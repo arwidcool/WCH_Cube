@@ -50,6 +50,31 @@ const MODE_MACRO = {
 const INPUT_MACRO = { 'No pull': 'GPIO_Mode_IN_FLOATING', 'Pull-up': 'GPIO_Mode_IPU', 'Pull-down': 'GPIO_Mode_IPD' };
 
 const cfg = () => M.codegen || {};
+const bareSignal = claim => claim.signal.slice(claim.who.length + 1);
+
+// Signals that are NOT set up with GPIO_Init: the debug interface and the reset
+// pin are controlled by option bytes and the debug hardware, and driving the
+// reset pin as a push-pull output would be actively harmful. Overridable per
+// family through codegen.skip_signals; SYS is the default because every WCH part
+// puts SWIO/SWCLK/RST there.
+const DEFAULT_SKIP = { SYS: true };
+function skipped(claim) {
+  const rule = (cfg().skip_signals || DEFAULT_SKIP)[claim.who];
+  return rule === true || (Array.isArray(rule) && rule.includes(bareSignal(claim)));
+}
+
+// An analog function needs GPIO_Mode_AIN, not AF_PP. codegen.analog_signals is
+// the authoritative list; without it, fall back to "an Analog-category
+// peripheral on an analog-capable pin" and say in the code that it was inferred.
+// The fallback cannot tell ADC1_IN4 from ADC1_RETR0 — they share PD3, and only
+// one of them is analog — which is why the data should say so.
+function analogClaim(claim, pin) {
+  const table = (cfg().analog_signals || {})[claim.who];
+  if (table) return { analog: table.includes(bareSignal(claim)), inferred: false };
+  const P = M.peripherals[claim.who];
+  const guess = !!(P && P.category === 'Analog' && (M.pins[pin] || {}).analog);
+  return { analog: guess, inferred: guess };
+}
 
 // ---- what to configure -------------------------------------------------------
 // One entry per physical GPIO the configuration uses, named by the pin the
@@ -58,17 +83,22 @@ export function gpioPlan() {
   const e = E || compute();
   const out = [];
   for (const [canonPin, info] of Object.entries(e.pins)) {
-    for (const claim of info.claims) {
+    const usable = info.claims.filter(c => !skipped(c));
+    if (!usable.length) continue;                        // e.g. a pin that only carries SWIO
+    for (const claim of usable) {
       const pin = claim.via || canonPin;
       const m = PIN_RE.exec(pin);
       if (!m || pinType(pin) !== 'io') continue;
       if (out.some(x => x.pin === pin)) continue;         // one register setup per pin
       const g = S.gpio[pin] || S.gpio[canonPin] || {};
-      const isAf = info.claims.some(c => c.who !== 'GPIO');
+      const isAf = usable.some(c => c.who !== 'GPIO');
       const manual = claim.who === 'GPIO' ? claim.signal : null;
+      const an = usable.map(c => analogClaim(c, claim.via || canonPin)).find(x => x.analog);
       let mode = g.mode;
+      let inferred = false;
       if (!mode) {
-        if (isAf) mode = 'Alternate Function Push Pull';
+        if (an) { mode = 'Analog'; inferred = an.inferred; }
+        else if (isAf) mode = 'Alternate Function Push Pull';
         else if (manual === 'GPIO_Output') mode = 'Output Push Pull';
         else if (manual === 'GPIO_Analog') mode = 'Analog';
         else mode = 'Input';
@@ -77,14 +107,27 @@ export function gpioPlan() {
       const macro = mode === 'Input' ? INPUT_MACRO[pull] || INPUT_MACRO['No pull'] : MODE_MACRO[mode] || 'GPIO_Mode_IN_FLOATING';
       out.push({
         pin, port: m[1], bit: +m[2],
-        signal: info.label,
+        signal: usable.map(c => c.signal).join(' / '),
         label: (g.label || '').trim(),
-        mode, pull, speed: g.speed || 'Low', macro,
+        mode, pull, speed: g.speed || 'Low', macro, inferred,
         conflict: info.state === 'conflict',
       });
     }
   }
   return out.sort((a, b) => (a.port === b.port ? a.bit - b.bit : a.port.localeCompare(b.port)));
+}
+
+// Pins the configuration uses but GPIO_Init must not touch, with the reason.
+export function skippedPins() {
+  const e = E || compute();
+  const out = [];
+  for (const [canonPin, info] of Object.entries(e.pins)) {
+    for (const claim of info.claims) {
+      if (!skipped(claim)) continue;
+      out.push({ pin: claim.via || canonPin, signal: claim.signal });
+    }
+  }
+  return out.sort((a, b) => a.pin.localeCompare(b.pin));
 }
 
 // ---- AFIO remap word ---------------------------------------------------------
@@ -176,14 +219,25 @@ export function cHeader() {
   ].join('\n');
 }
 
+// The pins the debug interface and the reset pin sit on, as a comment block.
+function skipNote(left) {
+  return [
+    '    /* Not configured here, by design: ' + left.map(s => `${s.pin} (${s.signal})`).join(', '),
+    '       the debug interface and the reset pin are controlled by the option bytes. */',
+    '',
+  ];
+}
+
 function gpioSection() {
   const plan = gpioPlan();
+  const left = skippedPins();
   const L = [];
   L.push(banner('GPIO'));
   L.push('void WCHCube_GPIO_Init(void)');
   L.push('{');
   if (!plan.length) {
-    L.push('    /* No pins configured. */');
+    if (left.length) L.push(...skipNote(left).slice(0, 2));
+    else L.push('    /* No pins configured. */');
     L.push('}');
     return L.join('\n');
   }
@@ -216,7 +270,8 @@ function gpioSection() {
     for (const [key, pins] of groups) {
       const [macro, speed] = key.split('|');
       for (const p of pins) {
-        L.push(`    /* P${p.port}${p.bit}${p.label ? ` "${p.label}"` : ''} — ${p.signal}${p.conflict ? '   *** CONFLICT ***' : ''} */`);
+        const notes = [p.conflict ? '*** CONFLICT ***' : '', p.inferred ? 'analog mode inferred — add codegen.analog_signals to be certain' : ''].filter(Boolean);
+        L.push(`    /* P${p.port}${p.bit}${p.label ? ` "${p.label}"` : ''} — ${p.signal}${notes.length ? '   ' + notes.join('; ') : ''} */`);
       }
       L.push(`    GPIO_InitStructure.GPIO_Pin = ${pins.map(p => `GPIO_Pin_${p.bit}`).join(' | ')};`);
       L.push(`    GPIO_InitStructure.GPIO_Mode = ${macro};`);
@@ -225,6 +280,8 @@ function gpioSection() {
       L.push('');
     }
   }
+
+  if (left.length) L.push(...skipNote(left));
 
   const remap = remapWord();
   if (remap) {

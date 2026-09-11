@@ -81,6 +81,7 @@ test('generateAll names its files after the part and package', () => {
   const out = e.generateAll();
   assert.deepEqual(Object.keys(out).sort(), [
     'CH32V006_QFN32_clocks.md', 'CH32V006_QFN32_pinout.csv', 'CH32V006_QFN32_pinout.md',
-  ]);
+    'wchcube_init.c', 'wchcube_init.h',
+  ], 'the reports are named after the part; the C files keep fixed include names');
   for (const [name, text] of Object.entries(out)) assert.ok(text.length > 100, `${name} has content`);
 });

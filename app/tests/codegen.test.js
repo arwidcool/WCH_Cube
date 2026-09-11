@@ -27,6 +27,8 @@ codegen:
       TIM1:   [{ lsb: 10, bits: 4 }]
       TIM2:   [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }]
       USART2: [{ lsb: 20, bits: 3 }]
+  analog_signals:
+    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7]
   rcc:
     register: "RCC->CFGR0"
     sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }
@@ -79,7 +81,7 @@ test('the generated GPIO code is grouped by port, mode and speed', () => {
   e.compute();
   const c = e.cSource();
   assert.ok(c.includes('GPIO_InitTypeDef GPIO_InitStructure = {0};'));
-  assert.ok(c.includes('RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOC | RCC_PB2Periph_GPIOD | RCC_PB2Periph_AFIO, ENABLE);'));
+  assert.ok(c.includes('RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOC | RCC_PB2Periph_AFIO, ENABLE);'));
   assert.ok(c.includes('GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;'), 'same mode and speed share one call');
   assert.ok(c.includes('GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;'));
   assert.ok(c.includes('GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;'));
@@ -162,7 +164,7 @@ test('without a codegen block the register sections are an honest TODO', () => {
   assert.equal(e.rccWord(), null);
   assert.ok(c.includes('TODO: alternate function remap'));
   assert.ok(c.includes('USART1: index 3 — 0011'), 'it still says what was chosen');
-  assert.ok(c.includes('TODO: enable the port clocks for GPIOC, GPIOD'));
+  assert.ok(c.includes('TODO: enable the port clocks for GPIOC'));
   assert.ok(c.includes('TODO: the MCU file has no codegen.rcc block'));
   assert.ok(c.includes('GPIO_Init(GPIOC, &GPIO_InitStructure);'), 'the GPIO half is generated regardless');
 });
@@ -232,4 +234,57 @@ test('every bundled part and package generates without throwing', () => {
       assert.ok(files['wchcube_init.c'].length > 200, `${name} ${pkg} produced a source file`);
     }
   }
+});
+
+test('the debug interface and the reset pin are never set up as GPIOs', () => {
+  const e = withCodegen();
+  e.compute();
+  assert.equal(e.E.pins.PD1.label, 'SYS_SWIO', 'they are claimed out of reset');
+  assert.equal(e.E.pins.PD7.label, 'SYS_RST');
+  assert.equal(e.gpioPlan().some(p => p.pin === 'PD1' || p.pin === 'PD7'), false,
+    'driving the reset pin as an output would brick the board until the next power cycle');
+  assert.deepEqual(e.skippedPins().map(s => s.signal).sort(), ['SYS_RST', 'SYS_SWIO']);
+  const c = e.cSource();
+  assert.ok(c.includes('Not configured here, by design: PD1 (SYS_SWIO), PD7 (SYS_RST)'));
+  assert.equal(c.includes('GPIO_Pin_7 | '), false, 'PD7 is not in any port D mask');
+});
+
+test('an ADC channel is an analog input, not an alternate function', () => {
+  const e = withCodegen();
+  e.toggleSetting('ADC1', 'Channels', 'IN4', true);      // ADC1_IN4 is on PD3
+  e.compute();
+  const row = e.gpioPlan().find(p => p.pin === 'PD3');
+  assert.equal(row.macro, 'GPIO_Mode_AIN');
+  assert.equal(row.inferred, false, 'codegen.analog_signals said so outright');
+  assert.ok(e.cSource().includes('GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AIN;'));
+});
+
+test('an ADC trigger pin stays digital, which only the data can tell us', () => {
+  const e = withCodegen();
+  // RETR0 shares PD3 with the IN4 channel, and is a digital trigger input
+  e.setSetting('ADC1', 'Regular group external trigger', 'External pin PD3 (ETRGREG_RM=0)');
+  e.compute();
+  const row = e.gpioPlan().find(p => p.pin === 'PD3');
+  assert.equal(row.signal, 'ADC1_RETR0');
+  assert.equal(row.macro, 'GPIO_Mode_AF_PP', 'a trigger input is not an analog pin');
+});
+
+test('without analog_signals the analog mode is a guess, and says so', () => {
+  const e = fresh();                                   // plain CH32V006, no codegen block
+  e.toggleSetting('ADC1', 'Channels', 'IN4', true);
+  e.compute();
+  const row = e.gpioPlan().find(p => p.pin === 'PD3');
+  assert.equal(row.macro, 'GPIO_Mode_AIN');
+  assert.equal(row.inferred, true);
+  assert.ok(e.cSource().includes('analog mode inferred — add codegen.analog_signals to be certain'));
+});
+
+test('an explicit mode in the GPIO table always wins', () => {
+  const e = withCodegen();
+  e.toggleSetting('ADC1', 'Channels', 'IN4', true);
+  e.setGpioField('PD3', 'mode', 'Output Open Drain');
+  e.compute();
+  const row = e.gpioPlan().find(p => p.pin === 'PD3');
+  assert.equal(row.macro, 'GPIO_Mode_Out_OD');
+  assert.equal(row.inferred, false);
 });
