@@ -118,3 +118,33 @@ export function timerFrequency(pid, m = M, s = S) {
   return { clockMhz: mhz, prescaler: Number(psc), period: Number(arr),
            hz: Math.round(hz * 1000) / 1000, periodUs: Math.round((1e6 / hz) * 1000) / 1000 };
 }
+
+/**
+ * How long one ADC conversion takes, from the sampling-time parameter and the ADC
+ * clock. Total = sampling cycles + the SAR cycles the resolution costs (11 for a
+ * 12-bit successive-approximation ADC, which is what this family has).
+ *
+ * The sampling parameter is an enum whose names read like "11.5 cycles", so the
+ * number is parsed out of the name rather than guessed from the index.
+ */
+export function adcConversionUs(pid, sarCycles = 11, m = M, s = S) {
+  const raw = paramValue(pid, 'sample');
+  if (raw === undefined || raw === null) return null;
+  const cycles = parseFloat(String(raw));
+  if (!Number.isFinite(cycles)) return null;
+  // a prescaler named after the peripheral family (ADC1 -> ADC) is its clock
+  const family = String(pid).replace(/\d+$/, '');
+  const r = clockCalc(m, s);
+  const mhz = r[family] !== undefined ? r[family] : periphClockMhz(pid, m, s);
+  if (!mhz) return null;
+  const total = cycles + sarCycles;
+  const us = total / mhz;                       // cycles / MHz = microseconds
+  return {
+    clockMhz: mhz,
+    samplingCycles: cycles,
+    sarCycles,
+    totalCycles: total,
+    us: Math.round(us * 1000) / 1000,
+    ksps: Math.round((1000 / us) * 100) / 100,
+  };
+}

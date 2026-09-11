@@ -3407,6 +3407,36 @@ function timerFrequency(pid, m = M, s = S) {
            hz: Math.round(hz * 1000) / 1000, periodUs: Math.round((1e6 / hz) * 1000) / 1000 };
 }
 
+/**
+ * How long one ADC conversion takes, from the sampling-time parameter and the ADC
+ * clock. Total = sampling cycles + the SAR cycles the resolution costs (11 for a
+ * 12-bit successive-approximation ADC, which is what this family has).
+ *
+ * The sampling parameter is an enum whose names read like "11.5 cycles", so the
+ * number is parsed out of the name rather than guessed from the index.
+ */
+function adcConversionUs(pid, sarCycles = 11, m = M, s = S) {
+  const raw = paramValue(pid, 'sample');
+  if (raw === undefined || raw === null) return null;
+  const cycles = parseFloat(String(raw));
+  if (!Number.isFinite(cycles)) return null;
+  // a prescaler named after the peripheral family (ADC1 -> ADC) is its clock
+  const family = String(pid).replace(/\d+$/, '');
+  const r = clockCalc(m, s);
+  const mhz = r[family] !== undefined ? r[family] : periphClockMhz(pid, m, s);
+  if (!mhz) return null;
+  const total = cycles + sarCycles;
+  const us = total / mhz;                       // cycles / MHz = microseconds
+  return {
+    clockMhz: mhz,
+    samplingCycles: cycles,
+    sarCycles,
+    totalCycles: total,
+    us: Math.round(us * 1000) / 1000,
+    ksps: Math.round((1000 / us) * 100) / 100,
+  };
+}
+
 // ===== app/engine/resources.js ================================================
 // =============================================================================
 //  resources.js — conflicts that are not about pins.
@@ -3725,6 +3755,41 @@ function setClock(patch) {
 
 const PROJECT = { name: 'Untitled', variant: null, dirty: false };
 
+// The .wchproj format number. Bump it only when an OLD file would be read wrongly
+// by new code, and add the migration in MIGRATIONS at the same time. Adding a key
+// that old files simply lack is not a bump: applying it is already tolerant.
+const PROJECT_FORMAT = 1;
+
+// n -> function that turns a format-n object into a format-(n+1) object.
+// Each one must be pure and must not need M or S: a project is migrated before
+// its MCU is even loaded.
+const MIGRATIONS = {
+  // 1: obj => ({ ...obj, wchproj: 2, ... }),
+};
+
+/**
+ * Bring a project object up to PROJECT_FORMAT, or explain why it cannot be.
+ * A file from the future is refused by name rather than half-applied.
+ */
+function migrateProject(obj) {
+  if (!obj || typeof obj !== 'object' || obj.wchproj === undefined) {
+    throw new Error('Not a WCHCube project file (no `wchproj:` version key).');
+  }
+  let v = Number(obj.wchproj);
+  if (!Number.isInteger(v) || v < 1) throw new Error(`Not a WCHCube project file (wchproj: ${obj.wchproj}).`);
+  if (v > PROJECT_FORMAT) {
+    throw new Error(`This project was saved in format ${v} by a newer WCHCube; this build reads format ${PROJECT_FORMAT}. Update WCHCube, or re-save the project from the version that wrote it.`);
+  }
+  let out = obj;
+  while (v < PROJECT_FORMAT) {
+    const step = MIGRATIONS[v];
+    if (!step) throw new Error(`No migration from project format ${v} to ${v + 1}.`);
+    out = step(out);
+    v = Number(out.wchproj);
+  }
+  return out;
+}
+
 function setProject(p) { Object.assign(PROJECT, p); }
 
 function projectObject() {
@@ -3737,7 +3802,7 @@ function projectObject() {
     if (Object.keys(params).length) periph[pid].params = params;
   }
   return {
-    wchproj: 1,
+    wchproj: PROJECT_FORMAT,
     name: PROJECT.name,
     saved: new Date().toISOString(),
     mcu: M.mcu.name,
@@ -3756,8 +3821,7 @@ function projectSerialize() {
 
 // Restore a project. Throws with a human sentence if the MCU file is not loaded.
 function projectApply(src) {
-  const obj = typeof src === 'string' ? yamlLoad(src) : src;
-  if (!obj || obj.wchproj !== 1) throw new Error('Not a WCHCube project file');
+  const obj = migrateProject(typeof src === 'string' ? yamlLoad(src) : src);
   const mcuSrc = MCU_FILES[obj.mcu];
   if (!mcuSrc) throw new Error(`This project is for "${obj.mcu}", which is not loaded. Use "Open MCU file…" to load its YAML first, then open the project again.`);
 

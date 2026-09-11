@@ -98,3 +98,34 @@ test('every bundled MCU has a clock tree that computes without NaN', () => {
     }
   }
 });
+
+test('adcConversionUs turns the sampling parameter into a real conversion time', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  // 11.5 sampling + 11 SAR cycles at 24 MHz = 0.938 us
+  const fast = e.adcConversionUs('ADC1');
+  assert.ok(fast, 'CH32V006 ADC1 has a sampling-time parameter');
+  assert.equal(fast.clockMhz, 24, 'the ADC prescaler output feeds it, not SYSCLK');
+  assert.equal(fast.samplingCycles, 11.5);
+  assert.equal(fast.totalCycles, 22.5);
+  assert.equal(fast.us, 0.938);
+
+  e.setParam('ADC1', 'sample', '239.5 cycles');
+  const slow = e.adcConversionUs('ADC1');
+  assert.equal(slow.totalCycles, 250.5);
+  assert.equal(slow.us, 10.438);
+  assert.ok(slow.ksps < fast.ksps, 'a longer sample means fewer samples per second');
+});
+
+test('the ADC conversion time follows the ADC prescaler, not the core clock', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const before = e.adcConversionUs('ADC1');
+  e.setClock({ pre: { ADC: 2 } });
+  const after = e.adcConversionUs('ADC1');
+  assert.equal(after.clockMhz, before.clockMhz / 2);
+  assert.ok(after.us > before.us, 'half the clock, twice the time');
+});
+
+test('a peripheral without a sampling parameter has no conversion time', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.equal(e.adcConversionUs('USART1'), null);
+});

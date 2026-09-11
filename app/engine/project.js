@@ -11,6 +11,41 @@ import { clearHistory } from './history.js';
 
 export const PROJECT = { name: 'Untitled', variant: null, dirty: false };
 
+// The .wchproj format number. Bump it only when an OLD file would be read wrongly
+// by new code, and add the migration in MIGRATIONS at the same time. Adding a key
+// that old files simply lack is not a bump: applying it is already tolerant.
+export const PROJECT_FORMAT = 1;
+
+// n -> function that turns a format-n object into a format-(n+1) object.
+// Each one must be pure and must not need M or S: a project is migrated before
+// its MCU is even loaded.
+export const MIGRATIONS = {
+  // 1: obj => ({ ...obj, wchproj: 2, ... }),
+};
+
+/**
+ * Bring a project object up to PROJECT_FORMAT, or explain why it cannot be.
+ * A file from the future is refused by name rather than half-applied.
+ */
+export function migrateProject(obj) {
+  if (!obj || typeof obj !== 'object' || obj.wchproj === undefined) {
+    throw new Error('Not a WCHCube project file (no `wchproj:` version key).');
+  }
+  let v = Number(obj.wchproj);
+  if (!Number.isInteger(v) || v < 1) throw new Error(`Not a WCHCube project file (wchproj: ${obj.wchproj}).`);
+  if (v > PROJECT_FORMAT) {
+    throw new Error(`This project was saved in format ${v} by a newer WCHCube; this build reads format ${PROJECT_FORMAT}. Update WCHCube, or re-save the project from the version that wrote it.`);
+  }
+  let out = obj;
+  while (v < PROJECT_FORMAT) {
+    const step = MIGRATIONS[v];
+    if (!step) throw new Error(`No migration from project format ${v} to ${v + 1}.`);
+    out = step(out);
+    v = Number(out.wchproj);
+  }
+  return out;
+}
+
 export function setProject(p) { Object.assign(PROJECT, p); }
 
 export function projectObject() {
@@ -23,7 +58,7 @@ export function projectObject() {
     if (Object.keys(params).length) periph[pid].params = params;
   }
   return {
-    wchproj: 1,
+    wchproj: PROJECT_FORMAT,
     name: PROJECT.name,
     saved: new Date().toISOString(),
     mcu: M.mcu.name,
@@ -42,8 +77,7 @@ export function projectSerialize() {
 
 // Restore a project. Throws with a human sentence if the MCU file is not loaded.
 export function projectApply(src) {
-  const obj = typeof src === 'string' ? yamlLoad(src) : src;
-  if (!obj || obj.wchproj !== 1) throw new Error('Not a WCHCube project file');
+  const obj = migrateProject(typeof src === 'string' ? yamlLoad(src) : src);
   const mcuSrc = MCU_FILES[obj.mcu];
   if (!mcuSrc) throw new Error(`This project is for "${obj.mcu}", which is not loaded. Use "Open MCU file…" to load its YAML first, then open the project again.`);
 

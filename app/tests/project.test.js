@@ -98,3 +98,48 @@ test('a project saved for a package the MCU does not have keeps the default pack
   e.projectApply(obj);
   assert.equal(e.S.pkg, 'TSSOP20');
 });
+
+// ---------------------------------------------------------------- format versioning
+
+test('a saved project carries the format number the build understands', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const obj = e.projectObject();
+  assert.equal(obj.wchproj, e.PROJECT_FORMAT);
+  assert.equal(typeof e.PROJECT_FORMAT, 'number');
+});
+
+test('a project from a newer WCHCube is refused by name, not half applied', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const obj = e.projectObject();
+  obj.wchproj = e.PROJECT_FORMAT + 3;
+  assert.throws(() => e.projectApply(obj), /saved in format \d+ by a newer WCHCube/);
+  assert.throws(() => e.projectApply({ name: 'no version' }), /no `wchproj:` version key/);
+  assert.throws(() => e.projectApply({ wchproj: 'x' }), /Not a WCHCube project file/);
+});
+
+test('migrateProject walks an old file forward one step at a time', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const current = e.PROJECT_FORMAT;
+  // Pretend this build is one format ahead, with a migration for the step.
+  const older = { ...e.projectObject(), wchproj: current, legacy_name: 'from the old days' };
+  e.MIGRATIONS[current] = obj => ({ ...obj, wchproj: current + 1, name: obj.legacy_name || obj.name });
+  try {
+    // migrateProject stops at PROJECT_FORMAT, so with no bump it must NOT run the step
+    assert.equal(e.migrateProject(older).wchproj, current, 'a current file is left alone');
+    // and a file one behind a bumped format is carried forward
+    const ancient = { ...older, wchproj: current - 1 };
+    if (current > 1) {
+      e.MIGRATIONS[current - 1] = obj => ({ ...obj, wchproj: current });
+      assert.equal(e.migrateProject(ancient).wchproj, current);
+    }
+  } finally {
+    delete e.MIGRATIONS[current];
+    delete e.MIGRATIONS[current - 1];
+  }
+});
+
+test('an unmigratable old file says so instead of loading wrong', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const obj = { ...e.projectObject(), wchproj: 0 };
+  assert.throws(() => e.migrateProject(obj), /Not a WCHCube project file/);
+});
