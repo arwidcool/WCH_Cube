@@ -22,7 +22,7 @@ import {
 import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
 import { hseFeedsSysclk } from './clock.js';
-import { constraintFor, constraintSentence, gpioEffectiveMode } from './constraints.js';
+import { constraintFor, constraintSentence, gpioEffectiveMode, gpioModeForSignal, gpioFieldOptionNames } from './constraints.js';
 
 export let E = null;
 
@@ -177,9 +177,19 @@ export function assignSignal(pin, opt) {
     for (const n of groupOf(pin)) delete S.manual[n];
     S.manual[pin] = opt.gpio;
     S.gpio[pin] ||= {
-      mode: opt.gpio === 'GPIO_Output' ? 'Output Push Pull' : opt.gpio === 'GPIO_Analog' ? 'Analog' : 'Input',
-      // the part's own first speed, never a Low/Medium/High name from nowhere
-      pull: 'No pull', speed: gpioSpeedFor(undefined) || '', label: '',
+      // The part's OWN name for this mode, read off its `gpio.modes` - the same answer
+      // the generator and the constraint matcher reach, from `gpioModeForSignal()`.
+      // These were the literals "Output Push Pull" / "Analog" / "Input", which is the
+      // round-3 defect one field over: a name from this app's vocabulary rather than
+      // the part's. Every part here happens to spell them the same way, so it was
+      // latent rather than live - and the literal is still the fallback, so a part
+      // whose file states nothing gets the same TODO it got before rather than a
+      // silently different mode.
+      mode: gpioModeForSignal(opt.gpio)
+        || (opt.gpio === 'GPIO_Output' ? 'Output Push Pull' : opt.gpio === 'GPIO_Analog' ? 'Analog' : 'Input'),
+      // the part's own first speed and first pull, never a name from nowhere
+      pull: gpioFieldOptionNames('pull')[0] || 'No pull',
+      speed: gpioSpeedFor(undefined) || '', label: '',
     };
     return;
   }

@@ -361,3 +361,22 @@ test('the mode a manual output implies is the mode the generator derives', () =>
       `${name}: the engine's idea of "an output" and the generator's must be one answer`);
   }
 });
+
+test('assigning an output stores the part\'s OWN name for the mode, not another family\'s', () => {
+  // A part whose plain output mode is spelled differently. The app used to store the
+  // literal "Output Push Pull" here, which is a name from its own vocabulary rather
+  // than the part's - round 3's defect one field over. Every shipped part happens to
+  // spell it the same way, which is what made it latent.
+  const e = fresh();
+  const renamed = PART.replace(
+    '{ name: Output Push Pull,             macro: GPIO_Mode_Out_PP, class: out }',
+    '{ name: Output Push-Pull,             macro: GPIO_Mode_Out_PP, class: out }');
+  assert.notEqual(renamed, PART, 'setup: the fixture line moved, so this test proves nothing');
+  e.loadMcu(renamed);
+  e.setPackage('QFN28');
+  e.assignSignal('PA0', { gpio: 'GPIO_Output' });
+  assert.equal(e.S.gpio.PA0.mode, 'Output Push-Pull', "the part's own spelling is what is stored");
+  assert.deepEqual(e.cComplaints(e.cFiles()), [],
+    'and the macro is looked up in that same list, so the C still compiles');
+  assert.ok(e.gpioFieldOptions('PA0', 'mode').includes('Output Push-Pull'));
+});
