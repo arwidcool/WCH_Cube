@@ -27,4 +27,45 @@ reference manuals. Every number you write must be traceable to a DS/RM table not
 - Write `data/FORMAT.md`: the full YAML schema, with every field explained, kept in sync with the engine.
 
 ## Current
-(rewrite this section every cycle: what you're doing, what's next, last commit hash)
+
+**Cycle of 2026-09-11. All green: `extract_remaps` exit 0, `validate_mcu` exit 0,
+`build.py` OK, `node tests/run.js` ALL GREEN (85 tests). No commit hash — this checkout is
+not a git repo (logged on BOARD at 02:10Z).**
+
+Done this cycle, in priority order from this file:
+
+1. **Second pass (priority 1) — complete.** `tools/extract_remaps.py` re-parses RM 7.2.11
+   with its own parser and diffs the YAML: 7 peripherals, 31 signal rows, **232 pin
+   assignments, 0 differences**. Negative-tested against planted pin edits. Then added a
+   **third pass** the brief did not ask for: the same grids diffed against the AFIO_PCFR1
+   register prose in RM 7.3.2.2, which states every remap a second time — **227 of 228
+   confirmed by two independent descriptions**. DONE.md data line 1 is met with evidence,
+   not with a careful read.
+2. **Priority 2 — complete.** CH32V006 gained the EXTI line→pin map, the DMA1 7-channel
+   request map, option-byte RST_MODE as four SYS choices, TIM1_RM=11xx (CH1 from LSI), and
+   TIM2 complementary outputs on the CH3/CH4 pins (RM 12.3.9, which the first pass missed).
+3. **Priority 3 — complete.** `tools/validate_mcu.py`. It was rewritten by another agent
+   mid-cycle; I kept the rewrite and restored the key whitelists it dropped, plus fixed a
+   crash on off-drive paths. See BOARD 03:40Z.
+4. **`data/FORMAT.md`** written (was a "when idle" item).
+
+Two findings worth carrying forward:
+
+- **The unquoted-comma trap.** A comma inside a YAML flow mapping truncates the value and
+  turns the rest into a null key. The file still parses and the app still loads, but the
+  app keys setting state by choice name, so two truncated names collapse into one option.
+  Four live instances found and fixed. The validator now rejects unknown keys for exactly
+  this reason — do not remove those whitelists.
+- **The RM contradicts itself once.** RM 7.3.2.2 writes USART2_RM=101 RTS as `PA11`; port A
+  stops at PA7 and Table 7-11 says `PA1`. The YAML follows the table. Expect the same typo
+  when extracting other CH32V00x parts.
+
+Next, in order:
+
+1. **CH32V005** — blocked on AGENT-2 answering the `inherits:` shape (BOARD 02:50Z).
+   Proposal is deep-merge plus a `remove:` list, resolved in the loader.
+2. **CH32V003 and later parts** — blocked on sources. `data/sources/` has only the V006
+   datasheet and the V00X reference manual. Asked once at 03:05Z; will not ask again.
+3. **Unblocked meanwhile:** convert the remaining Medium-confidence rows in
+   `CH32V006.notes.md` to High — TouchKey channel→pin from RM ch.10, and the OPA polling
+   channel set. Then the remaining option bytes (START_MODE, STANDBYRST, IWDG_SW).

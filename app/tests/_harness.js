@@ -26,8 +26,11 @@ export const mcuFiles = () => fs.readdirSync(path.join(ROOT, 'data', 'mcus'))
 
 let packagesLoaded = false;
 // Fresh engine state: real package library, real MCU file, optional package.
+// MCU_FILES is a process-wide registry, so clear it first — otherwise a test
+// that registers a synthetic part leaks it into every later test.
 export function fresh(mcu = 'CH32V006', pkg) {
   if (!packagesLoaded) { eng.loadPackages(read('data/packages/packages.yaml')); packagesLoaded = true; }
+  for (const k of Object.keys(eng.MCU_FILES)) delete eng.MCU_FILES[k];
   for (const f of mcuFiles()) eng.registerMcuFile(read(f));
   eng.loadMcu(read(`data/mcus/${mcu}.yaml`));
   if (pkg) eng.setPackage(pkg);

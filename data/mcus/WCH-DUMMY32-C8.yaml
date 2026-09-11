@@ -87,6 +87,7 @@ packages:
     48: VDD
 
   QFN48:
+    0: VSS                        # exposed pad — the geometry declares epad: true
     1: VBAT
     2: PC13
     3: PC14
@@ -159,6 +160,7 @@ packages:
     20: BOOT0
 
   QFN20:
+    0: VSS                        # exposed pad — the geometry declares epad: true
     1: VDD
     2: PC13
     3: PD0

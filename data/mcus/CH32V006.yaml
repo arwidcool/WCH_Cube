@@ -213,6 +213,12 @@ peripherals:
       # function turns on, which is a glitch filter, not a different pin.
       # RM 18 writes this value as "PD7 for I/O function"; the pin is actually the
       # package's reset pin — PA7 on QFN32 and PC5 on QSOP24 (DS note 5, see `remaps`).
+      #
+      # `validate_mcu.py` warns that choices[0] here carries a signal, because the engine
+      # reads choices[0] as a peripheral's "off" state. That is deliberate and must stay:
+      # the factory option byte is RST_MODE=10, so a blank part really does hold the reset
+      # pin, and the pin is not available until the option byte is reprogrammed. Reordering
+      # these to silence the warning would tell the user the pin is free when it is not.
       - name: External reset pin
         choices:
           - { name: "RST enabled — ignore 12 ms (RST_MODE=10, factory default)", signals: [RST], default: true }

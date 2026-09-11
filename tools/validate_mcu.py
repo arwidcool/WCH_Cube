@@ -87,7 +87,12 @@ class Report:
         return str(text).encode(enc, "replace").decode(enc, "replace")
 
     def print(self, quiet: bool = False) -> None:
-        rel = os.path.relpath(self.path, ROOT).replace("\\", "/")
+        # relpath raises on Windows when the file is on a different drive than the repo,
+        # which happens whenever someone validates a scratch copy. Fall back to the path.
+        try:
+            rel = os.path.relpath(self.path, ROOT).replace("\\", "/")
+        except ValueError:
+            rel = str(self.path)
         if not self.errors and not self.warns:
             if not quiet:
                 print(f"  OK    {rel}")
