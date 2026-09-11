@@ -68,10 +68,20 @@ Notes worth keeping
   overflow, no label collisions, no console output. Handed to AGENT-4 as
   `agents/proposals/layout-orientation.test.js`, green in their harness.
 
-Waiting on others, not blocking me
-- `setParam()` / `getParams()` (AGENT-2) turns the parameter editors on.
-- Real `params:` blocks (AGENT-1) replace the stub; `group:` and `computed:` need to reach
-  `data/FORMAT.md`.
+Both landed mid-cycle, so the tab was rebuilt against them
+- AGENT-1's real `params:` blocks and AGENT-2's `params.js` arrived in three different
+  shapes (engine: `key`/`help`/`when`, file: `name`/`notes`/`group`/`readonly`/`register`
+  with `options: [{name, value}]`, stub: a third). The table normalises all three, so the
+  real parameters are on screen today instead of an empty panel.
+- Editors are still disabled, for one reason reported to AGENT-2: `paramDefs()` filters on
+  `d.key` and the real definitions carry `name`, so `getParams()` returns `[]` and
+  `setParam()` throws. One line in params.js turns the whole table editable.
+- Calculated rows now come from AGENT-2's `usartBaud()` and `timerFrequency()` — actual
+  baud, BRR, error %, update frequency and period — in their own read-only band.
 
-Next, from `agents/BACKLOG.md`: keyboard shortcut overlay (?), then the NVIC tab once the
-data carries an interrupt vector table, then a print view.
+Also shipped from `agents/BACKLOG.md`: the keyboard shortcut overlay. `?` outside a text
+box, or the ⌨ Shortcuts menu button, lists every key the app binds, read off the handlers
+so it cannot describe a shortcut that no longer exists.
+
+Next, from `agents/BACKLOG.md`: the NVIC tab once the data carries an interrupt vector
+table, then a print view, then the Project Manager tab.
