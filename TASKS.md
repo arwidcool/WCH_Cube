@@ -19,15 +19,15 @@ Four autonomous agents (DATA / ENGINE / UI / QA+RELEASE) work this file. The wor
 
 | File | What it is |
 |---|---|
-| `Agents Rounds 3/00_PROJECT.md` | the round brief — read first, every cycle |
-| `Agents Rounds 3/AGENT_n_*.md` | your standing instructions + your "Current" section |
-| `Agents Rounds 3/BOARD.md` | the message board for this round (append-only) |
-| `Agents Rounds 3/WALKTHROUGH.md` | the acceptance script: configuration → C → a binary |
+| `Agents Rounds 4/00_PROJECT.md` | the round brief — read first, every cycle |
+| `Agents Rounds 4/AGENT_n_*.md` | your standing instructions + your "Current" section |
+| `Agents Rounds 4/BOARD.md` | the message board for this round (append-only) |
+| `Agents Rounds 4/WALKTHROUGH.md` | the acceptance script: a second family, and a folder you can flash |
 | `PROGRESS.md` | where the project actually stands (AGENT-4 keeps it true) |
 
 Claim with `[~] (AGENT-n)`. Communicate only via the board. Done = all of `agents/DONE.md`.
-Round-1 and round-2 boards (`agents/BOARD.md`, `Agents Rounds 2/BOARD.md`) are history and still
-binding — read the last entries of the round-2 board before your first round-3 cycle.
+Earlier boards (`agents/BOARD.md`, `Agents Rounds 2/BOARD.md`, `Agents Rounds 3/BOARD.md`) are
+history and still binding — read the last entries of the round-3 board before your first cycle.
 
 ## Status legend
 `[ ]` todo  `[~]` in progress  `[x]` done  `[-]` dropped
@@ -118,7 +118,7 @@ standing source of truth for project progress. AGENT-4 owns it and keeps it true
       `data/sources/<PART>/Evt/` and are the top authority for every name the software uses.
 - [x] (AGENT-4) `PROGRESS.md` at the repo root.
 
-## Round 3 — the generated code is the product  (CURRENT)
+## Round 3 — the generated code is the product  (open items carry into round 4 as D1–D9)
 
 Brief: `Agents Rounds 3/00_PROJECT.md`. One file per agent beside it; board is
 `Agents Rounds 3/BOARD.md`; acceptance script is `Agents Rounds 3/WALKTHROUGH.md`.
@@ -233,7 +233,8 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 - [x] (AGENT-2) Regenerating after save → close → open produces **byte-identical** C
 - [x] (AGENT-2) `tools/wchcube_cli.js --pio <dir>` writes the header to `include/` and the source
       to `src/`; `--strict` fails on an emitted TODO or `#error`
-- [ ] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1
+- [x] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1 — all done; TKEY needs none,
+      being an ADC mode rather than a peripheral
 - [ ] (AGENT-4) Host-side unit tests for `lib/util` under a `[env:native]`
 
 ### P3 — more parts, now that there is a compiler
@@ -274,6 +275,122 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       already clean
 - [ ] (AGENT-4) The human's `Taskfile.yml` is a stub. Make it the real task runner (build, test,
       firmware, validate) or leave it alone and say so — do not half-adopt it.
+
+## Round 4 — a second family, and a project you can flash  (CURRENT)
+
+Brief: `Agents Rounds 4/00_PROJECT.md`. One file per agent beside it; board is
+`Agents Rounds 4/BOARD.md`; acceptance script is `Agents Rounds 4/WALKTHROUGH.md`;
+launcher `Agents Rounds 4/run_round4.ps1`.
+
+Two deliverables that prove each other. **A: CH32X035 end to end** — a second MCU family, read from
+its own DS and RM and checked against its own EVT package. **B: "Generate PlatformIO project"** — a
+complete folder you open in VS Code and flash. The round's rule: **a part nobody generated a project
+for is a part nobody has actually used.**
+
+Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/sources/X035/Evt/`
+(2 239 files). Every "until the EVT package arrives" sentence in the repo is now stale.
+
+### D — carried over from round 3. These outrank everything below.
+
+- [ ] D1 (AGENT-2) `generateAll()` returns `{ name, language, text }` per file — AGENT-3 waits on it
+- [ ] D2 (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
+- [ ] D3 (AGENT-2) User code sections preserved across regeneration — or the option is not offered
+- [ ] D4 (AGENT-3) `Tools` tab: implement it or remove it
+- [ ] D5 (AGENT-4) Tauri command to write a generated file set to a chosen folder — in round 4 it
+      writes a whole project tree, so agree the signature on the board first
+- [ ] D6 (AGENT-4) Host-side unit tests for `lib/util` under `[env:native]`
+- [ ] D7 (AGENT-4) `agents/README.md` "Environment facts"; round-3 section in `agents/DONE.md`
+- [x] D8 (AGENT-1) RM chapter 20 "Extended Configuration" (EXTEN) on V006 — MODELLED, plus a new
+      `dma.remaps` key: TIM2_DMA_REMAP moves TIM2_CH4's request from channel 7 to channel 2.
+      AGENT-4: two ABSENT entries and a chapter-map line still needed in completeness.test.js
+- [ ] D9 (AGENT-4) `#m-open` / `#m-openproj` sweep; `Taskfile.yml` adopt-or-leave
+
+### A — CH32X035, end to end
+
+- [ ] (AGENT-1) Pin tables extracted with a **parser**, re-derived by a second pass and diffed to 0
+      differences. The DS markdown is mangled — rows split across lines, all seven package columns
+      merged into single cells — so eyeballing Table 2-1 is not available.
+- [ ] (AGENT-1) `data/mcus/CH32X035.yaml` — 8 variants (R8T6 / C8T6 / G8U6 / G8R6 / F8U6 / F7P6 /
+      D8U6, plus CH32X033F8P6), 7 packages, QingKe **RISC-V4C**, RV32IMAC, 62 KB flash, 20 KB SRAM
+- [ ] (AGENT-1) `data/packages/packages.yaml`: add **QSOP28**; resolve **LQFP64M** against the DS
+      mechanical drawing rather than assuming it is `LQFP64`
+- [ ] (AGENT-1) Ports **A/B/C only**, **24 bits wide** (`GPIO_Pin_0..23`), and **PC has a hole** —
+      PC0–PC7 then PC14–PC19. Post the pin list on the board early; it unblocks ENGINE and UI.
+- [ ] (AGENT-1) `clock:` with **no HSE** — `grep -c HSE ch32x035_rcc.h` = 0. One 48 MHz RC, SYSCLK
+      48/24/16/12/8. No HSE branch "for symmetry", not even a disabled one. Post it early.
+- [ ] (AGENT-1) Remap schema: a **`macro:` per remap index** alongside `lsb`/`bits`, because this
+      part's EVT exposes 40 named macros applied with `GPIO_PinRemapConfig`. Agree it with AGENT-2
+      before filling 40 entries. Re-derive from RM AFIO_PCFR1 independently and diff.
+- [ ] (AGENT-1) Peripherals incl. four kinds this repo has never modelled: **USBFS** (host+device),
+      **USBPD** (Type-C source/sink/DRP), **PIOC**, **AWU** — plus 4×USART, TIM1/2/3, SPI1, I2C1,
+      ADC1, 2×OPA, 3×CMP, PWR, FLASH, EXTI, IWDG, WWDG. No "Activated" stubs.
+- [ ] (AGENT-1) `dma:` with **8 channels**; `nvic:` with **47 vectors** and the three **grouped**
+      EXTI vectors covering 26 lines; PFIC priority scheme read for the **V4C**, not assumed from
+      the V2A
+- [ ] (AGENT-1) `codegen:` — header `ch32x035.h`, `RCC_APB2PeriphClockCmd` / `RCC_APB2Periph_GPIO$PORT`,
+      domains **AHB/APB1/APB2**, one speed `GPIO_Speed_50MHz`
+- [ ] (AGENT-1) `params:` with `struct:`/`field:`/`sdk_call` for every peripheral landed;
+      `pio_board`/`pio_env` per variant, omitted rather than approximated where no board ships
+- [ ] (AGENT-1) `verify_sdk_names.py` prefers `data/sources/<PART>/Evt/` over the PlatformIO package
+      and **says which headers it used**; both parts 0 errors
+- [ ] (AGENT-1) `CH32X035.notes.md` cites a DS/RM table or an EVT `file:line` per fact, and records
+      the EVT/DS TouchKey disagreement (DS says 14 channels; EVT ships no tkey header)
+- [ ] (AGENT-2) 24-bit pin masks — hunt `uint16_t`, `0xFFFF`, 4-digit hex, implied-16 shifts
+- [ ] (AGENT-2) Never iterate a port 0..N — PC is not contiguous
+- [ ] (AGENT-2) A part with **no HSE**: `clockCalc().selectable` from the data, the HSE auto-enable
+      coupling no-ops when `clock.hse_peripheral` is absent, nothing throws or renders a placeholder
+- [ ] (AGENT-2) Emit `GPIO_PinRemapConfig(<macro>, ENABLE)` where the data gives a macro, the
+      `AFIO->PCFR1` word where it does not — both families, no special case
+- [ ] (AGENT-2) Grouped NVIC vectors: many EXTI lines → one vector, enabled exactly once
+- [ ] (AGENT-3) Clock tab on a part with no HSE: no box, no mux entry, no RCC row, **no greyed
+      placeholder**, no layout gap, silent console — and CH32V006 unchanged
+- [ ] (AGENT-3) 24-bit ports and PC's hole in the GPIO table, tree, picker and chip labels
+- [ ] (AGENT-3) Seven packages draw, incl. **LQFP64 with 60 I/O** and long names (`USBPD_CC1`,
+      `USART4_CTS`, `TIM2_CH3N`) — the legibility work's first real stress
+- [ ] (AGENT-3) DMA panel sizes itself from `dma.requests` (**8** channels); NVIC tab lists the EXTI
+      vectors as **three rows, not twenty-six**
+- [ ] (AGENT-4) CH32X035 fixture in `tests/fixtures/`; `CH32X035G8U6` in the compile matrix
+- [ ] (AGENT-4) `smoke`, `layout`, `legibility`, `completeness`, `codegen_compile`, `data` all cover
+      CH32X035 × every package — and CH32V006/CH32V005 still pass
+- [ ] (AGENT-4) `tests/no_part_names.test.js` — `grep -ri "x035|ch32v006|ch32v005" app/engine/
+      app/template.html` empty outside comments
+- [ ] (AGENT-4) `data/firmware/README.md`'s "the configurator has no CH32X035 data yet" becomes
+      false the day the part lands — fix it then
+
+### B — Generate PlatformIO project
+
+- [ ] (AGENT-2) The file set as `{ path, name, language, text }`: `platformio.ini`, `src/main.c`,
+      `README.md`, `.gitignore`, `lib/wchcube_generated/{include,src}` — mirroring `data/firmware/`
+- [ ] (AGENT-2) `platformio.ini` from the variant: `platform = ch32v`, `framework = noneos-sdk`,
+      `board = variants[*].pio_board`, `-D SDI_PRINT=1`, `upload_protocol = wch-link`
+- [ ] (AGENT-2) A variant with **no `pio_board` is refused by name** with the generatable variants
+      listed — never substituted (F4U6 is 16 KB against F8U6's 62 KB)
+- [ ] (AGENT-2) `main.c`: printf over SDI (**claims no pin**), prints part / configured SYSCLK /
+      `SystemCoreClock` read back; blinks a pin **only** if the user configured an output and names
+      it; says plainly when they did not; `USER CODE BEGIN/END` around the loop
+- [ ] (AGENT-2) Generated README explains two-clock-owners in one sentence
+- [ ] (AGENT-2) CLI: write a whole standalone project, refusing a non-empty directory unless forced
+- [ ] (AGENT-2) Browser delivery: a stored-entry `.zip` written in `app/engine/` (no external
+      library — the app is one offline file), or the alternative argued on the board
+- [ ] (AGENT-3) Project Manager: **Generate PlatformIO project** with name + destination; preview
+      shows **every** file incl. `main.c` and `platformio.ini`
+- [ ] (AGENT-3) Says what `main.c` will do before generating, driven by the configuration; refusal
+      shows its reason; after a desktop generate, the path and the next two commands in copyable text
+- [ ] (AGENT-4) `tests/generated_project.test.js` **(gate)**: generate to a scratch dir, `pio run`,
+      exit 0, self-containment asserted, cleaned up; skips with a printed reason when `pio` is absent
+- [ ] (AGENT-4) A specific one-paragraph request in `HUMAN_TODO.md` for someone with a board and a
+      WCH-Link to flash one, with the exact commands
+- [ ] (AGENT-4) The flash result in `tests/evidence/round4/` — **or the DONE line says "builds, not
+      flashed", in those words**
+
+### Housekeeping
+
+- [ ] (AGENT-4) The stale "until the EVT package arrives" language: `PROGRESS.md`,
+      `data/firmware/ARCHITECTURE.md`, the round-3 pack. Post the list.
+- [ ] (AGENT-1) `data/sources/README.md` — which parts have EVT and where its headers live
+- [ ] (AGENT-1) `data/FORMAT.md` — the remap `macro:` form, grouped NVIC vectors, a part with no
+      HSE, 24-bit and non-contiguous ports, `pio_board`/`pio_env`
+- [ ] (AGENT-4) `PROGRESS.md` §5/§6/§7/§9 rewritten for a second family and a flashable artefact
 
 ## Phase 3 — Code / report generation  (FUTURE — keep hooks, do not build yet)
 
