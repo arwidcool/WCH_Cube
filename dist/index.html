@@ -179,6 +179,19 @@
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
   .chipbar .spacer{flex:1}
+  .chipbar .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+  .chipbar .ic.on{background:var(--blue-pale)}
+  /* pin search: a real result list, not just a counter */
+  .findwrap{position:relative;display:inline-block}
+  .findlist{position:absolute;left:0;top:calc(100% + 3px);z-index:55;min-width:250px;max-height:260px;overflow:auto;
+            background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 6px 18px var(--shadow)}
+  .findlist .row{display:flex;gap:8px;align-items:baseline;padding:4px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
+  .findlist .row:hover,.findlist .row.on{background:var(--blue-pale)}
+  .findlist .row b{font-weight:600;min-width:62px;color:var(--ink-strong)}
+  .findlist .row .num{color:var(--muted);font-size:11px}
+  .findlist .row .sig{color:var(--link);overflow:hidden;text-overflow:ellipsis;max-width:210px}
+  .findlist .row.conflict .sig{color:var(--bad)}
+  .findlist .more{padding:4px 9px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
   .chipbar label.flt{display:flex;align-items:center;gap:5px;color:#333;white-space:nowrap;cursor:pointer}
   .chipbar label.flt input{margin:0;cursor:pointer}
   #pkgsel{max-width:250px}
@@ -1347,6 +1360,324 @@ packages:
     19: PA14
     20: BOOT0
 
+  # ---- large packages, for layout testing only -------------------------------
+  # This part is a fixture, not a real MCU: these three tables exist so the chip
+  # renderer and the overflow audit are exercised across the whole QFN12..LQFP144
+  # range DONE.md asks for. The pin maps are plain sequential port pins and carry
+  # no peripheral meaning. Handed over by AGENT-3 (BOARD 10:49Z), who measured
+  # 144 pins / 144 labels / 0 overlaps / 0 clipping at 1024x768.
+  LQFP64:
+    1: PA0
+    2: PA1
+    3: PA2
+    4: PA3
+    5: PA4
+    6: PA5
+    7: PA6
+    8: PA7
+    9: PA8
+    10: PA9
+    11: PA10
+    12: PA11
+    13: PA12
+    14: PA13
+    15: PA14
+    16: PA15
+    17: PB0
+    18: PB1
+    19: PB2
+    20: PB3
+    21: PB4
+    22: PB5
+    23: PB6
+    24: PB7
+    25: PB8
+    26: PB9
+    27: PB10
+    28: PB11
+    29: PB12
+    30: PB13
+    31: PB14
+    32: PB15
+    33: PC0
+    34: PC1
+    35: PC2
+    36: PC3
+    37: PC4
+    38: PC5
+    39: PC6
+    40: PC7
+    41: PC8
+    42: PC9
+    43: PC10
+    44: PC11
+    45: PC12
+    46: PC13
+    47: PC14
+    48: PC15
+    49: PD0
+    50: PD1
+    51: PD2
+    52: PD3
+    53: PD4
+    54: PD5
+    55: PD6
+    56: PD7
+    57: PD8
+    58: PD9
+    59: PD10
+    60: PD11
+    61: PD12
+    62: PD13
+    63: PD14
+    64: PD15
+  LQFP100:
+    1: PA0
+    2: PA1
+    3: PA2
+    4: PA3
+    5: PA4
+    6: PA5
+    7: PA6
+    8: PA7
+    9: PA8
+    10: PA9
+    11: PA10
+    12: PA11
+    13: PA12
+    14: PA13
+    15: PA14
+    16: PA15
+    17: PB0
+    18: PB1
+    19: PB2
+    20: PB3
+    21: PB4
+    22: PB5
+    23: PB6
+    24: PB7
+    25: PB8
+    26: PB9
+    27: PB10
+    28: PB11
+    29: PB12
+    30: PB13
+    31: PB14
+    32: PB15
+    33: PC0
+    34: PC1
+    35: PC2
+    36: PC3
+    37: PC4
+    38: PC5
+    39: PC6
+    40: PC7
+    41: PC8
+    42: PC9
+    43: PC10
+    44: PC11
+    45: PC12
+    46: PC13
+    47: PC14
+    48: PC15
+    49: PD0
+    50: PD1
+    51: PD2
+    52: PD3
+    53: PD4
+    54: PD5
+    55: PD6
+    56: PD7
+    57: PD8
+    58: PD9
+    59: PD10
+    60: PD11
+    61: PD12
+    62: PD13
+    63: PD14
+    64: PD15
+    65: PE0
+    66: PE1
+    67: PE2
+    68: PE3
+    69: PE4
+    70: PE5
+    71: PE6
+    72: PE7
+    73: PE8
+    74: PE9
+    75: PE10
+    76: PE11
+    77: PE12
+    78: PE13
+    79: PE14
+    80: PE15
+    81: PF0
+    82: PF1
+    83: PF2
+    84: PF3
+    85: PF4
+    86: PF5
+    87: PF6
+    88: PF7
+    89: PF8
+    90: PF9
+    91: PF10
+    92: PF11
+    93: PF12
+    94: PF13
+    95: PF14
+    96: PF15
+    97: PG0
+    98: PG1
+    99: PG2
+    100: PG3
+  LQFP144:
+    1: PA0
+    2: PA1
+    3: PA2
+    4: PA3
+    5: PA4
+    6: PA5
+    7: PA6
+    8: PA7
+    9: PA8
+    10: PA9
+    11: PA10
+    12: PA11
+    13: PA12
+    14: PA13
+    15: PA14
+    16: PA15
+    17: PB0
+    18: PB1
+    19: PB2
+    20: PB3
+    21: PB4
+    22: PB5
+    23: PB6
+    24: PB7
+    25: PB8
+    26: PB9
+    27: PB10
+    28: PB11
+    29: PB12
+    30: PB13
+    31: PB14
+    32: PB15
+    33: PC0
+    34: PC1
+    35: PC2
+    36: PC3
+    37: PC4
+    38: PC5
+    39: PC6
+    40: PC7
+    41: PC8
+    42: PC9
+    43: PC10
+    44: PC11
+    45: PC12
+    46: PC13
+    47: PC14
+    48: PC15
+    49: PD0
+    50: PD1
+    51: PD2
+    52: PD3
+    53: PD4
+    54: PD5
+    55: PD6
+    56: PD7
+    57: PD8
+    58: PD9
+    59: PD10
+    60: PD11
+    61: PD12
+    62: PD13
+    63: PD14
+    64: PD15
+    65: PE0
+    66: PE1
+    67: PE2
+    68: PE3
+    69: PE4
+    70: PE5
+    71: PE6
+    72: PE7
+    73: PE8
+    74: PE9
+    75: PE10
+    76: PE11
+    77: PE12
+    78: PE13
+    79: PE14
+    80: PE15
+    81: PF0
+    82: PF1
+    83: PF2
+    84: PF3
+    85: PF4
+    86: PF5
+    87: PF6
+    88: PF7
+    89: PF8
+    90: PF9
+    91: PF10
+    92: PF11
+    93: PF12
+    94: PF13
+    95: PF14
+    96: PF15
+    97: PG0
+    98: PG1
+    99: PG2
+    100: PG3
+    101: PG4
+    102: PG5
+    103: PG6
+    104: PG7
+    105: PG8
+    106: PG9
+    107: PG10
+    108: PG11
+    109: PG12
+    110: PG13
+    111: PG14
+    112: PG15
+    113: PH0
+    114: PH1
+    115: PH2
+    116: PH3
+    117: PH4
+    118: PH5
+    119: PH6
+    120: PH7
+    121: PH8
+    122: PH9
+    123: PH10
+    124: PH11
+    125: PH12
+    126: PH13
+    127: PH14
+    128: PH15
+    129: PI0
+    130: PI1
+    131: PI2
+    132: PI3
+    133: PI4
+    134: PI5
+    135: PI6
+    136: PI7
+    137: PI8
+    138: PI9
+    139: PI10
+    140: PI11
+    141: PI12
+    142: PI13
+    143: PI14
+    144: PI15
+
 # -----------------------------------------------------------------------------
 # pin types: io | power | ground | reset | boot | osc
 pins:
@@ -1396,6 +1727,113 @@ pins:
   PB15:  { type: io, notes: 5 V tolerant }
   PC10:  { type: io, notes: Only on 64-pin parts }
   PC11:  { type: io, notes: Only on 64-pin parts }
+
+  # ---- ports E..I, bonded only on the large fixture packages above ------------
+  PC0: { type: io }
+  PC1: { type: io }
+  PC12: { type: io }
+  PC2: { type: io }
+  PC3: { type: io }
+  PC4: { type: io }
+  PC5: { type: io }
+  PC6: { type: io }
+  PC7: { type: io }
+  PC8: { type: io }
+  PC9: { type: io }
+  PD10: { type: io }
+  PD11: { type: io }
+  PD12: { type: io }
+  PD13: { type: io }
+  PD14: { type: io }
+  PD15: { type: io }
+  PD2: { type: io }
+  PD3: { type: io }
+  PD4: { type: io }
+  PD5: { type: io }
+  PD6: { type: io }
+  PD7: { type: io }
+  PD8: { type: io }
+  PD9: { type: io }
+  PE0: { type: io }
+  PE1: { type: io }
+  PE10: { type: io }
+  PE11: { type: io }
+  PE12: { type: io }
+  PE13: { type: io }
+  PE14: { type: io }
+  PE15: { type: io }
+  PE2: { type: io }
+  PE3: { type: io }
+  PE4: { type: io }
+  PE5: { type: io }
+  PE6: { type: io }
+  PE7: { type: io }
+  PE8: { type: io }
+  PE9: { type: io }
+  PF0: { type: io }
+  PF1: { type: io }
+  PF10: { type: io }
+  PF11: { type: io }
+  PF12: { type: io }
+  PF13: { type: io }
+  PF14: { type: io }
+  PF15: { type: io }
+  PF2: { type: io }
+  PF3: { type: io }
+  PF4: { type: io }
+  PF5: { type: io }
+  PF6: { type: io }
+  PF7: { type: io }
+  PF8: { type: io }
+  PF9: { type: io }
+  PG0: { type: io }
+  PG1: { type: io }
+  PG10: { type: io }
+  PG11: { type: io }
+  PG12: { type: io }
+  PG13: { type: io }
+  PG14: { type: io }
+  PG15: { type: io }
+  PG2: { type: io }
+  PG3: { type: io }
+  PG4: { type: io }
+  PG5: { type: io }
+  PG6: { type: io }
+  PG7: { type: io }
+  PG8: { type: io }
+  PG9: { type: io }
+  PH0: { type: io }
+  PH1: { type: io }
+  PH10: { type: io }
+  PH11: { type: io }
+  PH12: { type: io }
+  PH13: { type: io }
+  PH14: { type: io }
+  PH15: { type: io }
+  PH2: { type: io }
+  PH3: { type: io }
+  PH4: { type: io }
+  PH5: { type: io }
+  PH6: { type: io }
+  PH7: { type: io }
+  PH8: { type: io }
+  PH9: { type: io }
+  PI0: { type: io }
+  PI1: { type: io }
+  PI10: { type: io }
+  PI11: { type: io }
+  PI12: { type: io }
+  PI13: { type: io }
+  PI14: { type: io }
+  PI15: { type: io }
+  PI2: { type: io }
+  PI3: { type: io }
+  PI4: { type: io }
+  PI5: { type: io }
+  PI6: { type: io }
+  PI7: { type: io }
+  PI8: { type: io }
+  PI9: { type: io }
 
 # -----------------------------------------------------------------------------
 peripherals:
@@ -3142,8 +3580,12 @@ function generateAll() {
         <button class="ic" id="z-in" title="Zoom in">⊕</button>
         <button class="ic" id="z-fit" title="Fit">⛶</button>
         <button class="ic" id="z-out" title="Zoom out">⊖</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="ic" id="c-rot" title="Rotate the package 90° clockwise">⟳</button>
+        <button class="ic" id="c-flip" title="Mirror the package left to right">⇄</button>
+        <button class="ic" id="c-svg" title="Export this pinout drawing as an SVG file">⤓</button>
         <label class="sr" for="pkgsel">Package</label><select id="pkgsel" title="Package"></select>
-        <label class="sr" for="pin-search">Find a pin or signal</label><input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px"><span class="hits" id="pin-hits" role="status" aria-live="polite"></span>
+        <label class="sr" for="pin-search">Find a pin or signal</label><span class="findwrap"><input id="pin-search" placeholder="🔍 find pin or signal" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="pin-results" style="width:170px"><div class="findlist" id="pin-results" role="listbox" hidden></div></span><span class="hits" id="pin-hits" role="status" aria-live="polite"></span>
         <label class="flt" title="Hide pins that have no signal and no user label"><input type="checkbox" id="only-mod">Only modified</label>
         <div class="spacer"></div>
         <div class="unused">Unused GPIOs:<b id="unused">0 / 0</b></div>
@@ -3217,7 +3659,8 @@ let geom = null;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const attr = s => esc(s).replace(/"/g, '&quot;');
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
-const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false, cview: 'pinout' };
+const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false,
+            cview: 'pinout', rot: 0, flip: false, hits: [], pick: -1 };
 
 // userLabel() and pinModified() now live in app/engine/engine.js (AGENT-3's
 // 01:00Z handoff). pinModified() there canonicalises the pin, so the second name
@@ -3233,6 +3676,25 @@ function labelRoom() {
   return Math.max(120, Math.min(420, 34 + n * 6.6));
 }
 
+// Rotate and mirror the finished geometry, not the canvas. Every label, pin number
+// and text anchor is chosen from the pin's `side`, so remapping the side is all it
+// takes for the whole drawing to come out right way up - no counter-transforms.
+function orient(L) {
+  let { pins, body, W, H } = L;
+  const turn = r => ({ x: H - r.y - r.h, y: r.x, w: r.h, h: r.w });   // 90 degrees clockwise
+  for (let i = 0; i < (U.rot & 3); i++) {
+    pins = pins.map(pin => Object.assign({}, pin, turn(pin), { side: (pin.side + 3) % 4 }));
+    body = turn(body);
+    const swap = W; W = H; H = swap;
+  }
+  if (U.flip) {
+    const mirror = s => (s === 0 ? 2 : s === 2 ? 0 : s);
+    pins = pins.map(pin => Object.assign({}, pin, { x: W - pin.x - pin.w, side: mirror(pin.side) }));
+    body = Object.assign({}, body, { x: W - body.x - body.w });
+  }
+  return { pk: L.pk, pins, body, W, H };
+}
+
 function layout() {
   LABEL = labelRoom();
   const pk = PACKAGES[S.pkg] || { kind: 'quad', pins: Object.keys(pkgPins()).length };
@@ -3240,23 +3702,25 @@ function layout() {
   if (pk.kind === 'quad') {
     const ps = n / 4, B = ps * PITCH + 2 * MARGIN, x0 = LABEL + PLEN, y0 = LABEL + PLEN;
     for (let i = 0; i < n; i++) {
-      const side = Math.floor(i / ps), k = i % ps, p = { num: i + 1, side };
+      const side = Math.floor(i / ps), k = i % ps;
+      const p = { num: i + 1, side, w: side % 2 ? PITCH - 3 : PLEN, h: side % 2 ? PLEN : PITCH - 3 };
       if (side === 0) { p.x = x0 - PLEN; p.y = y0 + MARGIN + k * PITCH; }                                   // left, top->bottom
       if (side === 1) { p.x = x0 + MARGIN + k * PITCH; p.y = y0 + B; }                                      // bottom, left->right
       if (side === 2) { p.x = x0 + B; p.y = y0 + B - MARGIN - (k + 1) * PITCH; }                            // right, bottom->top
       if (side === 3) { p.x = x0 + B - MARGIN - (k + 1) * PITCH; p.y = y0 - PLEN; }                         // top, right->left
       pins.push(p);
     }
-    return { pk, pins, body: { x: x0, y: y0, w: B, h: B }, W: 2 * (LABEL + PLEN) + B, H: 2 * (LABEL + PLEN) + B };
+    return orient({ pk, pins, body: { x: x0, y: y0, w: B, h: B }, W: 2 * (LABEL + PLEN) + B, H: 2 * (LABEL + PLEN) + B });
   } else {
     const ps = n / 2, BW = 200, BH = ps * PITCH + 2 * MARGIN, x0 = LABEL + PLEN, y0 = 40;
     for (let i = 0; i < n; i++) {
-      const side = i < ps ? 0 : 2, k = i % ps, p = { num: i + 1, side };
+      const side = i < ps ? 0 : 2, k = i % ps;
+      const p = { num: i + 1, side, w: PLEN, h: PITCH - 3 };
       if (side === 0) { p.x = x0 - PLEN; p.y = y0 + MARGIN + k * PITCH; }
       else { p.x = x0 + BW; p.y = y0 + BH - MARGIN - (k + 1) * PITCH; }
       pins.push(p);
     }
-    return { pk, pins, body: { x: x0, y: y0, w: BW, h: BH }, W: 2 * (LABEL + PLEN) + BW, H: BH + 80 };
+    return orient({ pk, pins, body: { x: x0, y: y0, w: BW, h: BH }, W: 2 * (LABEL + PLEN) + BW, H: BH + 80 });
   }
 }
 
@@ -3292,7 +3756,7 @@ function renderChip() {
     if (S.selPin === name) cls += ' selected';
     if (U.focus === name) cls += ' focused';
     if (hidden) cls += ' dim';
-    const w = vert(p) ? PITCH - 3 : PLEN, h = vert(p) ? PLEN : PITCH - 3;
+    const w = p.w, h = p.h;                      // set in layout(), so rotation carries it
     const notes = grp.map(n => (M.pins[n] || {}).notes).filter(Boolean).join('; ');
     const tip = `${grp.join('/')} \u2014 pin ${p.num}`
       + (info ? ` \u2014 ${info.label}${info.state === 'conflict' ? ' (CONFLICT)' : ''}` : t === 'io' ? ' \u2014 unassigned' : ` \u2014 ${t}`)
@@ -3729,6 +4193,96 @@ function pinMatches(name, q) {
     || userLabel(name).toLowerCase().includes(q)
     || (M._pinSignals[name] || []).some(s => sigName(s.periph, s.signal).toLowerCase().includes(q));
 }
+// ---- orientation and export -------------------------------------------------
+function setOrientation(patch) {
+  Object.assign(U, patch);
+  document.getElementById('c-rot').classList.toggle('on', !!(U.rot & 3));
+  document.getElementById('c-flip').classList.toggle('on', U.flip);
+  U.autoFit = true;                                  // the drawing changed shape
+  renderChip();
+  fitChip();
+}
+document.getElementById('c-rot').onclick = () => {
+  setOrientation({ rot: (U.rot + 1) & 3 });
+  toast(`Package rotated ${U.rot * 90}\u00b0${U.flip ? ', mirrored' : ''}`);
+};
+document.getElementById('c-flip').onclick = () => {
+  setOrientation({ flip: !U.flip });
+  toast(U.flip ? 'Package mirrored' : 'Mirror off');
+};
+
+// The drawing is styled by the page stylesheet, so an exported file has to carry
+// it. Embedding the whole sheet keeps the export identical to what is on screen -
+// including the current theme - instead of a second copy of the colours that can
+// drift away from the app's.
+function exportSvg() {
+  const src = document.getElementById('svg');
+  const box = rootBox();
+  const pad = 12;
+  const out = src.cloneNode(true);
+  const root = out.querySelector('#root');
+  if (root) root.setAttribute('transform', `translate(${pad - box.x},${pad - box.y})`);
+  out.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  out.setAttribute('width', Math.ceil(box.width + pad * 2));
+  out.setAttribute('height', Math.ceil(box.height + pad * 2));
+  out.setAttribute('viewBox', `0 0 ${Math.ceil(box.width + pad * 2)} ${Math.ceil(box.height + pad * 2)}`);
+  const theme = document.documentElement.getAttribute('data-theme');
+  if (theme) out.setAttribute('data-theme', theme);
+  out.querySelectorAll('.pin').forEach(g => {         // interaction classes mean nothing in a file
+    g.classList.remove('hover', 'found', 'faded', 'focused', 'selected', 'newconflict', 'dim');
+    g.removeAttribute('role'); g.removeAttribute('tabindex');
+  });
+  const css = document.querySelector('style');
+  const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  style.textContent = (css ? css.textContent : '') +
+    `\n:root{background:var(--panel)}\nsvg{background:var(--panel)}\n`;
+  out.insertBefore(style, out.firstChild);
+  const name = `${(PROJECT.variant || M.mcu.name)}_${S.pkg}_pinout.svg`.replace(/[^\w.-]+/g, '_');
+  // XMLSerializer, not outerHTML: the file has to be XML, not HTML-flavoured markup
+  const xml = typeof XMLSerializer === 'function' ? new XMLSerializer().serializeToString(out) : out.outerHTML;
+  downloadText(name, '<?xml version="1.0" encoding="UTF-8"?>\n' + xml, 'image/svg+xml');
+  toast(`Exported ${name}`);
+}
+document.getElementById('c-svg').onclick = exportSvg;
+
+// ---- pin search -------------------------------------------------------------
+// The dropdown lists what matched, so you can pick the pin you meant instead of
+// pressing Enter until the right one lights up.
+function closeFindList() {
+  const l = document.getElementById('pin-results');
+  l.hidden = true; l.innerHTML = '';
+  document.getElementById('pin-search').setAttribute('aria-expanded', 'false');
+  U.pick = -1;
+}
+function renderFindList(hits, q) {
+  const l = document.getElementById('pin-results');
+  if (!q || !hits.length) { closeFindList(); return; }
+  const MAX = 12;
+  l.innerHTML = hits.slice(0, MAX).map((n, i) => {
+    const info = E.pins[canon(n)], ul = userLabel(n);
+    const sig = info ? info.label : (pinType(n) === 'io' ? 'unassigned' : pinType(n));
+    return `<div class="row${i === U.pick ? ' on' : ''}${info && info.state === 'conflict' ? ' conflict' : ''}" role="option"`
+      + ` aria-selected="${i === U.pick}" data-pin="${attr(n)}" data-i="${i}">`
+      + `<b>${esc(groupOf(n).join('/'))}</b><span class="num">pin ${pinNum(n)}</span>`
+      + `<span class="sig">${esc(sig)}${ul ? ' \u00b7 ' + esc(ul) : ''}</span></div>`;
+  }).join('') + (hits.length > MAX ? `<div class="more">+${hits.length - MAX} more — keep typing</div>` : '');
+  l.hidden = false;
+  document.getElementById('pin-search').setAttribute('aria-expanded', 'true');
+}
+function gotoPin(name) {
+  U.focus = name;
+  renderChip();
+  applyPinSearch();
+  const i = E.pins[canon(name)];
+  toast(`${groupOf(name).join('/')} (pin ${pinNum(name)})${i ? ' \u2014 ' + i.label : ''}`);
+}
+document.getElementById('pin-results').addEventListener('mousedown', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  e.preventDefault();                                 // keep the caret in the search box
+  U.pick = +row.dataset.i;
+  gotoPin(row.dataset.pin);
+});
+
 function applyPinSearch() {
   const box = document.getElementById('pin-search'), out = document.getElementById('pin-hits');
   const q = box.value.trim().toLowerCase();
@@ -3740,25 +4294,38 @@ function applyPinSearch() {
     if (hit) hits.push(p.dataset.pin);
   });
   U.hits = hits;
+  if (U.pick >= hits.length) U.pick = -1;
   out.textContent = !q ? '' : hits.length ? `${hits.length} pin${hits.length > 1 ? 's' : ''}` : 'no match';
   out.classList.toggle('none', !!q && !hits.length);
+  renderFindList(hits, q);
   return hits;
 }
 document.getElementById('pin-search').addEventListener('input', applyPinSearch);
 document.getElementById('pin-search').addEventListener('keydown', e => {
-  if (e.key === 'Escape') { e.stopPropagation(); e.target.value = ''; applyPinSearch(); return; }
+  if (e.key === 'Escape') {
+    e.stopPropagation();
+    if (!document.getElementById('pin-results').hidden) { closeFindList(); return; }
+    e.target.value = ''; applyPinSearch(); return;
+  }
+  const hits = U.hits && U.hits.length ? U.hits : [];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!hits.length) return;
+    e.preventDefault();
+    const step = e.key === 'ArrowDown' ? 1 : -1;
+    U.pick = (U.pick + step + hits.length + (U.pick < 0 && step < 0 ? 1 : 0)) % hits.length;
+    renderFindList(hits, e.target.value.trim().toLowerCase());
+    gotoPin(hits[U.pick]);
+    return;
+  }
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  const hits = U.hits && U.hits.length ? U.hits : applyPinSearch();
-  if (!hits.length) return;
-  // Enter walks the matches: focus the next one and say what it is
-  const at = hits.indexOf(U.focus);
-  U.focus = hits[(at + 1) % hits.length];
-  renderChip();
-  applyPinSearch();
-  const i = E.pins[canon(U.focus)];
-  toast(`${groupOf(U.focus).join('/')} (pin ${pinNum(U.focus)})${i ? ' \u2014 ' + i.label : ''}`);
+  const list = hits.length ? hits : applyPinSearch();
+  if (!list.length) return;
+  // Enter takes the highlighted row, or walks to the next match when nothing is highlighted
+  U.pick = U.pick >= 0 ? U.pick : (list.indexOf(U.focus) + 1) % list.length;
+  gotoPin(list[U.pick]);
 });
+document.getElementById('pin-search').addEventListener('blur', () => setTimeout(closeFindList, 120));
 
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];

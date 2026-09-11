@@ -500,7 +500,8 @@ let geom = null;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const attr = s => esc(s).replace(/"/g, '&quot;');
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
-const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false, cview: 'pinout' };
+const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false,
+            cview: 'pinout', rot: 0, flip: false, hits: [], pick: -1 };
 
 // userLabel() and pinModified() now live in app/engine/engine.js (AGENT-3's
 // 01:00Z handoff). pinModified() there canonicalises the pin, so the second name
@@ -1033,6 +1034,96 @@ function pinMatches(name, q) {
     || userLabel(name).toLowerCase().includes(q)
     || (M._pinSignals[name] || []).some(s => sigName(s.periph, s.signal).toLowerCase().includes(q));
 }
+// ---- orientation and export -------------------------------------------------
+function setOrientation(patch) {
+  Object.assign(U, patch);
+  document.getElementById('c-rot').classList.toggle('on', !!(U.rot & 3));
+  document.getElementById('c-flip').classList.toggle('on', U.flip);
+  U.autoFit = true;                                  // the drawing changed shape
+  renderChip();
+  fitChip();
+}
+document.getElementById('c-rot').onclick = () => {
+  setOrientation({ rot: (U.rot + 1) & 3 });
+  toast(`Package rotated ${U.rot * 90}\u00b0${U.flip ? ', mirrored' : ''}`);
+};
+document.getElementById('c-flip').onclick = () => {
+  setOrientation({ flip: !U.flip });
+  toast(U.flip ? 'Package mirrored' : 'Mirror off');
+};
+
+// The drawing is styled by the page stylesheet, so an exported file has to carry
+// it. Embedding the whole sheet keeps the export identical to what is on screen -
+// including the current theme - instead of a second copy of the colours that can
+// drift away from the app's.
+function exportSvg() {
+  const src = document.getElementById('svg');
+  const box = rootBox();
+  const pad = 12;
+  const out = src.cloneNode(true);
+  const root = out.querySelector('#root');
+  if (root) root.setAttribute('transform', `translate(${pad - box.x},${pad - box.y})`);
+  out.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  out.setAttribute('width', Math.ceil(box.width + pad * 2));
+  out.setAttribute('height', Math.ceil(box.height + pad * 2));
+  out.setAttribute('viewBox', `0 0 ${Math.ceil(box.width + pad * 2)} ${Math.ceil(box.height + pad * 2)}`);
+  const theme = document.documentElement.getAttribute('data-theme');
+  if (theme) out.setAttribute('data-theme', theme);
+  out.querySelectorAll('.pin').forEach(g => {         // interaction classes mean nothing in a file
+    g.classList.remove('hover', 'found', 'faded', 'focused', 'selected', 'newconflict', 'dim');
+    g.removeAttribute('role'); g.removeAttribute('tabindex');
+  });
+  const css = document.querySelector('style');
+  const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  style.textContent = (css ? css.textContent : '') +
+    `\n:root{background:var(--panel)}\nsvg{background:var(--panel)}\n`;
+  out.insertBefore(style, out.firstChild);
+  const name = `${(PROJECT.variant || M.mcu.name)}_${S.pkg}_pinout.svg`.replace(/[^\w.-]+/g, '_');
+  // XMLSerializer, not outerHTML: the file has to be XML, not HTML-flavoured markup
+  const xml = typeof XMLSerializer === 'function' ? new XMLSerializer().serializeToString(out) : out.outerHTML;
+  downloadText(name, '<?xml version="1.0" encoding="UTF-8"?>\n' + xml, 'image/svg+xml');
+  toast(`Exported ${name}`);
+}
+document.getElementById('c-svg').onclick = exportSvg;
+
+// ---- pin search -------------------------------------------------------------
+// The dropdown lists what matched, so you can pick the pin you meant instead of
+// pressing Enter until the right one lights up.
+function closeFindList() {
+  const l = document.getElementById('pin-results');
+  l.hidden = true; l.innerHTML = '';
+  document.getElementById('pin-search').setAttribute('aria-expanded', 'false');
+  U.pick = -1;
+}
+function renderFindList(hits, q) {
+  const l = document.getElementById('pin-results');
+  if (!q || !hits.length) { closeFindList(); return; }
+  const MAX = 12;
+  l.innerHTML = hits.slice(0, MAX).map((n, i) => {
+    const info = E.pins[canon(n)], ul = userLabel(n);
+    const sig = info ? info.label : (pinType(n) === 'io' ? 'unassigned' : pinType(n));
+    return `<div class="row${i === U.pick ? ' on' : ''}${info && info.state === 'conflict' ? ' conflict' : ''}" role="option"`
+      + ` aria-selected="${i === U.pick}" data-pin="${attr(n)}" data-i="${i}">`
+      + `<b>${esc(groupOf(n).join('/'))}</b><span class="num">pin ${pinNum(n)}</span>`
+      + `<span class="sig">${esc(sig)}${ul ? ' \u00b7 ' + esc(ul) : ''}</span></div>`;
+  }).join('') + (hits.length > MAX ? `<div class="more">+${hits.length - MAX} more — keep typing</div>` : '');
+  l.hidden = false;
+  document.getElementById('pin-search').setAttribute('aria-expanded', 'true');
+}
+function gotoPin(name) {
+  U.focus = name;
+  renderChip();
+  applyPinSearch();
+  const i = E.pins[canon(name)];
+  toast(`${groupOf(name).join('/')} (pin ${pinNum(name)})${i ? ' \u2014 ' + i.label : ''}`);
+}
+document.getElementById('pin-results').addEventListener('mousedown', e => {
+  const row = e.target.closest('.row'); if (!row) return;
+  e.preventDefault();                                 // keep the caret in the search box
+  U.pick = +row.dataset.i;
+  gotoPin(row.dataset.pin);
+});
+
 function applyPinSearch() {
   const box = document.getElementById('pin-search'), out = document.getElementById('pin-hits');
   const q = box.value.trim().toLowerCase();
@@ -1044,25 +1135,38 @@ function applyPinSearch() {
     if (hit) hits.push(p.dataset.pin);
   });
   U.hits = hits;
+  if (U.pick >= hits.length) U.pick = -1;
   out.textContent = !q ? '' : hits.length ? `${hits.length} pin${hits.length > 1 ? 's' : ''}` : 'no match';
   out.classList.toggle('none', !!q && !hits.length);
+  renderFindList(hits, q);
   return hits;
 }
 document.getElementById('pin-search').addEventListener('input', applyPinSearch);
 document.getElementById('pin-search').addEventListener('keydown', e => {
-  if (e.key === 'Escape') { e.stopPropagation(); e.target.value = ''; applyPinSearch(); return; }
+  if (e.key === 'Escape') {
+    e.stopPropagation();
+    if (!document.getElementById('pin-results').hidden) { closeFindList(); return; }
+    e.target.value = ''; applyPinSearch(); return;
+  }
+  const hits = U.hits && U.hits.length ? U.hits : [];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!hits.length) return;
+    e.preventDefault();
+    const step = e.key === 'ArrowDown' ? 1 : -1;
+    U.pick = (U.pick + step + hits.length + (U.pick < 0 && step < 0 ? 1 : 0)) % hits.length;
+    renderFindList(hits, e.target.value.trim().toLowerCase());
+    gotoPin(hits[U.pick]);
+    return;
+  }
   if (e.key !== 'Enter') return;
   e.preventDefault();
-  const hits = U.hits && U.hits.length ? U.hits : applyPinSearch();
-  if (!hits.length) return;
-  // Enter walks the matches: focus the next one and say what it is
-  const at = hits.indexOf(U.focus);
-  U.focus = hits[(at + 1) % hits.length];
-  renderChip();
-  applyPinSearch();
-  const i = E.pins[canon(U.focus)];
-  toast(`${groupOf(U.focus).join('/')} (pin ${pinNum(U.focus)})${i ? ' \u2014 ' + i.label : ''}`);
+  const list = hits.length ? hits : applyPinSearch();
+  if (!list.length) return;
+  // Enter takes the highlighted row, or walks to the next match when nothing is highlighted
+  U.pick = U.pick >= 0 ? U.pick : (list.indexOf(U.focus) + 1) % list.length;
+  gotoPin(list[U.pick]);
 });
+document.getElementById('pin-search').addEventListener('blur', () => setTimeout(closeFindList, 120));
 
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
