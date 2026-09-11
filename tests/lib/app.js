@@ -3,20 +3,23 @@
 // The app is one classic <script>: function declarations land on window, but top-level
 // let bindings (M, S, E, geom, U...) do NOT.  window.eval() runs in global scope and can
 // see them, so `a.ev('S.pkg')` is how tests read engine state.
-const fs = require('fs'), path = require('path');
-const { dep } = require('./deps');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dep, resolveDep } from './deps.js';
 
-const ROOT = path.join(__dirname, '..', '..');
-const DIST = path.join(ROOT, 'dist', 'index.html');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+export const ROOT = path.resolve(HERE, '..', '..');
+export const DIST = path.join(ROOT, 'dist', 'index.html');
 
 // jsdom has no layout engine: clientWidth/clientHeight are 0, which makes fitChip()
 // compute zoom 0.  Pretend the canvas has a real size so the render path is exercised
 // with realistic numbers.
-const VIEWPORT = { width: 1280, height: 720 };
+export const VIEWPORT = { width: 1280, height: 720 };
 
 const CDN_YAML = /<script[^>]+cdnjs[^>]+js-yaml[^>]*>\s*<\/script>/i;
 
-function readDist() {
+export function readDist() {
   if (!fs.existsSync(DIST)) throw new Error('dist/index.html missing - run "python build.py" first');
   let html = fs.readFileSync(DIST, 'utf8');
   // Offline: swap the CDN js-yaml tag for the vendored copy (or node_modules') if it is still there.
@@ -24,18 +27,18 @@ function readDist() {
     const vendored = path.join(ROOT, 'app', 'vendor', 'js-yaml.js');
     const lib = fs.existsSync(vendored)
       ? fs.readFileSync(vendored, 'utf8')
-      : fs.readFileSync(require.resolve('js-yaml/dist/js-yaml.js', { paths: module.paths }), 'utf8');
+      : fs.readFileSync(resolveDep('js-yaml/dist/js-yaml.js'), 'utf8');
     html = html.replace(CDN_YAML, '<script>/* test: vendored js-yaml */\n' + lib + '\n</script>');
   }
   return html;
 }
 
 /** True once AGENT-2's offline wiring has landed (no CDN tag in the built file). */
-function distIsOffline() {
+export function distIsOffline() {
   return !CDN_YAML.test(fs.readFileSync(DIST, 'utf8'));
 }
 
-function boot(options) {
+export function boot(options) {
   const opts = options || {};
   const viewport = opts.viewport || VIEWPORT;
   const { JSDOM, VirtualConsole } = dep('jsdom');
@@ -182,9 +185,8 @@ function boot(options) {
 }
 
 /** Boot once, hand to fn, always close (jsdom windows leak timers otherwise). */
-async function withApp(fn, opts) {
+export async function withApp(fn, opts) {
   const a = boot(opts);
   try { return await fn(a); } finally { a.close(); }
 }
 
-module.exports = { boot, withApp, readDist, distIsOffline, ROOT, DIST, VIEWPORT };

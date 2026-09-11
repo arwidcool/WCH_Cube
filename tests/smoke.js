@@ -4,8 +4,8 @@
 // assign something, and assert the console stayed completely silent.  This is the
 // check behind the DONE.md line "zero console errors/warnings on load for every
 // MCU x every package".
-const { suite, test, assert } = require('./lib/harness');
-const { boot } = require('./lib/app');
+import { suite, test, assert } from './lib/harness.js';
+import { boot } from './lib/app.js';
 
 suite('smoke (every MCU x every package)');
 

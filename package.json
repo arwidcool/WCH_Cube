@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "STM32CubeMX-style pinout, peripheral and clock configurator for WCH MCUs.",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "build": "python build.py",
     "test": "node tests/run.js",

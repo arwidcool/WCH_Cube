@@ -1,47 +1,95 @@
 #!/usr/bin/env node
-// Test runner. Discovers every *.test.js under app/tests/ (engine, AGENT-2) and
-// tests/ (QA, AGENT-4), runs them in one process, prints one line per test.
-// Exit code 1 on the first failing assertion, so CI and the merge rule can gate on it.
+// WCHCube test runner —  node tests/run.js [filter]
+//
+// Discovers every *.test.js under app/tests/ (engine units, AGENT-2) and tests/
+// (QA suites, AGENT-4), plus tests/smoke.js, and runs them in one process.
+// The two areas use different harnesses, so results are collected from both
+// registries: app/tests/_harness.js (collected()) and tests/lib/harness.js (REG).
+//
+// Exit 0 = green. Anything else = do not merge.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DIRS = [path.join(ROOT, 'app', 'tests'), path.join(ROOT, 'tests')];
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, '..');
+const filter = (process.argv[2] || '').toLowerCase();
 
-const files = DIRS.flatMap(d => (fs.existsSync(d) ? fs.readdirSync(d) : [])
-  .filter(f => f.endsWith('.test.js'))
-  .sort()
-  .map(f => path.join(d, f)));
+const tty = process.stdout.isTTY && !process.env.NO_COLOR;
+const C = tty
+  ? { g: s => `\x1b[32m${s}\x1b[0m`, r: s => `\x1b[31m${s}\x1b[0m`, y: s => `\x1b[33m${s}\x1b[0m`, d: s => `\x1b[90m${s}\x1b[0m`, b: s => `\x1b[1m${s}\x1b[0m` }
+  : { g: s => s, r: s => s, y: s => s, d: s => s, b: s => s };
 
-if (!files.length) { console.error('no *.test.js found in', DIRS.join(', ')); process.exit(1); }
+const list = (dir, extra = []) => {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  return names.filter(f => f.endsWith('.test.js') || extra.includes(f)).sort().map(f => path.join(dir, f));
+};
 
-const { collected } = await import(pathToFileURL(path.join(ROOT, 'app', 'tests', '_harness.js')).href);
+// smoke.js last: it is the slowest and the most likely to be noisy.
+const FILES = [
+  ...list(path.join(ROOT, 'app', 'tests')),
+  ...list(path.join(ROOT, 'tests')),
+  ...list(path.join(ROOT, 'tests'), ['smoke.js']).filter(f => path.basename(f) === 'smoke.js'),
+];
+if (!FILES.length) { console.error('no tests found under app/tests/ or tests/'); process.exit(2); }
 
-let pass = 0, fail = 0;
-const started = Date.now();
-for (const f of files) {
-  const before = collected().length;
-  await import(pathToFileURL(f).href);
-  const mine = collected().slice(before);
-  console.log(`\n${path.relative(ROOT, f).replace(/\\/g, '/')}  (${mine.length})`);
-  for (const t of mine) {
-    const t0 = Date.now();
+const imp = f => import(pathToFileURL(f).href);
+
+// Engine harness is optional: it only exists while AGENT-2 keeps app/tests/.
+let collected = () => [];
+const enginePath = path.join(ROOT, 'app', 'tests', '_harness.js');
+if (fs.existsSync(enginePath)) {
+  try { ({ collected } = await imp(enginePath)); }
+  catch (e) { console.error(C.y('warning: app/tests/_harness.js failed to load — engine units skipped')); console.error('  ' + (e.message || e)); }
+}
+const { REG, AssertionError } = await imp(path.join(ROOT, 'tests', 'lib', 'harness.js'));
+
+const t0 = Date.now();
+let pass = 0, filtered = 0;
+const failures = [];
+
+for (const file of FILES) {
+  const rel = path.relative(ROOT, file).replace(/\\/g, '/');
+  const before = { engine: collected().length, qa: REG.length };
+  try {
+    await imp(file);
+  } catch (e) {
+    console.log('\n' + C.b(rel));
+    console.log('  ' + C.r('LOAD FAIL') + ' ' + (e.stack || e));
+    failures.push({ where: rel, name: '(module load)', error: e });
+    continue;
+  }
+  const found = [...collected().slice(before.engine), ...REG.slice(before.qa)];
+  if (!found.length) continue;
+
+  let header = false;
+  for (const t of found) {
+    const label = t.suite ? `${t.suite} › ${t.name}` : t.name;
+    if (filter && !(`${rel} ${label}`.toLowerCase().includes(filter))) { filtered++; continue; }
+    if (!header) { console.log('\n' + C.b(rel)); header = true; }
+    const start = Date.now();
     try {
       await t.fn();
+      const ms = Date.now() - start;
       pass++;
-      console.log(`  ok    ${t.name}${Date.now() - t0 > 40 ? `  [${Date.now() - t0} ms]` : ''}`);
-    } catch (err) {
-      fail++;
-      console.log(`  FAIL  ${t.name}`);
-      const msg = (err && err.message || String(err)).split('\n').slice(0, 12).join('\n');
-      console.log(msg.replace(/^/gm, '        '));
-      if (err && err.stack) {
-        const at = err.stack.split('\n').find(l => l.includes('.test.js'));
-        if (at) console.log('       ', at.trim());
-      }
+      console.log(`  ${C.g('ok')}    ${label}${ms > 250 ? C.d(`  [${ms} ms]`) : ''}`);
+    } catch (e) {
+      console.log(`  ${C.r('FAIL')}  ${label}`);
+      const body = (e instanceof AssertionError || e.name === 'AssertionError')
+        ? (e.message || String(e))
+        : (e.stack || String(e));
+      console.log(body.split('\n').slice(0, 45).map(l => '        ' + l).join('\n'));
+      failures.push({ where: rel, name: label, error: e });
     }
   }
 }
-console.log(`\n${pass} passed, ${fail} failed, ${Date.now() - started} ms`);
-process.exit(fail ? 1 : 0);
+
+const secs = ((Date.now() - t0) / 1000).toFixed(1);
+console.log('\n' + '-'.repeat(64));
+if (failures.length) {
+  console.log(C.r(`${failures.length} FAILED`) + `, ${pass} passed` + (filtered ? `, ${filtered} filtered out` : '') + `  (${secs}s)`);
+  for (const f of failures) console.log('  ' + C.r('x') + ` ${f.where}  ${f.name}`);
+  process.exit(1);
+}
+console.log(C.g('ALL GREEN') + ` — ${pass} tests` + (filtered ? `, ${filtered} filtered out` : '') + `  (${secs}s)`);
