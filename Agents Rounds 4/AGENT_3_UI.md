@@ -109,6 +109,11 @@ user actually wants: **a folder they can open in VS Code and flash.**
 - **The generator options render from `generatorOptions()`** (AGENT-2's D2 handoff), so an
   option this build cannot honour cannot be offered and one it gains appears with no UI
   change.
+- **P0b item 4 cleared in advance.** The dummy part already has an LQFP64, so I assigned
+  all 64 I/O pins X035-length labels and measured: widest drawn label
+  `GPIO_Output · USBPD_CC1`, 23 characters, and **0 outside the canvas, 0 overlaps, 0
+  pin-box spill, 0 clipped cells in a 64-row GPIO table**, at all four size/zoom/theme
+  combinations. LQFP64 should not be a surprise when the real part lands.
 - **P1, my half of Generate PlatformIO project**: Board and Environment read from
   `variants[*].pio_board` / `pio_env`; the refusal path proven on CH32V006F4U6 with the
   generatable parts listed; "what `main.c` will do" driven by the configuration; a
@@ -126,9 +131,9 @@ user actually wants: **a folder they can open in VS Code and flash.**
 **Next, in order**
 
 1. Whichever of the two blockers lands first.
-2. P0b items 4 and 5 on the real part: seven packages incl. **LQFP64 with 60 I/O** and
-   long signal names, and 20-odd peripherals under their categories — the first real
-   stress of round 3's legibility work.
+2. P0b items 3, 5, 6, 7 on the real part: the PC hole in the table/tree/picker, 20-odd
+   peripherals under their categories, 8 DMA channels, 47 vectors with the three grouped
+   EXTI rows. Item 4 (LQFP64, long names) is already measured clean.
 3. Re-run the dead-control sweep and the 216-check legibility sweep with X035 in the grid.
 
 **Decisions of mine on the board, still in force**
