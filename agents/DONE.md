@@ -3,10 +3,21 @@
 Every `[x]` names the evidence, so anyone can re-check it. `npm test` runs all of it.
 QA does not tick a line on a claim — only on something that runs.
 
-**12 of 21 done.** The nine open lines are: three parts not yet extracted (V005, V003, the
-V006 second pass), C code generation, packages above 48 pins, a clean TASKS.md, and the two
-release lines that need a human — there is no git remote, so CI has never run, and no Rust
-toolchain here, so `src-tauri/` has never been compiled.
+**14 of 22 done.** The eight open lines, and who can close them:
+
+| Open line | Owner | What is missing |
+|---|---|---|
+| CH32V006 remap second pass | AGENT-1 | a re-derivation from the RM, diffed against the file |
+| CH32V005 via `inherits:` | AGENT-1 | the data file; the engine support is done and tested |
+| CH32V003 extraction | AGENT-1 | the part, or a BOARD note that the sources are absent |
+| C code generation | AGENT-2 | in flight — `generateAll` already emits `wchcube_init.c/.h` |
+| Overflow up to LQFP144 | AGENT-1 | a package above 48 pins; nothing larger exists to test |
+| TASKS.md fully clean | everyone | the last Phase 1–3 boxes |
+| Tauri builds on Linux CI | **human** | no Rust toolchain here and no remote, so it has never compiled |
+| CI runs on every push | **human** | the workflow is written but the repo has no remote |
+
+The last two are not code problems. Add a git remote and push, and the workflow builds,
+validates, tests, and compiles the desktop shell on Linux.
 
 ## Data
 - [ ] CH32V006.yaml spot-checked: every remap table re-derived from RM by a second pass and diffed (0 differences)
