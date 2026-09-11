@@ -187,7 +187,9 @@ fn open_project(app: AppHandle) -> Result<Option<String>, String> {
 
     let Some(file) = picked else { return Ok(None) };
     let path = file.into_path().map_err(|e| e.to_string())?;
-    fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))
+    fs::read_to_string(&path)
+        .map(Some)
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Where the user's own MCU files go. Created on demand so the folder exists
