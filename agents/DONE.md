@@ -3,12 +3,11 @@
 Every `[x]` names the evidence, so anyone can re-check it. `npm test` runs all of it.
 QA does not tick a line on a claim — only on something that runs.
 
-**14 of 24 done** (re-audited against the tree, cycle 3). The ten open lines:
+**15 of 24 done** (re-audited against the tree, cycle 3). The nine open lines:
 
 | Open line | Owner | What is missing |
 |---|---|---|
 | CH32V006 remap second pass | AGENT-1 | a re-derivation from the RM, diffed against the file |
-| CH32V005 via `inherits:` | AGENT-1 | the data file; the engine support is done and tested |
 | CH32V003 extraction | AGENT-1 | the part, or a BOARD note that the sources are absent |
 | C with no TODO sections | AGENT-1 | the `codegen:` + `analog_signals` blocks; the generator is done |
 | `params:` schema and tab | AGENT-1 / AGENT-2 / AGENT-3 | schema, data, engine, and the UI tab |
@@ -18,7 +17,7 @@ QA does not tick a line on a claim — only on something that runs.
 | Tauri builds on Linux CI | **human** | no Rust toolchain here and no remote, so it has never compiled |
 | CI runs on every push | **human** | the workflow is written but the repo has no remote |
 
-Six of the seven agent-owned lines are AGENT-1's, and five of those are just data extraction.
+Five of the six agent-owned lines are AGENT-1's, and four of those are just data extraction.
 The three human ones are not code problems: add a git remote and push, and the workflow builds,
 validates, tests, and compiles both the generated C and the desktop shell on Linux
 (see `agents/HUMAN_TODO.md`).
@@ -29,9 +28,14 @@ validates, tests, and compiles both the generated C and the desktop shell on Lin
       → `data/mcus/CH32V006.yaml` has `exti.lines` (AFIO_EXTICR, 4 sources per line) and
         `dma.requests` (DMA1, 7 channels); every EXTI pin reference is checked by
         `tools/validate_mcu.py` and gated in `tests/data.test.js`
-- [ ] CH32V005 variant file (no TKEY/TIM3, same pinout) generated from V006 with an `inherits:` field
-      → engine support is ready (`app/engine/inherit.js`, `app/tests/inherit.test.js`), but
-        `data/mcus/CH32V005.yaml` does not exist yet — AGENT-1
+- [x] CH32V005 variant file (no TKEY/TIM3, same pinout) generated from V006 with an `inherits:` field
+      → `data/mcus/CH32V005.yaml`: `mcu.inherits: CH32V006` plus a `remove:` list that drops
+        `peripherals.TKEY`, `peripherals.TIM3`, `packages.QFN32` and its remap entry, with four
+        CH32V005 part numbers of its own. It declares only what actually differs (OPA1).
+        Passes `tools/validate_mcu.py` with 0 errors, and it is picked up automatically by
+        `tests/smoke.js` ("CH32V005: every package loads, draws and survives clicking") and by
+        `tests/data.test.js`, so it is exercised on every package with a silent console.
+        Engine support: `app/engine/inherit.js` + `app/tests/inherit.test.js`.
 - [ ] CH32V003 extracted (DS + RM present in `data/sources/` or requested via BOARD → HUMAN and skipped if absent)
 - [x] Every MCU file passes `tools/validate_mcu.py` (schema + pin-existence + remap-consistency + package I/O counts vs model table)
       → `python tools/validate_mcu.py` exits 0 for both bundled parts; run as a merge gate by

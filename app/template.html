@@ -175,6 +175,19 @@
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
   .chipbar .spacer{flex:1}
+  .chipbar .sep{width:1px;height:18px;background:var(--line);margin:0 2px}
+  .chipbar .ic.on{background:var(--blue-pale)}
+  /* pin search: a real result list, not just a counter */
+  .findwrap{position:relative;display:inline-block}
+  .findlist{position:absolute;left:0;top:calc(100% + 3px);z-index:55;min-width:250px;max-height:260px;overflow:auto;
+            background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 6px 18px var(--shadow)}
+  .findlist .row{display:flex;gap:8px;align-items:baseline;padding:4px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
+  .findlist .row:hover,.findlist .row.on{background:var(--blue-pale)}
+  .findlist .row b{font-weight:600;min-width:62px;color:var(--ink-strong)}
+  .findlist .row .num{color:var(--muted);font-size:11px}
+  .findlist .row .sig{color:var(--link);overflow:hidden;text-overflow:ellipsis;max-width:210px}
+  .findlist .row.conflict .sig{color:var(--bad)}
+  .findlist .more{padding:4px 9px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
   .chipbar label.flt{display:flex;align-items:center;gap:5px;color:#333;white-space:nowrap;cursor:pointer}
   .chipbar label.flt input{margin:0;cursor:pointer}
   #pkgsel{max-width:250px}
@@ -408,8 +421,12 @@
         <button class="ic" id="z-in" title="Zoom in">⊕</button>
         <button class="ic" id="z-fit" title="Fit">⛶</button>
         <button class="ic" id="z-out" title="Zoom out">⊖</button>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="ic" id="c-rot" title="Rotate the package 90° clockwise">⟳</button>
+        <button class="ic" id="c-flip" title="Mirror the package left to right">⇄</button>
+        <button class="ic" id="c-svg" title="Export this pinout drawing as an SVG file">⤓</button>
         <label class="sr" for="pkgsel">Package</label><select id="pkgsel" title="Package"></select>
-        <label class="sr" for="pin-search">Find a pin or signal</label><input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px"><span class="hits" id="pin-hits" role="status" aria-live="polite"></span>
+        <label class="sr" for="pin-search">Find a pin or signal</label><span class="findwrap"><input id="pin-search" placeholder="🔍 find pin or signal" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="pin-results" style="width:170px"><div class="findlist" id="pin-results" role="listbox" hidden></div></span><span class="hits" id="pin-hits" role="status" aria-live="polite"></span>
         <label class="flt" title="Hide pins that have no signal and no user label"><input type="checkbox" id="only-mod">Only modified</label>
         <div class="spacer"></div>
         <div class="unused">Unused GPIOs:<b id="unused">0 / 0</b></div>
@@ -499,6 +516,25 @@ function labelRoom() {
   return Math.max(120, Math.min(420, 34 + n * 6.6));
 }
 
+// Rotate and mirror the finished geometry, not the canvas. Every label, pin number
+// and text anchor is chosen from the pin's `side`, so remapping the side is all it
+// takes for the whole drawing to come out right way up - no counter-transforms.
+function orient(L) {
+  let { pins, body, W, H } = L;
+  const turn = r => ({ x: H - r.y - r.h, y: r.x, w: r.h, h: r.w });   // 90 degrees clockwise
+  for (let i = 0; i < (U.rot & 3); i++) {
+    pins = pins.map(pin => Object.assign({}, pin, turn(pin), { side: (pin.side + 3) % 4 }));
+    body = turn(body);
+    const swap = W; W = H; H = swap;
+  }
+  if (U.flip) {
+    const mirror = s => (s === 0 ? 2 : s === 2 ? 0 : s);
+    pins = pins.map(pin => Object.assign({}, pin, { x: W - pin.x - pin.w, side: mirror(pin.side) }));
+    body = Object.assign({}, body, { x: W - body.x - body.w });
+  }
+  return { pk: L.pk, pins, body, W, H };
+}
+
 function layout() {
   LABEL = labelRoom();
   const pk = PACKAGES[S.pkg] || { kind: 'quad', pins: Object.keys(pkgPins()).length };
@@ -506,23 +542,25 @@ function layout() {
   if (pk.kind === 'quad') {
     const ps = n / 4, B = ps * PITCH + 2 * MARGIN, x0 = LABEL + PLEN, y0 = LABEL + PLEN;
     for (let i = 0; i < n; i++) {
-      const side = Math.floor(i / ps), k = i % ps, p = { num: i + 1, side };
+      const side = Math.floor(i / ps), k = i % ps;
+      const p = { num: i + 1, side, w: side % 2 ? PITCH - 3 : PLEN, h: side % 2 ? PLEN : PITCH - 3 };
       if (side === 0) { p.x = x0 - PLEN; p.y = y0 + MARGIN + k * PITCH; }                                   // left, top->bottom
       if (side === 1) { p.x = x0 + MARGIN + k * PITCH; p.y = y0 + B; }                                      // bottom, left->right
       if (side === 2) { p.x = x0 + B; p.y = y0 + B - MARGIN - (k + 1) * PITCH; }                            // right, bottom->top
       if (side === 3) { p.x = x0 + B - MARGIN - (k + 1) * PITCH; p.y = y0 - PLEN; }                         // top, right->left
       pins.push(p);
     }
-    return { pk, pins, body: { x: x0, y: y0, w: B, h: B }, W: 2 * (LABEL + PLEN) + B, H: 2 * (LABEL + PLEN) + B };
+    return orient({ pk, pins, body: { x: x0, y: y0, w: B, h: B }, W: 2 * (LABEL + PLEN) + B, H: 2 * (LABEL + PLEN) + B });
   } else {
     const ps = n / 2, BW = 200, BH = ps * PITCH + 2 * MARGIN, x0 = LABEL + PLEN, y0 = 40;
     for (let i = 0; i < n; i++) {
-      const side = i < ps ? 0 : 2, k = i % ps, p = { num: i + 1, side };
+      const side = i < ps ? 0 : 2, k = i % ps;
+      const p = { num: i + 1, side, w: PLEN, h: PITCH - 3 };
       if (side === 0) { p.x = x0 - PLEN; p.y = y0 + MARGIN + k * PITCH; }
       else { p.x = x0 + BW; p.y = y0 + BH - MARGIN - (k + 1) * PITCH; }
       pins.push(p);
     }
-    return { pk, pins, body: { x: x0, y: y0, w: BW, h: BH }, W: 2 * (LABEL + PLEN) + BW, H: BH + 80 };
+    return orient({ pk, pins, body: { x: x0, y: y0, w: BW, h: BH }, W: 2 * (LABEL + PLEN) + BW, H: BH + 80 });
   }
 }
 
@@ -558,7 +596,7 @@ function renderChip() {
     if (S.selPin === name) cls += ' selected';
     if (U.focus === name) cls += ' focused';
     if (hidden) cls += ' dim';
-    const w = vert(p) ? PITCH - 3 : PLEN, h = vert(p) ? PLEN : PITCH - 3;
+    const w = p.w, h = p.h;                      // set in layout(), so rotation carries it
     const notes = grp.map(n => (M.pins[n] || {}).notes).filter(Boolean).join('; ');
     const tip = `${grp.join('/')} \u2014 pin ${p.num}`
       + (info ? ` \u2014 ${info.label}${info.state === 'conflict' ? ' (CONFLICT)' : ''}` : t === 'io' ? ' \u2014 unassigned' : ` \u2014 ${t}`)
