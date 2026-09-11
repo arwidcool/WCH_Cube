@@ -88,11 +88,26 @@ function clearDropZone() {
   }
 }
 
+/**
+ * Put the drop zone back. BEST EFFORT, deliberately.
+ *
+ * This runs in a `finally`, and four agents share this tree: another one
+ * regenerating into `lib/wchcube_generated/` at the same moment makes a file
+ * operation here throw, and a throw in a `finally` REPLACES the test's real
+ * result. That turned a passing compile into a red line twice before it was
+ * understood. Cleanup is not an assertion: if it fails, say so and let the
+ * test's own verdict stand.
+ */
 function restoreDropZone(saved) {
-  clearDropZone();
-  for (const { p, text } of saved) {
-    fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, text);
+  try {
+    clearDropZone();
+    for (const { p, text } of saved) {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, text);
+    }
+  } catch (e) {
+    process.stdout.write(`        (could not restore the generated-code drop zone: ${e.message};`
+      + ' another agent is probably generating into it right now — harmless)\n');
   }
 }
 
@@ -191,21 +206,49 @@ function generatedObject(env) {
 }
 
 // ---------------------------------------------------------------- the gate
+/** What is in the drop zone right now, as one string. Cheap identity check. */
+function dropZoneState() {
+  const parts = [];
+  for (const p of [path.join(DROP, 'src', 'wchcube_init.c'), path.join(DROP, 'include', 'wchcube_init.h')]) {
+    try { parts.push(fs.readFileSync(p, 'utf8')); } catch { parts.push('(absent)'); }
+  }
+  return parts.join(' ');
+}
+
 for (const fixture of FIXTURES) {
   test(`${fixture.mcu} ${fixture.pkg}: a configured project generates C that compiles for ${fixture.env}`, () => {
     if (!pio.ok) skip(pio.why);
     const saved = saveDropZone();
     try {
-      const { c, h } = generate(fixture);
+      // Four agents share this tree and the drop zone is one directory, so
+      // another agent running the CLI mid-build swaps the source out from under
+      // the compiler. That produced three red lines that were green on a re-run
+      // with nothing changed — the worst kind of test, one that lies both ways.
+      // So: generate, build, and check the source is still OURS. If it is not,
+      // retry once; if it still is not, SKIP with the reason. "Somebody else
+      // overwrote the thing I was compiling" is not a pass and not a failure —
+      // it is a check that did not get to run, and the runner counts those.
+      let attempt = 0, r, c, h, before;
+      for (;;) {
+        ({ c, h } = generate(fixture));
+        before = dropZoneState();
 
-      // Before spending a compiler on it: is this actually a configuration, or
-      // is it the empty one that proved nothing last time?
-      const inits = (c.match(/GPIO_Init\(GPIO[A-Z],/g) || []).length;
-      assert.ok(inits >= 3,
-        `${fixture.file} generated only ${inits} GPIO_Init() call(s). A fixture that assigns no pins `
-        + 'compiles trivially and proves nothing — regenerate it with node tests/fixtures/make_fixtures.js');
+        // Before spending a compiler on it: is this actually a configuration, or
+        // is it the empty one that proved nothing last time?
+        const inits = (c.match(/GPIO_Init\(GPIO[A-Z],/g) || []).length;
+        assert.ok(inits >= 3,
+          `${fixture.file} generated only ${inits} GPIO_Init() call(s). A fixture that assigns no pins `
+          + 'compiles trivially and proves nothing — regenerate it with node tests/fixtures/make_fixtures.js');
 
-      const r = build(fixture.env);
+        r = build(fixture.env);
+        if (dropZoneState() === before) break;
+        if (++attempt >= 2) {
+          skip(`another agent rewrote data/firmware/lib/wchcube_generated/ while ${fixture.env} was `
+            + 'building, twice. The compile did not run on the code this test generated, so it '
+            + 'proves nothing either way. Re-run when the tree is quiet.');
+        }
+      }
+
       assert.equal(r.status, 0,
         `pio run -e ${fixture.env} failed on ${fixture.file}.\n`
         + 'This is the gate working: the generated C does not compile against the real SDK.\n'
@@ -359,4 +402,87 @@ test('every fixture configures something a default project would not', () => {
     if (!f.env) bad.push(`${f.file}: names no PlatformIO environment, so it can never be compiled`);
   }
   assert.empty(bad, 'a compile-gate fixture does not exercise enough to be worth compiling');
+});
+
+// ---------------------------------------------------------------- TODO / #error
+/**
+ * TODO kinds that are a known DATA gap someone owns, with the backlog line.
+ *
+ * codegen deliberately emits an explicit TODO rather than plausible-looking
+ * register code when the MCU file lacks an encoding — `PROGRESS.md` §8 records
+ * that as a decision, and it is the right one: wrong bits are worse than absent
+ * bits. So a TODO is not a codegen bug, it is a data gap that has reached the
+ * user's output, and it belongs to whoever owns the data.
+ *
+ * A TODO matching one of these prints and does not fail. **Anything else fails**,
+ * which is the point: a new KIND of TODO is a new gap nobody has looked at, and
+ * that is exactly what this gate is for. Each entry is checked against TASKS.md,
+ * so a kind cannot stay excused after its backlog line is closed or deleted.
+ */
+const TRACKED_TODOS = [
+  {
+    match: /no sdk_enabled\/sdk_disabled macro/,
+    owner: 'AGENT-1',
+    task: '`params:` carry `struct:` and `field:` so codegen does not infer the SDK mapping',
+    why: 'a bool parameter needs the two macros the SDK spells it with; the MCU file gives neither',
+  },
+  {
+    match: /nothing applies this struct/,
+    owner: 'AGENT-1',
+    task: '`params:` carry `struct:` and `field:` so codegen does not infer the SDK mapping',
+    why: 'the init struct is filled but the MCU file names no `*_Init()` to hand it to',
+  },
+  {
+    match: /is applied by \w+\(\), not by an init struct/,
+    owner: 'AGENT-1',
+    task: '`params:` carry `struct:` and `field:` so codegen does not infer the SDK mapping',
+    why: 'the parameter is set by a call rather than a struct field, and the MCU file does not say which call',
+  },
+];
+
+test('generated C contains no TODO or #error that is not a tracked data gap', async () => {
+  // `agents/DONE.md` has asked for zero TODOs since round 1, and round 3 repeats
+  // it. cComplaints() reads back what the generator just wrote, in the two
+  // spellings it writes: `#error "..."` at the start of a line, and `/* TODO: `.
+  const eng = await import('../app/engine/index.js');
+  const yamlSrc = fs.readFileSync(path.join(ROOT, 'app', 'vendor', 'js-yaml.js'), 'utf8');
+  const mod = { exports: {} };
+  new Function('module', 'exports', yamlSrc)(mod, mod.exports);
+  eng.setYaml(mod.exports);
+  eng.loadPackages(eng.yamlLoad(fs.readFileSync(path.join(ROOT, 'data', 'packages', 'packages.yaml'), 'utf8')));
+  const dir = path.join(ROOT, 'data', 'mcus');
+  for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.yaml')).sort()) {
+    eng.registerMcuFile(fs.readFileSync(path.join(dir, f), 'utf8'));
+  }
+  if (typeof eng.cComplaints !== 'function') skip('app/engine/codegen.js exports no cComplaints() yet');
+
+  const tasks = fs.readFileSync(path.join(ROOT, 'TASKS.md'), 'utf8');
+  const untracked = [], tracked = new Map(), stale = [];
+
+  for (const fixture of FIXTURES) {
+    eng.projectApply(fs.readFileSync(path.join(HERE, 'fixtures', fixture.file), 'utf8'));
+    eng.compute();
+    for (const c of eng.cComplaints()) {
+      const where = `${fixture.file} → ${c.file}:${c.line}`;
+      // An `#error` is never excused: it is codegen refusing to emit at all, and
+      // it does not compile. Only a TODO can be a tracked gap.
+      const hit = c.kind === 'todo' && TRACKED_TODOS.find(t => t.match.test(c.text));
+      if (!hit) { untracked.push(`${where} ${c.kind.toUpperCase()}: ${c.text}`); continue; }
+      if (!tasks.includes(hit.task)) {
+        stale.push(`${where}: excused by ${hit.owner}'s task "${hit.task}", which is no longer in TASKS.md`);
+        continue;
+      }
+      const key = `${hit.owner}: ${hit.task} — ${hit.why}`;
+      tracked.set(key, (tracked.get(key) || 0) + 1);
+    }
+  }
+
+  if (tracked.size) {
+    process.stdout.write(`        ${[...tracked.values()].reduce((a, b) => a + b, 0)} TODO(s) in generated C, all tracked data gaps:\n`);
+    for (const [k, n] of [...tracked].sort()) process.stdout.write(`          - ${n}x  ${k}\n`);
+  }
+  assert.empty(stale, 'TODOs excused by a backlog line that no longer exists');
+  assert.empty(untracked,
+    'generated C explains what it could not do instead of doing it, and this KIND of gap is not '
+    + 'tracked by anyone. Either fix the data or add it to TRACKED_TODOS with its TASKS.md line');
 });

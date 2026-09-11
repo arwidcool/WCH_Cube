@@ -77,6 +77,11 @@ peripherals:
       Negative input (NSEL): Disable
       Output: Disable
     remap: 0
+    params:
+      setup_cfg: Setting 0
+      highspeed: 'Off'
+      out_ie: 'Off'
+      nmi_ie: 'Off'
   TIM1:
     settings:
       Channel1: Disable

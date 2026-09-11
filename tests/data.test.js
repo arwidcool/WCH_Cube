@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { suite, test, assert } from './lib/harness.js';
+import { suite, test, assert, skip } from './lib/harness.js';
 import { yaml } from './lib/deps.js';
 import { boot, ROOT } from './lib/app.js';
 
@@ -28,16 +28,11 @@ function runValidator(args) {
 
 test('every MCU file passes tools/validate_mcu.py', () => {
   const res = runValidator(['--quiet']);
-  if (!res) {
-    // No Python at all: skip loudly rather than pretend this passed.
-    console.log('        (skipped: no python interpreter on PATH)');
-    return;
-  }
+  // A real skip now: the runner counts these and lists them above the verdict,
+  // which a console.log and a bare `return` never did — that read as a pass.
+  if (!res) skip('no python interpreter on PATH (tried: python, python3)');
   const out = ((res.stdout || '') + (res.stderr || '')).trim();
-  if (/PyYAML is required/.test(out)) {
-    console.log('        (skipped: PyYAML not installed)');
-    return;
-  }
+  if (/PyYAML is required/.test(out)) skip('PyYAML is not installed — pip install pyyaml');
   assert.equal(res.status, 0, 'validate_mcu.py reported errors:\n' + out);
 });
 

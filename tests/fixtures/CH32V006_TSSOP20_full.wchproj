@@ -81,6 +81,13 @@ peripherals:
       Negative input (NSEL): Disable
       Output: Disable
     remap: 0
+    params:
+      poll_trigger: Software
+      poll_auto: 'Off'
+      setup_cfg: Setting 0
+      highspeed: 'Off'
+      out_ie: 'Off'
+      nmi_ie: 'Off'
   TIM1:
     settings:
       Channel1: PWM Generation CH1
