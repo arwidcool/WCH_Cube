@@ -4,6 +4,7 @@ export * from './util.js';
 export * from './inherit.js';
 export * from './history.js';
 export * from './model.js';
+export * from './params.js';
 export * from './clock.js';
 export * from './resources.js';
 export * from './engine.js';

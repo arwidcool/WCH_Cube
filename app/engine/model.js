@@ -81,7 +81,10 @@ export function initState(m) {
     zoom: 1, panX: 0, panY: 0,
   };
   for (const [pid, P] of Object.entries(m.peripherals)) {
-    const ps = { settings: {}, remap: 0 };
+    // params are values (baud, period); settings decide pins. Separate maps on purpose.
+    const params = {};
+    for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
+    const ps = { settings: {}, remap: 0, params };
     for (const s of P.settings || []) {
       const def = s.choices.find(c => c.default);
       ps.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;

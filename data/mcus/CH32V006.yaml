@@ -303,6 +303,45 @@ peripherals:
       - name: Default
         pins: { IN0: PA2, IN1: PA1, IN2: PC4, IN3: PD2, IN4: PD3, IN5: PD5, IN6: PD6, IN7: PD4,
                 RETR0: PD3, RETR1: PC2, IETR0: PD1, IETR1: PA2 }
+    # Parameters - RM 9.3 (ADC_CTLR1 / CTLR2 / CTLR3, ADC_SAMPTRx).
+    params:
+      - { name: Resolution, type: int, default: 12, unit: bits, group: Basic, readonly: true,
+          register: "ADC_RDATAR DATA[11:0]",
+          notes: "Fixed in silicon, shown so it is not guessed at. RM 9.2 says 12-bit twice; the
+                  CH32V006 DS heading 3.3.14 still reads '10-bit ADC Characteristics', which is a
+                  stale heading - its own body text and every other mention say 12-bit." }
+      - name: Sampling Time
+        type: enum
+        default: 11.5 cycles
+        group: Basic
+        register: "ADC_SAMPTR1/2 SMPx[2:0]"
+        notes: "Cycle counts are for normal mode. In LOW-POWER mode codes 010/011/100 mean
+                13.5/28.5/41.5 cycles instead (RM 9.3.4). Total conversion = sampling + 12.5 cycles."
+        options:
+          - { name: 3.5 cycles,   value: 0 }
+          - { name: 7.5 cycles,   value: 1 }
+          - { name: 11.5 cycles,  value: 2 }
+          - { name: 19.5 cycles,  value: 3 }
+          - { name: 35.5 cycles,  value: 4 }
+          - { name: 55.5 cycles,  value: 5 }
+          - { name: 71.5 cycles,  value: 6 }
+          - { name: 239.5 cycles, value: 7 }
+      - { name: Low Power Mode, type: bool, default: false, group: Advanced,
+          register: "ADC_CTLR3 ADC_LP (bit 0)",
+          notes: Changes what three of the Sampling Time codes mean - see that row }
+      - { name: Continuous Conversion, type: bool, default: false, group: Basic,
+          register: "ADC_CTLR2 CONT (bit 1)" }
+      - { name: Scan Conversion, type: bool, default: false, group: Basic,
+          register: "ADC_CTLR1 SCAN (bit 8)" }
+      - name: Data Alignment
+        type: enum
+        default: Right
+        group: Advanced
+        register: "ADC_CTLR2 ALIGN (bit 11)"
+        options:
+          - { name: Right, value: 0 }
+          - { name: Left,  value: 1 }
+
 
   TKEY:
     category: Analog
@@ -412,6 +451,42 @@ peripherals:
       - { name: "0111 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
       - { name: "1000 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PA3, CH2N: PB0, CH3N: PB1 } }
       - { name: "1001 Partial",  pins: { ETR: PB4, CH1: PA0, CH2: PA1, CH3: PA2, CH4: PA3, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
+    # Parameters - RM timer chapter; the control bits are all in TIM1_CTLR1.
+    params:
+      - { name: Prescaler, type: int, default: 0, min: 0, max: 65535, group: Basic,
+          register: TIM1_PSC, notes: "Counter clock = HCLK / (Prescaler + 1)" }
+      - { name: Counter Period, type: int, default: 65535, min: 0, max: 65535, group: Basic,
+          register: TIM1_ATRLR, notes: "Auto-reload; one period is (Counter Period + 1) counter ticks" }
+      - name: Counter Mode
+        type: enum
+        default: Up
+        group: Basic
+        register: "TIM1_CTLR1 DIR (bit 4), CMS[6:5]"
+        options:
+          - { name: Up,               value: 0 }
+          - { name: Down,             value: 1 }
+          - { name: Center-aligned 1, value: 2 }
+          - { name: Center-aligned 2, value: 3 }
+          - { name: Center-aligned 3, value: 4 }
+      - name: Internal Clock Division
+        type: enum
+        default: "1"
+        group: Advanced
+        register: "TIM1_CTLR1 CKD[9:8]"
+        notes: Divides the clock feeding the digital filters and the dead-time generator, not the counter
+        options:
+          - { name: "1", value: 0 }
+          - { name: "2", value: 1 }
+          - { name: "4", value: 2 }
+      - { name: Auto-Reload Preload, type: bool, default: false, group: Advanced,
+          register: "TIM1_CTLR1 ARPE (bit 7)" }
+      - { name: Repetition Counter, type: int, default: 0, min: 0, max: 255, group: Advanced,
+          register: TIM1_RPTCR,
+          notes: "Update event every (Repetition Counter + 1) cycles - advanced timer only" }
+      - { name: Dead Time, type: int, default: 0, min: 0, max: 255, group: Advanced,
+          register: "TIM1_BDTR DTG[7:0]",
+          notes: Inserted between a channel and its complementary output }
+
 
   TIM2:
     category: Timers
@@ -466,6 +541,36 @@ peripherals:
       - { name: "101 Full",    pins: { CH1_ETR: PA0, CH2: PA1, CH3: PA2, CH4: PA3 } }
       - { name: "110 Full",    pins: { CH1_ETR: PB1, CH2: PA1, CH3: PA2, CH4: PA3 } }
       - { name: "111 Full",    pins: { CH1_ETR: PD3, CH2: PD4, CH3: PA2, CH4: PA3 } }
+    # Parameters - RM timer chapter; the control bits are all in TIM2_CTLR1.
+    params:
+      - { name: Prescaler, type: int, default: 0, min: 0, max: 65535, group: Basic,
+          register: TIM2_PSC, notes: "Counter clock = HCLK / (Prescaler + 1)" }
+      - { name: Counter Period, type: int, default: 65535, min: 0, max: 65535, group: Basic,
+          register: TIM2_ATRLR, notes: "Auto-reload; one period is (Counter Period + 1) counter ticks" }
+      - name: Counter Mode
+        type: enum
+        default: Up
+        group: Basic
+        register: "TIM2_CTLR1 DIR (bit 4), CMS[6:5]"
+        options:
+          - { name: Up,               value: 0 }
+          - { name: Down,             value: 1 }
+          - { name: Center-aligned 1, value: 2 }
+          - { name: Center-aligned 2, value: 3 }
+          - { name: Center-aligned 3, value: 4 }
+      - name: Internal Clock Division
+        type: enum
+        default: "1"
+        group: Advanced
+        register: "TIM2_CTLR1 CKD[9:8]"
+        notes: Divides the clock feeding the digital filters and the dead-time generator, not the counter
+        options:
+          - { name: "1", value: 0 }
+          - { name: "2", value: 1 }
+          - { name: "4", value: 2 }
+      - { name: Auto-Reload Preload, type: bool, default: false, group: Advanced,
+          register: "TIM2_CTLR1 ARPE (bit 7)" }
+
 
   TIM3:
     category: Timers
@@ -504,6 +609,40 @@ peripherals:
       - { name: "0111",         pins: { TX: PB5, RX: PB6, CTS: PC7, RTS: PB4 } }
       - { name: "1000",         pins: { TX: PA0, RX: PA1, CTS: PD2, RTS: PD3 } }
       - { name: "1001",         pins: { TX: PA0, RX: PC4, CTS: PD5, RTS: PD4 } }
+    # Parameters - RM USART chapter. Every row cites the register field it drives.
+    params:
+      - { name: Baud Rate, type: int, default: 115200, min: 300, max: 3000000, unit: bps,
+          group: Basic, register: "USART_BRR (12-bit mantissa + 4-bit fraction)",
+          notes: "Ceiling is HCLK/16 at the 48 MHz maximum; the achievable rate is quantised by BRR" }
+      - name: Word Length
+        type: enum
+        default: 8 bits
+        group: Basic
+        register: "USART_CTLR1 M (bit 12)"
+        notes: With parity on, the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word
+        options:
+          - { name: 8 bits, value: 0 }
+          - { name: 9 bits, value: 1 }
+      - name: Parity
+        type: enum
+        default: "None"
+        group: Basic
+        register: "USART_CTLR1 PCE (bit 10), PS (bit 9)"
+        options:
+          - { name: "None", value: 0 }
+          - { name: Even,   value: 2 }
+          - { name: Odd,    value: 3 }
+      - name: Stop Bits
+        type: enum
+        default: "1"
+        group: Basic
+        register: "USART_CTLR2 STOP[13:12]"
+        options:
+          - { name: "1",   value: 0 }
+          - { name: "0.5", value: 1 }
+          - { name: "2",   value: 2 }
+          - { name: "1.5", value: 3 }
+
 
   USART2:
     category: Connectivity
@@ -531,6 +670,40 @@ peripherals:
       - { name: "100",         pins: { TX: PB0, RX: PB1, CTS: PB6, RTS: PA1 } }
       - { name: "101",         pins: { TX: PC4, RX: PD1, CTS: PA4, RTS: PA1 } }
       - { name: "110",         pins: { TX: PA6, RX: PA5, CTS: PA7, RTS: PB3 } }
+    # Parameters - RM USART chapter. Every row cites the register field it drives.
+    params:
+      - { name: Baud Rate, type: int, default: 115200, min: 300, max: 3000000, unit: bps,
+          group: Basic, register: "USART_BRR (12-bit mantissa + 4-bit fraction)",
+          notes: "Ceiling is HCLK/16 at the 48 MHz maximum; the achievable rate is quantised by BRR" }
+      - name: Word Length
+        type: enum
+        default: 8 bits
+        group: Basic
+        register: "USART_CTLR1 M (bit 12)"
+        notes: With parity on, the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word
+        options:
+          - { name: 8 bits, value: 0 }
+          - { name: 9 bits, value: 1 }
+      - name: Parity
+        type: enum
+        default: "None"
+        group: Basic
+        register: "USART_CTLR1 PCE (bit 10), PS (bit 9)"
+        options:
+          - { name: "None", value: 0 }
+          - { name: Even,   value: 2 }
+          - { name: Odd,    value: 3 }
+      - name: Stop Bits
+        type: enum
+        default: "1"
+        group: Basic
+        register: "USART_CTLR2 STOP[13:12]"
+        options:
+          - { name: "1",   value: 0 }
+          - { name: "0.5", value: 1 }
+          - { name: "2",   value: 2 }
+          - { name: "1.5", value: 3 }
+
 
   SPI1:
     category: Connectivity
@@ -560,6 +733,60 @@ peripherals:
       - { name: "100",         pins: { NSS: PD3, SCK: PD4, MISO: PD5, MOSI: PD6 } }
       - { name: "101",         pins: { NSS: PC1, SCK: PA1, MISO: PB5, MOSI: PA2 } }
       - { name: "110",         pins: { NSS: PC4, SCK: PB5, MISO: PC7, MOSI: PB4 } }
+    # Parameters - RM SPI chapter; all of these live in SPI_CTLR1.
+    params:
+      - name: Baud Rate Prescaler
+        type: enum
+        default: "/16"
+        group: Basic
+        register: "SPI_CTLR1 BR[5:3]"
+        notes: Divides HCLK directly - this family has one bus frequency, there is no separate peripheral clock
+        options:
+          - { name: "/2",   value: 0 }
+          - { name: "/4",   value: 1 }
+          - { name: "/8",   value: 2 }
+          - { name: "/16",  value: 3 }
+          - { name: "/32",  value: 4 }
+          - { name: "/64",  value: 5 }
+          - { name: "/128", value: 6 }
+          - { name: "/256", value: 7 }
+      - name: Clock Polarity (CPOL)
+        type: enum
+        default: Low
+        group: Basic
+        register: "SPI_CTLR1 CPOL (bit 1)"
+        options:
+          - { name: Low,  value: 0 }
+          - { name: High, value: 1 }
+      - name: Clock Phase (CPHA)
+        type: enum
+        default: 1 Edge
+        group: Basic
+        register: "SPI_CTLR1 CPHA (bit 0)"
+        options:
+          - { name: 1 Edge, value: 0 }
+          - { name: 2 Edge, value: 1 }
+      - name: Data Size
+        type: enum
+        default: 8 bits
+        group: Basic
+        register: "SPI_CTLR1 DFF (bit 11)"
+        options:
+          - { name: 8 bits,  value: 0 }
+          - { name: 16 bits, value: 1 }
+      - name: First Bit
+        type: enum
+        default: MSB First
+        group: Basic
+        register: "SPI_CTLR1 LSBFIRST (bit 7)"
+        options:
+          - { name: MSB First, value: 0 }
+          - { name: LSB First, value: 1 }
+      - { name: CRC Calculation, type: bool, default: false, group: Advanced,
+          register: "SPI_CTLR1 CRCEN (bit 13)" }
+      - { name: CRC Polynomial, type: int, default: 7, min: 1, max: 65535, group: Advanced,
+          register: SPI_CRCR, depends_on: { param: CRC Calculation, equals: true } }
+
 
   I2C1:
     category: Connectivity
@@ -575,6 +802,31 @@ peripherals:
       - { name: "010",         pins: { SCL: PC5, SDA: PC6 } }
       - { name: "011",         pins: { SCL: PB5, SDA: PB6 } }
       - { name: "1xx",         pins: { SCL: PB3, SDA: PD1 } }
+    # Parameters - RM I2C chapter.
+    params:
+      - { name: Clock Speed, type: int, default: 100000, min: 1000, max: 400000, unit: Hz,
+          group: Basic, register: "I2C_CKCFGR CCR[11:0] with F/S (bit 15)",
+          notes: "Above 100 kHz the peripheral must run in fast mode (F/S = 1)" }
+      - name: Fast Mode Duty Cycle
+        type: enum
+        default: "2:1"
+        group: Advanced
+        register: "I2C_CKCFGR DUTY (bit 14)"
+        notes: Ignored in standard mode
+        options:
+          - { name: "2:1",  value: 0 }
+          - { name: "16:9", value: 1 }
+      - name: Addressing Mode
+        type: enum
+        default: 7-bit
+        group: Basic
+        register: "I2C_OAR1 ADDMODE (bit 15)"
+        options:
+          - { name: 7-bit,  value: 0 }
+          - { name: 10-bit, value: 1 }
+      - { name: Own Address, type: int, default: 0, min: 0, max: 1023, group: Basic,
+          register: "I2C_OAR1 ADD[9:0]" }
+
 
 # -----------------------------------------------------------------------------
 # External interrupts — RM 6.4.4 Table 6-2, register AFIO_EXTICR (RM 7.3.2.1).
@@ -626,6 +878,7 @@ dma:
     and the TIM3 CH4 event only channel 4. The wider TIM3 fan-out in the table
     (channels 1-3 and 4-6) applies to CH32M007, not to this part.
     TIM1_TRIG, TIM1_COM and TIM1_CH4 share channel 4 as one hardware request line.
+
 
 # -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.

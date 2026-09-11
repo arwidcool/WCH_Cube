@@ -6,6 +6,7 @@
 import {
   M, S, MCU_FILES, loadMcu, applyPackageRemaps, yamlDump, yamlLoad,
 } from './model.js';
+import { applyParams } from './params.js';
 import { clearHistory } from './history.js';
 
 export const PROJECT = { name: 'Untitled', variant: null, dirty: false };
@@ -18,6 +19,7 @@ export function projectObject() {
     const settings = {};
     for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
     periph[pid] = { settings, remap: st.remap };
+    if (st.params && Object.keys(st.params).length) periph[pid].params = { ...st.params };
   }
   return {
     wchproj: 1,
@@ -50,6 +52,7 @@ export function projectApply(src) {
   if (obj.package in M.packages) S.pkg = obj.package;
   applyPackageRemaps();
 
+  const dropped = [];
   for (const [pid, st] of Object.entries(obj.peripherals || {})) {
     if (!S.periph[pid]) continue;
     const P = M.peripherals[pid];
@@ -60,11 +63,16 @@ export function projectApply(src) {
       else if (s.choices.some(c => c.name === v)) S.periph[pid].settings[s.name] = v;
     }
     if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
+    dropped.push(...applyParams(pid, st.params));
   }
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
+  // A project saved against an older MCU file may name parameters that no longer
+  // exist or values now out of range. Those are dropped, never applied, and listed
+  // here so the UI can say so instead of opening a file that silently lost settings.
+  PROJECT.warnings = dropped;
   return PROJECT;
 }

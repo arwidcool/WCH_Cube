@@ -165,6 +165,22 @@
   table.params .pnote{display:block;color:var(--muted);font-size:11px;margin-top:1px}
   table.params .ro{color:var(--muted)}
   .paramhead{padding:5px 8px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line-soft)}
+  /* keyboard shortcut overlay — "?" anywhere outside a text field */
+  .keyshelp{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
+  .keyshelp .sheet{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;
+                   box-shadow:0 18px 50px var(--shadow);max-width:760px;width:calc(100% - 40px);max-height:86vh;overflow:auto}
+  .keyshelp h3{margin:0;padding:10px 16px;background:var(--navy);color:#fff;font-size:14px;
+               display:flex;justify-content:space-between;align-items:center;border-radius:6px 6px 0 0}
+  .keyshelp h3 button{border:0;background:none;color:#fff;font-size:18px;line-height:1;padding:0 4px}
+  .keyshelp .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 26px;padding:12px 16px 16px}
+  .keyshelp h4{margin:10px 0 4px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .keyshelp dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;align-items:baseline}
+  .keyshelp dt{white-space:nowrap}
+  .keyshelp dd{margin:0;color:var(--text)}
+  .keyshelp kbd{display:inline-block;min-width:15px;text-align:center;padding:1px 5px;border:1px solid var(--line);
+                border-bottom-width:2px;border-radius:3px;background:var(--bar);font:11px/1.5 var(--font);color:var(--ink-strong)}
+  .keyshelp .foot{padding:0 16px 14px;color:var(--muted);font-size:11.5px}
+  @media (max-width:900px){.keyshelp .cols{grid-template-columns:1fr}}
   table.gpio select,table.gpio input{width:100%;border:1px solid transparent;background:transparent;color:var(--text);padding:1px 2px}
   table.gpio select:hover,table.gpio input:hover,table.gpio input:focus,table.gpio select:focus{border-color:var(--line);background:var(--panel)}
   .foot{padding:6px 10px;color:var(--text);border-top:1px solid var(--line);background:var(--panel);font-size:12px}
@@ -380,6 +396,7 @@
     <button class="menu icon" id="m-undo" disabled>↶</button>
     <button class="menu icon" id="m-redo" disabled>↷</button>
     <button class="menu icon" id="m-theme" title="Dark theme">◑</button>
+    <button class="menu" id="m-keys" title="Keyboard shortcuts (?)">⌨ Shortcuts</button>
     <button class="menu" id="m-help">Help</button>
     <div class="spacer"></div>
     <select id="mcusel" class="menu" style="border:1px solid var(--line)"></select>
@@ -1828,6 +1845,67 @@ document.getElementById('projinput').onchange = e => {
 window.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveProject(); } if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); openNewProject(); } });
 window.addEventListener('beforeunload', e => { if (PROJECT.dirty) { e.preventDefault(); e.returnValue = ''; } });
 
+// ---------- 7c. keyboard shortcuts -------------------------------------------
+// Read off the handlers themselves, not from memory: every row below is a key this
+// file actually binds. Press ? to see it.
+const SHORTCUTS = [
+  ['Project', [
+    [['Ctrl', 'N'], 'New project'],
+    [['Ctrl', 'S'], 'Save project'],
+    [['Ctrl', 'Z'], 'Undo the last change'],
+    [['Ctrl', 'Y'], 'Redo'],
+    [['Ctrl', 'Shift', 'Z'], 'Redo, the other spelling'],
+  ]],
+  ['Chip', [
+    [['←', '→', '↑', '↓'], 'Move the focus from pin to pin'],
+    [['Enter'], 'Open the signal picker on the focused pin'],
+    [['L'], 'Set or edit that pin\u2019s user label'],
+    [['Del'], 'Reset the focused pin'],
+    [['Esc'], 'Close the picker, the menu or the label editor'],
+    [['Wheel'], 'Zoom; drag to pan'],
+  ]],
+  ['Finding things', [
+    [['↓', '↑'], 'Walk the pin-search results'],
+    [['Enter'], 'Jump to the highlighted result'],
+    [['Esc'], 'Close the result list, then clear the box'],
+  ]],
+  ['This dialog', [
+    [['?'], 'Open this list'],
+    [['Esc'], 'Close it'],
+  ]],
+];
+
+function closeKeysHelp() {
+  const d = document.getElementById('keyshelp');
+  if (d) { d.remove(); if (U.keysBack && U.keysBack.focus) U.keysBack.focus(); }
+}
+function openKeysHelp() {
+  if (document.getElementById('keyshelp')) { closeKeysHelp(); return; }
+  U.keysBack = document.activeElement;
+  const keys = list => list.map(k => `<kbd>${esc(k)}</kbd>`).join(' ');
+  const col = group => `<h4>${esc(group[0])}</h4><dl>` +
+    group[1].map(([k, what]) => `<dt>${keys(k)}</dt><dd>${esc(what)}</dd>`).join('') + '</dl>';
+  const d = document.createElement('div');
+  d.className = 'keyshelp'; d.id = 'keyshelp';
+  d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-label', 'Keyboard shortcuts');
+  d.innerHTML = `<div class="sheet"><h3>Keyboard shortcuts<button title="Close" aria-label="Close">\u00d7</button></h3>` +
+    `<div class="cols"><div>${SHORTCUTS.slice(0, 2).map(col).join('')}</div>` +
+    `<div>${SHORTCUTS.slice(2).map(col).join('')}</div></div>` +
+    `<div class="foot">Shortcuts stay out of your way while you are typing: none of them fire inside a text box, a dropdown or a dialog.</div></div>`;
+  d.addEventListener('click', e => { if (e.target === d || e.target.closest('h3 button')) closeKeysHelp(); });
+  document.body.appendChild(d);
+  const btn = d.querySelector('h3 button'); if (btn) btn.focus();
+}
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('keyshelp')) { e.preventDefault(); closeKeysHelp(); return; }
+  if (e.key !== '?') return;
+  const el = e.target, tag = (el.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || el.isContentEditable) return;
+  if (document.querySelector('.modal.show')) return;
+  e.preventDefault();
+  openKeysHelp();
+});
+
 // ---------- 8. glue -----------------------------------------------------------
 let lastConflicts = '', firstRender = true;
 function renderAll(fit) {
@@ -1889,6 +1967,7 @@ document.getElementById('m-reset').onclick = () => {
   const pk = S.pkg; loadMcu(M._src); setPackage(pk); syncMcuUi();
   PROJECT.dirty = true; renderAll(true);
 };
+document.getElementById('m-keys').onclick = openKeysHelp;
 document.getElementById('m-help').onclick = () => alert('WCHCube\n\n• Click a pin → choose a GPIO mode or an alternate function.\n• Right-click a pin → user label, reset, copy name.\n• Arrow keys move between pins, Enter opens the picker, L sets a label, Del resets.\n• "Only modified" hides every pin without a signal or a label.\n• Left tree → configure peripheral modes and AFIO remap; the orange badge counts conflicts.\n• Orange pin = two signals want the same pin. Click a signal in the banner to jump to its peripheral.\n• ⊘ = peripheral has no usable pin mapping on this package.\n• Open MCU file… loads any YAML in the same format as data/mcus/*.yaml.');
 const ms = document.getElementById('mcusel');
 for (const k of Object.keys(MCU_FILES)) { const o = document.createElement('option'); o.value = k; o.textContent = k; ms.appendChild(o); }

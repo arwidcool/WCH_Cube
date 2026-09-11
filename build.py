@@ -23,7 +23,7 @@ import sys
 ROOT = pathlib.Path(__file__).parent
 
 # dependency order; index.js is the Node-only barrel and is deliberately skipped
-ENGINE_MODULES = ["util.js", "inherit.js", "history.js", "model.js", "clock.js",
+ENGINE_MODULES = ["util.js", "inherit.js", "history.js", "model.js", "params.js", "clock.js",
                   "resources.js", "engine.js", "project.js", "codegen.js", "export.js"]
 
 IMPORT_RE = re.compile(r"^import\s[\s\S]*?from\s+['\"][^'\"]+['\"];[ \t]*$", re.M)
