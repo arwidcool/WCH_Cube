@@ -451,3 +451,291 @@ test('a divider with no encoding is reported, not half written', () => {
   assert.equal(e.rccWord().value >>> 31, 0, 'nothing was written for it');
   assert.equal((e.rccWord().mask >> 11) & 0x1f, 0, 'and the field is not even masked');
 });
+
+// =============================================================================
+//  Round-3 P2 — everything the user can set has to reach the C
+// =============================================================================
+//  Every SDK name asserted below is quoted from the MCU file, never from this test:
+//  the point of `struct:` / `sdk_field:` / `sdk:` is that the generator does not
+//  infer the mapping, and a test that hardcodes one is the same class of bug as
+//  data that does.
+
+test('params reach an init struct, in the MCU file order, with the file names', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setParam('USART1', 'baud', 9600);
+  e.setParam('USART1', 'parity', 'Even');
+  e.setParam('USART1', 'stop', '2');
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('void WCHCube_Periph_Init(void)'));
+  assert.ok(c.includes('USART_InitTypeDef USART_InitStructure = {0};'));
+  assert.ok(c.includes('USART_InitStructure.USART_BaudRate = 9600;'), 'a number goes in as itself');
+  assert.ok(c.includes('USART_InitStructure.USART_Parity = USART_Parity_Even;'), "the option's own sdk: macro");
+  assert.ok(c.includes('USART_InitStructure.USART_StopBits = USART_StopBits_2;'));
+  // the file's order, which is register order
+  const at = n => c.indexOf(n);
+  assert.ok(at('USART_BaudRate') < at('USART_WordLength'), 'and in the order the data lists them');
+  assert.ok(at('USART_WordLength') < at('USART_Parity'));
+
+  // the clock enable comes from codegen.periph_clock, not from the peripheral's name
+  assert.ok(c.includes('RCC_PB2PeriphClockCmd(RCC_PB2Periph_USART1, ENABLE);'));
+});
+
+test('a peripheral that is off is not initialised', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.compute();
+  const c = e.cSource();
+  assert.equal(c.includes('USART_InitTypeDef'), false, 'nothing is enabled at boot');
+  assert.ok(c.includes('/* No peripheral is switched on. */'));
+});
+
+test('every value emitted for an enum is a macro the MCU file gives, never a number', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setSetting('SPI1', 'Mode', 'Full-Duplex Master');
+  e.setSetting('I2C1', 'Mode', 'I2C');
+  e.toggleSetting('ADC1', 'Channels', 'IN0', true);      // ADC1 has no Mode; a channel switches it on
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.compute();
+  const c = e.cSource();
+  // The peripheral, DMA and interrupt blocks only. GPIO_Mode_* and GPIO_Pin_* are the
+  // generator's own table and mask - covered by their own tests and by the compile gate.
+  const from = c.indexOf('void WCHCube_Periph_Init');
+  const data = JSON.stringify(e.M);
+  let checked = 0;
+  for (const line of c.slice(from).split(/\r?\n/)) {
+    const m = /^\s+\w+Structure\.(\w+) = ([^;]+);/.exec(line);
+    if (!m) continue;
+    const [, member, value] = m;
+    if (/^-?\d+$/.test(value)) continue;                // a plain number is fine
+    assert.match(value, /^[A-Za-z_]\w*$/, `${member} = ${value} is neither a number nor a macro`);
+    // and the macro really came from the data, not from this generator's imagination
+    assert.ok(data.includes(value), `${value} is in the generated C but not in the MCU file`);
+    checked++;
+  }
+  assert.ok(checked > 10, `only ${checked} assignments checked - the sweep stopped working`);
+});
+
+test('a parameter that is not an init-struct member is handled as the data says', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.toggleSetting('ADC1', 'Channels', 'IN2', true);
+  e.setParam('ADC1', 'sample', '55.5 cycles');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.setParam('TIM1', 'arpe', true);
+  e.compute();
+  const c = e.cSource();
+
+  // sdk_call + sdk_args: a real call, with the arguments the data lists, in its order.
+  // TIM_TimeBaseInitTypeDef has no auto-reload-preload member (ch32v00X_tim.h:468).
+  assert.ok(c.includes('TIM_ARRPreloadConfig(TIM1, ENABLE);'));
+  assert.equal(/TIM_TimeBaseInitStructure\.\w*Preload/.test(c), false,
+    'and it is NOT invented as a struct member, which would not compile');
+
+  // sdk_repeat: channels — one call per ticked channel, with its macro and its rank.
+  // Sample time is a per-CHANNEL argument of ADC_RegularChannelConfig, not a property
+  // of the peripheral (ch32v00X_adc.h:165).
+  assert.ok(c.includes('ADC_RegularChannelConfig(ADC1, ADC_Channel_2, 1, ADC_SampleTime_CyclesMode5);'));
+
+  // sdk_none: stated, with the reason, and no code at all
+  assert.match(c, /Low power mode[\s\S]{0,80}the SDK exposes nothing for it/);
+  assert.equal(/ADC_LowPowerCmd/.test(c), false, 'the note says outright: do not invent one');
+});
+
+test('sdk_repeat emits one call per ticked channel, in rank order', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  for (const ch of ['IN0', 'IN3', 'IN5']) e.toggleSetting('ADC1', 'Channels', ch, true);
+  e.setParam('ADC1', 'sample', '3.5 cycles');
+  e.compute();
+  const calls = [...e.cSource().matchAll(/ADC_RegularChannelConfig\((.*?)\);/g)].map(m => m[1]);
+  assert.deepEqual(calls, [
+    'ADC1, ADC_Channel_0, 1, ADC_SampleTime_CyclesMode0',
+    'ADC1, ADC_Channel_3, 2, ADC_SampleTime_CyclesMode0',
+    'ADC1, ADC_Channel_5, 3, ADC_SampleTime_CyclesMode0',
+  ], 'rank is the position in the sequence, and every macro comes from codegen.channel_macros');
+
+  e.toggleSetting('ADC1', 'Channels', 'IN3', false);
+  e.compute();
+  const after = [...e.cSource().matchAll(/ADC_RegularChannelConfig\((.*?)\);/g)].map(m => m[1]);
+  assert.equal(after.length, 2, 'unticking one drops its call');
+  assert.match(after[1], /ADC_Channel_5, 2,/, 'and the ranks close up');
+});
+
+test('a single-instance peripheral gets the call shape the data states', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const spec = (e.M.codegen.init_structs || {}).OPA_InitTypeDef;
+  if (!spec) return;                     // only asserted where the data makes the claim
+  assert.equal(spec.no_handle, true, 'OPA_Init takes the struct alone (ch32v00X_opa.h)');
+  // and the generator honours it rather than emitting OPA_Init(OPA, &s)
+  e.setSetting('OPA1', 'Positive input (PSEL)', 'P0 — PA2');
+  e.compute();
+  const c = e.cSource();
+  if (c.includes('OPA_Init(')) {
+    assert.ok(c.includes('OPA_Init(&OPA_InitStructure);'), 'no handle argument');
+    assert.equal(/OPA_Init\(OPA,/.test(c), false);
+  }
+});
+
+test('a parameter that does not apply under the current settings is not emitted', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.compute();
+  const plan = e.initPlan('TIM1');
+  const emitted = plan.structs.flatMap(b => b.fields.map(f => f.name));
+  for (const d of e.paramDefs('TIM1')) {
+    if (d.readonly || !d.struct) continue;
+    if (e.paramApplies('TIM1', d)) continue;
+    assert.equal(emitted.includes(d.name), false, `${d.name} does not apply and must not be emitted`);
+  }
+});
+
+test('two structs on one peripheral are two blocks, because they are two SDK calls', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.compute();
+  const plan = e.initPlan('TIM1');
+  const names = plan.structs.map(b => b.struct);
+  assert.ok(names.includes('TIM_TimeBaseInitTypeDef'));
+  assert.ok(names.includes('TIM_BDTRInitTypeDef'),
+    'dead time lives in a DIFFERENT struct; putting it in the time base would not compile');
+  const c = e.cSource();
+  assert.ok(c.includes('TIM_BDTRInitTypeDef TIM_BDTRInitStructure = {0};'));
+  assert.equal(/TIM_TimeBaseInitStructure\.TIM_DeadTime/.test(c), false);
+});
+
+test('an applying function is never derived from a struct name', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.compute();
+  const c = e.cSource();
+  // As of this commit the MCU file carries no codegen.init_structs, so the generator
+  // must say what is missing rather than write USART_Init(USART1, &s) from a guess.
+  // When AGENT-1 lands the key this TODO disappears and the call appears; the rule
+  // the test is pinning is that one of those two is always true and never both.
+  const hasCall = /USART_Init\(/.test(c);
+  const hasTodo = /codegen\.init_structs\.USART_InitTypeDef\.fn/.test(c);
+  assert.ok(hasCall !== hasTodo, 'either the data names the function, or the C says so');
+  if (hasTodo) {
+    assert.match(c, /does not derive a function name from a struct name/);
+    assert.ok(e.cComplaints().some(x => x.kind === 'todo'), 'and --strict sees it');
+  }
+});
+
+test('DMA requests reach DMA_InitTypeDef with the data channel and the data macros', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.toggleSetting('ADC1', 'Channels', 'IN0', true);
+  e.addDmaRequest('ADC1');
+  e.setDmaParam('ADC1', 'priority', 'Very high');
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('void WCHCube_DMA_Init(void)'));
+  assert.ok(c.includes('RCC_HBPeriphClockCmd(RCC_HBPeriph_DMA1, ENABLE);'), 'the controller clock');
+  assert.ok(c.includes('DMA_InitTypeDef DMA_InitStructure = {0};'));
+  assert.ok(c.includes('DMA_InitStructure.DMA_Priority = DMA_Priority_VeryHigh;'));
+  assert.ok(c.includes('DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;'),
+    'the ADC seed from dma.request_defaults, not a default');
+  assert.ok(c.includes('DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;'));
+  assert.match(c, /ADC1 on DMA1 channel 1/, 'the channel comes from the hardware map');
+  assert.match(c, /the application owns the addresses and the length/,
+    'the buffer is not a configuration choice and the file says so');
+});
+
+test('a double-booked DMA channel refuses to compile instead of generating both', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.addDmaRequest('I2C1_TX');
+  e.addDmaRequest('USART2_TX');        // channel 6 as well
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /#error "WCHCube: DMA1 channel 6 is configured for I2C1_TX and USART2_TX/);
+  assert.match(c, /Remove one of them in DMA Settings/);
+  const bad = e.cComplaints().filter(x => x.kind === 'error');
+  assert.equal(bad.length, 1, 'and --strict fails on it');
+
+  e.removeDmaRequest('USART2_TX');
+  e.compute();
+  assert.equal(/#error/.test(e.cSource()), false, 'removing one clears it');
+});
+
+test('NVIC emits the enabled vectors with their PFIC priorities, and claims no nesting register', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setNvicVector('USART1', { enabled: true, preempt: 1, sub: 1 });
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('void WCHCube_NVIC_Init(void)'));
+  // the IRQn spelling, not the handler spelling — they are different symbols
+  assert.match(c, /USART1_IRQn/);
+  assert.match(c, /USART1_IRQHandler/, 'and the ISR name the user has to define');
+  assert.match(c, /preempt 1, sub 1|NVIC_IRQChannelPreemptionPriority = 1/);
+  assert.match(c, /Priority grouping: 2 levels of nesting/);
+  assert.match(c, /not in this part's reference manual/,
+    'RM 6.5.2.6 is only KEYCODE and RSTSYS; no register write may be claimed for the grouping');
+  // nothing was invented for the grouping switch
+  assert.equal(/PFIC_CFGR\s*=/.test(c), false);
+});
+
+test('a vector that is enabled but cannot fire is a warning, and the C still builds', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setNvicVector('SPI1', { enabled: true });      // SPI1 is off
+  e.compute();
+  assert.ok(e.E.resources.issues.some(i => i.kind === 'nvic'));
+  assert.equal(/#error/.test(e.cSource()), false, 'a warning is not a refusal to compile');
+});
+
+test('nothing configured means empty functions, not missing ones', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.compute();
+  const c = e.cSource();
+  for (const fn of ['WCHCube_Periph_Init', 'WCHCube_DMA_Init', 'WCHCube_NVIC_Init']) {
+    assert.ok(c.includes(`void ${fn}(void)`), `${fn} is always defined`);
+    assert.ok(e.cHeader().includes(`void ${fn}(void)`), `${fn} is always declared`);
+  }
+  assert.ok(c.includes('/* No DMA request is configured. */'));
+  assert.ok(c.includes('/* No interrupt vector is enabled. */'));
+});
+
+test('WCHCube_Init calls all five, clocks first and interrupts last', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.compute();
+  const c = e.cSource();
+  const body = c.slice(c.indexOf('void WCHCube_Init(void)'));
+  const order = ['WCHCube_RCC_Init();', 'WCHCube_GPIO_Init();', 'WCHCube_Periph_Init();',
+    'WCHCube_DMA_Init();', 'WCHCube_NVIC_Init();'];
+  let at = -1;
+  for (const call of order) {
+    const i = body.indexOf(call);
+    assert.ok(i > at, `${call} is called, after the one before it`);
+    at = i;
+  }
+});
+
+test('the header declares every function the source defines, still', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.addDmaRequest('USART1_TX');
+  e.setNvicVector('USART1', { enabled: true });
+  e.compute();
+  const defined = [...e.cSource().matchAll(/^void (\w+)\(void\)$/gm)].map(m => m[1]).sort();
+  const declared = [...e.cHeader().matchAll(/^void (\w+)\(void\);/gm)].map(m => m[1]).sort();
+  assert.deepEqual(declared, defined);
+});
+
+test('every bundled part and package still generates without throwing, with DMA and NVIC on', () => {
+  for (const name of Object.keys(eng.MCU_FILES)) {
+    const e = fresh();
+    e.loadMcu(name);
+    for (const pkg of Object.keys(e.M.packages)) {
+      e.setPackage(pkg);
+      for (const r of e.dmaAddableRequests().slice(0, 3)) e.addDmaRequest(r.request);
+      for (const v of e.nvicVectors().filter(x => !x.fixed).slice(0, 3)) {
+        e.setNvicVector(v.name, { enabled: true });
+      }
+      e.compute();
+      const c = e.cSource();
+      assert.ok(c.length > 100, `${name} ${pkg} generated nothing`);
+      assert.ok(c.includes('void WCHCube_Init(void)'), `${name} ${pkg}`);
+      // braces balance, which is the cheapest proof it is not half-written
+      assert.equal((c.match(/\{/g) || []).length, (c.match(/\}/g) || []).length, `${name} ${pkg} braces`);
+    }
+  }
+});

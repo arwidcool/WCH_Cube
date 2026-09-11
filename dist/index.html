@@ -169,7 +169,8 @@
   .treenone{padding:14px 10px;color:var(--muted);font-size:12px}
   .config{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel);margin-top:8px}
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
-  .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text)}
+  .ctabs[hidden]{display:none}
+  .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text);white-space:nowrap}
   .ctab.active{background:var(--blue-hdr);color:#fff;border-color:var(--blue-hdr)}
   /* Six columns of real GPIO values need 694 px and the centre column is ~440 px at 1280,
      so this scrolls sideways. A cut edge with no affordance reads as a broken layout, so
@@ -250,20 +251,63 @@
   .dreq.on{border-style:solid;border-color:var(--blue);background:var(--blue-pale);color:var(--text)}
   .dreq a{color:inherit;text-decoration:underline;cursor:pointer}
   .dreq small{display:block;font-size:10px;color:var(--muted)}
-  table.dmach tr.clash td{background:var(--res-bg);box-shadow:inset 3px 0 0 var(--res)}
-  table.dmach tr.clash:hover td{background:var(--res-bg)}
-  table.nvictab{min-width:640px}
+  /* A request the USER configured is solid; one merely available is dashed. A channel
+     with two configured requests is a HARD conflict (the user asked for both and the
+     channel serves one) and gets the bad colour, not the softer shared-resource one. */
+  .dreq.used{border-style:solid;border-color:var(--blue);background:var(--blue-pale);color:var(--text);font-weight:600}
+  table.dmach tr.used td{background:var(--blue-pale)}
+  table.dmach tr.clash td{background:var(--bad-bg);box-shadow:inset 3px 0 0 var(--bad)}
+  table.dmach tr.clash:hover td{background:var(--bad-bg)}
+  .clashowners{color:var(--bad)}
+  /* DMA Settings: the request list, then the selected row's DMA_InitTypeDef below it. */
+  table.dmatab{border-collapse:collapse;width:100%;min-width:420px;font-size:12.5px;table-layout:fixed}
+  table.dmatab th{background:var(--head);color:var(--on-accent);text-align:left;padding:4px 8px;font-weight:600;white-space:normal;line-height:1.15}
+  table.dmatab td{padding:3px 8px;border-bottom:1px solid var(--line-soft)}
+  table.dmatab tbody tr{cursor:pointer}
+  table.dmatab tbody tr:hover td{background:var(--blue-pale)}
+  table.dmatab tr.sel td{background:var(--blue-pale);box-shadow:inset 3px 0 0 var(--blue)}
+  table.dmatab tr.clash td{background:var(--bad-bg);box-shadow:inset 3px 0 0 var(--bad)}
+  table.dmatab th:nth-child(2),table.dmatab td:nth-child(2){width:80px}
+  table.dmatab th:nth-child(3),table.dmatab td:nth-child(3){width:132px}
+  table.dmatab th:nth-child(4),table.dmatab td:nth-child(4){width:86px}
+  table.dmatab th:nth-child(5),table.dmatab td:nth-child(5){width:34px}
+  table.dmatab select{width:100%;padding:1px 2px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  .dmadel{border:0;background:none;color:var(--muted);font-size:13px;line-height:1;padding:2px 5px;border-radius:3px}
+  .dmadel:hover{background:var(--bad);color:var(--on-accent)}
+  .dmaadd{display:flex;gap:6px;align-items:center;padding:7px 8px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+  .dmaadd select{flex:1;min-width:140px;padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  .dmaadd button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:3px;padding:3px 12px}
+  .dmaadd button:hover{background:var(--blue-pale)}
+  /* NVIC table. Two shapes: with an Owner column (System Core) and without (a
+     peripheral's own tab), so the column widths are set per shape. */
+  /* Sized for the VALUES: `DMA1_Channel1_IRQHandler` is 24 characters of monospace, and
+     it is the one string in this table the user has to copy exactly. The header is one
+     word so the column is not the one that gets squeezed; what it means is spelled out
+     above the table and in its title=. */
+  table.nvictab{min-width:676px}
   table.nvictab th:nth-child(1),table.nvictab td:nth-child(1){width:44px}
-  table.nvictab th:nth-child(2),table.nvictab td:nth-child(2){width:90px}
-  table.nvictab th:nth-child(3),table.nvictab td:nth-child(3){width:158px}
-  table.nvictab th:nth-child(4),table.nvictab td:nth-child(4){width:176px}
-  table.nvictab th:nth-child(5),table.nvictab td:nth-child(5){width:74px}
-  table.nvictab th:nth-child(6),table.nvictab td:nth-child(6){width:98px}
+  table.nvictab th:nth-child(2),table.nvictab td:nth-child(2){width:150px}
+  table.nvictab th:nth-child(3),table.nvictab td:nth-child(3){width:74px}
+  table.nvictab th:nth-child(4),table.nvictab td:nth-child(4){width:70px}
+  table.nvictab th:nth-child(5),table.nvictab td:nth-child(5){width:108px}
+  table.nvictab th:nth-child(6),table.nvictab td:nth-child(6){width:80px}
+  table.nvictab th:nth-child(7),table.nvictab td:nth-child(7){width:150px}
+  table.nvictab.noowner{min-width:602px}
+  table.nvictab.noowner th:nth-child(3),table.nvictab.noowner td:nth-child(3){width:70px}
+  table.nvictab.noowner th:nth-child(4),table.nvictab.noowner td:nth-child(4){width:108px}
+  table.nvictab.noowner th:nth-child(5),table.nvictab.noowner td:nth-child(5){width:80px}
+  table.nvictab.noowner th:nth-child(6),table.nvictab.noowner td:nth-child(6){width:150px}
   table.nvictab td code{font:11px/1.3 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);
                         display:block;overflow:hidden;text-overflow:ellipsis}
+  table.nvictab select{width:100%;padding:1px 2px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  table.nvictab tr.on td{background:var(--blue-pale)}
+  table.nvictab tr.on:hover td{background:var(--blue-pale)}
   table.nvictab tr.off td{color:var(--muted)}
   table.nvictab tr.off td code{color:var(--muted)}
   table.nvictab a{color:var(--link);text-decoration:underline;cursor:pointer}
+  /* "its peripheral is off" is a live link to the peripheral, not a grey checkbox. */
+  .needson{font-size:11.5px;white-space:nowrap}
+  .fixedval{color:var(--text);white-space:nowrap}
   .ro{color:var(--muted)}
   .mode code{white-space:nowrap}
   /* NVIC's Mode panel states facts about the silicon, so it does not wear the yellow
@@ -583,6 +627,10 @@
        aria-label= still carry the full phrase for hover and for screen readers. */
     .menu .lbl-full{display:none}
     .menu .lbl-short{display:inline}
+    /* Four Configuration tabs of CubeMX's full names do not fit the centre column
+       below this; "Settings" is the same word on all four, so it is the one to lose. */
+    .ctab .tabword{display:none}
+    .ctab{padding:4px 9px}
   }
   @media (max-width:1180px){
     #view-pinout{grid-template-columns:212px minmax(296px,1fr) minmax(356px,1.25fr)}
@@ -754,6 +802,59 @@ peripherals:
           - { name: OUT0 — PD4, signals: [OUT0] }
           - { name: OUT1 — PA5, signals: [OUT1] }
           - { name: Internal to ADC IN9 only }
+    # Restated for the same reason as `settings:` above - a list replaces wholesale, so
+    # this drops the parent's two POLLING parameters on a part that cannot poll.
+    # `poll_trigger` would have been worse than merely useless here: three of its five
+    # options are TIM3 events and CH32V005 has no TIM3 either. This is the hazard
+    # data/FORMAT.md names under `mcu.inherits` - a new entry in the parent is a new
+    # entry in every child - and it is why adding to the parent is worth a thought about
+    # what the derived part actually has.
+    params:
+      - key: setup_cfg
+        name: ADC conversion interval
+        struct: OPA_InitTypeDef
+        sdk_field: SETUP_CFG
+        type: enum
+        group: Advanced
+        default: Setting 0
+        options:
+          - { name: Setting 0, value: 0, sdk: OPA_SETUP_CFG_0 }
+          - { name: Setting 1, value: 1, sdk: OPA_SETUP_CFG_1 }
+          - { name: Setting 2, value: 3, sdk: OPA_SETUP_CFG_2 }
+        help: "How long the OPA is given to settle before the ADC samples it. The enum skips value 2: OPA_SETUP_CFG_2 is 3, not 2."
+      - key: highspeed
+        name: High speed mode
+        struct: OPA_InitTypeDef
+        sdk_field: OPA_HS
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: HS_OFF }
+          - { name: "On",  value: 1, sdk: HS_ON }
+        help: "Faster slew at a higher supply current."
+      - key: out_ie
+        name: Output interrupt
+        struct: OPA_InitTypeDef
+        sdk_field: OUT_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: OUT_IE_OFF }
+          - { name: "On",  value: 1, sdk: OUT_IE_ON }
+        help: "Interrupt on the comparator output changing."
+      - key: nmi_ie
+        name: Output NMI
+        struct: OPA_InitTypeDef
+        sdk_field: NMI_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: NMI_IE_OFF }
+          - { name: "On",  value: 1, sdk: NMI_IE_ON }
+        help: "Route the output to the non-maskable interrupt instead."
 
 # -----------------------------------------------------------------------------
 # DMA1 — the parent's map with every TIM3 request dropped (RM Table 8-2 note 2 applies
@@ -1054,15 +1155,95 @@ peripherals:
 
   IWDG:
     category: System Core
+    # The independent watchdog has NO init struct and NO handle: every setting is its own
+    # call and the peripheral is a singleton. ch32v00X_iwdg.h declares
+    # IWDG_SetPrescaler(uint8_t), IWDG_SetReload(uint16_t) and IWDG_Enable(void) - not one
+    # of them takes an IWDG_TypeDef*. So `sdk_args` here is [$VALUE] with no $HANDLE, and
+    # there is no `struct:` to name. There is no IWDG_InitTypeDef on this part.
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: prescaler
+        name: Prescaler
+        sdk_call: IWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: "64"
+        options:
+          - { name: "4",   value: 0, sdk: IWDG_Prescaler_4 }
+          - { name: "8",   value: 1, sdk: IWDG_Prescaler_8 }
+          - { name: "16",  value: 2, sdk: IWDG_Prescaler_16 }
+          - { name: "32",  value: 3, sdk: IWDG_Prescaler_32 }
+          - { name: "64",  value: 4, sdk: IWDG_Prescaler_64 }
+          - { name: "128", value: 5, sdk: IWDG_Prescaler_128 }
+          - { name: "256", value: 6, sdk: IWDG_Prescaler_256 }
+        help: "Divides the LSI, which is the only clock this watchdog has. The header stops at 256 - there is no IWDG_Prescaler_512 on this part, however familiar that name is elsewhere."
+      - key: reload
+        name: Reload value
+        sdk_call: IWDG_SetReload
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 4095
+        min: 0
+        max: 4095
+        help: "12-bit down-counter, so 4095 is the ceiling. Timeout is (prescaler x (reload + 1)) / f_LSI."
+      - key: write_access
+        name: Register write access
+        sdk_call: IWDG_WriteAccessCmd
+        sdk_args: [$VALUE]
+        type: enum
+        group: Advanced
+        default: Enable before writing
+        options:
+          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
+          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
+        help: "The prescaler and reload registers are write-protected until this key is written. The two values are the literal key words 0x5555 and 0x0000, not a flag."
 
   WWDG:
     category: System Core
+    # Also struct-free and handle-free (ch32v00X_wwdg.h). Note WWDG_Enable(uint8_t Counter)
+    # TAKES the counter, so "switch it on" and "set the counter" are one call rather than
+    # two - which is why `counter` below names WWDG_Enable and not WWDG_SetCounter.
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: prescaler
+        name: Prescaler
+        sdk_call: WWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: WWDG_Prescaler_1 }
+          - { name: "2", value: 1, sdk: WWDG_Prescaler_2 }
+          - { name: "4", value: 2, sdk: WWDG_Prescaler_4 }
+          - { name: "8", value: 3, sdk: WWDG_Prescaler_8 }
+        help: "Divides HCLK/4096. Four options only - the header stops at 8."
+      - key: window
+        name: Window value
+        sdk_call: WWDG_SetWindowValue
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 127
+        min: 64
+        max: 127
+        help: "Refreshing EARLIER than this resets the part, which is the whole point of a windowed watchdog. The counter's bit 6 must stay set, so the usable range starts at 64."
+      - key: counter
+        name: Counter start value
+        sdk_call: WWDG_Enable
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 127
+        min: 64
+        max: 127
+        help: "WWDG_Enable takes the counter as its argument, so this value and switching the watchdog on are the same call. Below 64 the counter has already underflowed and the part resets at once."
 
   # RM ch.2. Nothing here claims a pin: the supply monitor and the auto-wake-up are
   # internal, and their interrupts reach the core over EXTI lines 8 and 9, which have no
@@ -1297,6 +1478,8 @@ peripherals:
       - key: sample
         name: Sampling time
         sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
         sdk_note: "ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per CHANNEL, not per peripheral. ch32v00X_adc.h:165."
         type: enum
         default: 11.5 cycles
@@ -1313,7 +1496,7 @@ peripherals:
       - key: lowpower
         name: Low power mode
         sdk_none: true
-        sdk_note: ch32v00X_adc.h exposes NOTHING for the low-power bit - no struct member and no function (grepped the whole header). It is ADC_CTLR1 ADC_LP and codegen must write the register or leave it alone. Do not invent an ADC_LowPowerCmd.
+        sdk_note: ch32v00X_adc.h exposes NOTHING for the low-power bit - no struct member and no function (grepped the whole header). It is ADC_CTLR1 ADC_LP, so codegen must write the register or leave it alone - and must not invent a low-power command function, because none exists to call.
         type: bool
         default: false
         help: "ADC_CTLR3 ADC_LP, bit 0. Changes what three of the sampling-time codes mean - see that row."
@@ -1321,6 +1504,8 @@ peripherals:
         name: Continuous conversion
         struct: ADC_InitTypeDef
         sdk_field: ADC_ContinuousConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         type: bool
         default: false
         help: ADC_CTLR2 CONT, bit 1.
@@ -1328,6 +1513,8 @@ peripherals:
         name: Scan conversion
         struct: ADC_InitTypeDef
         sdk_field: ADC_ScanConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         type: bool
         default: false
         help: ADC_CTLR1 SCAN, bit 8.
@@ -1364,8 +1551,25 @@ peripherals:
 
   OPA1:
     category: Analog
-    notes: OPA/PGA/CMP. Pin assignment from DS pin table (OPA_P0..P3, OPA_N0..N2, OPA_OUT0/1); selection via OPA_CTLR1 PSEL/NSEL/MODE.
+    notes: >
+      OPA/PGA/CMP. Pin assignment from DS pin table (OPA_P0..P3, OPA_N0..N2, OPA_OUT0/1);
+      selection via OPA_CTLR1 PSEL/NSEL/MODE. The polling set below was Medium confidence
+      until the EVT package landed and is now settled - see the notes file.
     settings:
+      # POLLING: the EVT header is explicit and it corrects what this file used to offer.
+      # `OPA_InitTypeDef` has POLL_NUM of type OPA_PSEL_POLL_NUM_TypeDef, whose members are
+      # CHP_POLL_NUM_1, _2 and _3 - **three is the maximum**, so the old
+      # "Polling P0/P1/P2/P3" choice asked for hardware that does not exist and is gone.
+      # Each slot is independent: POLL_CH1/CH2/CH3 are OPA_POLL_CH1/2/3_TypeDef and every
+      # one of them offers PA2 / PD7 / PD3 / PD1, i.e. any of P0..P3. So the thing that
+      # decides which PINS are claimed is the SET of channels polled, and every set of two
+      # or three distinct channels is legal - all ten are listed rather than the single
+      # arbitrary P0/P1/P2 this file used to hardcode.
+      # A one-channel "poll" claims the same pin as simply selecting it, so it is not
+      # listed separately. POLL_NUM and POLL_CH1..3 are DERIVED from the chosen set by the
+      # generator; they are deliberately not user parameters, because a user-set POLL_NUM
+      # could contradict the set and then the pins and the register would disagree.
+      # Source: data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_opa.h.
       - name: Positive input (PSEL)
         choices:
           - { name: Disable }
@@ -1373,8 +1577,16 @@ peripherals:
           - { name: P1 — PD7, signals: [P1] }
           - { name: P2 — PD3, signals: [P2] }
           - { name: P3 — PD1, signals: [P3] }
+          - { name: Polling P0/P1, signals: [P0, P1] }
+          - { name: Polling P0/P2, signals: [P0, P2] }
+          - { name: Polling P0/P3, signals: [P0, P3] }
+          - { name: Polling P1/P2, signals: [P1, P2] }
+          - { name: Polling P1/P3, signals: [P1, P3] }
+          - { name: Polling P2/P3, signals: [P2, P3] }
           - { name: Polling P0/P1/P2, signals: [P0, P1, P2] }
-          - { name: Polling P0/P1/P2/P3, signals: [P0, P1, P2, P3] }
+          - { name: Polling P0/P1/P3, signals: [P0, P1, P3] }
+          - { name: Polling P0/P2/P3, signals: [P0, P2, P3] }
+          - { name: Polling P1/P2/P3, signals: [P1, P2, P3] }
       - name: Negative input (NSEL)
         choices:
           - { name: Disable }
@@ -1388,6 +1600,80 @@ peripherals:
           - { name: OUT0 — PD4, signals: [OUT0] }
           - { name: OUT1 — PA5, signals: [OUT1] }
           - { name: Internal to ADC IN9 only }
+    # Everything here is a NON-pin setting, deliberately: what decides a pin lives in
+    # `settings:` above where the conflict engine can see it. Every struct, field and
+    # enum member read out of ch32v00X_opa.h and checked by tools/verify_sdk_names.py.
+    params:
+      - key: poll_trigger
+        name: Poll trigger
+        struct: OPA_InitTypeDef
+        sdk_field: POLL_SEL
+        type: enum
+        group: Basic
+        default: Software
+        options:
+          - { name: Software,  value: 0, sdk: OPA_POLL_SEL_SOFT }
+          - { name: TIM1_CH4,  value: 1, sdk: OPA_POLL_SEL_TIM1_CH4 }
+          - { name: TIM2_CH4,  value: 2, sdk: OPA_POLL_SEL_TIM2_CH4 }
+          - { name: TIM3_CH1,  value: 3, sdk: OPA_POLL_SEL_TIM3_CH1 }
+          - { name: TIM3_CH2,  value: 4, sdk: OPA_POLL_SEL_TIM3_CH2 }
+        help: "What advances the poll to the next channel. Only meaningful when the positive input is a polling set. The three TIM3 options do not exist on CH32V005, which has no TIM3."
+      - key: poll_auto
+        name: Automatic polling
+        struct: OPA_InitTypeDef
+        sdk_field: POLL_AT
+        type: enum
+        group: Basic
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: OPA_POLL_AUTO_OFF }
+          - { name: "On",  value: 1, sdk: OPA_POLL_AUTO_ON }
+        help: "Advance the poll without software help once it is started."
+      - key: setup_cfg
+        name: ADC conversion interval
+        struct: OPA_InitTypeDef
+        sdk_field: SETUP_CFG
+        type: enum
+        group: Advanced
+        default: Setting 0
+        options:
+          - { name: Setting 0, value: 0, sdk: OPA_SETUP_CFG_0 }
+          - { name: Setting 1, value: 1, sdk: OPA_SETUP_CFG_1 }
+          - { name: Setting 2, value: 3, sdk: OPA_SETUP_CFG_2 }
+        help: "How long the OPA is given to settle before the ADC samples it. The enum skips value 2: OPA_SETUP_CFG_2 is 3, not 2, so the option index is NOT the register value here."
+      - key: highspeed
+        name: High speed mode
+        struct: OPA_InitTypeDef
+        sdk_field: OPA_HS
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: HS_OFF }
+          - { name: "On",  value: 1, sdk: HS_ON }
+        help: "Faster slew at a higher supply current."
+      - key: out_ie
+        name: Output interrupt
+        struct: OPA_InitTypeDef
+        sdk_field: OUT_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: OUT_IE_OFF }
+          - { name: "On",  value: 1, sdk: OUT_IE_ON }
+        help: "Interrupt on the comparator output changing."
+      - key: nmi_ie
+        name: Output NMI
+        struct: OPA_InitTypeDef
+        sdk_field: NMI_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: NMI_IE_OFF }
+          - { name: "On",  value: 1, sdk: NMI_IE_ON }
+        help: "Route the output to the non-maskable interrupt instead. RM Table 6-1 gives this part no OPA vector of its own, which is consistent with the output arriving as NMI."
     remaps:
       - name: Default
         pins: { P0: PA2, P1: PD7, P2: PD3, P3: PD1, N0: PA1, N1: PD0, N2: PA4, OUT0: PD4, OUT1: PA5 }
@@ -1499,6 +1785,9 @@ peripherals:
       - key: arpe
         name: Auto-reload preload
         sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
@@ -1625,6 +1914,9 @@ peripherals:
       - key: arpe
         name: Auto-reload preload
         sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
@@ -1633,10 +1925,73 @@ peripherals:
 
   TIM3:
     category: Timers
-    notes: Streamlined timer — output compare only, no external pins (RM ch.13). Not on CH32V005.
+    notes: >
+      Streamlined timer - output compare only, no external pins (RM ch.13). Not on CH32V005.
+      It shares the full TIM driver, so its time base is TIM_TimeBaseInitTypeDef exactly like
+      TIM1 and TIM2; what it lacks is pins, not registers. No repetition-counter or dead-time
+      parameter here: RCR and BDTR belong to the advanced-control timer, TIM1. And note that
+      RM Table 6-1 gives this part NO TIM3 interrupt vector - confirmed against the EVT
+      IRQn_Type enum and the startup table, see CH32V006.notes.md.
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: prescaler
+        name: Prescaler
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        group: Basic
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. The counter is clocked at f_TIM / (prescaler + 1)."
+      - key: period
+        name: Counter period (auto-reload)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        group: Basic
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR. 16-bit, so 65535 is the ceiling."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        group: Basic
+        default: Up
+        options:
+          - { name: Up,               value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down,             value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 4, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 6, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR and CMS. The option values are the register encodings, which is why they run 0/1/2/4/6 rather than 0..4."
+      - key: ckd
+        name: Clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        group: Advanced
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD - the ratio between the timer clock and the digital filter sampling clock."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        group: Advanced
+        default: false
+        help: "Buffers writes to the auto-reload register until the next update event. Not a member of TIM_TimeBaseInitTypeDef - it is a call after TIM_TimeBaseInit (ch32v00X_tim.h:468)."
 
   # ---------------- Connectivity ----------------
   USART1:
@@ -1888,6 +2243,9 @@ peripherals:
       - key: crc
         name: CRC calculation
         sdk_call: SPI_CalculateCRC
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         sdk_note: "SPI_InitTypeDef has SPI_CRCPolynomial (the polynomial) but no CRC ENABLE member; enabling it is a call after SPI_Init. ch32v00X_spi.h:53 and :140."
         type: bool
         default: false
@@ -2302,6 +2660,27 @@ gpio:
   speeds:
     - { name: "30 MHz", macro: GPIO_Speed_30MHz }
 
+  # The SPL macro for each GPIO-table mode, so the generator stops carrying its own
+  # table. Same reasoning as `speeds` above and the same defect class: `GPIOMode_TypeDef`
+  # is per family, and a mode macro from another CH32 part is a name that compiles
+  # nowhere. All EIGHT members of the enum in
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 28-38 are
+  # accounted for below - five here, three under `input_modes`.
+  modes:
+    - { name: Output Push Pull,              macro: GPIO_Mode_Out_PP }
+    - { name: Output Open Drain,             macro: GPIO_Mode_Out_OD }
+    - { name: Alternate Function Push Pull,  macro: GPIO_Mode_AF_PP }
+    - { name: Alternate Function Open Drain, macro: GPIO_Mode_AF_OD }
+    - { name: Analog,                        macro: GPIO_Mode_AIN }
+
+  # Mode `Input` does not have one macro: the SPL folds the PULL setting into the mode,
+  # so which of these three applies is decided by the GPIO table's Pull-up/Pull-down
+  # column, not by a fourth mode entry. Keyed by the pull name for that reason.
+  input_modes:
+    - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
+    - { name: Pull-up,   macro: GPIO_Mode_IPU }
+    - { name: Pull-down, macro: GPIO_Mode_IPD }
+
 # -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.
 # Requested by AGENT-2 (BOARD 05:43Z / 05:44Z). Every number below was read off the
@@ -2365,6 +2744,52 @@ codegen:
       # supports that shape; [{lsb:14,bits:3}] would encode identically.
       TIM2:   [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }]
       USART2: [{ lsb: 20, bits: 3 }]
+
+  # Which SDK function applies each init struct, and what it applies it TO. AGENT-2's
+  # generator refuses to derive a function name from a struct name, which is right: the
+  # pairing is not mechanical. Every line confirmed in the EVT headers.
+  init_structs:
+    GPIO_InitTypeDef:          { fn: GPIO_Init }          # ch32v00X_gpio.h:138
+    USART_InitTypeDef:         { fn: USART_Init }         # ch32v00X_usart.h:121
+    SPI_InitTypeDef:           { fn: SPI_Init }           # ch32v00X_spi.h:129
+    I2C_InitTypeDef:           { fn: I2C_Init }           # ch32v00X_i2c.h:287
+    ADC_InitTypeDef:           { fn: ADC_Init }           # ch32v00X_adc.h:156
+    DMA_InitTypeDef:           { fn: DMA_Init }           # ch32v00X_dma.h:162
+    TIM_TimeBaseInitTypeDef:   { fn: TIM_TimeBaseInit }   # ch32v00X_tim.h:431
+    # NOT TIM_TimeBaseInit, and not derivable from the struct name either. The dead-time
+    # parameter lives in this struct and only TIM_BDTRConfig applies it.
+    TIM_BDTRInitTypeDef:       { fn: TIM_BDTRConfig }     # ch32v00X_tim.h:438
+    # OPA is a SINGLE-INSTANCE peripheral and `OPA_Init` takes the struct ALONE - there is
+    # no handle argument (ch32v00X_opa.h:352). `no_handle` says so explicitly rather than
+    # leaving the generator to emit OPA_Init(OPA, &s), which would not compile.
+    OPA_InitTypeDef:           { fn: OPA_Init, no_handle: true }
+
+  # The SPL name of each peripheral's register block - the first argument of the functions
+  # above. Confirmed in ch32v00X.h: TIM2 444, I2C1 447, ADC1 455, TIM1 456, SPI1 457,
+  # USART1 458, DMA1 459, USART2 472, TIM3 474.
+  #
+  # Note OPA: the block is named `OPA`, not `OPA1` (ch32v00X.h:473), so the tree id and the
+  # SDK name differ. It is listed for completeness; OPA_Init does not take it.
+  periph_handle:
+    USART1: USART1
+    USART2: USART2
+    SPI1:   SPI1
+    I2C1:   I2C1
+    TIM1:   TIM1
+    TIM2:   TIM2
+    TIM3:   TIM3
+    ADC1:   ADC1
+    DMA1:   DMA1
+    OPA1:   OPA
+
+  # Signal name -> SDK macro, for a `sdk_repeat: channels` call. ADC_RegularChannelConfig
+  # takes a channel and a rank, so sampling time is set per CHANNEL rather than once per
+  # peripheral, and the generator needs the macro for each. ch32v00X_adc.h lines 67-76
+  # define ADC_Channel_0..9; this part bonds IN0..IN7, and IN8/IN9 are the internal
+  # references, which is why the list stops at 7 and does not simply mirror the header.
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7 }
 
   # Which signals want GPIO_Mode_AIN rather than AF_PP. Without this the generator has
   # to guess from the peripheral's category, and it cannot tell ADC1_IN4 from
@@ -3573,6 +3998,27 @@ gpio:
     - { name: "10 MHz", macro: GPIO_Speed_10MHz }
     - { name: "50 MHz", macro: GPIO_Speed_50MHz }
 
+  # The SPL macro for each GPIO-table mode, so the generator stops carrying its own
+  # table. Same reasoning as `speeds` above and the same defect class: `GPIOMode_TypeDef`
+  # is per family, and a mode macro from another CH32 part is a name that compiles
+  # nowhere. All EIGHT members of the enum in
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 28-38 are
+  # accounted for below - five here, three under `input_modes`.
+  modes:
+    - { name: Output Push Pull,              macro: GPIO_Mode_Out_PP }
+    - { name: Output Open Drain,             macro: GPIO_Mode_Out_OD }
+    - { name: Alternate Function Push Pull,  macro: GPIO_Mode_AF_PP }
+    - { name: Alternate Function Open Drain, macro: GPIO_Mode_AF_OD }
+    - { name: Analog,                        macro: GPIO_Mode_AIN }
+
+  # Mode `Input` does not have one macro: the SPL folds the PULL setting into the mode,
+  # so which of these three applies is decided by the GPIO table's Pull-up/Pull-down
+  # column, not by a fourth mode entry. Keyed by the pull name for that reason.
+  input_modes:
+    - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
+    - { name: Pull-up,   macro: GPIO_Mode_IPU }
+    - { name: Pull-down, macro: GPIO_Mode_IPD }
+
 # -----------------------------------------------------------------------------
 # DMA1 - seven channels, F1-style.
 #
@@ -4517,9 +4963,13 @@ function normaliseParamDefs(list) {
     readonly: !!(d.readonly || d.computed),
     help: d.help || d.notes || '',
     deps: normDeps(d),
-    field: d.field, sdk_field: d.sdk_field,
+    // Carried through untouched: only codegen interprets these, and a generator that
+    // cannot see them would have to infer the SDK mapping, which is the whole thing
+    // data/FORMAT.md's "not every parameter is an init-struct member" section forbids.
+    struct: d.struct, field: d.field, sdk_field: d.sdk_field,
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
-    struct: d.struct,
+    sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
+    sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
   }));
 }
 
@@ -5967,6 +6417,8 @@ function projectApply(src) {
 
 
 
+
+
 const PIN_RE = /^P([A-Z])(\d+)$/;
 const hex = (v, digits = 8) => '0x' + (v >>> 0).toString(16).toUpperCase().padStart(digits, '0') + 'U';
 const bin = (v, bits) => (v >>> 0).toString(2).padStart(bits, '0');
@@ -6186,9 +6638,12 @@ function cHeader() {
     '',
     `#include "${cfg().header || 'debug.h'}"`,
     '',
-    'void WCHCube_RCC_Init(void);   /* clock tree: SYSCLK source, PLL, prescalers */',
-    'void WCHCube_GPIO_Init(void);  /* port clocks, AFIO remap, every configured pin */',
-    'void WCHCube_Init(void);       /* both, in the right order */',
+    'void WCHCube_RCC_Init(void);    /* clock tree: SYSCLK source, PLL, prescalers */',
+    'void WCHCube_GPIO_Init(void);   /* port clocks, AFIO remap, every configured pin */',
+    'void WCHCube_Periph_Init(void); /* peripheral clocks and *_InitTypeDef blocks */',
+    'void WCHCube_DMA_Init(void);    /* DMA_InitTypeDef per configured request */',
+    'void WCHCube_NVIC_Init(void);   /* the enabled vectors, with PFIC priorities */',
+    'void WCHCube_Init(void);        /* all of them, in the right order */',
     '',
     `#endif /* ${guard} */`,
     '',
@@ -6346,18 +6801,416 @@ function cSource() {
       + `below name exactly what is missing."`);
     L.push('');
   }
+  // A channel the user booked twice cannot be resolved by generating both and letting
+  // the last write win - that is silently wrong silicon. Round-3 P2 asks for #error.
+  for (const c of dmaConflicts()) {
+    L.push(`#error "WCHCube: ${c.text.replace(/"/g, "'")}. Remove one of them in DMA Settings."`);
+    L.push('');
+  }
   if (e.conflictList.length) {
     L.push(`#error "WCHCube: ${e.conflictList.length} unresolved pin conflict(s) — ${e.conflictList.map(c => c.text).join('; ')}"`);
     L.push('');
   }
-  L.push(rccSection(), '', gpioSection(), '');
+  L.push(rccSection(), '', gpioSection(), '', periphSection(), '', dmaSection(), '', nvicSection(), '');
   L.push(banner('Entry point'));
   L.push('void WCHCube_Init(void)');
   L.push('{');
+  // Clocks first because everything else needs them; peripherals before DMA because a
+  // channel points at a peripheral register; NVIC last so nothing can fire into a
+  // half-configured peripheral.
   L.push('    WCHCube_RCC_Init();');
   L.push('    WCHCube_GPIO_Init();');
+  L.push('    WCHCube_Periph_Init();');
+  L.push('    WCHCube_DMA_Init();');
+  L.push('    WCHCube_NVIC_Init();');
   L.push('}');
   L.push('');
+  return L.join('\n');
+}
+
+// ---- peripheral init structs -------------------------------------------------
+//  `params:` -> `*_InitTypeDef` blocks. Every name here comes from the MCU file:
+//  `struct:` is the typedef, `sdk_field:` the member, and an enum option's `sdk:`
+//  the macro. Nothing is derived from the peripheral's name - `USART_InitTypeDef`
+//  does NOT imply `USART_Init`, and data/FORMAT.md is explicit that not every
+//  parameter is a struct member at all:
+//
+//    sdk_call:      the SDK sets it with a function, not a member  (TIM arpe)
+//    sdk_none:      the SDK exposes nothing for it                 (ADC lowpower)
+//    struct: other  it belongs to a DIFFERENT struct               (TIM1 deadtime)
+//
+//  A parameter that does not apply under the current settings is not emitted, and
+//  neither is one the data marks readonly - those are derived, not chosen.
+
+/** The literal to assign for one parameter, or a reason it cannot be written. */
+function paramLiteral(pid, d) {
+  const v = paramValue(pid, d.key);
+  if (d.type === 'bool') {
+    const macro = v ? d.sdk_enabled : d.sdk_disabled;
+    if (macro) return { text: macro };
+    return { missing: `${d.name}: the MCU file gives no sdk_enabled/sdk_disabled macro for ${v}` };
+  }
+  if (d.options) {
+    const hit = d.options.find(o => String(o.name) === String(v));
+    if (hit && hit.sdk) return { text: hit.sdk };
+    return { missing: `${d.name}: option "${v}" has no sdk: macro in the MCU file` };
+  }
+  if (typeof v === 'number' && Number.isFinite(v)) return { text: String(v) };
+  if (v === undefined || v === null) return { missing: `${d.name}: no value` };
+  return { missing: `${d.name}: "${v}" is not a number and has no sdk: macro` };
+}
+
+/**
+ * What has to be emitted for one peripheral, grouped the way the SDK applies it:
+ * one block per `struct:`, in the order the parameters appear in the MCU file,
+ * which is the order AGENT-1 wrote them in - register order.
+ *
+ * `fn` and `handle` are looked up in `codegen.init_structs` / `codegen.periph_handle`.
+ * They are NOT guessed: `USART_Init(USART1, &s)` is two names this generator has no
+ * source for, and round 3 opened with two defects that were exactly one wrong
+ * identifier each. Without them the block is still emitted - the field values are
+ * known and useful - followed by a TODO naming the two keys that would apply it.
+ */
+function initPlan(pid) {
+  const defs = paramDefs(pid).filter(d => !d.readonly && paramApplies(pid, d));
+  const structs = [];
+  const calls = [];
+  const notes = [];
+  const cg = cfg();
+  const handle = (cg.periph_handle || {})[pid];
+  for (const d of defs) {
+    if (d.sdk_none) {
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — the SDK exposes nothing for it`
+        + (d.sdk_note ? `: ${d.sdk_note}` : ''));
+      continue;
+    }
+    if (d.sdk_call) {
+      calls.push(...sdkCalls(pid, d, handle));
+      continue;
+    }
+    if (!d.struct) {
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — the MCU file says neither struct:, sdk_call: nor sdk_none:`);
+      continue;
+    }
+    if (!d.sdk_field) {
+      notes.push(`${d.name}: struct: ${d.struct} without an sdk_field:, so the member name is unknown`);
+      continue;
+    }
+    let block = structs.find(b => b.struct === d.struct);
+    if (!block) {
+      const spec = (cg.init_structs || {})[d.struct] || {};
+      // A single-instance peripheral's Init takes the struct ALONE: OPA_Init(&s), not
+      // OPA_Init(OPA, &s) (ch32v00X_opa.h). The data says so; it is not guessable.
+      structs.push(block = {
+        struct: d.struct, fn: spec.fn || null,
+        noHandle: !!spec.no_handle, handle: spec.no_handle ? null : (handle || null),
+        fields: [], missing: [],
+      });
+    }
+    const lit = paramLiteral(pid, d);
+    if (lit.missing) block.missing.push(lit.missing);
+    else block.fields.push({ member: d.sdk_field, text: lit.text, name: d.name, value: paramValue(pid, d.key), unit: d.unit });
+  }
+  return { pid, structs, calls, notes, handle: handle || null };
+}
+
+/**
+ * A parameter the SDK sets with a FUNCTION rather than a struct member. The data gives
+ * the function and its argument list as placeholders, because the shape is not
+ * derivable: `TIM_ARRPreloadConfig(TIMx, NewState)` takes two arguments and
+ * `ADC_RegularChannelConfig(ADCx, channel, rank, sampletime)` takes four, one call per
+ * CHANNEL. Placeholders, all from data/FORMAT.md:
+ *     $HANDLE   codegen.periph_handle[pid]
+ *     $VALUE    the option's sdk: macro, the bool's sdk_enabled/sdk_disabled, or a number
+ *     $CHANNEL  codegen.channel_macros[pid][signal], with sdk_repeat: channels
+ *     $RANK     1-based position in that repeat
+ * Anything else, or a placeholder that cannot be filled, becomes a TODO naming it.
+ */
+function sdkCalls(pid, d, handle) {
+  const lit = paramLiteral(pid, d);
+  const args = Array.isArray(d.sdk_args) ? d.sdk_args : null;
+  const base = { key: d.key, name: d.name, fn: d.sdk_call, value: paramValue(pid, d.key), note: d.sdk_note || '' };
+  if (!args) return [{ ...base, missing: 'the MCU file gives no sdk_args, so the argument list is unknown' }];
+  if (lit.missing) return [{ ...base, missing: lit.missing }];
+
+  // One call per selected channel, or exactly one call.
+  let repeats = [null];
+  if (d.sdk_repeat === 'channels') {
+    const macros = (cfg().channel_macros || {})[pid];
+    if (!macros) return [{ ...base, missing: `codegen.channel_macros.${pid} — no macro for any channel` }];
+    const chosen = selectedChannels(pid);
+    if (!chosen.length) return [];                 // nothing selected, nothing to configure
+    repeats = chosen.map((sig, i) => ({ sig, macro: macros[sig], rank: i + 1 }));
+    const unknown = repeats.filter(r => !r.macro).map(r => r.sig);
+    if (unknown.length) return [{ ...base, missing: `codegen.channel_macros.${pid} has no macro for ${unknown.join(', ')}` }];
+  } else if (d.sdk_repeat) {
+    return [{ ...base, missing: `sdk_repeat: ${d.sdk_repeat} is not a repeat this generator knows` }];
+  }
+
+  const out = [];
+  for (const r of repeats) {
+    const filled = [];
+    let missing = null;
+    for (const a of args) {
+      const token = String(a);
+      if (token === '$VALUE') filled.push(lit.text);
+      else if (token === '$HANDLE') { if (!handle) missing = `codegen.periph_handle.${pid}`; else filled.push(handle); }
+      else if (token === '$CHANNEL') { if (!r) missing = '$CHANNEL without sdk_repeat: channels'; else filled.push(r.macro); }
+      else if (token === '$RANK') { if (!r) missing = '$RANK without sdk_repeat: channels'; else filled.push(String(r.rank)); }
+      else if (/^[$]/.test(token)) missing = `${token} is not a placeholder this generator knows`;
+      else filled.push(token);                      // a literal argument, written as given
+      if (missing) break;
+    }
+    if (missing) { out.push({ ...base, missing }); break; }
+    out.push({ ...base, text: `${d.sdk_call}(${filled.join(', ')});`, channel: r ? r.sig : null });
+  }
+  return out;
+}
+
+/**
+ * The signals of a `checkboxes` setting the user ticked — ADC1's Channels. Read from
+ * the settings rather than from a name, so a part that spells it differently still
+ * works and the engine special-cases no peripheral.
+ */
+function selectedChannels(pid) {
+  const P = M.peripherals[pid] || {};
+  const st = (S.periph[pid] || {}).settings || {};
+  const out = [];
+  for (const s of P.settings || []) {
+    if (s.type !== 'checkboxes') continue;
+    const v = st[s.name];
+    if (!(v instanceof Set)) continue;
+    for (const c of s.choices) if (v.has(c.name)) out.push(c.name);
+  }
+  return out;
+}
+
+/** Peripherals that are switched on and have something to initialise. */
+function initPeripherals() {
+  const e = E || compute();
+  return Object.keys(M.peripherals)
+    .filter(pid => isEnabled(pid))
+    .filter(pid => paramDefs(pid).length || (cfg().periph_clock && clockBitOf(pid)))
+    .sort();
+}
+
+/** The RCC enable register a peripheral's clock bit lives in, from codegen.periph_clock. */
+function clockBitOf(pid) {
+  for (const [bus, spec] of Object.entries(cfg().periph_clock || {})) {
+    if (!spec || typeof spec !== 'object' || !spec.bits) continue;
+    if (spec.bits[pid] === undefined) continue;
+    return { bus, fn: spec.fn, macro: `${spec.prefix || ''}${pid}`, register: spec.register };
+  }
+  return null;
+}
+
+function structVar(name) {
+  // USART_InitTypeDef -> USART_InitStructure, the SPL's own naming in every example.
+  return String(name).replace(/TypeDef$/, 'Structure');
+}
+
+function periphBlock(pid) {
+  const plan = initPlan(pid);
+  const L = [];
+  const clk = clockBitOf(pid);
+  L.push(`    /* ---- ${pid} ${'-'.repeat(Math.max(0, 58 - pid.length))} */`);
+  if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
+  else if (cfg().periph_clock) L.push(`    /* ${pid} has no clock enable bit in codegen.periph_clock — none is written. */`);
+
+  for (const b of plan.structs) {
+    const varName = structVar(b.struct);
+    L.push(`    {`);
+    L.push(`        ${b.struct} ${varName} = {0};`);
+    for (const f of b.fields) {
+      const human = f.unit ? `${f.value} ${f.unit}` : String(f.value);
+      L.push(`        ${varName}.${f.member} = ${f.text};   /* ${f.name}: ${human} */`);
+    }
+    for (const m of b.missing) {
+      L.push(`        /* TODO: ${m}. */`);
+    }
+    if (b.fn && (b.handle || b.noHandle)) {
+      L.push(`        ${b.fn}(${b.noHandle ? '' : `${b.handle}, `}&${varName});`);
+    } else {
+      L.push('        /* TODO: nothing applies this struct. The MCU file needs');
+      if (!b.fn) L.push(`           codegen.init_structs.${b.struct}.fn — the SDK function that takes a ${b.struct}`);
+      if (!b.handle) L.push(`           codegen.periph_handle.${pid} — the SPL name of ${pid}'s register block`);
+      L.push('           This generator does not derive a function name from a struct name. */');
+    }
+    L.push(`    }`);
+  }
+
+  for (const c of plan.calls) {
+    if (c.text) {
+      L.push(`    ${c.text}   /* ${c.name}: ${c.value}${c.channel ? ` on ${c.channel}` : ''} */`);
+      continue;
+    }
+    L.push(`    /* TODO: ${c.name} = ${c.value} is applied by ${c.fn}(), not by an init struct,`);
+    L.push(`       and ${c.missing}. */`);
+    if (c.note) L.push(`    /* ${c.note} */`);
+  }
+  for (const n of plan.notes) L.push(`    /* ${n} */`);
+  if (L.length === 1) L.push(`    /* nothing to configure */`);
+  L.push('');
+  return L;
+}
+
+function periphSection() {
+  const L = [];
+  L.push(banner('Peripherals'));
+  L.push('void WCHCube_Periph_Init(void)');
+  L.push('{');
+  const pids = initPeripherals();
+  if (!pids.length) {
+    L.push('    /* No peripheral is switched on. */');
+    L.push('}');
+    return L.join('\n');
+  }
+  for (const pid of pids) L.push(...periphBlock(pid));
+  if (L[L.length - 1] === '') L.pop();
+  L.push('}');
+  return L.join('\n');
+}
+
+// ---- DMA ---------------------------------------------------------------------
+//  One DMA_InitTypeDef per configured request, the DMA1 clock enable, and the
+//  channel handle from `dma.register.channel_macro`. A channel the user booked
+//  twice is an #error in cSource(), not last-wins code.
+//
+//  DMA_PeripheralBaseAddr, DMA_MemoryBaseAddr and DMA_BufferSize are deliberately
+//  absent from the data: they are the application's buffer, not a configuration
+//  choice, and CubeMX does not ask for them either. They are emitted as named TODOs
+//  so the file says what the application still has to fill in.
+
+function dmaChannelHandle(channel) {
+  const reg = ((M.dma || {}).register) || {};
+  if (!reg.channel_macro) return null;
+  return String(reg.channel_macro).replace('$CH', String(channel));
+}
+
+function dmaSection() {
+  const rows = dmaRequests();
+  const L = [];
+  L.push(banner('DMA'));
+  L.push('void WCHCube_DMA_Init(void)');
+  L.push('{');
+  if (!rows.length) {
+    L.push('    /* No DMA request is configured. */');
+    L.push('}');
+    return L.join('\n');
+  }
+  const ctrl = (M.dma || {}).controller;
+  const clk = ctrl ? clockBitOf(ctrl) : null;
+  if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
+  else L.push(`    /* TODO: ${ctrl || 'the DMA controller'} has no clock enable bit in codegen.periph_clock. */`);
+  L.push('');
+
+  const spec = (cfg().init_structs || {})[(M.dma || {}).init_struct] || {};
+  const defs = dmaParamDefs();
+  for (const r of rows) {
+    const handle = dmaChannelHandle(r.channel);
+    const st = (M.dma || {}).init_struct;
+    L.push(`    /* ---- ${r.request} on ${ctrl || 'DMA'} channel ${r.channel} (${r.owner}) ${'-'.repeat(Math.max(0, 20 - r.request.length))} */`);
+    if (!st) {
+      L.push('    /* TODO: the MCU file has no dma.init_struct, so no struct can be declared. */');
+      L.push('');
+      continue;
+    }
+    const varName = structVar(st);
+    L.push('    {');
+    L.push(`        ${st} ${varName} = {0};`);
+    for (const d of defs) {
+      const value = dmaParamValue(r.id, d.key);
+      let text = null;
+      if (d.type === 'bool') text = value ? d.sdk_enabled : d.sdk_disabled;
+      else if (d.options) { const hit = d.options.find(o => String(o.name) === String(value)); text = hit && hit.sdk; }
+      else if (typeof value === 'number') text = String(value);
+      if (!d.sdk_field) { L.push(`        /* TODO: ${d.name}: dma.channel_params gives no sdk_field:. */`); continue; }
+      if (!text) { L.push(`        /* TODO: ${d.name} = ${value}: no sdk macro in dma.channel_params. */`); continue; }
+      L.push(`        ${varName}.${d.sdk_field} = ${text};   /* ${d.name}: ${value} */`);
+    }
+    L.push('        /* TODO: the application owns the addresses and the length —');
+    L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_MemoryBaseAddr and`);
+    L.push('           .DMA_BufferSize before this call. They are a buffer, not a');
+    L.push('           configuration choice, so the configurator does not ask for them. */');
+    if (handle && spec.deinit) L.push(`        ${spec.deinit}(${handle});`);
+    if (spec.fn && handle) {
+      L.push(`        ${spec.fn}(${handle}, &${varName});`);
+      if (spec.cmd) L.push(`        ${spec.cmd}(${handle}, ENABLE);`);
+    } else {
+      L.push(`        /* TODO: nothing applies this struct. The MCU file needs`);
+      if (!spec.fn) L.push(`           codegen.init_structs.${st}.fn — the SDK function that takes a ${st}`);
+      if (!handle) L.push('           dma.register.channel_macro — the SPL name of a channel, e.g. DMA1_Channel$CH');
+      L.push('           This generator does not derive a function name from a struct name. */');
+    }
+    L.push('    }');
+    L.push('');
+  }
+  if (L[L.length - 1] === '') L.pop();
+  L.push('}');
+  return L.join('\n');
+}
+
+// ---- NVIC --------------------------------------------------------------------
+//  The PFIC is not the Cortex-M scheme: PFIC_IPRIORx gives each vector a byte and
+//  implements TWO of its bits ([5:0] reserved, write-invalid; RM 6.5.2.21), and the
+//  maximum nesting depth is 2.
+//
+//  Where the nesting depth itself is configured is NOT in this reference manual -
+//  `nvic.scheme.notes` says so outright - so the chosen grouping is emitted as a
+//  comment and NO register write is claimed for it. Do not invent one.
+
+function nvicSection() {
+  const L = [];
+  L.push(banner('Interrupts'));
+  L.push('void WCHCube_NVIC_Init(void)');
+  L.push('{');
+  const st = nvicState();
+  const on = st ? st.vectors.filter(v => v.enabled && !v.fixed) : [];
+  if (!st || !on.length) {
+    L.push('    /* No interrupt vector is enabled. */');
+    L.push('}');
+    return L.join('\n');
+  }
+  const g = st.groups[st.group] || null;
+  if (g) {
+    L.push(`    /* Priority grouping: ${g.name} */`);
+    const note = ((st.scheme || {}).notes || '').trim().split('\n')[0];
+    if (note) L.push(`    /* The register that selects it is not in this part's reference manual, so`);
+    if (note) L.push('       nothing is written for the grouping itself — only the per-vector bytes. */');
+  }
+  const spec = (cfg().nvic || {});
+  const structName = spec.init_struct || null;
+  const fn = spec.fn || null;
+  if (!structName || !fn) {
+    L.push('    /* TODO: the MCU file has no codegen.nvic.init_struct / .fn, so the');
+    L.push('       SDK call that enables a vector cannot be written. The vectors the');
+    L.push('       configuration asks for, with their PFIC priorities, are: */');
+    for (const v of on) {
+      L.push(`    /*   ${v.irqn || v.name}  preempt ${v.preempt}, sub ${v.sub}`
+        + `${v.handler ? `  — ISR: ${v.handler}()` : ''} */`);
+    }
+    L.push('}');
+    return L.join('\n');
+  }
+  const varName = structVar(structName);
+  L.push(`    ${structName} ${varName} = {0};`);
+  L.push('');
+  for (const v of on) {
+    if (!v.irqn) {
+      L.push(`    /* TODO: vector ${v.name} has no irqn: in the MCU file, so it cannot be named. */`);
+      continue;
+    }
+    L.push(`    /* ${v.name}${v.description ? ` — ${v.description}` : ''}`
+      + `${v.handler ? `   ISR: ${v.handler}()` : ''} */`);
+    L.push(`    ${varName}.${spec.field_channel || 'NVIC_IRQChannel'} = ${v.irqn};`);
+    if (spec.field_preempt) L.push(`    ${varName}.${spec.field_preempt} = ${v.preempt};`);
+    if (spec.field_sub) L.push(`    ${varName}.${spec.field_sub} = ${v.sub};`);
+    if (spec.field_enable) L.push(`    ${varName}.${spec.field_enable} = ENABLE;`);
+    L.push(`    ${fn}(&${varName});`);
+    L.push('');
+  }
+  if (L[L.length - 1] === '') L.pop();
+  L.push('}');
   return L.join('\n');
 }
 
@@ -7599,15 +8452,42 @@ document.getElementById('tree-search').addEventListener('input', renderTree);
  * read-only overviews live on the NVIC and DMA1 entries in System Core, which need no
  * state and are already useful.
  */
-// An engine export the bundle may not define at all: `typeof someName` on a bare
-// identifier throws, so ask the global object, which is where build.py puts them.
-const engineHas = n => typeof globalThis[n] === 'function';
+/**
+ * Does this bundle's engine have that function?
+ *
+ * Asked `globalThis[name]` at first, which is wrong and was quietly wrong: build.py
+ * inlines `app/engine/*` as its own <script>, so a name it declares with
+ * `export function` does become a property of the global object, but a name it declares
+ * with `export const` does NOT — a top-level `const` is a lexical binding, not a global
+ * property. `nvicGroup`, `nvicGroups`, `nvicScheme` and `dmaAddableRequests` are all
+ * `export const`, so every one of those checks answered "no" while the function was
+ * sitting right there: every interrupt priority rendered as an em dash and the DMA tab
+ * grew no Add control. `typeof <identifier>` sees both kinds, and does not throw on a
+ * name that was never declared, so the checks are spelled out one identifier at a time
+ * rather than looked up by string.
+ *
+ * (The identifiers are safe to touch: the engine's <script> runs to completion before
+ * this one starts, so nothing below is in the temporal dead zone.)
+ */
+const hasNvic = () => typeof nvicVectors === 'function' && typeof setNvicVector === 'function';
+const hasNvicGroups = () => typeof nvicGroups === 'function' && typeof nvicGroup === 'function';
+const hasNvicScheme = () => typeof nvicScheme === 'function';
+const hasSetNvicGroup = () => typeof setNvicGroup === 'function';
+const hasDma = () => typeof dmaRequests === 'function' && typeof setDmaParam === 'function';
+const hasDmaAdd = () => typeof dmaAddableRequests === 'function' && typeof addDmaRequest === 'function';
+const hasDmaParams = () => typeof dmaParamDefs === 'function' && typeof dmaParamValue === 'function';
+const hasDmaConflicts = () => typeof dmaConflicts === 'function';
+const hasDmaState = () => typeof dmaState === 'function';
 const CTABS = [
   { id: 'param', name: 'Parameter Settings', has: pid => pid !== 'GPIO' && paramRows(pid).length > 0 },
-  { id: 'nvic', name: 'NVIC Settings', has: pid => engineHas('setNvicVector') && nvicVectorsOf(pid).length > 0 },
-  { id: 'dma', name: 'DMA Settings', has: pid => engineHas('setDmaParam') && dmaRequestNamesOf(pid).length > 0 },
+  { id: 'nvic', name: 'NVIC Settings', has: pid => hasNvic() && nvicVectorsOf(pid).length > 0 },
+  { id: 'dma', name: 'DMA Settings', has: pid => hasDma() && dmaRequestNamesOf(pid).length > 0 },
   { id: 'gpio', name: 'GPIO Settings', has: pid => pid === 'GPIO' || periphPins(pid).length > 0 },
 ];
+// The engine is the authority on every list below; these only exist so the tab strip can
+// ask "does this peripheral have any" without loading the whole table.
+const engineNvicVectors = () => (hasNvic() ? nvicVectors() : []);
+const engineDmaRequests = () => (hasDma() ? dmaRequests() : []);
 const tabsFor = pid => (!pid ? [] : CTABS.filter(t => { try { return t.has(pid); } catch (e) { return false; } }));
 let ctab = 'gpio';
 function renderCtabs(pid) {
@@ -7616,9 +8496,17 @@ function renderCtabs(pid) {
   // The selected tab has to survive selecting another peripheral, but only if that
   // peripheral has it; otherwise fall to the first one it does have.
   if (!tabs.some(t => t.id === ctab)) ctab = tabs.length ? tabs[0].id : null;
-  bar.innerHTML = tabs.map(t =>
-    `<button class="ctab${t.id === ctab ? ' active' : ''}" data-ctab="${t.id}" role="tab"`
-    + ` aria-selected="${t.id === ctab}">${esc(t.name)}</button>`).join('');
+  // Four tabs of CubeMX's full names need ~536 px and the centre column is ~440 px at
+  // 1280, so they wrapped to two lines. The word "Settings" is the same on all four and
+  // carries nothing; it drops out when the panel is narrow (CSS, below) and the full name
+  // stays in title= and aria-label=.
+  bar.innerHTML = tabs.map(t => {
+    const cut = t.name.endsWith(' Settings');
+    const stem = cut ? t.name.slice(0, -9) : t.name;
+    return `<button class="ctab${t.id === ctab ? ' active' : ''}" data-ctab="${t.id}" role="tab"`
+      + ` title="${attr(t.name)}" aria-label="${attr(t.name)}" aria-selected="${t.id === ctab}">`
+      + `${esc(stem)}${cut ? '<span class="tabword"> Settings</span>' : ''}</button>`;
+  }).join('');
   bar.hidden = tabs.length === 0;
   return ctab;
 }
@@ -7662,9 +8550,9 @@ document.getElementById('ptitle').addEventListener('click', e => {
 /** Pins this peripheral currently claims. */
 const periphPins = pid => Object.entries(E.pins)
   .filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
-/** The vectors `nvic:` gives this peripheral. `system: true` ones belong to NVIC itself. */
-const nvicVectorsOf = pid => ((M.nvic || {}).vectors || [])
-  .filter(v => (pid === 'NVIC' ? v.system : v.peripheral === pid));
+/** The vectors this peripheral owns. `system: true` ones belong to the NVIC entry itself. */
+const nvicVectorsOf = pid => (hasNvic() ? nvicVectors() : ((M.nvic || {}).vectors || []))
+  .filter(v => (pid === 'NVIC' ? true : v.peripheral === pid));
 /** The DMA request names owned by this peripheral, with the channels each can use. */
 function dmaRequestNamesOf(pid) {
   const reqs = (M.dma || {}).requests || {};
@@ -7742,67 +8630,217 @@ function renderCentre() {
     : `<div class="empty">${esc(pid)} has nothing to configure on this part.</div>`;
   body.innerHTML = ctab === 'gpio' ? gpioTable(periphPins(pid))
     : ctab === 'param' ? paramTable(pid)
-      : isDmaCtl ? '' : nothing;
+      : ctab === 'nvic' ? nvicTable(nvicVectorsOf(pid), { showOwner: false })
+        : ctab === 'dma' ? dmaTable(pid)
+          : isDmaCtl ? '' : nothing;
   if (isDmaCtl) body.innerHTML += dmaChannelTable();
 }
 
-// ---- DMA1 in System Core: every channel, what wants it, and who owns it -------
-// Read-only on purpose. Which requests the user has ADDED, and how each one is
-// configured, is state the engine does not have yet (requested from AGENT-2 on the
-// board, 14:30Z); this shows what the SILICON offers and which of it is live, which is
-// the half `dma:` can answer today. `dmaState()` is the same engine call the shared-
-// resource warnings come from, so this table and the warning cannot disagree.
+// ---- DMA1 in System Core: every channel, what can use it, and what is on it ----
+// `dmaState()` is the same engine call the shared-resource warnings come from and
+// `dmaConflicts()` is the hard "two requests, one channel" list, so this table and the
+// banners above it cannot disagree. Configuring a request is the DMA Settings tab on its
+// peripheral; this is the one place that shows every channel at once.
 function dmaChannelTable() {
   const d = M.dma;
   if (!d || !d.requests) return '';
-  const st = typeof dmaState === 'function' ? dmaState() : null;
+  const st = hasDmaState() ? dmaState() : null;
   const defs = d.request_defaults || {};
   const owner = r => (M.peripherals[r] ? r : String(r).split('_')[0]);
-  const contended = new Set(((E.resourceIssues || []).filter(x => x.kind === 'dma')).map(x => String(x.channel)));
+  const configured = {};                    // channel -> the requests the USER configured
+  for (const r of engineDmaRequests()) (configured[r.channel] ||= []).push(r);
+  const clash = {};
+  if (hasDmaConflicts()) for (const c of dmaConflicts()) clash[String(c.channel)] = c;
   const rows = [];
   for (let ch = 1; ch <= (d.channels || Object.keys(d.requests).length); ch++) {
     const list = d.requests[ch] || d.requests[String(ch)] || [];
     const live = (st && st.channels[ch]) ? st.channels[ch].live : [];
+    const mine = (configured[String(ch)] || []).map(r => r.request);
     const cells = list.map(r => {
       const o = owner(r);
+      const used = mine.includes(r);
       const on = live.includes(r);
-      const dir = (defs[r] || {}).dir;
-      const link = M.peripherals[o]
-        ? `<a data-goto="${attr(o)}" title="Go to ${attr(o)}">${esc(r)}</a>` : esc(r);
-      return `<span class="dreq${on ? ' on' : ''}" title="${attr(`${r} — owner ${o}${dir ? `, default direction ${dir}` : ''}${on ? ', that peripheral is switched on' : ', that peripheral is off'}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
+      const dir = used ? dmaParamValue(r, 'dir') : (defs[r] || {}).dir;
+      const link = M.peripherals[o] ? `<a data-goto="${attr(o)}" title="Go to ${attr(o)}">${esc(r)}</a>` : esc(r);
+      const why = used ? 'configured on this channel' : on ? 'that peripheral is switched on, but no DMA request is configured' : 'that peripheral is off';
+      return `<span class="dreq${used ? ' used' : on ? ' on' : ''}" title="${attr(`${r} — owner ${o}${dir ? `, ${used ? '' : 'default '}direction ${dir}` : ''}; ${why}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
     }).join('');
-    rows.push(`<tr class="${contended.has(String(ch)) ? 'clash' : ''}"><td>${ch}</td><td>${cells || '<span class="ro">no request maps here</span>'}</td>`
-      + `<td>${live.length ? live.map(r => esc(owner(r))).filter((v, i, a) => a.indexOf(v) === i).join(', ') : '<span class="ro">—</span>'}</td></tr>`);
+    const c = clash[String(ch)];
+    rows.push(`<tr class="${c ? 'clash' : mine.length ? 'used' : ''}"${c ? ` title="${attr(c.text)}"` : ''}>`
+      + `<td>${ch}</td><td>${cells || '<span class="ro">no request maps here</span>'}</td>`
+      + `<td>${c ? `<b class="clashowners">${esc(c.owners.join(' + '))}</b>`
+        : mine.length ? esc([...new Set((configured[String(ch)] || []).map(r => r.owner))].join(', '))
+          : '<span class="ro">—</span>'}</td></tr>`);
   }
   const off = st && !st.enabled
-    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing on it is live yet. Switch it on in its Mode panel above.</div>` : '';
-  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and which of those peripherals is switched on.`
-    + ` A channel two switched-on peripherals both want is outlined; only one of them can drive it.</div>${off}`
-    + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Live owner</th></tr></thead>`
+    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing here reaches the generated code yet. Switch it on in its Mode panel above.</div>` : '';
+  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and what is configured on it.`
+    + ` Configure a request on its peripheral's <b>DMA Settings</b> tab. A channel with two configured requests is outlined`
+    + ` and names both owners: one channel serves one request, and the generated C says <code>#error</code> rather than picking.</div>${off}`
+    + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Configured</th></tr></thead>`
     + `<tbody>${rows.join('')}</tbody></table>`;
 }
 
-// ---- NVIC in System Core: every vector this part has --------------------------
-// Also read-only, for the same reason: enabling a vector and setting its priority is
-// state the engine does not have yet. What it CAN say without inventing anything is
-// which interrupts exist, what the SDK calls each one (two names, and they differ), who
-// owns it, and whether that owner is switched on. The priority scheme is printed as the
-// fact it is rather than as a control that would not write anywhere - and the numbers
-// come from `nvic.scheme`, never from CubeMX muscle memory: this PFIC implements TWO
-// priority bits, not four.
+// ---- DMA Settings, per peripheral ---------------------------------------------
+//
+// A table of this peripheral's configured requests with Add / Delete, and the selected
+// row's DMA_InitTypeDef fields below it. Those fields are rendered by the SAME editors
+// as Parameter Settings: `dma.channel_params` is deliberately the same schema as
+// `params:` and `dmaParamDefs()` returns what `getParams()` returns, so there is one set
+// of editors and one set of rules rather than two that can disagree.
+//
+// **The channel is not a selector unless the part actually offers a choice.** All 23 of
+// CH32V006's requests are wired to exactly one channel, so `legalChannels` comes back one
+// long and the cell is fixed text - the same rule as `gpio.speeds`, and computed from the
+// map rather than assumed, so a part whose request can reach several channels gets a real
+// selector without this code changing.
+let dmaPick = null;                 // UI-only: which request row is open. Not in S.
+function dmaTable(pid) {
+  const all = engineDmaRequests();
+  const mine = all.filter(r => r.owner === pid);
+  const addable = (hasDmaAdd() ? dmaAddableRequests() : []).filter(r => r.owner === pid);
+  const clash = {};
+  if (hasDmaConflicts()) for (const c of dmaConflicts()) for (const id of c.ids) clash[id] = c;
+  if (!mine.some(r => r.id === dmaPick)) dmaPick = mine.length ? mine[0].id : null;
+
+  const rows = mine.map(r => {
+    const c = clash[r.id];
+    const ch = r.legalChannels.length > 1
+      ? `<select data-dr="${attr(r.id)}" data-dk="channel" aria-label="${attr(`${r.request} channel`)}">`
+        + r.legalChannels.map(x => `<option${String(x) === r.channel ? ' selected' : ''}>${x}</option>`).join('') + '</select>'
+      : `<span class="fixedval" title="${attr(`${r.request} is wired to channel ${r.channel} only`)}">${esc(r.channel)}</span>`;
+    return `<tr class="${r.id === dmaPick ? 'sel' : ''}${c ? ' clash' : ''}" data-dpick="${attr(r.id)}">`
+      + `<td>${esc(r.request)}</td><td>${ch}</td>`
+      + `<td>${esc(String(dmaParamValue(r.id, 'dir') ?? '—'))}</td>`
+      + `<td>${esc(String(dmaParamValue(r.id, 'pl') ?? dmaParamValue(r.id, 'priority') ?? '—'))}</td>`
+      + `<td><button class="dmadel" data-ddel="${attr(r.id)}" title="${attr(`Remove ${r.request}`)}" aria-label="${attr(`Remove ${r.request}`)}">✕</button></td></tr>`;
+  }).join('');
+
+  let h = `<div class="paramhead">DMA requests ${esc(pid)} can make, and how each one is configured.`
+    + ` The buffer address and the transfer count are not here: <code>DMA_PeripheralBaseAddr</code>,`
+    + ` <code>DMA_MemoryBaseAddr</code> and <code>DMA_BufferSize</code> are your application's buffer, not a`
+    + ` configuration choice, and the generated C leaves them as named TODOs.</div>`;
+  for (const c of Object.values(clash).filter((v, i, a) => a.indexOf(v) === i)) {
+    h += `<div class="pmnote bad" style="position:static">⚠ ${esc(c.text)} — <b>${esc(c.owners.join(' and '))}</b>.`
+      + ` The generated C will say <code>#error</code> rather than pick one.</div>`;
+  }
+  h += `<table class="dmatab"><thead><tr><th>Request</th><th>Channel</th><th>Direction</th><th>Priority</th><th></th></tr></thead>`
+    + `<tbody>${rows || `<tr><td colspan="5" class="ro">No DMA request configured for ${esc(pid)} yet.</td></tr>`}</tbody></table>`;
+  h += `<div class="dmaadd">`
+    + (addable.length
+      ? `<select id="dma-add" aria-label="DMA request to add">`
+        + addable.map(r => `<option value="${attr(r.request)}">${esc(r.request)} — channel ${esc(r.channel)}</option>`).join('')
+        + `</select><button id="dma-add-go">Add</button>`
+      : `<span class="ro">${mine.length ? `Every DMA request ${esc(pid)} has is configured.` : `${esc(pid)} has no DMA request on this part.`}</span>`)
+    + `</div>`;
+
+  // The selected row's DMA_InitTypeDef fields, through the Parameter Settings editors.
+  const sel = mine.find(r => r.id === dmaPick);
+  if (sel) {
+    const defs = hasDmaParams() ? dmaParamDefs() : [];
+    h += `<div class="section-h">${esc(sel.request)} — ${esc((M.dma || {}).init_struct || 'DMA_InitTypeDef')}</div>`
+      + paramTableFrom(defs.map(d => Object.assign({}, d, { value: dmaParamValue(sel.id, d.key) })), {
+        owner: sel.id, head: `${sel.request} on channel ${sel.channel}`,
+        attrs: { o: 'dp', k: 'dn' }, keyPrefix: 'DMA',
+        note: (M.dma.request_notes || {})[sel.request] || '',
+      });
+  }
+  return h;
+}
+
+// ---- NVIC ---------------------------------------------------------------------
+//
+// One table, two callers: the NVIC entry in System Core shows every vector, and a
+// peripheral's NVIC Settings tab shows the ones it owns. Same renderer, so the two views
+// cannot drift apart.
+//
+// **The priority ranges come from `nvic.scheme`, never from CubeMX muscle memory.** The
+// PFIC on this part implements TWO priority bits, not four: PFIC_IPRIORx [5:0] are
+// reserved and write-invalid (RM 6.5.2.21), so with nesting on it is one preemption bit
+// and one sub-priority bit, both 0-1. A spinner offering 0-15 would be offering settings
+// the silicon throws away. A field the active grouping gives zero bits is rendered as
+// fixed text, not a disabled control - the same rule as the GPIO speed column.
+// A priority is settable whether or not the vector is enabled: the value is stored
+// either way, and disabling the control because of another control's state is the thing
+// round 2 forbade. Zero bits in the active grouping IS a hardware fact, and that renders
+// as fixed text - never as a disabled select.
+function nvicPriorityCell(v, which, spec) {
+  if (!spec) return '<span class="ro">—</span>';
+  const value = which === 'preempt' ? v.preempt : v.sub;
+  if (spec.max <= spec.min) {
+    return `<span class="fixedval" title="${attr(`This grouping gives ${which === 'preempt' ? 'preemption' : 'sub-'}priority ${spec.bits || 0} bits, so ${spec.min} is the only value`)}">${spec.min}</span>`;
+  }
+  let o = '';
+  for (let i = spec.min; i <= spec.max; i++) o += `<option${i === value ? ' selected' : ''}>${i}</option>`;
+  return `<select data-nv="${attr(v.name)}" data-nk="${which}" aria-label="${attr(`${v.name} ${which} priority`)}">${o}</select>`;
+}
+
+/**
+ * The Enabled cell.
+ *
+ * It used to be a `disabled` checkbox whenever the owning peripheral was switched off,
+ * which is exactly what round 2 forbids: greying is for an option the MCU data says the
+ * part does not have, never a consequence of another control's state. "USART1 is off" is
+ * UI state. So instead of a dead checkbox the cell says so and offers the fix - one click
+ * to the peripheral that has to be switched on first. A live control that explains itself
+ * beats a grey one that does not.
+ */
+function nvicEnableCell(v) {
+  if (v.fixed) {
+    return `<span class="fixedval" title="${attr(`${v.name} is always active on this core and cannot be switched off`)}">always on</span>`;
+  }
+  if (v.peripheral && !M.peripherals[v.peripheral]) {
+    return `<span class="ro" title="${attr(`${M.mcu.name} has no ${v.peripheral}`)}">not on this part</span>`;
+  }
+  if (!v.available && v.peripheral) {
+    return `<a data-goto="${attr(v.peripheral)}" class="needson"`
+      + ` title="${attr(`${v.peripheral} is switched off. Switch it on and this interrupt can be enabled.`)}">${esc(v.peripheral)} is off</a>`;
+  }
+  return `<input type="checkbox" data-nv="${attr(v.name)}" data-nk="enabled"${v.enabled ? ' checked' : ''}`
+    + ` aria-label="${attr(`Enable the ${v.name} interrupt`)}">`;
+}
+
+function nvicTable(rows, { showOwner }) {
+  const g = hasNvicGroups() ? nvicGroup() : null;
+  const pre = g && g.preempt ? { min: g.preempt.min || 0, max: g.preempt.max || 0, bits: g.preempt.bits || 0 } : null;
+  const sub = g && g.sub ? { min: g.sub.min || 0, max: g.sub.max || 0, bits: g.sub.bits || 0 } : null;
+  if (!rows.length) return '<div class="empty">No interrupt vector belongs to this peripheral.</div>';
+  const body = rows.map(v => {
+    const who = v.system ? '<span class="ro">core</span>'
+      : M.peripherals[v.peripheral] ? `<a data-goto="${attr(v.peripheral)}" title="Go to ${attr(v.peripheral)}">${esc(v.peripheral)}</a>`
+        : esc(v.peripheral || '—');
+    return `<tr class="${v.enabled ? 'on' : ''}${v.available ? '' : ' off'}" title="${attr(v.description || v.name)}">`
+      + `<td>${v.vector}</td><td>${esc(v.name)}<br><code>${esc(v.irqn || '')}</code></td>`
+      + (showOwner ? `<td>${who}</td>` : '')
+      + `<td>${nvicEnableCell(v)}</td><td>${nvicPriorityCell(v, 'preempt', pre)}</td><td>${nvicPriorityCell(v, 'sub', sub)}</td>`
+      + `<td><code>${esc(v.handler || '')}</code></td></tr>`;
+  }).join('');
+  return `<table class="nvictab${showOwner ? '' : ' noowner'}"><thead><tr><th>No.</th><th>Interrupt</th>`
+    + (showOwner ? '<th>Owner</th>' : '')
+    + `<th>Enabled</th><th>Preemption priority</th><th>Sub priority</th>`
+    + `<th title="the symbol in the startup vector table your ISR must be called to be linked in">Handler</th></tr></thead>`
+    + `<tbody>${body}</tbody></table>`;
+}
+
+/** One delegated writer for both callers. Every write goes through the engine. */
+document.getElementById('cbody').addEventListener('change', e => {
+  const el = e.target; if (!el.dataset.nv) return;
+  try {
+    setNvicVector(el.dataset.nv, { [el.dataset.nk]: el.type === 'checkbox' ? el.checked : Number(el.value) });
+  } catch (err) { toast(err.message); }
+  renderAll();
+});
+
+/** The NVIC entry in System Core: the scheme, the grouping selector, every vector. */
 function renderNvicOverview(mode, body) {
   const n = M.nvic || {};
-  const sch = n.scheme || {};
-  const groups = sch.groups || [];
-  const active = groups.find(g => g.default) || groups[0];
-  const ownedLive = v => !v.system && M.peripherals[v.peripheral] && isEnabled(v.peripheral);
-  const vectors = (n.vectors || []).slice().sort((a, b) => (a.vector || 0) - (b.vector || 0));
-  const core = vectors.filter(v => v.system).length;
-  const live = vectors.filter(ownedLive).length;
+  const sch = (hasNvicScheme() ? nvicScheme() : n.scheme) || {};
+  const groups = hasNvicGroups() ? nvicGroups() : (sch.groups || []);
+  const vectors = nvicVectorsOf('NVIC').slice().sort((a, b) => (a.vector || 0) - (b.vector || 0));
+  const on = vectors.filter(v => v.enabled).length;
 
-  // These are FACTS about the silicon, not settings, so they are not drawn with the
-  // yellow setting labels the rest of the Mode panel uses - a read-only value wearing an
-  // editable row's clothes is its own kind of lie.
+  // Facts about the silicon are not drawn with the yellow setting labels the editable
+  // rows use - a read-only value wearing an editable row's clothes is its own kind of lie.
   const fact = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
   let facts = '';
   if (sch.priority_bits !== undefined) {
@@ -7811,30 +8849,30 @@ function renderNvicOverview(mode, body) {
       + `${sch.priority_lsb !== undefined ? ` — bits [${sch.priority_lsb + sch.priority_bits - 1}:${sch.priority_lsb}]. The rest are reserved and write-invalid.` : ''}`);
   }
   if (sch.max_nesting !== undefined) facts += fact('Maximum nesting', sch.max_nesting);
-  if (active) {
-    facts += fact('Priority grouping', esc(active.name)
-      + (groups.length > 1 ? `<br><span class="ro">This part also offers: ${groups.filter(g => g !== active).map(g => esc(g.name)).join('; ')}. Choosing between them arrives with the NVIC Settings tab.</span>` : ''));
+  // One grouping is not a choice; show it as text. Two or more is a real selector.
+  if (groups.length > 1 && hasSetNvicGroup()) {
+    const i = hasNvicGroups() ? groups.indexOf(nvicGroup()) : 0;
+    facts += fact('Priority grouping', `<select id="nvic-group" aria-label="Interrupt priority grouping">`
+      + groups.map((x, j) => `<option value="${j}"${j === i ? ' selected' : ''}>${esc(x.name)}</option>`).join('')
+      + `</select>`);
+  } else if (groups.length === 1) {
+    facts += fact('Priority grouping', esc(groups[0].name));
   }
-  mode.innerHTML = `<div class="nvicfacts"><p>${esc(n.controller || 'NVIC')} — ${vectors.length} interrupt vector${vectors.length === 1 ? '' : 's'} on this part:`
-    + ` ${core} belonging to the core itself and ${live} to a peripheral you have switched on.</p>`
-    + (facts ? `<dl>${facts}</dl>` : '') + `</div>`;
+  mode.innerHTML = `<div class="nvicfacts"><p>${esc(n.controller || 'NVIC')} — ${vectors.length} interrupt vector${vectors.length === 1 ? '' : 's'} on this part,`
+    + ` ${on} enabled.</p>` + (facts ? `<dl>${facts}</dl>` : '') + `</div>`;
+  const gs = mode.querySelector('#nvic-group');
+  if (gs) gs.onchange = () => {
+    // Priorities already set are clamped into the new range by the engine, so re-render
+    // everything rather than only this panel: a number elsewhere may have just moved.
+    try { setNvicGroup(+gs.value); } catch (err) { toast(err.message); }
+    renderAll();
+  };
 
-  const rows = vectors.map(v => {
-    const on = v.system || ownedLive(v);
-    const who = v.system ? '<span class="ro">core</span>'
-      : M.peripherals[v.peripheral] ? `<a data-goto="${attr(v.peripheral)}" title="Go to ${attr(v.peripheral)}">${esc(v.peripheral)}</a>`
-        : esc(v.peripheral || '—');
-    return `<tr class="${on ? '' : 'off'}"><td>${v.vector}</td><td>${esc(v.name)}</td><td><code>${esc(v.irqn || '')}</code></td>`
-      + `<td><code>${esc(v.handler || '')}</code></td><td>${who}</td>`
-      + `<td>${v.fixed ? '<span class="ro">fixed</span>' : on ? 'available' : '<span class="ro">owner is off</span>'}</td></tr>`;
-  }).join('');
-  body.innerHTML = `<div class="paramhead">Every vector in this part's table. <b>Two names per vector</b>, because the SDK uses two`
-    + ` and they are not interchangeable: <code>IRQn</code> is what <code>NVIC_IRQChannel</code> takes, <code>Handler</code> is the`
-    + ` symbol your ISR must be called to be linked in. Enabling a vector and setting its priority arrives with the NVIC Settings tab.</div>`
-    + `<table class="nvictab"><thead><tr><th>No.</th><th>Interrupt</th><th>IRQn</th><th>Handler</th><th>Owner</th><th>State</th></tr></thead>`
-    + `<tbody>${rows}</tbody></table>`
-    // The MCU file's own note about the scheme. It is here rather than in the Mode panel
-    // because that panel is capped at 42 % of the column and would scroll a paragraph.
+  body.innerHTML = `<div class="paramhead"><b>Two names per vector</b>, because the SDK uses two and they are not`
+    + ` interchangeable: <code>IRQn</code> is what <code>NVIC_IRQChannel</code> takes, and the <b>Handler</b> column is the`
+    + ` symbol in the startup table your ISR must be called to be linked in. A vector whose peripheral is switched off`
+    + ` cannot be enabled here — switch the peripheral on first.</div>`
+    + nvicTable(vectors, { showOwner: true })
     + (sch.notes ? `<div class="paramhead" style="border:0;border-top:1px solid var(--line-soft);margin-top:6px">${esc(String(sch.notes).trim())}</div>` : '');
 }
 document.getElementById('cbody').addEventListener('click', e => {
@@ -7892,8 +8930,12 @@ function paramActive(pid, row, byName) {
   });
 }
 
-function paramEditor(pid, row, live) {
-  const key = `data-pp="${attr(pid)}" data-pn="${attr(paramKey(row))}"`;
+// `A` names the two data- attributes the editor writes, so the same editors serve
+// peripheral parameters (`data-pp`/`data-pn` -> setParam) and DMA_InitTypeDef fields
+// (`data-dp`/`data-dn` -> setDmaParam). `dma.channel_params` is deliberately the same
+// schema as `params:`, and this is what lets that pay off as one set of editors.
+function paramEditor(pid, row, live, A = { o: 'pp', k: 'pn' }) {
+  const key = `data-${A.o}="${attr(pid)}" data-${A.k}="${attr(paramKey(row))}"`;
   const unit = row.unit ? `<span class="unit">${esc(row.unit)}</span>` : '';
   if (paramReadonly(row)) {
     const has = row.value !== undefined && row.value !== null && row.value !== '';
@@ -7911,6 +8953,40 @@ function paramEditor(pid, row, live) {
   const step = row.step !== undefined ? ` step="${attr(row.step)}"` : (row.type === 'int' ? ' step="1"' : ' step="any"');
   const mm = (row.min !== undefined ? ` min="${row.min}"` : '') + (row.max !== undefined ? ` max="${row.max}"` : '');
   return `<div class="ed"><input type="number" ${key} value="${attr(row.value !== undefined ? row.value : '')}"${step}${mm}${dis}>${unit}</div>`;
+}
+
+/**
+ * The Basic/Advanced grouped parameter table, given rows that already carry their value.
+ * Both Parameter Settings and the DMA Settings tab's DMA_InitTypeDef block render through
+ * this, so a change to how a parameter looks cannot land in one and not the other.
+ */
+function paramTableFrom(rows, { owner, head, attrs = { o: 'pp', k: 'pn' }, live = true, note = '', keyPrefix } = {}) {
+  if (!rows.length) return '<div class="empty">Nothing to configure here.</div>';
+  const grouped = rows.some(r => r.group);
+  const groups = new Map();
+  for (const r of rows) {
+    const g = grouped ? (r.group || (r.advanced ? 'Advanced' : 'Basic')) : '';
+    (groups.get(g) || groups.set(g, []).get(g)).push(r);
+  }
+  const order = [...groups.keys()].sort((a, b) => {
+    const rank = n => (n === 'Basic' ? 0 : n === 'Advanced' ? 2 : 1);
+    return rank(a) - rank(b) || a.localeCompare(b);
+  });
+  let h = '';
+  for (const g of order) {
+    const key = `${keyPrefix || owner}/${g}`, shut = g && paramsClosed.has(key);
+    if (g) h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g)}</td></tr>`;
+    if (shut) continue;
+    for (const r of groups.get(g)) {
+      const cls = paramReadonly(r) ? 'calc' : '';
+      const rn = [paramNote(r), r.register ? `register: ${r.register}` : '', r.sdk_field ? `DMA_InitTypeDef.${r.sdk_field}` : '']
+        .filter(Boolean).join(' — ');
+      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${rn ? `<span class="pnote">${esc(rn)}</span>` : ''}</td>`
+        + `<td>${paramEditor(owner, r, live, attrs)}</td></tr>`;
+    }
+  }
+  return (note ? `<div class="paramhead">${esc(note)}</div>` : '')
+    + `<table class="params"><thead><tr><th>${esc(head || owner)}</th><th>Value</th></tr></thead><tbody>${h}</tbody></table>`;
 }
 
 // Numbers the engine derives from the parameters plus the clock tree. Shown
@@ -7949,6 +9025,8 @@ function paramTable(pid) {
   const live = typeof setParam === 'function' && typeof getParams === 'function'
     && (() => { try { return (getParams(pid) || []).length > 0; } catch (e) { return false; } })();
 
+  // A row whose `when:` is not met is drawn recessed and not writable - the condition is
+  // in the data, so it is kept here rather than pushed into the shared renderer.
   const byName = Object.fromEntries(rows.map(r => [paramLabel(r), r.value]));
   const grouped = rows.some(r => r.group);
   const groups = new Map();
@@ -7987,13 +9065,42 @@ function paramTable(pid) {
 }
 
 document.getElementById('cbody').addEventListener('click', e => {
+  // Add / remove / select a DMA request. Every write is an engine call, so all three
+  // land on the undo stack and in the saved project.
+  const del = e.target.closest('[data-ddel]');
+  if (del) {
+    try { removeDmaRequest(del.dataset.ddel); } catch (err) { toast(err.message); }
+    renderAll(); return;
+  }
+  if (e.target.id === 'dma-add-go') {
+    const sel = document.getElementById('dma-add');
+    if (sel) { try { addDmaRequest(sel.value); dmaPick = sel.value; } catch (err) { toast(err.message); } }
+    renderAll(); return;
+  }
+  const pick = e.target.closest('tr[data-dpick]');
+  if (pick && !e.target.closest('select,button')) { dmaPick = pick.dataset.dpick; renderCentre(); return; }
+
   const g = e.target.closest('tr.grp'); if (!g) return;
   const key = g.dataset.grp;
   paramsClosed.has(key) ? paramsClosed.delete(key) : paramsClosed.add(key);
   renderCentre();
 });
 document.getElementById('cbody').addEventListener('change', e => {
-  const el = e.target; if (!el.dataset.pp) return;
+  const el = e.target;
+  // A DMA_InitTypeDef field, through the same editors but a different setter.
+  if (el.dataset.dp) {
+    try { setDmaParam(el.dataset.dp, el.dataset.dn, el.type === 'checkbox' ? el.checked : el.value); }
+    catch (err) { toast(err.message); }
+    renderAll();
+    return;
+  }
+  if (el.dataset.dr) {                      // the channel selector on a request row
+    try { setDmaRequest(el.dataset.dr, { [el.dataset.dk]: el.value }); }
+    catch (err) { toast(err.message); }
+    renderAll();
+    return;
+  }
+  if (!el.dataset.pp) return;
   if (typeof setParam !== 'function') return;
   const pid = el.dataset.pp, key = el.dataset.pn;
   const v = el.type === 'checkbox' ? el.checked : el.value;

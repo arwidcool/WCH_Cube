@@ -30,7 +30,9 @@
 //    A field may be split across slices: `from` is the bit of the remap index a
 //    slice starts at (TIM2_RM[2] lives at bit 16, away from TIM2_RM[1:0]).
 // =============================================================================
-import { M, S, pinType, requiredSignals, gpioSpeeds, gpioSpeedFor } from './model.js';
+import { M, S, pinType, requiredSignals, gpioSpeeds, gpioSpeedFor, isEnabled } from './model.js';
+import { paramDefs, paramValue, paramApplies } from './params.js';
+import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
 import { E, compute } from './engine.js';
 import { clockCalc, firstPre } from './clock.js';
 import { PROJECT } from './project.js';
@@ -254,9 +256,12 @@ export function cHeader() {
     '',
     `#include "${cfg().header || 'debug.h'}"`,
     '',
-    'void WCHCube_RCC_Init(void);   /* clock tree: SYSCLK source, PLL, prescalers */',
-    'void WCHCube_GPIO_Init(void);  /* port clocks, AFIO remap, every configured pin */',
-    'void WCHCube_Init(void);       /* both, in the right order */',
+    'void WCHCube_RCC_Init(void);    /* clock tree: SYSCLK source, PLL, prescalers */',
+    'void WCHCube_GPIO_Init(void);   /* port clocks, AFIO remap, every configured pin */',
+    'void WCHCube_Periph_Init(void); /* peripheral clocks and *_InitTypeDef blocks */',
+    'void WCHCube_DMA_Init(void);    /* DMA_InitTypeDef per configured request */',
+    'void WCHCube_NVIC_Init(void);   /* the enabled vectors, with PFIC priorities */',
+    'void WCHCube_Init(void);        /* all of them, in the right order */',
     '',
     `#endif /* ${guard} */`,
     '',
@@ -414,18 +419,416 @@ export function cSource() {
       + `below name exactly what is missing."`);
     L.push('');
   }
+  // A channel the user booked twice cannot be resolved by generating both and letting
+  // the last write win - that is silently wrong silicon. Round-3 P2 asks for #error.
+  for (const c of dmaConflicts()) {
+    L.push(`#error "WCHCube: ${c.text.replace(/"/g, "'")}. Remove one of them in DMA Settings."`);
+    L.push('');
+  }
   if (e.conflictList.length) {
     L.push(`#error "WCHCube: ${e.conflictList.length} unresolved pin conflict(s) — ${e.conflictList.map(c => c.text).join('; ')}"`);
     L.push('');
   }
-  L.push(rccSection(), '', gpioSection(), '');
+  L.push(rccSection(), '', gpioSection(), '', periphSection(), '', dmaSection(), '', nvicSection(), '');
   L.push(banner('Entry point'));
   L.push('void WCHCube_Init(void)');
   L.push('{');
+  // Clocks first because everything else needs them; peripherals before DMA because a
+  // channel points at a peripheral register; NVIC last so nothing can fire into a
+  // half-configured peripheral.
   L.push('    WCHCube_RCC_Init();');
   L.push('    WCHCube_GPIO_Init();');
+  L.push('    WCHCube_Periph_Init();');
+  L.push('    WCHCube_DMA_Init();');
+  L.push('    WCHCube_NVIC_Init();');
   L.push('}');
   L.push('');
+  return L.join('\n');
+}
+
+// ---- peripheral init structs -------------------------------------------------
+//  `params:` -> `*_InitTypeDef` blocks. Every name here comes from the MCU file:
+//  `struct:` is the typedef, `sdk_field:` the member, and an enum option's `sdk:`
+//  the macro. Nothing is derived from the peripheral's name - `USART_InitTypeDef`
+//  does NOT imply `USART_Init`, and data/FORMAT.md is explicit that not every
+//  parameter is a struct member at all:
+//
+//    sdk_call:      the SDK sets it with a function, not a member  (TIM arpe)
+//    sdk_none:      the SDK exposes nothing for it                 (ADC lowpower)
+//    struct: other  it belongs to a DIFFERENT struct               (TIM1 deadtime)
+//
+//  A parameter that does not apply under the current settings is not emitted, and
+//  neither is one the data marks readonly - those are derived, not chosen.
+
+/** The literal to assign for one parameter, or a reason it cannot be written. */
+function paramLiteral(pid, d) {
+  const v = paramValue(pid, d.key);
+  if (d.type === 'bool') {
+    const macro = v ? d.sdk_enabled : d.sdk_disabled;
+    if (macro) return { text: macro };
+    return { missing: `${d.name}: the MCU file gives no sdk_enabled/sdk_disabled macro for ${v}` };
+  }
+  if (d.options) {
+    const hit = d.options.find(o => String(o.name) === String(v));
+    if (hit && hit.sdk) return { text: hit.sdk };
+    return { missing: `${d.name}: option "${v}" has no sdk: macro in the MCU file` };
+  }
+  if (typeof v === 'number' && Number.isFinite(v)) return { text: String(v) };
+  if (v === undefined || v === null) return { missing: `${d.name}: no value` };
+  return { missing: `${d.name}: "${v}" is not a number and has no sdk: macro` };
+}
+
+/**
+ * What has to be emitted for one peripheral, grouped the way the SDK applies it:
+ * one block per `struct:`, in the order the parameters appear in the MCU file,
+ * which is the order AGENT-1 wrote them in - register order.
+ *
+ * `fn` and `handle` are looked up in `codegen.init_structs` / `codegen.periph_handle`.
+ * They are NOT guessed: `USART_Init(USART1, &s)` is two names this generator has no
+ * source for, and round 3 opened with two defects that were exactly one wrong
+ * identifier each. Without them the block is still emitted - the field values are
+ * known and useful - followed by a TODO naming the two keys that would apply it.
+ */
+export function initPlan(pid) {
+  const defs = paramDefs(pid).filter(d => !d.readonly && paramApplies(pid, d));
+  const structs = [];
+  const calls = [];
+  const notes = [];
+  const cg = cfg();
+  const handle = (cg.periph_handle || {})[pid];
+  for (const d of defs) {
+    if (d.sdk_none) {
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — the SDK exposes nothing for it`
+        + (d.sdk_note ? `: ${d.sdk_note}` : ''));
+      continue;
+    }
+    if (d.sdk_call) {
+      calls.push(...sdkCalls(pid, d, handle));
+      continue;
+    }
+    if (!d.struct) {
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — the MCU file says neither struct:, sdk_call: nor sdk_none:`);
+      continue;
+    }
+    if (!d.sdk_field) {
+      notes.push(`${d.name}: struct: ${d.struct} without an sdk_field:, so the member name is unknown`);
+      continue;
+    }
+    let block = structs.find(b => b.struct === d.struct);
+    if (!block) {
+      const spec = (cg.init_structs || {})[d.struct] || {};
+      // A single-instance peripheral's Init takes the struct ALONE: OPA_Init(&s), not
+      // OPA_Init(OPA, &s) (ch32v00X_opa.h). The data says so; it is not guessable.
+      structs.push(block = {
+        struct: d.struct, fn: spec.fn || null,
+        noHandle: !!spec.no_handle, handle: spec.no_handle ? null : (handle || null),
+        fields: [], missing: [],
+      });
+    }
+    const lit = paramLiteral(pid, d);
+    if (lit.missing) block.missing.push(lit.missing);
+    else block.fields.push({ member: d.sdk_field, text: lit.text, name: d.name, value: paramValue(pid, d.key), unit: d.unit });
+  }
+  return { pid, structs, calls, notes, handle: handle || null };
+}
+
+/**
+ * A parameter the SDK sets with a FUNCTION rather than a struct member. The data gives
+ * the function and its argument list as placeholders, because the shape is not
+ * derivable: `TIM_ARRPreloadConfig(TIMx, NewState)` takes two arguments and
+ * `ADC_RegularChannelConfig(ADCx, channel, rank, sampletime)` takes four, one call per
+ * CHANNEL. Placeholders, all from data/FORMAT.md:
+ *     $HANDLE   codegen.periph_handle[pid]
+ *     $VALUE    the option's sdk: macro, the bool's sdk_enabled/sdk_disabled, or a number
+ *     $CHANNEL  codegen.channel_macros[pid][signal], with sdk_repeat: channels
+ *     $RANK     1-based position in that repeat
+ * Anything else, or a placeholder that cannot be filled, becomes a TODO naming it.
+ */
+function sdkCalls(pid, d, handle) {
+  const lit = paramLiteral(pid, d);
+  const args = Array.isArray(d.sdk_args) ? d.sdk_args : null;
+  const base = { key: d.key, name: d.name, fn: d.sdk_call, value: paramValue(pid, d.key), note: d.sdk_note || '' };
+  if (!args) return [{ ...base, missing: 'the MCU file gives no sdk_args, so the argument list is unknown' }];
+  if (lit.missing) return [{ ...base, missing: lit.missing }];
+
+  // One call per selected channel, or exactly one call.
+  let repeats = [null];
+  if (d.sdk_repeat === 'channels') {
+    const macros = (cfg().channel_macros || {})[pid];
+    if (!macros) return [{ ...base, missing: `codegen.channel_macros.${pid} — no macro for any channel` }];
+    const chosen = selectedChannels(pid);
+    if (!chosen.length) return [];                 // nothing selected, nothing to configure
+    repeats = chosen.map((sig, i) => ({ sig, macro: macros[sig], rank: i + 1 }));
+    const unknown = repeats.filter(r => !r.macro).map(r => r.sig);
+    if (unknown.length) return [{ ...base, missing: `codegen.channel_macros.${pid} has no macro for ${unknown.join(', ')}` }];
+  } else if (d.sdk_repeat) {
+    return [{ ...base, missing: `sdk_repeat: ${d.sdk_repeat} is not a repeat this generator knows` }];
+  }
+
+  const out = [];
+  for (const r of repeats) {
+    const filled = [];
+    let missing = null;
+    for (const a of args) {
+      const token = String(a);
+      if (token === '$VALUE') filled.push(lit.text);
+      else if (token === '$HANDLE') { if (!handle) missing = `codegen.periph_handle.${pid}`; else filled.push(handle); }
+      else if (token === '$CHANNEL') { if (!r) missing = '$CHANNEL without sdk_repeat: channels'; else filled.push(r.macro); }
+      else if (token === '$RANK') { if (!r) missing = '$RANK without sdk_repeat: channels'; else filled.push(String(r.rank)); }
+      else if (/^[$]/.test(token)) missing = `${token} is not a placeholder this generator knows`;
+      else filled.push(token);                      // a literal argument, written as given
+      if (missing) break;
+    }
+    if (missing) { out.push({ ...base, missing }); break; }
+    out.push({ ...base, text: `${d.sdk_call}(${filled.join(', ')});`, channel: r ? r.sig : null });
+  }
+  return out;
+}
+
+/**
+ * The signals of a `checkboxes` setting the user ticked — ADC1's Channels. Read from
+ * the settings rather than from a name, so a part that spells it differently still
+ * works and the engine special-cases no peripheral.
+ */
+function selectedChannels(pid) {
+  const P = M.peripherals[pid] || {};
+  const st = (S.periph[pid] || {}).settings || {};
+  const out = [];
+  for (const s of P.settings || []) {
+    if (s.type !== 'checkboxes') continue;
+    const v = st[s.name];
+    if (!(v instanceof Set)) continue;
+    for (const c of s.choices) if (v.has(c.name)) out.push(c.name);
+  }
+  return out;
+}
+
+/** Peripherals that are switched on and have something to initialise. */
+export function initPeripherals() {
+  const e = E || compute();
+  return Object.keys(M.peripherals)
+    .filter(pid => isEnabled(pid))
+    .filter(pid => paramDefs(pid).length || (cfg().periph_clock && clockBitOf(pid)))
+    .sort();
+}
+
+/** The RCC enable register a peripheral's clock bit lives in, from codegen.periph_clock. */
+export function clockBitOf(pid) {
+  for (const [bus, spec] of Object.entries(cfg().periph_clock || {})) {
+    if (!spec || typeof spec !== 'object' || !spec.bits) continue;
+    if (spec.bits[pid] === undefined) continue;
+    return { bus, fn: spec.fn, macro: `${spec.prefix || ''}${pid}`, register: spec.register };
+  }
+  return null;
+}
+
+function structVar(name) {
+  // USART_InitTypeDef -> USART_InitStructure, the SPL's own naming in every example.
+  return String(name).replace(/TypeDef$/, 'Structure');
+}
+
+function periphBlock(pid) {
+  const plan = initPlan(pid);
+  const L = [];
+  const clk = clockBitOf(pid);
+  L.push(`    /* ---- ${pid} ${'-'.repeat(Math.max(0, 58 - pid.length))} */`);
+  if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
+  else if (cfg().periph_clock) L.push(`    /* ${pid} has no clock enable bit in codegen.periph_clock — none is written. */`);
+
+  for (const b of plan.structs) {
+    const varName = structVar(b.struct);
+    L.push(`    {`);
+    L.push(`        ${b.struct} ${varName} = {0};`);
+    for (const f of b.fields) {
+      const human = f.unit ? `${f.value} ${f.unit}` : String(f.value);
+      L.push(`        ${varName}.${f.member} = ${f.text};   /* ${f.name}: ${human} */`);
+    }
+    for (const m of b.missing) {
+      L.push(`        /* TODO: ${m}. */`);
+    }
+    if (b.fn && (b.handle || b.noHandle)) {
+      L.push(`        ${b.fn}(${b.noHandle ? '' : `${b.handle}, `}&${varName});`);
+    } else {
+      L.push('        /* TODO: nothing applies this struct. The MCU file needs');
+      if (!b.fn) L.push(`           codegen.init_structs.${b.struct}.fn — the SDK function that takes a ${b.struct}`);
+      if (!b.handle) L.push(`           codegen.periph_handle.${pid} — the SPL name of ${pid}'s register block`);
+      L.push('           This generator does not derive a function name from a struct name. */');
+    }
+    L.push(`    }`);
+  }
+
+  for (const c of plan.calls) {
+    if (c.text) {
+      L.push(`    ${c.text}   /* ${c.name}: ${c.value}${c.channel ? ` on ${c.channel}` : ''} */`);
+      continue;
+    }
+    L.push(`    /* TODO: ${c.name} = ${c.value} is applied by ${c.fn}(), not by an init struct,`);
+    L.push(`       and ${c.missing}. */`);
+    if (c.note) L.push(`    /* ${c.note} */`);
+  }
+  for (const n of plan.notes) L.push(`    /* ${n} */`);
+  if (L.length === 1) L.push(`    /* nothing to configure */`);
+  L.push('');
+  return L;
+}
+
+function periphSection() {
+  const L = [];
+  L.push(banner('Peripherals'));
+  L.push('void WCHCube_Periph_Init(void)');
+  L.push('{');
+  const pids = initPeripherals();
+  if (!pids.length) {
+    L.push('    /* No peripheral is switched on. */');
+    L.push('}');
+    return L.join('\n');
+  }
+  for (const pid of pids) L.push(...periphBlock(pid));
+  if (L[L.length - 1] === '') L.pop();
+  L.push('}');
+  return L.join('\n');
+}
+
+// ---- DMA ---------------------------------------------------------------------
+//  One DMA_InitTypeDef per configured request, the DMA1 clock enable, and the
+//  channel handle from `dma.register.channel_macro`. A channel the user booked
+//  twice is an #error in cSource(), not last-wins code.
+//
+//  DMA_PeripheralBaseAddr, DMA_MemoryBaseAddr and DMA_BufferSize are deliberately
+//  absent from the data: they are the application's buffer, not a configuration
+//  choice, and CubeMX does not ask for them either. They are emitted as named TODOs
+//  so the file says what the application still has to fill in.
+
+function dmaChannelHandle(channel) {
+  const reg = ((M.dma || {}).register) || {};
+  if (!reg.channel_macro) return null;
+  return String(reg.channel_macro).replace('$CH', String(channel));
+}
+
+function dmaSection() {
+  const rows = dmaRequests();
+  const L = [];
+  L.push(banner('DMA'));
+  L.push('void WCHCube_DMA_Init(void)');
+  L.push('{');
+  if (!rows.length) {
+    L.push('    /* No DMA request is configured. */');
+    L.push('}');
+    return L.join('\n');
+  }
+  const ctrl = (M.dma || {}).controller;
+  const clk = ctrl ? clockBitOf(ctrl) : null;
+  if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
+  else L.push(`    /* TODO: ${ctrl || 'the DMA controller'} has no clock enable bit in codegen.periph_clock. */`);
+  L.push('');
+
+  const spec = (cfg().init_structs || {})[(M.dma || {}).init_struct] || {};
+  const defs = dmaParamDefs();
+  for (const r of rows) {
+    const handle = dmaChannelHandle(r.channel);
+    const st = (M.dma || {}).init_struct;
+    L.push(`    /* ---- ${r.request} on ${ctrl || 'DMA'} channel ${r.channel} (${r.owner}) ${'-'.repeat(Math.max(0, 20 - r.request.length))} */`);
+    if (!st) {
+      L.push('    /* TODO: the MCU file has no dma.init_struct, so no struct can be declared. */');
+      L.push('');
+      continue;
+    }
+    const varName = structVar(st);
+    L.push('    {');
+    L.push(`        ${st} ${varName} = {0};`);
+    for (const d of defs) {
+      const value = dmaParamValue(r.id, d.key);
+      let text = null;
+      if (d.type === 'bool') text = value ? d.sdk_enabled : d.sdk_disabled;
+      else if (d.options) { const hit = d.options.find(o => String(o.name) === String(value)); text = hit && hit.sdk; }
+      else if (typeof value === 'number') text = String(value);
+      if (!d.sdk_field) { L.push(`        /* TODO: ${d.name}: dma.channel_params gives no sdk_field:. */`); continue; }
+      if (!text) { L.push(`        /* TODO: ${d.name} = ${value}: no sdk macro in dma.channel_params. */`); continue; }
+      L.push(`        ${varName}.${d.sdk_field} = ${text};   /* ${d.name}: ${value} */`);
+    }
+    L.push('        /* TODO: the application owns the addresses and the length —');
+    L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_MemoryBaseAddr and`);
+    L.push('           .DMA_BufferSize before this call. They are a buffer, not a');
+    L.push('           configuration choice, so the configurator does not ask for them. */');
+    if (handle && spec.deinit) L.push(`        ${spec.deinit}(${handle});`);
+    if (spec.fn && handle) {
+      L.push(`        ${spec.fn}(${handle}, &${varName});`);
+      if (spec.cmd) L.push(`        ${spec.cmd}(${handle}, ENABLE);`);
+    } else {
+      L.push(`        /* TODO: nothing applies this struct. The MCU file needs`);
+      if (!spec.fn) L.push(`           codegen.init_structs.${st}.fn — the SDK function that takes a ${st}`);
+      if (!handle) L.push('           dma.register.channel_macro — the SPL name of a channel, e.g. DMA1_Channel$CH');
+      L.push('           This generator does not derive a function name from a struct name. */');
+    }
+    L.push('    }');
+    L.push('');
+  }
+  if (L[L.length - 1] === '') L.pop();
+  L.push('}');
+  return L.join('\n');
+}
+
+// ---- NVIC --------------------------------------------------------------------
+//  The PFIC is not the Cortex-M scheme: PFIC_IPRIORx gives each vector a byte and
+//  implements TWO of its bits ([5:0] reserved, write-invalid; RM 6.5.2.21), and the
+//  maximum nesting depth is 2.
+//
+//  Where the nesting depth itself is configured is NOT in this reference manual -
+//  `nvic.scheme.notes` says so outright - so the chosen grouping is emitted as a
+//  comment and NO register write is claimed for it. Do not invent one.
+
+function nvicSection() {
+  const L = [];
+  L.push(banner('Interrupts'));
+  L.push('void WCHCube_NVIC_Init(void)');
+  L.push('{');
+  const st = nvicState();
+  const on = st ? st.vectors.filter(v => v.enabled && !v.fixed) : [];
+  if (!st || !on.length) {
+    L.push('    /* No interrupt vector is enabled. */');
+    L.push('}');
+    return L.join('\n');
+  }
+  const g = st.groups[st.group] || null;
+  if (g) {
+    L.push(`    /* Priority grouping: ${g.name} */`);
+    const note = ((st.scheme || {}).notes || '').trim().split('\n')[0];
+    if (note) L.push(`    /* The register that selects it is not in this part's reference manual, so`);
+    if (note) L.push('       nothing is written for the grouping itself — only the per-vector bytes. */');
+  }
+  const spec = (cfg().nvic || {});
+  const structName = spec.init_struct || null;
+  const fn = spec.fn || null;
+  if (!structName || !fn) {
+    L.push('    /* TODO: the MCU file has no codegen.nvic.init_struct / .fn, so the');
+    L.push('       SDK call that enables a vector cannot be written. The vectors the');
+    L.push('       configuration asks for, with their PFIC priorities, are: */');
+    for (const v of on) {
+      L.push(`    /*   ${v.irqn || v.name}  preempt ${v.preempt}, sub ${v.sub}`
+        + `${v.handler ? `  — ISR: ${v.handler}()` : ''} */`);
+    }
+    L.push('}');
+    return L.join('\n');
+  }
+  const varName = structVar(structName);
+  L.push(`    ${structName} ${varName} = {0};`);
+  L.push('');
+  for (const v of on) {
+    if (!v.irqn) {
+      L.push(`    /* TODO: vector ${v.name} has no irqn: in the MCU file, so it cannot be named. */`);
+      continue;
+    }
+    L.push(`    /* ${v.name}${v.description ? ` — ${v.description}` : ''}`
+      + `${v.handler ? `   ISR: ${v.handler}()` : ''} */`);
+    L.push(`    ${varName}.${spec.field_channel || 'NVIC_IRQChannel'} = ${v.irqn};`);
+    if (spec.field_preempt) L.push(`    ${varName}.${spec.field_preempt} = ${v.preempt};`);
+    if (spec.field_sub) L.push(`    ${varName}.${spec.field_sub} = ${v.sub};`);
+    if (spec.field_enable) L.push(`    ${varName}.${spec.field_enable} = ENABLE;`);
+    L.push(`    ${fn}(&${varName});`);
+    L.push('');
+  }
+  if (L[L.length - 1] === '') L.pop();
+  L.push('}');
   return L.join('\n');
 }
 

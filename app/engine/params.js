@@ -87,9 +87,13 @@ export function normaliseParamDefs(list) {
     readonly: !!(d.readonly || d.computed),
     help: d.help || d.notes || '',
     deps: normDeps(d),
-    field: d.field, sdk_field: d.sdk_field,
+    // Carried through untouched: only codegen interprets these, and a generator that
+    // cannot see them would have to infer the SDK mapping, which is the whole thing
+    // data/FORMAT.md's "not every parameter is an init-struct member" section forbids.
+    struct: d.struct, field: d.field, sdk_field: d.sdk_field,
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
-    struct: d.struct,
+    sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
+    sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
   }));
 }
 
