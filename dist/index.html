@@ -4833,6 +4833,24 @@ function gpioSpeeds() {
   return [];
 }
 
+// ---- GPIO mode and pull ------------------------------------------------------
+// `GPIOMode_TypeDef` is per family exactly as `GPIOSpeed_TypeDef` was, so a mode macro
+// from another CH32 part is the same defect class the round opened with. `gpio.modes`
+// lists the five real modes and `gpio.input_modes` the three the SPL reaches through
+// the PULL column - the SDK folds pull into the mode, so `Input` has no single macro
+// and the list is keyed by pull name rather than by a fourth mode.
+function gpioModes() {
+  const list = ((M && M.gpio) || {}).modes;
+  if (!Array.isArray(list)) return [];
+  return list.filter(x => x && x.name).map(x => ({ name: String(x.name), macro: x.macro || null }));
+}
+
+function gpioInputModes() {
+  const list = ((M && M.gpio) || {}).input_modes;
+  if (!Array.isArray(list)) return [];
+  return list.filter(x => x && x.name).map(x => ({ name: String(x.name), macro: x.macro || null }));
+}
+
 // True when the part offers a real choice. False (one speed, or none stated) means the
 // UI shows fixed text and no selector - never a disabled selector.
 const gpioSpeedIsChoice = () => gpioSpeeds().length > 1;
@@ -6501,14 +6519,24 @@ function speedMacro(stored) {
   return { macro: null, name };
 }
 
-const MODE_MACRO = {
-  'Output Push Pull': 'GPIO_Mode_Out_PP',
-  'Output Open Drain': 'GPIO_Mode_Out_OD',
-  'Alternate Function Push Pull': 'GPIO_Mode_AF_PP',
-  'Alternate Function Open Drain': 'GPIO_Mode_AF_OD',
-  Analog: 'GPIO_Mode_AIN',
-};
-const INPUT_MACRO = { 'No pull': 'GPIO_Mode_IN_FLOATING', 'Pull-up': 'GPIO_Mode_IPU', 'Pull-down': 'GPIO_Mode_IPD' };
+// The SPL macro for a GPIO mode, from the MCU file. `GPIOMode_TypeDef` is per family
+// exactly as `GPIOSpeed_TypeDef` was - GPIO_Mode_AIN exists on this part, but a table
+// carried over from another CH32 would be the same defect the round opened with - so
+// these come from `gpio.modes` / `gpio.input_modes` and are never assumed here.
+//
+// `Input` has no macro of its own: the SPL folds the pull into the mode, which is why
+// the second table is keyed by the PULL name. A part that states neither gets a TODO
+// naming exactly what is missing.
+function modeMacro(mode, pull) {
+  const list = mode === 'Input' ? gpioInputModes() : gpioModes();
+  const key = mode === 'Input' ? (pull || 'No pull') : mode;
+  const hit = list.find(x => x.name === key);
+  if (hit && hit.macro) return { macro: hit.macro };
+  if (!list.length) {
+    return { missing: `the MCU file has no gpio.${mode === 'Input' ? 'input_modes' : 'modes'}` };
+  }
+  return { missing: `gpio.${mode === 'Input' ? 'input_modes' : 'modes'} has no entry for "${key}"` };
+}
 
 const cfg = () => M.codegen || {};
 const bareSignal = claim => claim.signal.slice(claim.who.length + 1);
@@ -6565,12 +6593,13 @@ function gpioPlan() {
         else mode = 'Input';
       }
       const pull = g.pull || 'No pull';
-      const macro = mode === 'Input' ? INPUT_MACRO[pull] || INPUT_MACRO['No pull'] : MODE_MACRO[mode] || 'GPIO_Mode_IN_FLOATING';
+      const m2 = modeMacro(mode, pull);
       out.push({
         pin, port: m[1], bit: +m[2],
         signal: usable.map(c => c.signal).join(' / '),
         label: (g.label || '').trim(),
-        mode, pull, speed: gpioSpeedFor(g.speed), macro, inferred,
+        mode, pull, speed: gpioSpeedFor(g.speed),
+        macro: m2.macro || null, macroMissing: m2.missing || null, inferred,
         conflict: info.state === 'conflict',
       });
     }
@@ -6765,17 +6794,24 @@ function gpioSection() {
     // one GPIO_Init call per distinct mode+speed on the port, the way CubeMX groups them
     const groups = new Map();
     for (const p of mine) {
-      const key = `${p.macro}|${p.speed}`;
+      const key = `${p.macro || `?${p.mode}/${p.pull}`}|${p.speed}`;
       (groups.get(key) || groups.set(key, []).get(key)).push(p);
     }
     for (const [key, pins] of groups) {
-      const [macro, speed] = key.split('|');
+      const [, speed] = key.split('|');
+      const macro = pins[0].macro;
       for (const p of pins) {
         const notes = [p.conflict ? '*** CONFLICT ***' : '', p.inferred ? 'analog mode inferred — add codegen.analog_signals to be certain' : ''].filter(Boolean);
         L.push(`    /* P${p.port}${p.bit}${p.label ? ` "${p.label}"` : ''} — ${p.signal}${notes.length ? '   ' + notes.join('; ') : ''} */`);
       }
       L.push(`    GPIO_InitStructure.GPIO_Pin = ${pins.map(p => `GPIO_Pin_${p.bit}`).join(' | ')};`);
-      L.push(`    GPIO_InitStructure.GPIO_Mode = ${macro};`);
+      if (macro) {
+        L.push(`    GPIO_InitStructure.GPIO_Mode = ${macro};`);
+      } else {
+        L.push(`    /* TODO: no SPL macro for GPIO mode "${pins[0].mode}"`
+          + `${pins[0].mode === 'Input' ? ` with pull "${pins[0].pull}"` : ''} — ${pins[0].macroMissing}.`);
+        L.push('       GPIOMode_TypeDef is per family; this generator does not guess a mode macro. */');
+      }
       const sp = speedMacro(speed);
       if (sp.macro) {
         L.push(`    GPIO_InitStructure.GPIO_Speed = ${sp.macro};`);

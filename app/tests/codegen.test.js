@@ -739,3 +739,80 @@ test('every bundled part and package still generates without throwing, with DMA 
     }
   }
 });
+
+// AGENT-1, board 16:02Z: "your enum-macro test currently passes only because those
+// macros also appear in my file, not because the generator reads it." Fair, and this is
+// the version that cannot pass for that reason - the part below spells every mode macro
+// differently from anything in the SDK, so the only way the right string reaches the C
+// is if the generator read `gpio.modes`.
+const RENAMED_MODES = `
+mcu:
+  name: CH32V006-RENAMED-MODES
+  inherits: CH32V006
+  remove: [gpio.modes, gpio.input_modes]
+gpio:
+  modes:
+    - { name: Output Push Pull,              macro: XX_Mode_Out_PP }
+    - { name: Output Open Drain,             macro: XX_Mode_Out_OD }
+    - { name: Alternate Function Push Pull,  macro: XX_Mode_AF_PP }
+    - { name: Alternate Function Open Drain, macro: XX_Mode_AF_OD }
+    - { name: Analog,                        macro: XX_Mode_AIN }
+  input_modes:
+    - { name: No pull,   macro: XX_Mode_IN_FLOATING }
+    - { name: Pull-up,   macro: XX_Mode_IPU }
+    - { name: Pull-down, macro: XX_Mode_IPD }
+`;
+
+test('the GPIO mode macro comes from gpio.modes, not from a table in the generator', () => {
+  const e = withFile(RENAMED_MODES, 'CH32V006-RENAMED-MODES');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.assignSignal('PC1', { gpio: 'GPIO_Input' });
+  e.setGpioField('PC1', 'pull', 'Pull-down');
+  e.assignSignal('PC2', { gpio: 'GPIO_Analog' });
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('GPIO_Mode = XX_Mode_Out_PP;'), 'the data name, not GPIO_Mode_Out_PP');
+  assert.ok(c.includes('GPIO_Mode = XX_Mode_IPD;'), 'Input folds the PULL into the mode');
+  assert.ok(c.includes('GPIO_Mode = XX_Mode_AIN;'));
+  assert.equal(/GPIO_Mode = GPIO_Mode_/.test(c), false, 'nothing came from a hardcoded table');
+});
+
+test('every mode and pull the GPIO table offers has a macro in the data', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const modes = e.gpioModes();
+  const pulls = e.gpioInputModes();
+  assert.ok(modes.length && pulls.length, 'CH32V006 states both');
+  assert.ok(modes.every(m => m.macro), 'a mode without a macro is a mode the C cannot express');
+  assert.ok(pulls.every(m => m.macro));
+  // and every one of them really reaches the C
+  for (const m of modes) {
+    const g = fresh('CH32V006', 'TSSOP20');
+    g.assignSignal('PC0', { gpio: 'GPIO_Output' });
+    g.setGpioField('PC0', 'mode', m.name);
+    g.compute();
+    assert.ok(g.cSource().includes(`GPIO_Mode = ${m.macro};`), `${m.name} -> ${m.macro}`);
+  }
+  for (const pull of pulls) {
+    const g = fresh('CH32V006', 'TSSOP20');
+    g.assignSignal('PC0', { gpio: 'GPIO_Input' });
+    g.setGpioField('PC0', 'pull', pull.name);
+    g.compute();
+    assert.ok(g.cSource().includes(`GPIO_Mode = ${pull.macro};`), `Input + ${pull.name} -> ${pull.macro}`);
+  }
+});
+
+test('a part that states no gpio.modes gets a TODO, not a guessed mode macro', () => {
+  const e = withFile(`
+mcu:
+  name: CH32V006-NOMODES
+  inherits: CH32V006
+  remove: [gpio.modes, gpio.input_modes]
+`, 'CH32V006-NOMODES');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.compute();
+  const c = e.cSource();
+  assert.equal(/GPIO_InitStructure.GPIO_Mode =/.test(c), false, 'nothing is invented');
+  assert.match(c, /TODO: no SPL macro for GPIO mode "Output Push Pull"/);
+  assert.match(c, /GPIOMode_TypeDef is per family/);
+  assert.ok(e.cComplaints().some(x => x.kind === 'todo' && /GPIO mode/.test(x.text)), '--strict sees it');
+});

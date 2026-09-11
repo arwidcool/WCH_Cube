@@ -176,6 +176,24 @@ export function gpioSpeeds() {
   return [];
 }
 
+// ---- GPIO mode and pull ------------------------------------------------------
+// `GPIOMode_TypeDef` is per family exactly as `GPIOSpeed_TypeDef` was, so a mode macro
+// from another CH32 part is the same defect class the round opened with. `gpio.modes`
+// lists the five real modes and `gpio.input_modes` the three the SPL reaches through
+// the PULL column - the SDK folds pull into the mode, so `Input` has no single macro
+// and the list is keyed by pull name rather than by a fourth mode.
+export function gpioModes() {
+  const list = ((M && M.gpio) || {}).modes;
+  if (!Array.isArray(list)) return [];
+  return list.filter(x => x && x.name).map(x => ({ name: String(x.name), macro: x.macro || null }));
+}
+
+export function gpioInputModes() {
+  const list = ((M && M.gpio) || {}).input_modes;
+  if (!Array.isArray(list)) return [];
+  return list.filter(x => x && x.name).map(x => ({ name: String(x.name), macro: x.macro || null }));
+}
+
 // True when the part offers a real choice. False (one speed, or none stated) means the
 // UI shows fixed text and no selector - never a disabled selector.
 export const gpioSpeedIsChoice = () => gpioSpeeds().length > 1;
