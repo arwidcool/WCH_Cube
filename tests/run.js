@@ -94,6 +94,11 @@ for (const file of FILES) {
   }
 }
 
+// Real-browser suites share one headless Chrome for the whole run (tests/lib/browser.js).
+// Shut it down here: an open socket and a live child process would otherwise keep the
+// event loop alive and the runner would never exit on a green run.
+try { await (await imp(path.join(ROOT, 'tests', 'lib', 'browser.js'))).closeBrowser(); } catch { /* no browser suite ran */ }
+
 const secs = ((Date.now() - t0) / 1000).toFixed(1);
 console.log('\n' + '-'.repeat(64));
 if (failures.length) {
