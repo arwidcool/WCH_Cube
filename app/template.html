@@ -2495,7 +2495,26 @@ function renderClock() {
       .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
   const TITLE = { HSI: 'HSI RC oscillator', HSE: 'HSE crystal / clock in', LSI: 'LSI RC oscillator', LSE: 'LSE crystal' };
 
-  for (const s of ['HSI', 'HSE', 'LSI', 'LSE']) {
+  /**
+   * Every oscillator the MCU file declares, in a stable order.
+   *
+   * This loop used to BE the list `['HSI','HSE','LSI','LSE']`, which is the CH32V006
+   * family's set written into the renderer. A part that names its oscillator anything else
+   * had no box drawn for it at all - not greyed, not empty, absent - while the SYSCLK mux
+   * still offered it, so the tree showed a system clock fed by nothing, with no console
+   * error and no gap to notice. Found by reshaping a loaded model to CH32X035's shape
+   * (one 48 MHz RC, no HSE) before that part's YAML exists.
+   *
+   * The four familiar names lead so the tree reads the same on parts that have them; every
+   * other source follows in the order the file declares it. A part with no HSE simply has
+   * no HSE entry here, which is all "no HSE box, no placeholder, no gap" requires.
+   */
+  const KNOWN_SOURCES = ['HSI', 'HSE', 'LSI', 'LSE'];
+  const sourceNames = [
+    ...KNOWN_SOURCES.filter(n => c.sources[n]),
+    ...Object.keys(c.sources || {}).filter(n => !KNOWN_SOURCES.includes(n)),
+  ];
+  for (const s of sourceNames) {
     const d = c.sources[s]; if (!d) continue;
     const khz = d.khz !== undefined;
     const rs = (r.sources || {})[s] || {};
@@ -2840,15 +2859,24 @@ function renderPmConfig(files) {
     + `</dl><p>The header goes to <code>include/</code> and the source to <code>src/</code>; that project picks them up automatically.`
     + ` No other toolchain is supported — there is nothing hidden behind this, it is the only one implemented.</p></div>`;
 
-  // Code generator. Only choices the engine can actually honour: which of the files it
-  // produced are written. The structural options in the round brief - one file or a pair
-  // per peripheral, keeping user-code sections across a regeneration - are NOT SHOWN,
-  // because codegen cannot do either yet and a checkbox that changes nothing is a lie.
+  // Code generator. The list comes from `generatorOptions()` - the options THIS BUILD can
+  // honour - and is never a set of checkboxes typed here: an option the engine cannot
+  // honour then cannot be offered, and one it gains appears without a UI change. That is
+  // AGENT-2's D2 contract (board, round 3, 16:41Z), and it is why the panel grew the file
+  // split and the user-code switch on its own when they landed.
+  const opts = typeof generatorOptions === 'function' ? generatorOptions() : [];
   h += `<div class="pmsec"><h4>Code generator</h4>`
+    + (opts.length ? opts.map(o => {
+      const v = generatorOption(o.key);
+      return `<label class="chk" title="${attr(o.help || o.name)}">`
+        + `<input type="checkbox" data-pmopt="${attr(o.key)}"${v ? ' checked' : ''}>`
+        + `<span>${esc(o.name)}${o.help ? `<small>${esc(o.help)}</small>` : ''}</span></label>`;
+    }).join('') : '<p>This build offers no generator options.</p>')
+    + `<h4 style="margin-top:12px">Files</h4>`
     + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.name)}"${PM.skip.has(f.name) ? '' : ' checked'}>`
       + `<span><code>${esc(f.name)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
       : '<p>This configuration generates nothing.</p>')
-    + `<p>Options the generator cannot honour yet are not listed here rather than shown greyed: it writes one header and one source, and does not preserve user-code sections across a regeneration.</p></div>`;
+    + `</div>`;
 
   h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE CODE</button>`
     + `<p>${chosen.length ? `Downloads ${chosen.length} file${chosen.length === 1 ? '' : 's'}.` : 'Nothing selected.'}`
@@ -2861,6 +2889,13 @@ function renderPmConfig(files) {
   box.querySelectorAll('input[data-pmfile]').forEach(cb => cb.onchange = () => {
     cb.checked ? PM.skip.delete(cb.dataset.pmfile) : PM.skip.add(cb.dataset.pmfile);
     renderProjectManager();
+  });
+  // A generator option changes what the generator PRODUCES, so it is engine state: it
+  // goes through setGeneratorOption (validated, one undo step, saved in the .wchproj),
+  // and the whole app re-renders because the file list and the preview both move.
+  box.querySelectorAll('input[data-pmopt]').forEach(cb => cb.onchange = () => {
+    try { setGeneratorOption(cb.dataset.pmopt, cb.checked); } catch (err) { toast(err.message); }
+    renderAll();
   });
   // The desktop bridge (src-tauri/desktop.js) replaces this handler with a native folder
   // picker. app/template.html contains no Tauri code, by design; it only has to leave a
