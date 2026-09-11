@@ -115,32 +115,47 @@ before either of you writes a line (they are shaping `generateAll()` to return
 
 ---
 
-## Current — round 3, cycle 1
+## Current — round 3, cycle 2
 
-**Done this cycle**
+**Done so far this round**
 
-- **C1 — all eight legibility findings (L1–L8).** Measured in a real browser before and
-  after, 216 checks over CH32V006 TSSOP20 + QFN32 and WCH-DUMMY32-C8 LQFP48 × 1280x720 and
-  1920x1080 × zoom 100 % and 125 % × light and dark. All green, console silent.
-  Numbers per finding are on the board and in the commit message.
-- **C6 — `#mcusel` and `#pkgsel`.** Both re-read from the model on every render, so no
-  code path can leave either disagreeing with `M`/`S`. `#mcusel` is labelled "Load part:".
-- A resize handler, which the app did not have: the chip re-fits and the clock tree
-  re-lays out when the window changes size. Without it a layout measured as fitting at
-  one viewport silently reproduced L2 at another.
+- **C1** — all eight legibility findings (L1–L8), measured before and after.
+- **C6** — `#mcusel` and `#pkgsel` re-read from the model on every render.
+- **P2 item 8** — the GPIO speed control, driven by `gpio.speeds`: one speed renders as
+  fixed text, three render as a selector with those three, no part name in the code path.
+- **C2 and C3, the halves that need no engine state** — the DMA1 channel table and the
+  NVIC overview in System Core, plus a per-peripheral Configuration tab strip that draws
+  only the tabs a peripheral can use.
+- **P1** — the Project Manager tab and the code preview, with `#error`/TODO lines marked
+  from the engine's own `cComplaints()`.
+- AGENT-4's `tests/legibility.test.js` found three things my own sweep missed, all at
+  1536 CSS px. Fixed; that suite and my 216-check sweep are both green, and the whole
+  runner is **ALL GREEN, 333 tests**.
+
+**Blocked, both requested on the board**
+
+1. **C2/C3's editable halves** need `S.dma` / `S.nvic` and setters from AGENT-2
+   (requested 14:30Z, with the exact shape). The two tabs check for `setDmaParam` /
+   `setNvicVector` as well as the data, so they appear on their own the moment those land
+   — only the tables behind them are left to write.
+2. **`Tools`** is the last `disabled` control in the app. Removing it fails
+   `tests/layout.test.js`, which is AGENT-4's file; asked them 15:47Z to change the
+   assertion or to tell me to implement it instead.
 
 **Next, in order**
 
-1. **C3 — NVIC Settings tab** and the NVIC overview in System Core. Ranges come from
-   `nvic.scheme.groups` (PFIC has two priority bits, not four).
-2. **C2 — DMA Settings tab** and the DMA1 channel table in System Core, rendered with the
-   existing Parameter Settings editors (`dma.channel_params` is in the `params:` schema).
-3. **P1 — the Project Manager tab**, then the preview panel, then `Tools`.
-4. **P2 item 8 — the GPIO speed control**, as soon as AGENT-1's capability key lands.
+1. Whichever of the two blockers answers first; if neither answers within two cycles,
+   both become my decision under the working agreement.
+2. The dead-control audit, finished and posted: every remaining `disabled`, hidden or
+   no-op control, each one justified by the MCU data or removed.
+3. `mcu.variants.<part>.pio_env` from AGENT-1 (requested 15:47Z) fills in the Project
+   Manager's Environment row. Nothing is broken until it does.
 
 **Open decisions of mine on the board**
 
-- The package selector displays `PKG · N I/O`; part numbers and temperature grades moved
-  to `title=`, the New Project dialog and (next) Project Manager.
-- The GPIO table scrolls sideways rather than truncating a value. The 88 px speed column
-  comes out of that width the moment the GPIO-speed capability key lands.
+- The package selector displays `PKG · N I/O`; part numbers and grades live in `title=`,
+  the New Project dialog and the Project Manager tab.
+- The GPIO table scrolls sideways rather than truncating a value.
+- The Project Manager will not guess the PlatformIO environment name from the part
+  number, because `platformio.ini` maps `CH32V006F8P7` to `CH32V006F8P6`.
+- Generator options the engine cannot honour are not shown at all, not shown greyed.

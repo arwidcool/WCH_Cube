@@ -132,9 +132,14 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       `tests/evidence/round2/2026-09-11.md` — all eight re-measured in a real browser
       before and after, 216 checks over 3 part/package combinations × 1280/1920 ×
       100/125 % × light/dark, all green, console silent
-- [ ] C2 (AGENT-3) DMA Settings tab + the DMA1 channel table in System Core
-- [ ] C3 (AGENT-3) NVIC Settings tab + the NVIC overview in System Core — PFIC has **two**
-      priority bits, not four; take the ranges from `nvic.scheme`
+- [~] C2 (AGENT-3) DMA Settings tab + the DMA1 channel table in System Core — the **channel
+      table is done** (all channels, requests, owners, live state, contended channel outlined
+      with the owner named, click-through). The **tab** needs `S.dma` and setters, which do not
+      exist; requested from AGENT-2 on the board 14:30Z
+- [~] C3 (AGENT-3) NVIC Settings tab + the NVIC overview in System Core — the **overview is
+      done** (all 29 vectors, both SDK names, owner, live state, and the priority scheme read
+      off `nvic.scheme`: two bits, max nesting 2). The **tab** needs `S.nvic` and setters;
+      requested from AGENT-2 on the board 14:30Z
 - [x] C4 (AGENT-2) `mcu.remove` is applied after the parent merge, so a child that removes *and*
       redefines a path loses its own version (cost CH32V005 its whole DMA request map)
       — fixed: `remove` now runs against the parent, before the merge; 5 tests
@@ -164,8 +169,10 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       — `gpio.speeds: [{name, macro}]`, documented in FORMAT.md, handed off to AGENT-2/AGENT-3
 - [x] (AGENT-2) Emit the part's one speed macro; never a Low/Medium/High mapping
       — driven by `gpio.speeds`; `gpioSpeeds()` / `gpioSpeedIsChoice()` / `gpioSpeedFor()`
-- [ ] (AGENT-3) Remove the GPIO speed select where the data says there is one speed — show the
-      fixed value as text, driven by the data, never by a hardcoded part name
+- [x] (AGENT-3) Remove the GPIO speed select where the data says there is one speed — show the
+      fixed value as text, driven by the data, never by a hardcoded part name. Measured in a
+      browser: CH32V006/CH32V005 (one speed) render 0 selects and fixed text, WCH-DUMMY32-C8
+      (three) renders selects with exactly those three. No part name in the code path.
 - [x] (AGENT-1) `tools/verify_sdk_names.py` — check every `codegen:` / `params:` / `dma:` /
       `nvic:` name a part claims against that part's SDK headers, suggest the closest match on a
       miss, say "no SDK for series X, not checked" rather than passing silently. Planted-break
@@ -187,12 +194,19 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 ### P1 — the code generation UI
 
-- [ ] (AGENT-3) **Project Manager tab** on the dead `disabled title="Future"` placeholder: project
-      info, toolchain (PlatformIO + the env it maps to), generator options, Generate
-- [ ] (AGENT-3) **Preview**: file list + the real text of the selected file, read-only, with TODO
+- [x] (AGENT-3) **Project Manager tab** on the dead `disabled title="Future"` placeholder: project
+      info, toolchain (PlatformIO + the env it maps to), generator options, Generate. The env
+      name is NOT derived from the part number — platformio.ini maps CH32V006F8P7 to
+      CH32V006F8P6 — so it reads `variants.<part>.pio_env` and says where the answer is until
+      that key lands (requested from AGENT-1)
+- [x] (AGENT-3) **Preview**: file list + the real text of the selected file, read-only, with TODO
       and `#error` lines visually obvious. Two of this round's P0 bugs were single wrong
-      identifiers in generated C — this is the panel that shows them to a human.
-- [ ] (AGENT-3) `Tools` tab: implement it or remove it. A dead tab is a dead control.
+      identifiers in generated C — this is the panel that shows them to a human. Marks come
+      from the engine's own `cComplaints()`, not a scanner of the UI's; verified end to end on
+      a real defect (a GPIO on the shorted PD7/PA4 pair → `#error` on line 15)
+- [~] (AGENT-3) `Tools` tab: implement it or remove it. A dead tab is a dead control.
+      Blocked on `tests/layout.test.js`, which asserts the four tab names and is AGENT-4's
+      file — requested on the board 15:47Z. It is the last `disabled` control in the app.
 - [ ] (AGENT-2) `generateAll()` returns `{ name, language, text }` per file so the UI can list and
       preview without knowing what codegen produces
 - [ ] (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
