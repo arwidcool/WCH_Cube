@@ -1,7 +1,8 @@
 # Adding a microcontroller
 
-This project supports **CH32V006**, **CH32V005** and **CH32X035**. If the part you want is not
-in that list, this page is the whole process.
+This project ships **CH32V006**, **CH32V005**, **CH32V003** and **CH32X035** — which is really
+just "whatever is in `data/mcus/`". If the part you want is not in that list, this page is the
+whole process.
 
 The honest summary: **adding a part is a data job, not a programming job.** You supply the
 vendor's documentation; an AI agent — or you — extracts it into one YAML file; the app, the

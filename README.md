@@ -38,9 +38,10 @@ click when a choice would collide with something you have already set.
 | **[PROGRESS.md](PROGRESS.md)** | What is actually done, broken, and never tested. |
 | **[docs/](docs/)** | Index of all of the above. |
 
-Supported parts: **CH32V006**, **CH32V005** (defined as a delta on CH32V006) and **CH32X035** —
-a second, deliberately different family (24-bit ports, no HSE, named remap macros) that exists
-to prove the engine is data-driven rather than shaped around one chip.
+Supported parts — the list is `data/mcus/`, and adding to it does not require touching `app/`:
+**CH32V006**, **CH32V005** (defined as a delta on CH32V006), **CH32V003** and **CH32X035** — a
+second, deliberately different family (24-bit ports, no HSE, named remap macros) that exists to
+prove the engine is data-driven rather than shaped around one chip.
 
 ```
 WCH_CubeMX/

@@ -5,6 +5,9 @@ microcontrollers** — pick a part and a package, click a pin, choose a signal. 
 which peripherals can reach which pins *on that exact package*, warns you before a choice
 collides with something you already set, and generates C that compiles against WCH's own SDK.
 
+It ships four parts — **CH32V006**, **CH32V005**, **CH32V003** and **CH32X035** — and which parts
+exist is simply what is in `data/mcus/`. Adding another does not require touching `app/`.
+
 ![The pinout view: CH32V006 on TSSOP20 with USART1 and SPI1 assigned](images/app-pinout.png)
 
 ---
