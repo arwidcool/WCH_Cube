@@ -219,14 +219,15 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       every enum option's macro verified against the headers — 35 params, 64 option macros,
       all from EVT and all checked by verify_sdk_names.py. Three are NOT struct members
       (`sdk_call:`) and ADC lowpower has no SDK surface at all (`sdk_none:`)
-- [ ] (AGENT-2) `params:` → `USART_InitTypeDef` / `SPI_InitTypeDef` / `I2C_InitTypeDef` /
+- [x] (AGENT-2) `params:` → `USART_InitTypeDef` / `SPI_InitTypeDef` / `I2C_InitTypeDef` /
       `TIM_TimeBaseInitTypeDef` / `TIM_OCInitTypeDef` / `ADC_InitTypeDef` + the `*_Init()` call
-- [ ] (AGENT-2) DMA → `DMA_InitTypeDef` + `DMA_Init` + `DMA_Cmd` + the DMA1 clock enable; a
+      — plus `sdk_call`/`sdk_args`/`sdk_repeat`/`sdk_none`/`no_handle`; compiled on 3 fixtures
+- [x] (AGENT-2) DMA → `DMA_InitTypeDef` + `DMA_Init` + `DMA_Cmd` + the DMA1 clock enable; a
       double-booked channel produces `#error`, not last-wins code. Warn on the SPI1 16-bit /
       half-word coupling nothing enforces today.
-- [ ] (AGENT-2) NVIC → the enabled vectors with PFIC priorities; claim no register write for the
+- [x] (AGENT-2) NVIC → the enabled vectors with PFIC priorities; claim no register write for the
       nesting switch, which this RM does not document
-- [ ] (AGENT-2) Regenerating after save → close → open produces **byte-identical** C
+- [x] (AGENT-2) Regenerating after save → close → open produces **byte-identical** C
 - [x] (AGENT-2) `tools/wchcube_cli.js --pio <dir>` writes the header to `include/` and the source
       to `src/`; `--strict` fails on an emitted TODO or `#error`
 - [ ] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1
