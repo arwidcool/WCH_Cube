@@ -297,9 +297,9 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 
 ### D — carried over from round 3. These outrank everything below.
 
-- [ ] D1 (AGENT-2) `generateAll()` returns `{ name, language, text }` per file — AGENT-3 waits on it
-- [ ] D2 (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
-- [ ] D3 (AGENT-2) User code sections preserved across regeneration — or the option is not offered
+- [x] D1 (AGENT-2) `generateAll()` returns `{ name, language, text }` per file — AGENT-3 waits on it
+- [x] D2 (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
+- [x] D3 (AGENT-2) User code sections preserved across regeneration — or the option is not offered
 - [x] D4 (AGENT-3) `Tools` tab: implement it or remove it — implemented as a data report.
       The app now has exactly one `disabled` control (`#m-redo`, justified by the undo
       history), so round 3's "no disabled control not justified by the MCU data" is true.
@@ -381,9 +381,9 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [x] (AGENT-1) `CH32X035.notes.md` cites a DS/RM table or an EVT `file:line` per fact, and records
       the EVT/DS TouchKey disagreement (DS says 14 channels; EVT ships no tkey header) — DONE,
       including every open question rather than a guess for it.
-- [ ] (AGENT-2) 24-bit pin masks — hunt `uint16_t`, `0xFFFF`, 4-digit hex, implied-16 shifts
-- [ ] (AGENT-2) Never iterate a port 0..N — PC is not contiguous
-- [ ] (AGENT-2) A part with **no HSE**: `clockCalc().selectable` from the data, the HSE auto-enable
+- [x] (AGENT-2) 24-bit pin masks — hunt `uint16_t`, `0xFFFF`, 4-digit hex, implied-16 shifts
+- [x] (AGENT-2) Never iterate a port 0..N — PC is not contiguous
+- [x] (AGENT-2) A part with **no HSE**: `clockCalc().selectable` from the data, the HSE auto-enable
       coupling no-ops when `clock.hse_peripheral` is absent, nothing throws or renders a placeholder
 - [ ] (AGENT-2) Emit `GPIO_PinRemapConfig(<macro>, ENABLE)` where the data gives a macro, the
       `AFIO->PCFR1` word where it does not — both families, no special case
@@ -405,18 +405,18 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 
 ### B — Generate PlatformIO project
 
-- [ ] (AGENT-2) The file set as `{ path, name, language, text }`: `platformio.ini`, `src/main.c`,
+- [x] (AGENT-2) The file set as `{ path, name, language, text }`: `platformio.ini`, `src/main.c`,
       `README.md`, `.gitignore`, `lib/wchcube_generated/{include,src}` — mirroring `data/firmware/`
-- [ ] (AGENT-2) `platformio.ini` from the variant: `platform = ch32v`, `framework = noneos-sdk`,
+- [x] (AGENT-2) `platformio.ini` from the variant: `platform = ch32v`, `framework = noneos-sdk`,
       `board = variants[*].pio_board`, `-D SDI_PRINT=1`, `upload_protocol = wch-link`
-- [ ] (AGENT-2) A variant with **no `pio_board` is refused by name** with the generatable variants
+- [x] (AGENT-2) A variant with **no `pio_board` is refused by name** with the generatable variants
       listed — never substituted (F4U6 is 16 KB against F8U6's 62 KB)
-- [ ] (AGENT-2) `main.c`: printf over SDI (**claims no pin**), prints part / configured SYSCLK /
+- [x] (AGENT-2) `main.c`: printf over SDI (**claims no pin**), prints part / configured SYSCLK /
       `SystemCoreClock` read back; blinks a pin **only** if the user configured an output and names
       it; says plainly when they did not; `USER CODE BEGIN/END` around the loop
-- [ ] (AGENT-2) Generated README explains two-clock-owners in one sentence
-- [ ] (AGENT-2) CLI: write a whole standalone project, refusing a non-empty directory unless forced
-- [ ] (AGENT-2) Browser delivery: a stored-entry `.zip` written in `app/engine/` (no external
+- [x] (AGENT-2) Generated README explains two-clock-owners in one sentence
+- [x] (AGENT-2) CLI: write a whole standalone project, refusing a non-empty directory unless forced
+- [x] (AGENT-2) Browser delivery: a stored-entry `.zip` written in `app/engine/` (no external
       library — the app is one offline file), or the alternative argued on the board
 - [~] (AGENT-3) Project Manager: **Generate PlatformIO project** with name + destination; preview
       shows **every** file incl. `main.c` and `platformio.ini`
