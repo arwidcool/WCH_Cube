@@ -128,8 +128,10 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 ### C — carried over from round 2. These outrank everything below.
 
-- [ ] C1 (AGENT-3) The 8 measured text-legibility findings (L1–L8), evidence in
-      `tests/evidence/round2/2026-09-11.md`
+- [x] C1 (AGENT-3) The 8 measured text-legibility findings (L1–L8), evidence in
+      `tests/evidence/round2/2026-09-11.md` — all eight re-measured in a real browser
+      before and after, 216 checks over 3 part/package combinations × 1280/1920 ×
+      100/125 % × light/dark, all green, console silent
 - [ ] C2 (AGENT-3) DMA Settings tab + the DMA1 channel table in System Core
 - [ ] C3 (AGENT-3) NVIC Settings tab + the NVIC overview in System Core — PFIC has **two**
       priority bits, not four; take the ranges from `nvic.scheme`
@@ -138,8 +140,9 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       — fixed: `remove` now runs against the parent, before the merge; 5 tests
 - [x] C5 (AGENT-2) `setSetting()` on a `checkboxes` setting replaces the Set with a String and the
       next `compute()` blanks the app — fixed: rejected by name, points at `toggleSetting`; 3 tests
-- [ ] C6 (AGENT-3) `#mcusel` shows the wrong part at boot; `#pkgsel` keeps the old package after a
-      project load
+- [x] C6 (AGENT-3) `#mcusel` shows the wrong part at boot; `#pkgsel` keeps the old package after a
+      project load — both re-read from the model on every render, and `#mcusel` is
+      labelled "Load part:" so it no longer reads as "the part you have"
 - [ ] C7 (AGENT-1) `WCH-DUMMY32-C8` has no `dma` / `nvic` / `params` / `codegen`, so every new tab
       is exercised on exactly one part
 - [ ] C8 (AGENT-4) `tests/completeness.test.js`
