@@ -66,7 +66,11 @@ ENGINE and UI were merged into APP in round 5 — one owner of `app/`.
 - [x] EXTI line→pin map + DMA1 channel map + option-byte RST_MODE + TIM1_1_RM (CH1→LSI) + TIM2 complementary outputs, all for CH32V006 (AGENT-1)
 - [x] `tools/validate_mcu.py` — schema, pin existence, signal parity across remaps, package numbering, DS I/O counts, EXTI line legality (AGENT-1)
 - [x] Third pass: remap tables cross-checked against the AFIO_PCFR1 register prose (RM 7.3.2.2) — 227/228 confirmed by both, 1 source self-contradiction found (AGENT-1)
-- [~] (AGENT-1) `data/FORMAT.md` — full YAML schema, every field explained, kept in sync with the engine
+- [x] (AGENT-1) `data/FORMAT.md` — full YAML schema, every field explained, kept in sync with the engine
+      → **closed 2026-09-11 (AGENT-3, walkthrough §4 step 14).** The file documents every top-level
+        key including `constraints:` (`## constraints`, with the rules `validate_mcu.py` enforces
+        stated in prose), and `data.test.js` runs that validator on every bundled part, so drift
+        between the two is a red test rather than a stale paragraph.
 - [x] (AGENT-1) CH32V005 via `inherits: CH32V006` — drops TKEY, TIM3, the QFN32 package and OPA polling;
       pinout verified against DS Table 2-2 by `tools/extract_pins.py` (25 I/O rows, 0 differences)
 - [x] (AGENT-1) `codegen:` block for CH32V006 — AFIO_PCFR1 and RCC_CFGR0 encodings read off the RM,
@@ -243,11 +247,14 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 ### P3 — more parts, now that there is a compiler
 
-- [~] (AGENT-1) `data/mcus/CH32X035.yaml` from `data/sources/X035/Datasheets/`. Groundwork in
-      `data/sources/README.md`; NOT started, the DS markdown needs a script (see the board).
-      Also confirmed: 24-BIT ports, and PC is not contiguous. Confirmed and
-      **different from the V00x family**: ports A/B/C only, `RCC_APB2PeriphClockCmd`, one speed
-      `GPIO_Speed_50MHz`, no `ADCCLK_Frequency` in `RCC_ClocksTypeDef`.
+- [x] (AGENT-1) `data/mcus/CH32X035.yaml` from `data/sources/X035/Datasheets/`.
+      → **closed 2026-09-11 (AGENT-3, walkthrough §4 step 14).** It landed: 8 variants, 7 packages,
+        all seven packages diffed to 0 differences against the DS I/O column, `validate_mcu.py` and
+        `verify_sdk_names.py` both 0 errors, `--strict` exit 0, generated C compiles, and it carries
+        the seven cited `constraints:` entries. The record the line was holding: ports A/B/C only,
+        24-bit, PC not contiguous (holes at PC8/9 and PC12/13), `RCC_APB2PeriphClockCmd`, one speed
+        `GPIO_Speed_50MHz`, no `ADCCLK_Frequency` in `RCC_ClocksTypeDef`, no HSE at all. What
+        remains is per-peripheral depth, which is the separate line at the top of this section.
 - [x] (AGENT-1) When an EVT package lands in `data/sources/<PART>/Evt/`: re-run `verify_sdk_names.py`
       against it, re-check every Medium-confidence row, and post what changed — both drops have
       landed; headers are under `EXAM/SRC/Peripheral/inc`, and `data/sources/README.md` says so

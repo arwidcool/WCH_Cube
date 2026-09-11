@@ -36,6 +36,11 @@ Prerequisites: `python build.py` has been run. `pio` is installed. A real browse
    before round 5 — read them, do not assume.
 8. Load **CH32V005**. Same answer, and it is `inherits: CH32V006`, so this also proves the
    constraint block survives or is correctly absent through inheritance.
+8b. Load **CH32V003** on **TSSOP20**. It declares no `constraints:` either, and it is the part that
+   arrived last — so this is the check that a part added *after* the mechanism does not need one to
+   behave. Its two documented differences from the V00x family are worth reading off the screen:
+   the GPIO **speed** control offers **three** values (2 / 10 / 30 MHz) where the others offer one
+   or show fixed text, and there is no port B.
 9. `git stash`-free check: for a configuration you saved before the round, the generated C is
    **byte-identical**. The cheapest way is to generate C for a `tests/fixtures/*.wchproj` and
    confirm `tests/codegen_compile.test.js`'s "the checked-in fixtures still match what the engine
@@ -65,8 +70,11 @@ Prerequisites: `python build.py` has been run. `pio` is installed. A real browse
 14. `tasks=` no `[~]` left in `TASKS.md` that the round was supposed to close.
 15. `python tools/validate_mcu.py` → exit 0, and `python tools/verify_sdk_names.py` → exit 0 with
     no part reported NOT CHECKED for a reason that no longer applies.
-16. `node tools/wchcube_cli.js --list` names **three real parts** — CH32V005, CH32V006, CH32X035.
-    No synthetic fixture may appear; `tests/data.test.js` guards this.
+16. `node tools/wchcube_cli.js --list` names **four real parts** — CH32V003, CH32V005, CH32V006,
+    CH32X035. No synthetic fixture may appear; `tests/data.test.js` guards this. (This step said
+    "three" until a fourth part landed mid-round; the check is that the list and
+    `data/mcus/*.yaml` agree, not that the number is any particular value —
+    `tests/sdk_names.test.js` asserts exactly that.)
 17. `grep -ri "x035\|ch32v006\|ch32v005\|x033" app/engine/ app/template.html` → comments only.
 
 ## §5 — the browser, properly
