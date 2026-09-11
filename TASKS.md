@@ -132,14 +132,13 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       `tests/evidence/round2/2026-09-11.md` — all eight re-measured in a real browser
       before and after, 216 checks over 3 part/package combinations × 1280/1920 ×
       100/125 % × light/dark, all green, console silent
-- [~] C2 (AGENT-3) DMA Settings tab + the DMA1 channel table in System Core — the **channel
-      table is done** (all channels, requests, owners, live state, contended channel outlined
-      with the owner named, click-through). The **tab** needs `S.dma` and setters, which do not
-      exist; requested from AGENT-2 on the board 14:30Z
-- [~] C3 (AGENT-3) NVIC Settings tab + the NVIC overview in System Core — the **overview is
-      done** (all 29 vectors, both SDK names, owner, live state, and the priority scheme read
-      off `nvic.scheme`: two bits, max nesting 2). The **tab** needs `S.nvic` and setters;
-      requested from AGENT-2 on the board 14:30Z
+- [x] C2 (AGENT-3) DMA Settings tab + the DMA1 channel table in System Core — requests with
+      Add/Delete, the `DMA_InitTypeDef` block through the Parameter Settings editors, the
+      channel as fixed text where the part offers one, and a double-booked channel as a hard
+      conflict naming both owners
+- [x] C3 (AGENT-3) NVIC Settings tab + the NVIC overview in System Core — one table for both,
+      ranges read off `nvic.scheme` (CH32V006 offers 0/1 and 0/1, the dummy part 0-7 and 0-1),
+      the grouping selector, and `fixed:` vectors as "always on" rather than a dead checkbox
 - [x] C4 (AGENT-2) `mcu.remove` is applied after the parent merge, so a child that removes *and*
       redefines a path loses its own version (cost CH32V005 its whole DMA request map)
       — fixed: `remove` now runs against the parent, before the merge; 5 tests

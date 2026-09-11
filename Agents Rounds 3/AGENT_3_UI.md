@@ -115,47 +115,43 @@ before either of you writes a line (they are shaping `generateAll()` to return
 
 ---
 
-## Current — round 3, cycle 2
+## Current — round 3, cycle 3
 
-**Done so far this round**
+**Every P0 in my instructions is closed.**
 
-- **C1** — all eight legibility findings (L1–L8), measured before and after.
-- **C6** — `#mcusel` and `#pkgsel` re-read from the model on every render.
-- **P2 item 8** — the GPIO speed control, driven by `gpio.speeds`: one speed renders as
-  fixed text, three render as a selector with those three, no part name in the code path.
-- **C2 and C3, the halves that need no engine state** — the DMA1 channel table and the
-  NVIC overview in System Core, plus a per-peripheral Configuration tab strip that draws
-  only the tabs a peripheral can use.
-- **P1** — the Project Manager tab and the code preview, with `#error`/TODO lines marked
-  from the engine's own `cComplaints()`.
-- AGENT-4's `tests/legibility.test.js` found three things my own sweep missed, all at
-  1536 CSS px. Fixed; that suite and my 216-check sweep are both green, and the whole
-  runner is **ALL GREEN, 333 tests**.
+| | |
+|---|---|
+| C1 | the eight legibility findings, measured before and after |
+| C6 | `#mcusel` and `#pkgsel` re-read from the model on every render |
+| C2 | DMA Settings tab + the DMA1 channel table |
+| C3 | NVIC Settings tab + the NVIC panel |
+| P1 | the Project Manager tab and the code preview |
+| P2 item 8 | the GPIO speed control, driven by `gpio.speeds` |
 
-**Blocked, both requested on the board**
+`python build.py && node tests/run.js` is **ALL GREEN, 352 tests**, including AGENT-4's
+`tests/legibility.test.js` (6/6) and my own 216-check browser sweep.
 
-1. **C2/C3's editable halves** need `S.dma` / `S.nvic` and setters from AGENT-2
-   (requested 14:30Z, with the exact shape). The two tabs check for `setDmaParam` /
-   `setNvicVector` as well as the data, so they appear on their own the moment those land
-   — only the tables behind them are left to write.
-2. **`Tools`** is the last `disabled` control in the app. Removing it fails
-   `tests/layout.test.js`, which is AGENT-4's file; asked them 15:47Z to change the
-   assertion or to tell me to implement it instead.
+**Still open**
 
-**Next, in order**
-
-1. Whichever of the two blockers answers first; if neither answers within two cycles,
-   both become my decision under the working agreement.
-2. The dead-control audit, finished and posted: every remaining `disabled`, hidden or
-   no-op control, each one justified by the MCU data or removed.
-3. `mcu.variants.<part>.pio_env` from AGENT-1 (requested 15:47Z) fills in the Project
+1. **`Tools`** — the last `disabled` control in the app. Removing it fails
+   `tests/layout.test.js`, which asserts the four tab names and is AGENT-4's file. Asked
+   them at 15:47Z to change the assertion or to say what it should do. Two of my cycles
+   without an answer and it becomes my decision.
+2. **The dead-control audit, finished and posted** — every remaining `disabled`, hidden
+   or no-op control, each justified by the MCU data or removed. `#m-open` and
+   `#m-openproj` open an OS file chooser headless Chrome cannot answer; AGENT-4 skips
+   them by id.
+3. **`mcu.variants.<part>.pio_env`** from AGENT-1 (asked 15:47Z) fills in the Project
    Manager's Environment row. Nothing is broken until it does.
+4. **The Tauri Generate command** from AGENT-4 (asked 15:47Z). `#pm-generate` has a
+   stable id and working browser behaviour, so the bridge only has to replace `.onclick`.
 
-**Open decisions of mine on the board**
+**Decisions of mine on the board, all still in force**
 
 - The package selector displays `PKG · N I/O`; part numbers and grades live in `title=`,
   the New Project dialog and the Project Manager tab.
 - The GPIO table scrolls sideways rather than truncating a value.
-- The Project Manager will not guess the PlatformIO environment name from the part
-  number, because `platformio.ini` maps `CH32V006F8P7` to `CH32V006F8P6`.
+- The Project Manager will not guess the PlatformIO environment from the part number.
 - Generator options the engine cannot honour are not shown at all, not shown greyed.
+- Do not test for an engine export through `globalThis`: `export const` names are not
+  properties of it, and the check fails silently.
