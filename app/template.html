@@ -16,9 +16,14 @@
     /* surfaces and ink - every themed colour goes through one of these */
     --head:#4b5563; --bar:#fafafa; --tab-off:#e9ecef; --line-soft:#eef0f2;
     --link:#0b57a4; --on-accent:#ffffff; --warn-bg:#fff3e0; --bad-bg:#fdecec;
+    /* Ink for the pin colours and the badges. Those fills are CubeMX's and stay put in
+       both themes, so the TEXT on them cannot come from --text (which flips) — it is a
+       fixed near-black that clears 4.5:1 on every one of them. --warn-ink is the amber
+       status glyph darkened until it passes on a white panel. */
+    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#8a6200; --on-res:#ffffff;
     /* shared-resource issues (EXTI lines, DMA channels) - never orange, they are not pin conflicts */
     --res:#5a4fcf; --res-bg:#efedfc;
-    --chip-text:#ffffff; --chip-sub:#cfd3d7; --chip-dot:#d0d4d8;
+    --chip-text:#ffffff; --chip-sub:#ffffff; --chip-dot:#d0d4d8;
     --sys-na:#e3e6ea; --sys-na-fg:#98a1aa; --sys-off:#eceff1; --sys-off-fg:#4b5563;
     --shadow:rgba(0,0,0,.25); --ink-strong:#03234b;
     /* surfaces that carry white text - darker than --blue-lt so the text passes AA */
@@ -83,7 +88,7 @@
   .item:hover{background:var(--blue-pale)}
   .item.selected{background:var(--blue);color:#fff}
   .item .st{width:14px;text-align:center;font-size:12px}
-  .st.ok{color:var(--ok)} .st.warn{color:var(--warn)} .st.na{color:var(--bad)}
+  .st.ok{color:var(--ok)} .st.warn{color:var(--warn-ink)} .st.na{color:var(--bad)}
   .item.selected .st{color:#fff}
   .item.na{color:var(--muted)}
 
@@ -105,15 +110,16 @@
   /* shared resources are contended, not double-booked pins: own colour, dashed edge */
   .resbar{margin-top:4px;background:var(--res-bg);color:var(--res);border:1px dashed var(--res);padding:3px 8px;font-size:12px;text-align:left;font-weight:400}
   .resbar .rw{display:block;margin-top:2px}
+  .resbar .note{font-style:italic}
   .resbar a{color:inherit;text-decoration:underline;cursor:pointer;padding:0 2px;border-radius:2px}
   .resbar a:hover{background:var(--res);color:var(--on-accent);text-decoration:none}
   .conflicts .cf{display:inline-block;margin:1px 10px 1px 0;white-space:nowrap}
   .conflicts a{color:#a11;text-decoration:underline;cursor:pointer}
   .conflicts a:hover{background:var(--pin-conflict);color:#fff;text-decoration:none}
-  .cnt{background:var(--pin-conflict);color:#fff;border-radius:8px;padding:0 6px;font-size:11px;line-height:15px;min-width:17px;text-align:center;display:inline-block}
+  .cnt{background:var(--pin-conflict);color:var(--on-badge);border-radius:8px;padding:0 6px;font-size:11px;line-height:15px;min-width:17px;text-align:center;display:inline-block}
   .item .cnt{margin-left:auto}
   .item.selected .cnt{background:#fff;color:#c25100}
-  .cnt.res{background:var(--res)}
+  .cnt.res{background:var(--res);color:var(--on-res)}
   .item.selected .cnt.res{background:#fff;color:var(--res)}
   .cat>button .cnt{margin-left:8px}
   /* list options: sort toggle + gear, sitting under the search box */
@@ -124,7 +130,7 @@
   .treebar .seg button+button{border-left:1px solid var(--line)}
   .treebar .seg button:hover{background:var(--blue-pale);color:var(--ink-strong)}
   .treebar .seg button.on{background:var(--blue-hdr);color:var(--on-accent)}
-  .treebar .ic{border:0;background:none;color:var(--blue);font-size:14px;padding:1px 5px;border-radius:3px}
+  .treebar .ic{border:0;background:none;color:var(--link);font-size:14px;padding:1px 5px;border-radius:3px}
   .treebar .ic:hover{background:var(--blue-pale)}
   .treebar .ic.on{background:var(--blue-pale)}
   .azlist{padding:4px 0 8px}
@@ -155,7 +161,7 @@
   table.params tr.grp td::before{content:"▾ ";color:var(--muted)}
   table.params tr.grp.closed td::before{content:"▸ "}
   table.params tr:not(.grp):hover td{background:var(--blue-pale)}
-  table.params tr.off td{opacity:.45}
+  table.params tr.off td{color:var(--muted);font-style:italic}
   table.params tr.calc td{font-style:italic;color:var(--muted)}
   table.params tr.calc td .val{font-style:normal;color:var(--ink-strong);font-weight:600}
   table.params .ed{display:flex;align-items:center;gap:6px}
@@ -207,7 +213,7 @@
   .canvas.grabbing{cursor:grabbing}
   .canvas svg{width:100%;height:100%;display:block}
   .chipbar{display:flex;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line);background:var(--bar)}
-  .chipbar .ic{border:0;background:none;color:var(--blue);font-size:17px;padding:2px 6px;border-radius:3px}
+  .chipbar .ic{border:0;background:none;color:var(--link);font-size:17px;padding:2px 6px;border-radius:3px}
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
   .chipbar .spacer{flex:1}
@@ -224,7 +230,7 @@
   .findlist .row .sig{color:var(--link);overflow:hidden;text-overflow:ellipsis;max-width:210px}
   .findlist .row.conflict .sig{color:var(--bad)}
   .findlist .more{padding:4px 9px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
-  .chipbar label.flt{display:flex;align-items:center;gap:5px;color:#333;white-space:nowrap;cursor:pointer}
+  .chipbar label.flt{display:flex;align-items:center;gap:5px;color:var(--text);white-space:nowrap;cursor:pointer}
   .chipbar label.flt input{margin:0;cursor:pointer}
   #pkgsel{max-width:250px}
   .unused{border:1px solid var(--line);padding:3px 8px;background:var(--panel)}
@@ -232,14 +238,16 @@
 
   /* pin styles (svg) */
   .pin rect{stroke:var(--panel);stroke-width:.8}
-  .pin text{font-family:var(--font);font-size:9.5px;fill:var(--text);pointer-events:none}
+  /* One ink for every pin box: --text flips with the theme but the fills do not, so a
+     themed colour failed AA on green in light and on orange/grey in dark. */
+  .pin text{font-family:var(--font);font-size:9.5px;fill:var(--on-pin);pointer-events:none}
   .pin.io rect{fill:var(--pin-io)}
   .pin.unused rect{fill:var(--pin-unused)}
   .pin.power rect{fill:var(--pin-power)}
   .pin.ground rect{fill:var(--pin-gnd)}
   .pin.reset rect,.pin.boot rect{fill:var(--pin-sys)}
   .pin.set rect{fill:var(--pin-set)}
-  .pin.set text{fill:var(--on-accent)}
+  .pin.set text{fill:var(--on-pin)}       /* white on CubeMX green is 2.8:1 */
   .pin.conflict rect{fill:var(--pin-conflict)}
   .pin.io,.pin.set,.pin.conflict{cursor:pointer}
   .pin.hover rect{stroke:var(--pin-hover);stroke-width:2}
@@ -251,7 +259,10 @@
   .pin.selected rect{stroke:#0033cc;stroke-width:2.5}
   .siglabel{font-family:var(--font);font-size:10.5px;fill:var(--text)}
   .siglabel.conflict{fill:var(--bad);font-weight:600}
-  .pinnum{font-family:var(--font);font-size:7.5px;fill:var(--muted)}
+  /* `.pin text` (0,1,1) outranks a bare `.pinnum` (0,1,0), so this rule never applied and
+     pin numbers took the pin-box ink instead of the muted grey they are meant to have.
+     They are drawn just OUTSIDE the box, on the canvas, so they need the canvas colour. */
+  .pin text.pinnum{font-family:var(--font);font-size:7.5px;fill:var(--muted)}
   .siglabel .userlabel,.siglabel.userlabel{fill:var(--link);font-style:italic}
   .siglabel .lsep{fill:var(--muted)}
   .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
@@ -266,7 +277,7 @@
   .ctxmenu .hd{padding:5px 12px;background:var(--navy);color:#fff;margin-bottom:3px}
   .ctxmenu .mi{padding:5px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:18px;align-items:baseline}
   .ctxmenu .mi:hover{background:var(--blue-pale)}
-  .ctxmenu .mi.dis{color:var(--muted);opacity:.75;cursor:default;background:none}
+  .ctxmenu .mi.dis{color:var(--muted);cursor:default;background:none}
   .ctxmenu .mi small{color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ctxmenu .sep{height:1px;background:var(--line);margin:3px 0}
   .ctxmenu input{width:calc(100% - 24px);margin:5px 12px 7px;padding:4px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
@@ -278,11 +289,12 @@
   .picker .note{padding:4px 10px;color:var(--muted);border-bottom:1px solid var(--line-soft);font-size:11.5px}
   .picker .opt{padding:4px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:12px}
   .picker .opt:hover{background:var(--blue-pale)}
-  .picker .opt.cur{background:var(--pin-set);color:#fff}
-  .picker .opt.na{color:var(--muted);opacity:.7;cursor:not-allowed}
+  .picker .opt.cur{background:var(--pin-set);color:var(--on-pin)}
+  .picker .opt.na{color:var(--muted);cursor:not-allowed}
   .picker .opt small{color:var(--muted)}
   .picker .opt .lbl{white-space:nowrap}
-  .picker .opt.cur small{color:#e8ffe0}
+  .picker .hd .num{color:var(--muted)}
+  .picker .opt.cur small{color:#1a1a1a}
   .picker .grp{padding:4px 10px 2px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
 
   /* ---- clock view: boxes positioned over an SVG connector layer ---- */
@@ -304,8 +316,13 @@
   .cnode .mul span{color:var(--muted);font-size:14px}
   .cnode.over{border-color:var(--bad);background:var(--bad-bg)}
   .cnode.over .val,.cnode.over .lim{color:var(--bad)}
-  .cnode.off{opacity:.45;background:var(--bg)}
-  .cnode.off .val{color:var(--muted)}
+  /* "not feeding SYSCLK" is a DISPLAY fact about the tree, never an interaction block:
+     a dashed outline and a recessed ground say it without dimming. The opacity that used
+     to live here made the HSE and PLL boxes look exactly like disabled controls before
+     anything was selected, which is most of why "I cannot choose HSE" was reported. */
+  .cnode.off{background:var(--bg);border-style:dashed}
+  .cnode.off h5{color:var(--muted)}
+  .cnode.off .val{color:var(--ink-strong)}
   .clegend{display:flex;gap:20px;align-items:center;color:var(--muted);font-size:11.5px;flex-wrap:wrap}
   .clegend b{font-weight:400}
   .clegend i{display:inline-block;width:22px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:5px}
@@ -319,15 +336,16 @@
     --navy:#0f1923; --blue:#3aa3dd; --blue-lt:#2f8fc4; --blue-pale:#1d3345;
     --bg:#1a1e23; --panel:#23282e; --line:#3b434c; --text:#e4e8ec; --muted:#98a3ae;
     --chip:#596069; --chip-dk:#464c54;
-    --pin-unused:#6a7078; --pin-io:#878d94; --pin-power:#b9a94f; --pin-gnd:#a89a48;
+    --pin-unused:#7e858d; --pin-io:#878d94; --pin-power:#b9a94f; --pin-gnd:#a89a48;
     --pin-sys:#8d8442; --pin-conflict:#e08900; --pin-hover:#5aa9f0; --pin-set:#3a9a22;
     --ok:#4cc85a; --warn:#e0a000; --bad:#ff7a7a;
     --head:#343c45; --bar:#1f2429; --tab-off:#2b3138; --line-soft:#2e343b;
     --link:#6cb8ee; --on-accent:#ffffff; --warn-bg:#3a2c1a; --bad-bg:#3a2323;
     --res:#a79cff; --res-bg:#2a2740;
-    --chip-text:#f2f5f7; --chip-sub:#b9c0c7; --chip-dot:#aeb5bc;
+    --chip-text:#f2f5f7; --chip-sub:#f2f5f7; --chip-dot:#aeb5bc;
     --sys-na:#2b3138; --sys-na-fg:#7d868f; --sys-off:#2b3138; --sys-off-fg:#c3cad1;
     --shadow:rgba(0,0,0,.6); --ink-strong:#cfe2f2; --blue-hdr:#1c6f9f;
+    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#e0a000; --on-res:#1a1e23;
   }
   :root[data-theme="dark"] .mode label{background:#c9a92b;color:#1a1e23}
   :root[data-theme="dark"] .gen:hover{background:var(--blue)}
@@ -357,7 +375,7 @@
   .variants label{display:grid;grid-template-columns:20px 150px 90px 1fr;gap:8px;padding:4px 6px;border-radius:3px;cursor:pointer;font-size:12.5px}
   .variants label:hover{background:var(--blue-pale)}
   .variants label.on{background:var(--blue-hdr);color:#fff}
-  .variants small{color:inherit;opacity:.8}
+  .variants small{color:inherit}
   .btns{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px}
   .btns button{padding:6px 16px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:3px}
   .btns .primary{background:var(--blue-hdr);color:#fff;border-color:var(--blue-hdr)}
@@ -536,6 +554,33 @@ let LABEL = 190;                 // room outside the chip for signal labels - gr
 let geom = null;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const attr = s => esc(s).replace(/"/g, '&quot;');
+
+// ---- fitting text into an SVG box -------------------------------------------
+// SVG text neither wraps nor ellipsises itself, so anything drawn inside a shape is
+// measured once it is in the document and brought inside the box in three steps:
+// shrink (never past MIN_FS - text too small to read is not an improvement on text
+// that is abbreviated), then swap in the caller's short form, then truncate with an
+// ellipsis. Every one of these elements carries the full string in a <title> or an
+// aria-label, so shortening never loses information.
+const MIN_FS = 7.5;
+function fitSvgText(el, maxLen, alt) {
+  if (!el || !(maxLen > 0) || typeof el.getComputedTextLength !== 'function') return;
+  const len = () => { try { return el.getComputedTextLength(); } catch (e) { return 0; } };
+  if (len() <= maxLen) return;
+  // Read the COMPUTED size and write an inline style, never the font-size attribute: a
+  // presentation attribute loses to any stylesheet rule, and `.pin text{font-size:9.5px}`
+  // is exactly such a rule — it silently defeated the per-pin sizing that was here before.
+  let fs = parseFloat(getComputedStyle(el).fontSize) || parseFloat(el.getAttribute('font-size')) || 10;
+  while (fs > MIN_FS && len() > maxLen) { fs = Math.max(MIN_FS, fs - 0.25); el.style.fontSize = fs + 'px'; }
+  if (len() <= maxLen) return;
+  if (alt && alt !== el.textContent) { el.textContent = alt; if (len() <= maxLen) return; }
+  let s = el.textContent;
+  while (s.length > 1 && len() > maxLen) { s = s.slice(0, -1); el.textContent = s + '…'; }
+}
+/** Fit every `data-fitw` text in a freshly written SVG. */
+function fitSvgTexts(root) {
+  root.querySelectorAll('text[data-fitw]').forEach(t => fitSvgText(t, +t.dataset.fitw, t.dataset.alt));
+}
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
 const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false,
             cview: 'pinout', rot: 0, flip: false, hits: [], pick: -1 };
@@ -617,11 +662,35 @@ function renderChip() {
   if (geom.pk.epad || epad) {
     const ex = b.x + b.w * .3, ey = b.y + b.h * .3, ew = b.w * .4, eh = b.h * .4;
     g.push(`<rect x="${ex}" y="${ey}" width="${ew}" height="${eh}" fill="var(--chip-dk)" rx="3"/>`);
-    if (epad) g.push(`<text x="${ex + ew / 2}" y="${ey + eh - 6}" text-anchor="middle" font-size="9" fill="var(--chip-sub)" font-family="var(--font)">pad: ${esc(epad.join('/'))}</text>`);
   }
   g.push(`<circle cx="${b.x + 14}" cy="${b.y + 14}" r="4.5" fill="var(--chip-dot)"/>`);
-  g.push(`<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 - 4}" text-anchor="middle" font-size="${Math.min(24, b.w / 9)}" font-weight="700" fill="var(--chip-text)" font-family="var(--font)">${esc(M.mcu.name)}</text>`);
-  g.push(`<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 + 22}" text-anchor="middle" font-size="${Math.min(20, b.w / 11)}" font-style="italic" font-weight="600" fill="var(--chip-text)" font-family="var(--font)">${esc(S.pkg)}</text>`);
+  // The part name, the package and the exposed-pad caption are ONE centred stack with
+  // real line heights, not three texts at fixed offsets. At fixed offsets "pad: VSS"
+  // landed on top of the package name on QFN12 and QFN20, and a long part name ran off
+  // the chip body on every narrow package. Each line is fitted to the body width after
+  // insertion (data-fitw below), so nothing can leave the rectangle either.
+  {
+    // Every size is floored at MIN_FS: the fitting pass only ever shrinks, so a size
+    // that starts below the floor stays there. On QFN12 the pad caption was 5.9 px.
+    const size = (cap, div) => Math.max(MIN_FS, Math.min(cap, b.w / div));
+    const lines = [
+      { t: M.mcu.name, fs: size(24, 9), w: 700, style: '' },
+      { t: S.pkg, fs: size(20, 11), w: 600, style: ' font-style="italic"' },
+    ];
+    if (epad) lines.push({ t: `pad: ${epad.join('/')}`, fs: size(11, 20), w: 400, style: '', fill: 'var(--chip-sub)' });
+    const LEAD = 1.25;
+    const total = lines.reduce((a, l) => a + l.fs * LEAD, 0);
+    let y = b.y + b.h / 2 - total / 2;
+    for (const l of lines) {
+      y += l.fs * LEAD;
+      // The <title> is a sibling, never a child of <text>: a title inside <text> would
+      // land in its textContent and the truncation step would abbreviate the wrong string.
+      g.push(`<g><title>${esc(l.t)}</title>`
+        + `<text x="${b.x + b.w / 2}" y="${y - l.fs * .3}" text-anchor="middle" style="font-size:${l.fs}px"`
+        + ` font-weight="${l.w}"${l.style} fill="${l.fill || 'var(--chip-text)'}" font-family="var(--font)"`
+        + ` data-fitw="${Math.max(10, b.w - 16)}">${esc(l.t)}</text></g>`);
+    }
+  }
   const vert = p => p.side === 1 || p.side === 3;
   for (const p of geom.pins) {
     const grp = names[p.num]; if (!grp) continue;
@@ -642,9 +711,14 @@ function renderChip() {
     g.push(`<g class="${cls}" data-pin="${esc(name)}" data-num="${p.num}" role="${t === 'io' ? 'button' : 'img'}" aria-label="${attr(tip)}"><title>${esc(tip)}</title>`);
     g.push(`<rect x="${p.x}" y="${p.y}" width="${w}" height="${h}" rx="2"/>`);
     const cx = p.x + w / 2, cy = p.y + h / 2;
-    const fs = shown.length > 4 ? ` font-size="${Math.max(6, 9.5 - (shown.length - 4) * 0.9)}"` : '';
-    if (vert(p)) g.push(`<text transform="translate(${cx + 3.5},${cy}) rotate(-90)" text-anchor="middle"${fs}>${esc(shown)}</text>`);
-    else g.push(`<text x="${cx}" y="${cy + 3.5}" text-anchor="middle"${fs}>${esc(shown)}</text>`);
+    // Never below MIN_FS here: a name shrunk to 6 px is not readable, so the fitting
+    // pass abbreviates ("PD7/PA4" -> "PD7+") instead of shrinking further. The full
+    // pair stays in the <title> above and in the picker.
+    const fs = shown.length > 4 ? ` style="font-size:${Math.max(MIN_FS, 9.5 - (shown.length - 4) * 0.9)}px"` : '';
+    // the text runs along the pin's long axis, which rotation may have swapped
+    const fit = ` data-fitw="${Math.max(8, (vert(p) ? h : w) - 4)}" data-alt="${attr(grp.length > 1 ? grp[0] + '+' : grp[0])}"`;
+    if (vert(p)) g.push(`<text transform="translate(${cx + 3.5},${cy}) rotate(-90)" text-anchor="middle"${fs}${fit}>${esc(shown)}</text>`);
+    else g.push(`<text x="${cx}" y="${cy + 3.5}" text-anchor="middle"${fs}${fit}>${esc(shown)}</text>`);
     // pin number just outside
     const numPos = p.side === 0 ? [p.x - 8, cy + 3, 'end'] : p.side === 2 ? [p.x + w + 8, cy + 3, 'start'] : null;
     if (numPos) g.push(`<text class="pinnum" x="${numPos[0]}" y="${numPos[1]}" text-anchor="${numPos[2]}">${p.num}</text>`);
@@ -666,6 +740,7 @@ function renderChip() {
   }
   g.push('</g>');
   svg.innerHTML = g.join('');
+  fitSvgTexts(svg);
   // unused GPIO counter
   const io = Object.entries(names).filter(([n, g]) => n !== '0' && pinType(g[0]) === 'io').map(([, g]) => g[0]);
   const used = io.filter(n => E.pins[n]).length;
@@ -765,7 +840,7 @@ function openPicker(pin, cx, cy) {
   const d = document.createElement('div'); d.className = 'picker'; d.id = 'picker';
   const num = pinNum(pin), grp = groupOf(pin);
   const cur = E.pins[canon(pin)];
-  let h = `<h4>${grp.join(' / ')} <small style="opacity:.75">pin ${num}</small></h4>`;
+  let h = `<h4>${esc(grp.join(' / '))} <small>pin ${num}</small></h4>`;
   if (grp.length > 1) h += `<div class="note" style="color:var(--bad)">${grp.join(' and ')} are shorted inside this package — one physical pin, never both outputs.</div>`;
   for (const n of grp) if (M.pins[n] && M.pins[n].notes) h += `<div class="note">${n}: ${M.pins[n].notes}</div>`;
   if (cur) h += `<div class="note" style="color:${cur.state === 'conflict' ? 'var(--bad)' : 'var(--ok)'}">Currently: ${cur.label}${cur.state === 'conflict' ? ' — CONFLICT' : ''}</div>`;
@@ -817,7 +892,7 @@ function openPinMenu(pin, cx, cy) {
   const grp = groupOf(pin), num = pinNum(pin), info = E.pins[canon(pin)], ul = userLabel(pin), io = pinType(pin) === 'io';
   const d = document.createElement('div'); d.className = 'ctxmenu'; d.id = 'ctxmenu';
   d.innerHTML =
-    `<div class="hd">${esc(grp.join(' / '))} <span style="opacity:.7">pin ${num}</span></div>` +
+    `<div class="hd">${esc(grp.join(' / '))} <span class="num">pin ${num}</span></div>` +
     `<div class="mi" data-a="label">${ul ? 'Edit user label…' : 'Set user label…'}<small>${ul ? esc(ul) : '<span class="kb">L</span>'}</small></div>` +
     (ul ? `<div class="mi" data-a="clear">Clear user label</div>` : '') +
     `<div class="sep"></div>` +
@@ -1366,7 +1441,7 @@ function resourceBanner() {
     return `<span class="rw">${r.severity === 'warning' ? '⚑' : '⚠'} ${esc(r.text)}${links ? ' — ' + links : ''}</span>`;
   };
   return `<div class="resbar" role="status" aria-live="polite">${n} shared-resource issue${n > 1 ? 's' : ''}` +
-    ` <span style="opacity:.8">(EXTI lines and DMA channels, not pin conflicts)</span>${rows.map(line).join('')}</div>`;
+    ` <span class="note">(EXTI lines and DMA channels, not pin conflicts)</span>${rows.map(line).join('')}</div>`;
 }
 
 document.getElementById('ptitle').addEventListener('click', e => {
@@ -1394,11 +1469,11 @@ function renderCentre() {
   let h = '';
   if (E.status[pid] === 'na') h += `<div class="issue">${pid} is not available on ${S.pkg}: none of its pin mappings are bonded out on this package.</div>`;
   for (const s of P.settings || []) {
-    h += `<label>${s.name}</label>`;
+    h += `<label>${esc(s.name)}</label>`;
     if (s.type === 'checkboxes') {
-      h += `<div class="checks">` + s.choices.map(c => `<label><input type="checkbox" data-s="${s.name}" data-c="${c.name}"${st.settings[s.name].has(c.name) ? ' checked' : ''}> ${c.name}</label>`).join('') + '</div>';
+      h += `<div class="checks">` + s.choices.map(c => `<label><input type="checkbox" data-s="${attr(s.name)}" data-c="${attr(c.name)}"${st.settings[s.name].has(c.name) ? ' checked' : ''}> ${esc(c.name)}</label>`).join('') + '</div>';
     } else {
-      h += `<select data-s="${s.name}">` + s.choices.map(c => `<option${st.settings[s.name] === c.name ? ' selected' : ''}>${c.name}</option>`).join('') + '</select>';
+      h += `<select data-s="${attr(s.name)}">` + s.choices.map(c => `<option${st.settings[s.name] === c.name ? ' selected' : ''}>${esc(c.name)}</option>`).join('') + '</select>';
     }
   }
   if (P.notes) h += `<div class="hint">${P.notes}</div>`;
@@ -1622,38 +1697,59 @@ function renderClock() {
   const f = v => Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '\u2014';
   const fp = firstPre(c);
   const COLW = [188, 208, 198, 216, 240];
+  // Every option list is clockCalc().selectable \u2014 the MCU file's FULL list, never
+  // filtered by the current state. An option is missing from a mux only when the data
+  // says this part cannot do it; nothing here may add a second reason.
+  const sel = r.selectable || clockSelectable(M);
+  // "Is this box carrying a clock right now" is the engine's answer too, so the tree
+  // cannot disagree with the frequencies beside it. An engine without `feeding` (older
+  // bundle) lights everything rather than dimming something that is in fact running.
+  const lit = id => (r.feeding ? !!r.feeding[id] : true);
 
   // ---- 1. the graph, derived entirely from M.clock + clockCalc() -------------
   const nodes = [], edges = [], byId = {};
   const node = (id, col, o) => { const n = Object.assign({ id, col, w: COLW[col] || 200 }, o); nodes.push(n); byId[id] = n; return n; };
   const edge = (from, to, active) => { if (byId[from] && byId[to]) edges.push({ from, to, active: !!active }); };
-  const preSel = n => `<select data-pre="${attr(n)}">` + c.prescalers[n].options
-    .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  const preSel = n => `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
+    + (sel.pre[n] || c.prescalers[n].options)
+      .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
   const TITLE = { HSI: 'HSI RC oscillator', HSE: 'HSE crystal / clock in', LSI: 'LSI RC oscillator', LSE: 'LSE crystal' };
 
   for (const s of ['HSI', 'HSE', 'LSI', 'LSE']) {
     const d = c.sources[s]; if (!d) continue;
     const khz = d.khz !== undefined;
+    const rs = (r.sources || {})[s] || {};
+    // The crystal frequency carries no `max` attribute on purpose: the datasheet range is
+    // shown underneath and an out-of-range value has to be TYPEABLE so it can go red.
+    // A spinner that refuses 30 MHz would hide the very limit it is meant to teach.
     node(s, 0, {
       title: TITLE[s] || s,
-      body: s === 'HSE' ? `<input type="number" step="0.001" min="0" id="ck-hse" value="${k.hse}">` : '',
+      body: s === 'HSE'
+        ? `<input type="number" step="0.001" min="0" id="ck-hse" value="${k.hse}"`
+          + ` aria-label="HSE crystal frequency in MHz"`
+          + ` title="External crystal or clock input, in MHz${d.min_mhz !== undefined ? ` (datasheet ${d.min_mhz}\u2013${d.max_mhz})` : ''}">`
+        : '',
       val: khz ? d.khz : (s === 'HSE' ? k.hse : d.mhz),
       unit: khz ? 'kHz' : 'MHz',
       lim: d.min_mhz !== undefined ? `${d.min_mhz}\u2013${d.max_mhz} MHz` : (d.fixed ? 'fixed' : ''),
-      over: r.over.includes(s),
+      over: rs.over !== undefined ? rs.over : r.over.includes(s),
     });
   }
   if (c.pll) node('PLL', 1, {
     title: 'PLL',
-    body: `<select id="ck-pllin">` + c.pll.inputs.map((i2, n) =>
-        `<option value="${n}"${k.pllIn === n ? ' selected' : ''}>${esc(i2.name)}${i2.div > 1 ? ' / ' + i2.div : ''}</option>`).join('') + '</select>' +
-      `<div class="mul"><span>\u00d7</span><select id="ck-pllmul">` + c.pll.multipliers.map(m =>
+    // The divider is appended only when the input's own name does not already carry it.
+    // The dummy part calls its inputs "HSI/2" and "HSE/2", which read as "HSI/2 / 2".
+    body: `<select id="ck-pllin" aria-label="PLL source">` + sel.pllIn.map(i2 =>
+        `<option value="${i2.index}"${k.pllIn === i2.index ? ' selected' : ''}>${esc(i2.name)}`
+        + `${i2.div > 1 && !new RegExp('/\\s*' + i2.div + '$').test(i2.name) ? ' / ' + i2.div : ''}</option>`).join('') + '</select>' +
+      `<div class="mul"><span>\u00d7</span><select id="ck-pllmul" aria-label="PLL multiplier">` + sel.pllMul.map(m =>
         `<option value="${m}"${String(m) === String(k.pllMul) ? ' selected' : ''}>${m}</option>`).join('') + '</select></div>',
     val: r.PLLCLK, unit: 'MHz PLLCLK', lim: `input ${f(r.pllIn)} MHz`,
   });
   node('SYSCLK', 2, {
     title: 'System clock mux',
-    body: `<select id="ck-sys">` + c.sysclk.sources.map(s => `<option${s === k.sys ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>',
+    body: `<select id="ck-sys" aria-label="System clock source">`
+      + sel.sys.map(s => `<option${s === k.sys ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>',
     val: r.SYSCLK, unit: 'MHz SYSCLK', lim: `max ${c.sysclk.max_mhz} MHz`, over: r.over.includes('SYSCLK'),
   });
   if (fp) node('pre:' + fp, 3, {
@@ -1677,22 +1773,16 @@ function renderClock() {
     title: d.name, val: r[d.name], unit: 'MHz', lim: `${d.source || fp || 'SYSCLK'} / ${d.div}`,
   });
 
-  // which nodes actually carry a clock right now -> everything else is greyed
-  const on = new Set(['SYSCLK']);
-  const pllSrc = c.pll ? (c.pll.inputs[k.pllIn] || {}).source : null;
-  if (Object.values(c.prescalers || {}).some(v => v.source === 'PLLCLK')) on.add('PLL');
-  if (k.sys === 'PLLCLK') on.add('PLL'); else on.add(k.sys);
-  if (on.has('PLL') && pllSrc) on.add(pllSrc);
-  if (fp) on.add('pre:' + fp);
-  for (const name of Object.keys(prebase)) if (on.has(prebase[name])) on.add('pre:' + name);
-  for (const d of c.derived || []) if (!fp || on.has('pre:' + fp)) on.add('drv:' + d.name);
-  for (const n of nodes) n.off = !on.has(n.id);
+  // Which nodes actually carry a clock right now. This used to be recomputed here from
+  // M.clock, so the tree could contradict the frequencies printed inside it; it is
+  // clockCalc().feeding now, and dimming is purely how a non-feeding branch LOOKS.
+  for (const n of nodes) n.off = !lit(n.id);
 
-  if (c.pll) c.pll.inputs.forEach((i2, n) => edge(i2.source, 'PLL', on.has('PLL') && k.pllIn === n));
-  for (const s of c.sysclk.sources) edge(s === 'PLLCLK' ? 'PLL' : s, 'SYSCLK', k.sys === s);
+  if (c.pll) sel.pllIn.forEach(i2 => edge(i2.source, 'PLL', lit('PLL') && k.pllIn === i2.index));
+  for (const s of sel.sys) edge(s === 'PLLCLK' ? 'PLL' : s, 'SYSCLK', k.sys === s);
   if (fp) edge('SYSCLK', 'pre:' + fp, true);
-  for (const [name, base] of Object.entries(prebase)) edge(base, 'pre:' + name, on.has('pre:' + name));
-  for (const d of c.derived || []) edge(fp ? 'pre:' + fp : 'SYSCLK', 'drv:' + d.name, on.has('drv:' + d.name));
+  for (const [name, base] of Object.entries(prebase)) edge(base, 'pre:' + name, lit('pre:' + name));
+  for (const d of c.derived || []) edge(fp ? 'pre:' + fp : 'SYSCLK', 'drv:' + d.name, lit('drv:' + d.name));
 
   // ---- 2. paint the boxes ----------------------------------------------------
   let h = `<div class="cnote">This tree is drawn from the MCU file's <b>clock:</b> block \u2014 no part-specific UI. `
@@ -1705,13 +1795,33 @@ function renderClock() {
       + (n.val !== undefined ? `<div class="val">${f(n.val)}<small>${esc(n.unit || '')}</small></div>` : '')
       + (n.lim ? `<div class="lim">${esc(n.lim)}</div>` : '') + '</div>').join('')
     + `</div>`;
-  if (r.over.length) h += `<div class="issues">\u26a0 Out of specification: ${esc(r.over.join(', '))}</div>`;
+  if (r.over.length) {
+    // `over` is everything out of specification; `under` is the subset that is too SLOW.
+    // Saying which way it is wrong is the difference between a warning the user can act
+    // on and one they have to go and re-derive from the limit line.
+    const under = new Set(r.under || []);
+    const why = n => under.has(n) ? 'below minimum'
+      : ((c.prescalers || {})[n] || {}).target_mhz ? 'off target' : 'above maximum';
+    h += `<div class="issues">\u26a0 Out of specification: ${esc(r.over.map(n => `${n} (${why(n)})`).join(', '))}</div>`;
+  }
   if (c.notes) h += `<div class="cnote">${esc(c.notes)}</div>`;
   if (c.buses) h += `<div class="cnote">Bus assignment \u2014 ` + Object.entries(c.buses)
     .map(([b, l]) => `<b>${esc(b)}</b>: ${esc(l.join(', '))}`).join(' &nbsp;\u00b7&nbsp; ') + `</div>`;
   el.innerHTML = h;
 
+  // Re-sync every control from S, whether or not the layout pass below runs. The markup
+  // carries `selected` already; this is the guarantee that a <select> can never sit
+  // showing a configuration the engine does not have (it could, before round 2).
+  const setVal = (q, v) => { const n = el.querySelector(q); if (n && String(n.value) !== String(v)) n.value = String(v); };
+  setVal('#ck-sys', k.sys); setVal('#ck-pllin', k.pllIn); setVal('#ck-pllmul', k.pllMul); setVal('#ck-hse', k.hse);
+  el.querySelectorAll('select[data-pre]').forEach(s => {
+    if (String(s.value) !== String(k.pre[s.dataset.pre])) s.value = String(k.pre[s.dataset.pre]);
+  });
+
   // ---- 3. measure, place, connect --------------------------------------------
+  // Only the GEOMETRY can be deferred. Interaction is bound once, by delegation, below
+  // renderClock() — a handler bound after this early return left every control on the
+  // tab dead while the tab had never been shown, which is how the round-2 P0 looked.
   const wrap = el.querySelector('#ctreewrap');
   if (!wrap.offsetParent) { U.clockPending = true; return; }   // tab hidden: heights are 0, redo when shown
   U.clockPending = false;
@@ -1753,14 +1863,44 @@ function renderClock() {
       + `<path class="carrow${cls}" d="M${x2 + 7} ${y2} l-7 -4.5 v9 z"/>`;
   }).join('');
 
-  // ---- 4. handlers (same contract as before) ---------------------------------
-  const apply = patch => { setClock(patch); renderClock(); PROJECT.dirty = true; updateCrumb(); };
-  const hse = el.querySelector('#ck-hse'); if (hse) hse.onchange = () => apply({ hse: +hse.value });
-  const pi = el.querySelector('#ck-pllin'); if (pi) pi.onchange = () => apply({ pllIn: +pi.value });
-  const pm = el.querySelector('#ck-pllmul'); if (pm) pm.onchange = () => apply({ pllMul: +pm.value });
-  const sy = el.querySelector('#ck-sys'); if (sy) sy.onchange = () => apply({ sys: sy.value });
-  el.querySelectorAll('select[data-pre]').forEach(s => s.onchange = () => apply({ pre: { [s.dataset.pre]: +s.value } }));
 }
+
+// ---- clock interaction ------------------------------------------------------
+// Bound ONCE, by delegation on #clock, and deliberately NOT inside renderClock():
+// the layout pass there returns early while the tab has never been visible, and a
+// per-element handler bound after that point leaves a fully drawn tree in which
+// nothing reaches the engine. Delegation has nothing to lose, so the controls work
+// whether or not the tree has ever been measured.
+function clockApply(patch) {
+  let changed;
+  try {
+    changed = setClock(patch) || {};
+  } catch (e) {
+    // The engine refuses only values the MCU file does not offer (or nonsense in the
+    // crystal box). Say so and redraw, so the control snaps back to what S actually holds.
+    toast('⚠ ' + e.message);
+    renderClock();
+    return;
+  }
+  // Not renderClock(): selecting HSE can switch the crystal on in RCC, which claims
+  // pins, so the chip, the tree and the GPIO table all have to catch up. renderAll()
+  // also marks the project dirty and refreshes the breadcrumb.
+  renderAll();
+  if (changed.hse) {
+    const pins = changed.hse.pins.length ? changed.hse.pins.join('/') : 'the crystal pins';
+    const sigs = changed.hse.signals.map(s => `${changed.hse.pid}_${s}`).join('/');
+    toast(`HSE enabled in RCC — ${pins} now ${sigs}`);
+  }
+}
+document.getElementById('clock').addEventListener('change', e => {
+  const t = e.target;
+  if (!t || !t.tagName) return;
+  if (t.id === 'ck-sys') clockApply({ sys: t.value });
+  else if (t.id === 'ck-pllin') clockApply({ pllIn: +t.value });
+  else if (t.id === 'ck-pllmul') clockApply({ pllMul: +t.value });
+  else if (t.id === 'ck-hse') clockApply({ hse: +t.value });
+  else if (t.dataset.pre) clockApply({ pre: { [t.dataset.pre]: +t.value } });
+});
 // The clock tab is display:none until selected, and hidden boxes measure 0, so
 // lay the tree out the moment the tab becomes visible.
 new MutationObserver(() => {
@@ -1937,7 +2077,9 @@ window.addEventListener('keydown', e => {
 document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + b.dataset.view));
-  if (b.dataset.view === 'pinout') fitChip();
+  // Text measured while the view was hidden comes back 0, so a repaint made from
+  // another tab leaves the chip unfitted. Re-fit on the way in; it is idempotent.
+  if (b.dataset.view === 'pinout') { fitSvgTexts(svg); fitChip(); }
 });
 document.getElementById('pkgsel').onchange = e => {
   closePicker();
@@ -1973,7 +2115,26 @@ document.getElementById('m-help').onclick = () => alert('WCHCube\n\n• Click a 
 const ms = document.getElementById('mcusel');
 for (const k of Object.keys(MCU_FILES)) { const o = document.createElement('option'); o.value = k; o.textContent = k; ms.appendChild(o); }
 ms.onchange = () => { openMcu(MCU_FILES[ms.value]); setProject({ name: `${ms.value}_${S.pkg}`, variant: null, dirty: false }); updateCrumb(); };
-openMcu(MCU_FILES[Object.keys(MCU_FILES).sort()[0]]);
+/**
+ * Which part opens on a cold start. It used to be whichever name sorted first, which
+ * made it CH32V005 — a part DERIVED from CH32V006 through `inherits:`, with TKEY and
+ * TIM3 removed. Nobody means "the cut-down variant" by "the default part".
+ *
+ * Order: an MCU file that says `mcu.default: true`; else the first part that is neither
+ * derived (`inherits:`) nor a test fixture (`mcu.fixture: true`); else the first file.
+ * Every step reads the data, so a new part changes the answer without changing this code.
+ */
+function defaultMcuName() {
+  const names = Object.keys(MCU_FILES).sort();
+  const head = {};
+  for (const n of names) {
+    try { head[n] = (jsyaml.load(MCU_FILES[n]) || {}).mcu || {}; } catch (e) { head[n] = {}; }
+  }
+  return names.find(n => head[n].default === true)
+    || names.find(n => !head[n].inherits && !head[n].fixture)
+    || names[0];
+}
+openMcu(MCU_FILES[defaultMcuName()]);
 setProject({ name: `${M.mcu.name}_${S.pkg}`, dirty: false }); updateCrumb();
 </script>
 </body>

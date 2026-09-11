@@ -20,9 +20,14 @@
     /* surfaces and ink - every themed colour goes through one of these */
     --head:#4b5563; --bar:#fafafa; --tab-off:#e9ecef; --line-soft:#eef0f2;
     --link:#0b57a4; --on-accent:#ffffff; --warn-bg:#fff3e0; --bad-bg:#fdecec;
+    /* Ink for the pin colours and the badges. Those fills are CubeMX's and stay put in
+       both themes, so the TEXT on them cannot come from --text (which flips) — it is a
+       fixed near-black that clears 4.5:1 on every one of them. --warn-ink is the amber
+       status glyph darkened until it passes on a white panel. */
+    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#8a6200; --on-res:#ffffff;
     /* shared-resource issues (EXTI lines, DMA channels) - never orange, they are not pin conflicts */
     --res:#5a4fcf; --res-bg:#efedfc;
-    --chip-text:#ffffff; --chip-sub:#cfd3d7; --chip-dot:#d0d4d8;
+    --chip-text:#ffffff; --chip-sub:#ffffff; --chip-dot:#d0d4d8;
     --sys-na:#e3e6ea; --sys-na-fg:#98a1aa; --sys-off:#eceff1; --sys-off-fg:#4b5563;
     --shadow:rgba(0,0,0,.25); --ink-strong:#03234b;
     /* surfaces that carry white text - darker than --blue-lt so the text passes AA */
@@ -87,7 +92,7 @@
   .item:hover{background:var(--blue-pale)}
   .item.selected{background:var(--blue);color:#fff}
   .item .st{width:14px;text-align:center;font-size:12px}
-  .st.ok{color:var(--ok)} .st.warn{color:var(--warn)} .st.na{color:var(--bad)}
+  .st.ok{color:var(--ok)} .st.warn{color:var(--warn-ink)} .st.na{color:var(--bad)}
   .item.selected .st{color:#fff}
   .item.na{color:var(--muted)}
 
@@ -109,15 +114,16 @@
   /* shared resources are contended, not double-booked pins: own colour, dashed edge */
   .resbar{margin-top:4px;background:var(--res-bg);color:var(--res);border:1px dashed var(--res);padding:3px 8px;font-size:12px;text-align:left;font-weight:400}
   .resbar .rw{display:block;margin-top:2px}
+  .resbar .note{font-style:italic}
   .resbar a{color:inherit;text-decoration:underline;cursor:pointer;padding:0 2px;border-radius:2px}
   .resbar a:hover{background:var(--res);color:var(--on-accent);text-decoration:none}
   .conflicts .cf{display:inline-block;margin:1px 10px 1px 0;white-space:nowrap}
   .conflicts a{color:#a11;text-decoration:underline;cursor:pointer}
   .conflicts a:hover{background:var(--pin-conflict);color:#fff;text-decoration:none}
-  .cnt{background:var(--pin-conflict);color:#fff;border-radius:8px;padding:0 6px;font-size:11px;line-height:15px;min-width:17px;text-align:center;display:inline-block}
+  .cnt{background:var(--pin-conflict);color:var(--on-badge);border-radius:8px;padding:0 6px;font-size:11px;line-height:15px;min-width:17px;text-align:center;display:inline-block}
   .item .cnt{margin-left:auto}
   .item.selected .cnt{background:#fff;color:#c25100}
-  .cnt.res{background:var(--res)}
+  .cnt.res{background:var(--res);color:var(--on-res)}
   .item.selected .cnt.res{background:#fff;color:var(--res)}
   .cat>button .cnt{margin-left:8px}
   /* list options: sort toggle + gear, sitting under the search box */
@@ -128,7 +134,7 @@
   .treebar .seg button+button{border-left:1px solid var(--line)}
   .treebar .seg button:hover{background:var(--blue-pale);color:var(--ink-strong)}
   .treebar .seg button.on{background:var(--blue-hdr);color:var(--on-accent)}
-  .treebar .ic{border:0;background:none;color:var(--blue);font-size:14px;padding:1px 5px;border-radius:3px}
+  .treebar .ic{border:0;background:none;color:var(--link);font-size:14px;padding:1px 5px;border-radius:3px}
   .treebar .ic:hover{background:var(--blue-pale)}
   .treebar .ic.on{background:var(--blue-pale)}
   .azlist{padding:4px 0 8px}
@@ -159,7 +165,7 @@
   table.params tr.grp td::before{content:"▾ ";color:var(--muted)}
   table.params tr.grp.closed td::before{content:"▸ "}
   table.params tr:not(.grp):hover td{background:var(--blue-pale)}
-  table.params tr.off td{opacity:.45}
+  table.params tr.off td{color:var(--muted);font-style:italic}
   table.params tr.calc td{font-style:italic;color:var(--muted)}
   table.params tr.calc td .val{font-style:normal;color:var(--ink-strong);font-weight:600}
   table.params .ed{display:flex;align-items:center;gap:6px}
@@ -211,7 +217,7 @@
   .canvas.grabbing{cursor:grabbing}
   .canvas svg{width:100%;height:100%;display:block}
   .chipbar{display:flex;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line);background:var(--bar)}
-  .chipbar .ic{border:0;background:none;color:var(--blue);font-size:17px;padding:2px 6px;border-radius:3px}
+  .chipbar .ic{border:0;background:none;color:var(--link);font-size:17px;padding:2px 6px;border-radius:3px}
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
   .chipbar .spacer{flex:1}
@@ -228,7 +234,7 @@
   .findlist .row .sig{color:var(--link);overflow:hidden;text-overflow:ellipsis;max-width:210px}
   .findlist .row.conflict .sig{color:var(--bad)}
   .findlist .more{padding:4px 9px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
-  .chipbar label.flt{display:flex;align-items:center;gap:5px;color:#333;white-space:nowrap;cursor:pointer}
+  .chipbar label.flt{display:flex;align-items:center;gap:5px;color:var(--text);white-space:nowrap;cursor:pointer}
   .chipbar label.flt input{margin:0;cursor:pointer}
   #pkgsel{max-width:250px}
   .unused{border:1px solid var(--line);padding:3px 8px;background:var(--panel)}
@@ -236,14 +242,16 @@
 
   /* pin styles (svg) */
   .pin rect{stroke:var(--panel);stroke-width:.8}
-  .pin text{font-family:var(--font);font-size:9.5px;fill:var(--text);pointer-events:none}
+  /* One ink for every pin box: --text flips with the theme but the fills do not, so a
+     themed colour failed AA on green in light and on orange/grey in dark. */
+  .pin text{font-family:var(--font);font-size:9.5px;fill:var(--on-pin);pointer-events:none}
   .pin.io rect{fill:var(--pin-io)}
   .pin.unused rect{fill:var(--pin-unused)}
   .pin.power rect{fill:var(--pin-power)}
   .pin.ground rect{fill:var(--pin-gnd)}
   .pin.reset rect,.pin.boot rect{fill:var(--pin-sys)}
   .pin.set rect{fill:var(--pin-set)}
-  .pin.set text{fill:var(--on-accent)}
+  .pin.set text{fill:var(--on-pin)}       /* white on CubeMX green is 2.8:1 */
   .pin.conflict rect{fill:var(--pin-conflict)}
   .pin.io,.pin.set,.pin.conflict{cursor:pointer}
   .pin.hover rect{stroke:var(--pin-hover);stroke-width:2}
@@ -255,7 +263,10 @@
   .pin.selected rect{stroke:#0033cc;stroke-width:2.5}
   .siglabel{font-family:var(--font);font-size:10.5px;fill:var(--text)}
   .siglabel.conflict{fill:var(--bad);font-weight:600}
-  .pinnum{font-family:var(--font);font-size:7.5px;fill:var(--muted)}
+  /* `.pin text` (0,1,1) outranks a bare `.pinnum` (0,1,0), so this rule never applied and
+     pin numbers took the pin-box ink instead of the muted grey they are meant to have.
+     They are drawn just OUTSIDE the box, on the canvas, so they need the canvas colour. */
+  .pin text.pinnum{font-family:var(--font);font-size:7.5px;fill:var(--muted)}
   .siglabel .userlabel,.siglabel.userlabel{fill:var(--link);font-style:italic}
   .siglabel .lsep{fill:var(--muted)}
   .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
@@ -270,7 +281,7 @@
   .ctxmenu .hd{padding:5px 12px;background:var(--navy);color:#fff;margin-bottom:3px}
   .ctxmenu .mi{padding:5px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:18px;align-items:baseline}
   .ctxmenu .mi:hover{background:var(--blue-pale)}
-  .ctxmenu .mi.dis{color:var(--muted);opacity:.75;cursor:default;background:none}
+  .ctxmenu .mi.dis{color:var(--muted);cursor:default;background:none}
   .ctxmenu .mi small{color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ctxmenu .sep{height:1px;background:var(--line);margin:3px 0}
   .ctxmenu input{width:calc(100% - 24px);margin:5px 12px 7px;padding:4px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
@@ -282,11 +293,12 @@
   .picker .note{padding:4px 10px;color:var(--muted);border-bottom:1px solid var(--line-soft);font-size:11.5px}
   .picker .opt{padding:4px 10px;cursor:pointer;display:flex;justify-content:space-between;gap:12px}
   .picker .opt:hover{background:var(--blue-pale)}
-  .picker .opt.cur{background:var(--pin-set);color:#fff}
-  .picker .opt.na{color:var(--muted);opacity:.7;cursor:not-allowed}
+  .picker .opt.cur{background:var(--pin-set);color:var(--on-pin)}
+  .picker .opt.na{color:var(--muted);cursor:not-allowed}
   .picker .opt small{color:var(--muted)}
   .picker .opt .lbl{white-space:nowrap}
-  .picker .opt.cur small{color:#e8ffe0}
+  .picker .hd .num{color:var(--muted)}
+  .picker .opt.cur small{color:#1a1a1a}
   .picker .grp{padding:4px 10px 2px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
 
   /* ---- clock view: boxes positioned over an SVG connector layer ---- */
@@ -308,8 +320,13 @@
   .cnode .mul span{color:var(--muted);font-size:14px}
   .cnode.over{border-color:var(--bad);background:var(--bad-bg)}
   .cnode.over .val,.cnode.over .lim{color:var(--bad)}
-  .cnode.off{opacity:.45;background:var(--bg)}
-  .cnode.off .val{color:var(--muted)}
+  /* "not feeding SYSCLK" is a DISPLAY fact about the tree, never an interaction block:
+     a dashed outline and a recessed ground say it without dimming. The opacity that used
+     to live here made the HSE and PLL boxes look exactly like disabled controls before
+     anything was selected, which is most of why "I cannot choose HSE" was reported. */
+  .cnode.off{background:var(--bg);border-style:dashed}
+  .cnode.off h5{color:var(--muted)}
+  .cnode.off .val{color:var(--ink-strong)}
   .clegend{display:flex;gap:20px;align-items:center;color:var(--muted);font-size:11.5px;flex-wrap:wrap}
   .clegend b{font-weight:400}
   .clegend i{display:inline-block;width:22px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:5px}
@@ -323,15 +340,16 @@
     --navy:#0f1923; --blue:#3aa3dd; --blue-lt:#2f8fc4; --blue-pale:#1d3345;
     --bg:#1a1e23; --panel:#23282e; --line:#3b434c; --text:#e4e8ec; --muted:#98a3ae;
     --chip:#596069; --chip-dk:#464c54;
-    --pin-unused:#6a7078; --pin-io:#878d94; --pin-power:#b9a94f; --pin-gnd:#a89a48;
+    --pin-unused:#7e858d; --pin-io:#878d94; --pin-power:#b9a94f; --pin-gnd:#a89a48;
     --pin-sys:#8d8442; --pin-conflict:#e08900; --pin-hover:#5aa9f0; --pin-set:#3a9a22;
     --ok:#4cc85a; --warn:#e0a000; --bad:#ff7a7a;
     --head:#343c45; --bar:#1f2429; --tab-off:#2b3138; --line-soft:#2e343b;
     --link:#6cb8ee; --on-accent:#ffffff; --warn-bg:#3a2c1a; --bad-bg:#3a2323;
     --res:#a79cff; --res-bg:#2a2740;
-    --chip-text:#f2f5f7; --chip-sub:#b9c0c7; --chip-dot:#aeb5bc;
+    --chip-text:#f2f5f7; --chip-sub:#f2f5f7; --chip-dot:#aeb5bc;
     --sys-na:#2b3138; --sys-na-fg:#7d868f; --sys-off:#2b3138; --sys-off-fg:#c3cad1;
     --shadow:rgba(0,0,0,.6); --ink-strong:#cfe2f2; --blue-hdr:#1c6f9f;
+    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#e0a000; --on-res:#1a1e23;
   }
   :root[data-theme="dark"] .mode label{background:#c9a92b;color:#1a1e23}
   :root[data-theme="dark"] .gen:hover{background:var(--blue)}
@@ -361,7 +379,7 @@
   .variants label{display:grid;grid-template-columns:20px 150px 90px 1fr;gap:8px;padding:4px 6px;border-radius:3px;cursor:pointer;font-size:12.5px}
   .variants label:hover{background:var(--blue-pale)}
   .variants label.on{background:var(--blue-hdr);color:#fff}
-  .variants small{color:inherit;opacity:.8}
+  .variants small{color:inherit}
   .btns{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px}
   .btns button{padding:6px 16px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:3px}
   .btns .primary{background:var(--blue-hdr);color:#fff;border-color:var(--blue-hdr)}
@@ -493,7 +511,16 @@ mcu:
     - peripherals.TKEY                      # DS: "CH32V005 no TouchKey,TIM3"
     - peripherals.TIM3                      # same note
     - peripherals.SYS.remap_by_package.QFN32   # the package it pointed at is gone
-    - dma.requests                          # replaced below, minus the TIM3 requests
+    # The parent's codegen block mentions both dropped peripherals. Left inherited, the
+    # generator would mark TouchKey pins analog and emit a TIM3 clock enable on a part
+    # that has neither. Found by validate_mcu.py's codegen name check, round 2.
+    - codegen.analog_signals.TKEY
+    - codegen.periph_clock.PB1.bits.TIM3
+    # Starting values for two requests this part does not have. Safe to remove here: the
+    # child does not redefine `dma.request_defaults`, it only inherits it (see the note
+    # on `dma:` below about paths that are removed AND redefined).
+    - dma.request_defaults.TIM3_CH3
+    - dma.request_defaults.TIM3_CH4
 
   # DS §1 model table, lines 106-109. Replaces the parent's list outright.
   variants:
@@ -536,6 +563,12 @@ peripherals:
 # -----------------------------------------------------------------------------
 # DMA1 — the parent's map with every TIM3 request dropped (RM Table 8-2 note 2 applies
 # to CH32V006/V007; CH32V005 has no TIM3 at all). Channel numbering is unchanged.
+# `dma.requests` is NOT in `mcu.remove` above, and must not be: `mcu.remove` is applied
+# AFTER the parent is merged, so removing a path the child also redefines deletes the
+# child's own version too. It did exactly that until round 2 - CH32V005 shipped with no
+# DMA request map at all, and the engine's channel-clash warnings were dead on this part.
+# Nothing needs removing here anyway: maps merge key by key and the child wins, so
+# listing all seven channels below replaces the parent's seven outright.
 dma:
   requests:
     1: [ADC1, TIM2_CH3]
@@ -828,6 +861,195 @@ peripherals:
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+
+  # RM ch.2. Nothing here claims a pin: the supply monitor and the auto-wake-up are
+  # internal, and their interrupts reach the core over EXTI lines 8 and 9, which have no
+  # pins either (see `exti.internal`). It is still a real configuration - PVD threshold,
+  # regulator mode and the wake-up period are all choices with consequences.
+  PWR:
+    category: System Core
+    settings:
+      - name: Power voltage detector (PVD)
+        choices:
+          - { name: Disable }
+          - { name: Enable }                      # PWR_CTLR PVDE, bit 4
+      - name: Auto wake-up (AWU)
+        choices:
+          - { name: Disable }
+          - { name: Enable }                      # PWR_AWUCSR AWUEN, bit 1
+      - name: Low-power mode entered on WFI/WFE
+        choices:
+          - { name: Sleep }                       # PWR_CTLR PDDS = 0
+          - { name: Standby }                     # PWR_CTLR PDDS = 1
+    params:
+      - key: pvd_level
+        name: PVD threshold
+        type: enum
+        group: Basic
+        default: 2.43 V rising / 2.41 V falling
+        options:
+          - { name: 1.87 V rising / 1.85 V falling, value: 0 }
+          - { name: 2.23 V rising / 2.21 V falling, value: 1 }
+          - { name: 2.43 V rising / 2.41 V falling, value: 2 }
+          - { name: 2.66 V rising / 2.60 V falling, value: 3 }
+        when:
+          Power voltage detector (PVD): Enable
+        help: "PWR_CTLR PLS[6:5]. The two figures are the rising and falling thresholds - the gap is the comparator's hysteresis, not a tolerance. RM 2.4.1 notes these levels apply to CH32V002/005/006/007 and M007."
+      - key: ldo_mode
+        name: Voltage regulator mode
+        type: enum
+        group: Advanced
+        default: Normal - LDO 1.2 V
+        options:
+          - { name: Normal - LDO 1.2 V,        value: 2 }
+          - { name: Low power - LDO 1.0 V,     value: 1 }
+          - { name: Energy saving - LDO 1.0 V, value: 3 }
+        help: "PWR_CTLR LDO_MODE[3:2], reset 10b. Code 00 is documented as \"unable to configure\" and is deliberately not offered. RM 2.4.1: standby turns low-power mode on in hardware regardless, and running code from flash in energy-saving mode is not recommended."
+      - key: awu_prescaler
+        name: Auto wake-up prescaler
+        type: enum
+        group: Basic
+        default: /4096
+        options:
+          - { name: Off,     value: 0 }
+          - { name: /2,      value: 2 }
+          - { name: /4,      value: 3 }
+          - { name: /8,      value: 4 }
+          - { name: /16,     value: 5 }
+          - { name: /32,     value: 6 }
+          - { name: /64,     value: 7 }
+          - { name: /128,    value: 8 }
+          - { name: /256,    value: 9 }
+          - { name: /512,    value: 10 }
+          - { name: /1024,   value: 11 }
+          - { name: /2048,   value: 12 }
+          - { name: /4096,   value: 13 }
+          - { name: /10240,  value: 14 }
+          - { name: /61440,  value: 15 }
+        when:
+          Auto wake-up (AWU): Enable
+        help: "PWR_AWUPSC[3:0], counting off the 128 kHz LSI. Codes 0000 and 0001 both mean \"prescaler off\", so only one Off entry is offered. The last two steps are 10240 and 61440, not the powers of two the rest of the list suggests."
+      - key: awu_window
+        name: Auto wake-up window
+        type: int
+        group: Basic
+        default: 63
+        min: 0
+        max: 63
+        unit: counts
+        when:
+          Auto wake-up (AWU): Enable
+        help: "PWR_AWUWR[5:0], reset 0x3F. The wake-up period is (window + 1) prescaled LSI ticks - RM 2.4.4 is explicit that the hardware adds the one."
+
+  # RM ch.18. Two different things live here and both are real: the wait-state setting the
+  # core needs at speed (FLASH_ACTLR, changed at runtime) and the user option bytes, which
+  # are programmed once and take effect at the next power-on. RST_MODE is the third option
+  # byte and is deliberately NOT here - it decides whether a PIN is a reset, so it belongs
+  # to SYS where the conflict engine can see it. Modelling it twice would let the two
+  # disagree.
+  FLASH:
+    category: System Core
+    settings:
+      - name: Independent watchdog start (IWDG_SW)
+        choices:
+          - { name: "Started by software (IWDG_SW = 1, factory default)" }
+          - { name: "Started by hardware at power-on (IWDG_SW = 0)" }
+      - name: Reset on entering Standby (STANDBY_RST)
+        choices:
+          - { name: "No reset (STANDBY_RST = 1, factory default)" }
+          - { name: "System reset (STANDBY_RST = 0)" }
+      - name: Power-on start mode (START_MODE)
+        choices:
+          - { name: "Boot from BOOT area (START_MODE = 1, factory default)" }
+          - { name: "Boot from user area (START_MODE = 0)" }
+      - name: Read protection (RDPR)
+        choices:
+          - { name: "Unprotected (RDPR = 0xA5, factory default)" }
+          - { name: "Read-protected (any other value)" }
+    params:
+      - key: latency
+        name: Wait states
+        type: enum
+        group: Basic
+        default: 2 wait states
+        options:
+          - { name: 0 wait states, value: 0 }
+          - { name: 1 wait state,  value: 1 }
+          - { name: 2 wait states, value: 2 }
+        help: "FLASH_ACTLR LATENCY[1:0]. RM 18.3.1 recommends 0 up to 15 MHz, 1 above 15 up to 24, and 2 above 24 up to 48. Code 11 is reserved. Too few wait states at speed is a fetch that returns garbage, so the default here is the value that is safe at every SYSCLK this part offers."
+    notes: >
+      Wait states are the one setting on this part that has to follow the clock tree. The
+      app does not couple them yet: it neither recomputes LATENCY when SYSCLK changes nor
+      reddens a value that is too low for the selected clock. Until it does, the default
+      is the conservative one. WRPR0-WRPR3 (write protection, one bit per 2 sectors) and
+      Data0/Data1 (two user bytes) are the remaining option bytes and are not modelled -
+      they are per-project values rather than a configuration choice, and the format has
+      nothing to express "one bit per sector" with.
+
+  # RM 6.4. Which PIN each line watches is `exti:` at the top level, because AFIO_EXTICR
+  # picks one port per line and that is a pin question the conflict engine has to see.
+  # What is configurable here is what each line does once it has a pin: whether it fires,
+  # and on which edge (EXTI_RTENR / EXTI_FTENR, RM 6.4.3). No signals, so nothing here
+  # claims a pin - the pin arrives when a GPIO is set to an interrupt mode.
+  EXTI:
+    category: System Core
+    settings:
+      - name: EXTI line 0 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 1 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 2 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 3 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 4 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 5 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 6 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 7 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+    notes: >
+      All eight lines share one vector, EXTI7_0 (RM Table 6-1), so the NVIC tab shows a
+      single entry however many lines are on. Lines 8 and 9 are internal - PVD and the
+      auto-wake-up - and are configured on PWR, not here; they are listed in
+      `exti.internal` because they occupy lines but can never conflict over a pin.
+      Interrupt versus event (EXTI_INTENR versus EXTI_EVENR, RM 6.4.2) is not modelled:
+      an event wakes the core from WFE without running a handler, which is a code
+      decision rather than a pinout one.
 
   # ---------------- Analog ----------------
   ADC1:
@@ -1502,12 +1724,277 @@ dma:
     5: [USART1_RX, TIM2_CH1, TIM1_UP]
     6: [I2C1_TX, TIM1_CH3, USART2_TX]
     7: [I2C1_RX, TIM2_CH2, TIM2_CH4, USART2_RX]
+  # --- Configuration, RM 8.3.3 (DMA_CFGRx) -------------------------------------------
+  # A request is not just "which channel": it is a direction, a priority, two data widths
+  # and two increment flags, and all of them land in one register. The UI builds its DMA
+  # Settings tab from `channel_params`, which is deliberately the SAME schema as a
+  # peripheral's `params:` (key / name / type / default / options with `value`), so the
+  # Parameter Settings editors render it with no new UI code.
+  init_struct: DMA_InitTypeDef
+  register:
+    name: DMA_CFGRx
+    address: 0x40020008          # channel 1; RM 8.3.3 "offset 0x08 + (x-1)*20"
+    stride: 20
+    channel_macro: DMA1_Channel$CH
+    fields:
+      EN:      { lsb: 0,  bits: 1 }
+      TCIE:    { lsb: 1,  bits: 1 }
+      HTIE:    { lsb: 2,  bits: 1 }
+      TEIE:    { lsb: 3,  bits: 1 }
+      DIR:     { lsb: 4,  bits: 1 }
+      CIRC:    { lsb: 5,  bits: 1 }
+      PINC:    { lsb: 6,  bits: 1 }
+      MINC:    { lsb: 7,  bits: 1 }
+      PSIZE:   { lsb: 8,  bits: 2 }
+      MSIZE:   { lsb: 10, bits: 2 }
+      PL:      { lsb: 12, bits: 2 }
+      MEM2MEM: { lsb: 14, bits: 1 }
+
+  # Every field of DMA_InitTypeDef the user chooses. The addresses and the transfer count
+  # are not here on purpose: DMA_PeripheralBaseAddr, DMA_MemoryBaseAddr and
+  # DMA_BufferSize are the application's buffer, not a configuration choice, and CubeMX
+  # does not ask for them either. The generator emits them as named TODOs.
+  #
+  # `value` is the register encoding and comes from RM 8.3.3 - certain. `sdk` is the EVT
+  # SDK macro and follows the standard WCH/SPL spelling; no ch32v00x EVT copy exists in
+  # this repo to confirm it against (same open question as gpio_clock, HUMAN_TODO 5), so
+  # a generator that cannot find the macro should fall back to the register value, which
+  # is never in doubt.
+  channel_params:
+    - key: dir
+      name: Direction
+      type: enum
+      group: Basic
+      field: DIR
+      sdk_field: DMA_DIR
+      default: Peripheral to memory
+      options:
+        - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+        - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+      help: "DMA_CFGRx DIR, bit 4: 0 reads from the peripheral, 1 reads from memory. The SDK names it after what the PERIPHERAL is - PeripheralSRC is peripheral-to-memory."
+    - key: priority
+      name: Priority
+      type: enum
+      group: Basic
+      field: PL
+      sdk_field: DMA_Priority
+      default: Low
+      options:
+        - { name: Low,       value: 0, sdk: DMA_Priority_Low }
+        - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
+        - { name: High,      value: 2, sdk: DMA_Priority_High }
+        - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
+      help: "DMA_CFGRx PL[13:12]. Software priority; ties are broken by channel number, lowest wins (RM 8.2)."
+    - key: mode
+      name: Mode
+      type: enum
+      group: Basic
+      field: CIRC
+      sdk_field: DMA_Mode
+      default: Normal
+      options:
+        - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
+        - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
+      help: "DMA_CFGRx CIRC, bit 5. Circular reloads the transfer count and runs forever - what a continuously sampling ADC or a repeating PWM pattern wants. RM 8.2.4: circular mode is NOT available in memory-to-memory mode."
+    - key: pinc
+      name: Increment peripheral address
+      type: bool
+      group: Basic
+      field: PINC
+      sdk_field: DMA_PeripheralInc
+      default: false
+      sdk_enabled: DMA_PeripheralInc_Enable
+      sdk_disabled: DMA_PeripheralInc_Disable
+      help: "DMA_CFGRx PINC, bit 6. Off for a normal peripheral: its data register is one fixed address."
+    - key: minc
+      name: Increment memory address
+      type: bool
+      group: Basic
+      field: MINC
+      sdk_field: DMA_MemoryInc
+      default: true
+      sdk_enabled: DMA_MemoryInc_Enable
+      sdk_disabled: DMA_MemoryInc_Disable
+      help: "DMA_CFGRx MINC, bit 7. On for a buffer - off would rewrite one variable over and over."
+    - key: psize
+      name: Peripheral data width
+      type: enum
+      group: Basic
+      field: PSIZE
+      sdk_field: DMA_PeripheralDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
+      help: "DMA_CFGRx PSIZE[9:8]: 00 8-bit, 01 16-bit, 10 32-bit. 11 is reserved, which is why there are three options and not four. Match the peripheral's own register width."
+    - key: msize
+      name: Memory data width
+      type: enum
+      group: Basic
+      field: MSIZE
+      sdk_field: DMA_MemoryDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
+      help: "DMA_CFGRx MSIZE[11:10], same encoding as PSIZE. Widths may differ from the peripheral's; the DMA packs or unpacks between them."
+    - key: m2m
+      name: Memory to memory
+      type: bool
+      group: Advanced
+      field: MEM2MEM
+      sdk_field: DMA_M2M
+      default: false
+      sdk_enabled: DMA_M2M_Enable
+      sdk_disabled: DMA_M2M_Disable
+      help: "DMA_CFGRx MEM2MEM, bit 14. A hardware peripheral request must leave this off: the channel would ignore the request line and run from a software trigger instead."
+
+  # Interrupt-enable bits in the same register. They are not user parameters - the app
+  # turns them on when the matching NVIC vector is enabled - but codegen needs the names.
+  interrupt_fields: { transfer_complete: TCIE, half_transfer: HTIE, transfer_error: TEIE }
+
+  # Per-request starting values, applied when the user adds a request. Only the fields
+  # that differ from the `default` above are listed; everything else takes the default.
+  # These are the values the hardware actually needs, not preferences - a USART data
+  # register is 8 bits wide, so a 16-bit transfer to it is a bug, not a choice.
+  request_defaults:
+    ADC1:       { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+    USART1_TX:  { dir: Memory to peripheral }
+    USART1_RX:  { dir: Peripheral to memory }
+    USART2_TX:  { dir: Memory to peripheral }
+    USART2_RX:  { dir: Peripheral to memory }
+    SPI1_TX:    { dir: Memory to peripheral }
+    SPI1_RX:    { dir: Peripheral to memory }
+    I2C1_TX:    { dir: Memory to peripheral }
+    I2C1_RX:    { dir: Peripheral to memory }
+    TIM1_UP:    { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_TRIG:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_COM:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH1:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH2:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH3:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_UP:    { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH1:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH2:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH3:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH3:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+  request_notes:
+    ADC1: >
+      ADC_RDATAR is 12-bit data in a 16-bit field, so both widths are half-word; a byte
+      transfer would silently truncate every sample. Circular is the default because a
+      one-shot ADC rarely needs DMA at all - the reason to wire it up is continuous
+      conversion into a buffer.
+    TIM: >
+      The timer registers this can target (CCRx, ARR, CNT) are 16-bit, hence half-word on
+      both sides. Direction is the interesting one: memory-to-peripheral is the common
+      case (feeding compare values for PWM), but the SAME request serves input capture,
+      which reads CCRx and therefore runs peripheral-to-memory. The default is the
+      common case and the user changes it; nothing in the data can decide it, because
+      TIMx_CHy names an event, not a direction.
+    USART: >
+      USART_DATAR is 8 significant bits in the default 8-bit word length, so byte/byte.
+      A 9-bit word length makes the register half-word; the app does not couple the two
+      automatically, because the buffer layout is the application's call.
+    SPI1: >
+      Byte/byte matches SPI1's default 8-bit data size. If the `datasize` parameter is
+      set to 16 bits, both widths should be half-word - this is the one place where a
+      peripheral parameter and a DMA parameter have to agree, and today nothing enforces
+      it. Worth a warning in the engine rather than a silent mismatch.
+
   notes: >
     RM Table 8-2 note (2): on CH32V006 the TIM3 CH3 event can trigger only DMA channel 1
     and the TIM3 CH4 event only channel 4. The wider TIM3 fan-out in the table
     (channels 1-3 and 4-6) applies to CH32M007, not to this part.
     TIM1_TRIG, TIM1_COM and TIM1_CH4 share channel 4 as one hardware request line.
 
+
+# -----------------------------------------------------------------------------
+# Interrupts - RM Table 6-1 (the CH32V00X vector table) and RM 6.5.2.21
+# (PFIC_IPRIORx). Every vector the part owns, grouped by the peripheral that owns
+# it, so each peripheral's NVIC Settings tab lists only its own and the NVIC panel
+# in System Core can list them all.
+#
+# THE PRIORITY SCHEME IS NOT THE CORTEX-M ONE. Anyone arriving from STM32CubeMX
+# expects 4 priority bits and a configurable group split. The PFIC has TWO usable
+# bits: PFIC_IPRIORx gives each interrupt a byte, but only [7:6] are implemented and
+# [5:0] are "reserved, fixed to 0, write invalid" (RM 6.5.2.21). Maximum nesting
+# depth is 2 (RM 6.1.1), and the register description spells out what the two bits
+# mean in each case:
+#   nesting off -> both bits are plain priority, 4 levels, nothing preempts
+#   nesting on  -> bit 7 is the preemption level (2), bit 6 the sub-priority (2)
+# So "preemption priority 0-1, sub priority 0-1" is the whole range. A UI offering
+# 0-15 would be offering settings the silicon discards.
+nvic:
+  controller: PFIC
+  scheme:
+    register: { name: PFIC_IPRIORx, address: 0xE000E400, bits_per_vector: 8 }
+    priority_bits: 2                  # [7:6]; [5:0] are reserved and write-invalid
+    priority_lsb: 6
+    max_nesting: 2                    # RM 6.1.1
+    groups:
+      - name: 2 levels of nesting (1 preemption bit, 1 sub-priority bit)
+        default: true
+        preempt: { bits: 1, lsb: 7, min: 0, max: 1 }
+        sub:     { bits: 1, lsb: 6, min: 0, max: 1 }
+      - name: No nesting (2 priority bits, no preemption)
+        preempt: { bits: 0, min: 0, max: 0 }
+        sub:     { bits: 2, lsb: 6, min: 0, max: 3 }
+    enable:  { register: PFIC_IENR1, address: 0xE000E100, note: "one bit per vector number; IENR2 covers 32-40" }
+    disable: { register: PFIC_IRER1, address: 0xE000E180 }
+    notes: >
+      Where the nesting depth itself is configured is NOT in this reference manual.
+      PFIC_CFGR (RM 6.5.2.6) is only KEYCODE and RSTSYS, and no other PFIC register
+      carries it; on this core it is a CSR of the QingKe V2 core, documented in the
+      core manual rather than here. The two groups above are therefore offered as a
+      choice with the meaning of the bits spelled out, and no register write is
+      claimed for the switch itself. Do not invent one.
+  vectors:
+    # `vector` is the No. column of RM Table 6-1 - the index into the vector table,
+    # which is also what the SDK's IRQn enum uses. `irqn` follows the usual WCH EVT
+    # spelling; like the DMA macros it is convention, not something this repo can
+    # confirm against a ch32v00x SDK copy (HUMAN_TODO 5).
+    - { name: NMI,        vector: 2,  irqn: NMI_Handler,          system: true,  fixed: true,  description: Non-maskable interrupt }
+    - { name: HardFault,  vector: 3,  irqn: HardFault_Handler,    system: true,  fixed: true,  description: Abnormal interrupt (exception) }
+    - { name: SysTick,    vector: 12, irqn: SysTick_IRQn,         system: true,  description: System timer interrupt }
+    - { name: SW,         vector: 14, irqn: Software_IRQn,        system: true,  description: Software interrupt }
+    - { name: WWDG,       vector: 16, irqn: WWDG_IRQn,            peripheral: WWDG,   description: Window watchdog timer interrupt }
+    - { name: PVD,        vector: 17, irqn: PVD_IRQn,             peripheral: PWR,    description: Supply voltage detection interrupt (through EXTI line 8) }
+    - { name: FLASH,      vector: 18, irqn: FLASH_IRQn,           peripheral: FLASH,  description: Flash global interrupt }
+    - { name: RCC,        vector: 19, irqn: RCC_IRQn,             peripheral: RCC,    description: Reset and clock control interrupt }
+    - { name: EXTI7_0,    vector: 20, irqn: EXTI7_0_IRQn,         peripheral: EXTI,   description: EXTI line 0-7 interrupt (one vector for all eight lines) }
+    - { name: AWU,        vector: 21, irqn: AWU_IRQn,             peripheral: PWR,    description: Automatic wake-up interrupt (through EXTI line 9) }
+    - { name: DMA1_CH1,   vector: 22, irqn: DMA1_Channel1_IRQn,   peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
+    - { name: DMA1_CH2,   vector: 23, irqn: DMA1_Channel2_IRQn,   peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
+    - { name: DMA1_CH3,   vector: 24, irqn: DMA1_Channel3_IRQn,   peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
+    - { name: DMA1_CH4,   vector: 25, irqn: DMA1_Channel4_IRQn,   peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
+    - { name: DMA1_CH5,   vector: 26, irqn: DMA1_Channel5_IRQn,   peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
+    - { name: DMA1_CH6,   vector: 27, irqn: DMA1_Channel6_IRQn,   peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
+    - { name: DMA1_CH7,   vector: 28, irqn: DMA1_Channel7_IRQn,   peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
+    - { name: ADC,        vector: 29, irqn: ADC1_IRQn,            peripheral: ADC1,   description: ADC global interrupt }
+    - { name: I2C1_EV,    vector: 30, irqn: I2C1_EV_IRQn,         peripheral: I2C1,   description: I2C1 event interrupt }
+    - { name: I2C1_ER,    vector: 31, irqn: I2C1_ER_IRQn,         peripheral: I2C1,   description: I2C1 error interrupt }
+    - { name: USART1,     vector: 32, irqn: USART1_IRQn,          peripheral: USART1, description: USART1 global interrupt }
+    - { name: SPI1,       vector: 33, irqn: SPI1_IRQn,            peripheral: SPI1,   description: SPI1 global interrupt }
+    - { name: TIM1BRK,    vector: 34, irqn: TIM1_BRK_IRQn,        peripheral: TIM1,   description: TIM1 break interrupt }
+    - { name: TIM1UP,     vector: 35, irqn: TIM1_UP_IRQn,         peripheral: TIM1,   description: TIM1 update interrupt }
+    - { name: TIM1TRG,    vector: 36, irqn: TIM1_TRG_COM_IRQn,    peripheral: TIM1,   description: TIM1 trigger and commutation interrupt }
+    - { name: TIM1CC,     vector: 37, irqn: TIM1_CC_IRQn,         peripheral: TIM1,   description: TIM1 capture/compare interrupt }
+    - { name: TIM2,       vector: 38, irqn: TIM2_IRQn,            peripheral: TIM2,   description: TIM2 global interrupt }
+    - { name: USART2,     vector: 39, irqn: USART2_IRQn,          peripheral: USART2, description: USART2 global interrupt }
+    - { name: OPCM,       vector: 40, irqn: OPCM_IRQn,            peripheral: OPA1,   description: Operational amplifier and comparator global interrupt }
+  notes: >
+    RM Table 6-1 ends at vector 40 and lists NO TIM3 interrupt, while CH32V006 does
+    have TIM3 (RM Table 8-2 note 2 describes its DMA requests on this very part).
+    Either the table is written for the base family and V006 adds a vector the
+    manual does not print, or TIM3 on this part is usable only through DMA and
+    polling. The table is the only statement available, so no TIM3 vector is
+    invented here; see CH32V006.notes.md. If a WCH SDK header for ch32v00x turns up,
+    this is the first thing to check.
 
 # -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.
@@ -1561,6 +2048,16 @@ codegen:
     register: "RCC->CFGR0"
     sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }   # SW[1:0]
     pllsrc: { lsb: 16, bits: 1, values: { HSI: 0, HSE: 1 } }              # PLLSRC
+    # MCO[2:0] — RM 3.4.2. The field is not a dense enum: 0xx all mean "no clock output",
+    # so Disable encodes as 0 and the four real sources start at 100b. Keys are the choice
+    # names of peripherals.RCC "Master Clock Output (MCO)", so a rename there has to be
+    # made here too — validate_mcu.py checks that they still line up.
+    mco:
+      peripheral: RCC
+      setting: Master Clock Output (MCO)
+      lsb: 24
+      bits: 3
+      values: { Disable: 0, SYSCLK: 4, HSI: 5, HSE: 6, PLLCLK: 7 }
     prescalers:
       # HPRE[3:0]. The RM gives two encodings for /2, /4 and /8; these are the ones from
       # the 0000..0111 run, which covers every divider the clock tree offers below 16.
@@ -1585,6 +2082,30 @@ codegen:
              values: { 2: 0, 4: 4, 6: 16, 8: 12, 12: 20, 16: 28,
                        24: 21, 32: 29, 48: 22, 64: 30, 96: 23, 128: 31 } }
 
+  # RCC_CTLR — RM 3.4.1, offset 0x00, reset 0x0050XX83. The oscillator ENABLES live here,
+  # not in CFGR0, so selecting HSE takes two registers: SW/PLLSRC in CFGR0 and HSEON here.
+  # `hse_choices` is keyed by the choice names of peripherals.RCC "High Speed Clock (HSE)".
+  # Write order matters: RM 3.4.1 bit 18 says HSEBYP may only be written while HSEON is 0,
+  # so a generator clears HSEON, writes HSEBYP, then sets HSEON and polls HSERDY.
+  ctlr:
+    register: "RCC->CTLR"
+    fields:
+      HSION:  { lsb: 0,  bits: 1 }
+      HSIRDY: { lsb: 1,  bits: 1, access: ro }
+      HSEON:  { lsb: 16, bits: 1 }
+      HSERDY: { lsb: 17, bits: 1, access: ro }
+      HSEBYP: { lsb: 18, bits: 1 }
+      CSSON:  { lsb: 19, bits: 1 }
+      PLLON:  { lsb: 24, bits: 1 }
+      PLLRDY: { lsb: 25, bits: 1, access: ro }
+    hse_choices:
+      Disable:                     { HSEON: 0, HSEBYP: 0 }
+      BYPASS clock source:         { HSEON: 1, HSEBYP: 1 }
+      Crystal / ceramic resonator: { HSEON: 1, HSEBYP: 0 }
+    # PLLON is not a user setting: it follows from the clock tree. Set it whenever PLLCLK
+    # feeds SYSCLK or the MCO, and poll PLLRDY before switching SW to 10b.
+    pll_follows_tree: true
+
   # Not consumed by the generator yet — data first, so it is ready when it is.
   # Which enable register each peripheral's clock bit lives in (RM 3.4.6 / 3.4.7 / 3.4.8).
   # This is NOT a frequency split: there is only one prescaler (HPRE), so HB, PB1 and PB2
@@ -1607,7 +2128,12 @@ codegen:
 clock:
   sources:
     HSI: { mhz: 24, fixed: true }
-    HSE: { mhz: 24, min_mhz: 3, max_mhz: 25 }
+    # DS Table 3-9 (from an external high-speed clock) and Table 3-10 (crystal / ceramic
+    # resonator) both give 3 / 24 / 32 MHz as min / typ / max, so the ceiling is 32.
+    # This said 25 before round 2 and that number is in neither table: 25 MHz appears
+    # only in Table 3-10 note 1, an ESR recommendation for a 25 MHz crystal, not a limit.
+    # Nothing is loosened by the fix - sysclk.max_mhz still reddens HSE x2 above 24.
+    HSE: { mhz: 24, min_mhz: 3, max_mhz: 32 }
     LSI: { khz: 128, fixed: true }
   pll:
     inputs:
@@ -1617,6 +2143,16 @@ clock:
   sysclk:
     sources: [HSI, HSE, PLLCLK]
     max_mhz: 48
+
+  # Picking HSE anywhere in the clock tree must switch the RCC crystal on and let it claim
+  # its pins, the way CubeMX does (round-2 P0). These three keys name the setting that
+  # represents "HSE is wired up" and the signals its crystal choice claims, so the engine
+  # never hardcodes XI/XO - the dummy part calls the same two pins OSC_IN/OSC_OUT.
+  # The engine must never do the reverse: switching SYSCLK away from HSE leaves RCC alone.
+  hse_peripheral: RCC                    # -> peripherals.RCC
+  hse_setting: High Speed Clock (HSE)    # -> that peripheral's settings[] entry, by name
+  hse_signals: [XI, XO]                  # the crystal choice claims both; BYPASS claims XI only
+
   prescalers:
     HB:  { options: [1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64, 128, 256], max_mhz: 48, label: HB prescaler (HPRE) → HCLK }
     ADC: { options: [1, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128], source: HB, min_mhz: 16, max_mhz: 48,
@@ -2704,6 +3240,14 @@ clock:
   sysclk:
     sources: [HSI, HSE, PLLCLK]
     max_mhz: 144
+
+  # Same HSE coupling as the real parts (see data/FORMAT.md). This fixture deliberately
+  # names its crystal pins OSC_IN / OSC_OUT rather than XI / XO, so an engine that
+  # hardcoded the CH32V006 spelling would pass on V006 and silently fail here.
+  hse_peripheral: RCC
+  hse_setting: High Speed Clock (HSE)
+  hse_signals: [OSC_IN, OSC_OUT]
+
   prescalers:
     AHB:  { options: [1, 2, 4, 8, 16, 64, 128, 256, 512], max_mhz: 144 }
     APB1: { options: [1, 2, 4, 8, 16], max_mhz: 72 }
@@ -3335,9 +3879,74 @@ function defaultClock(c) {
 // The root prescaler (the one with no `source:`) — AHB on F1-style parts, HB on V00x.
 const firstPre = c => Object.keys(c.prescalers || {}).find(n => !(c.prescalers[n].source));
 
-// Every frequency in MHz, plus `over`: the names that are out of specification.
+/**
+ * Which node ids carry a clock right now. Ids match what the UI draws:
+ * HSI/HSE/LSI/LSE, PLL, SYSCLK, `pre:<name>`, `drv:<name>`. "Not feeding" is a
+ * DISPLAY fact (dashed and dimmed) — it never means the user may not pick it.
+ */
+function feedingSet(c, k) {
+  const on = new Set(['SYSCLK']);
+  const pllSrc = c.pll ? (c.pll.inputs[k.pllIn] || {}).source : null;
+  // a prescaler tapped straight off the PLL (USB on the dummy part) keeps the
+  // PLL running even when SYSCLK comes from somewhere else
+  if (Object.values(c.prescalers || {}).some(v => v.source === 'PLLCLK')) on.add('PLL');
+  if (k.sys === 'PLLCLK') on.add('PLL'); else on.add(k.sys);
+  if (on.has('PLL') && pllSrc) on.add(pllSrc);
+  const fp = firstPre(c);
+  if (fp) on.add('pre:' + fp);
+  for (const [name, v] of Object.entries(c.prescalers || {})) {
+    if (name === fp) continue;
+    const base = v.source === 'PLLCLK' ? 'PLL'
+      : (v.source && v.source !== fp && c.prescalers[v.source]) ? 'pre:' + v.source
+      : (fp ? 'pre:' + fp : 'SYSCLK');
+    if (on.has(base)) on.add('pre:' + name);
+  }
+  for (const d of c.derived || []) if (!fp || on.has('pre:' + fp)) on.add('drv:' + d.name);
+  return on;
+}
+
+/**
+ * Every choice the DATA allows, for every mux and prescaler — never filtered by
+ * the current state. The UI binds its <select>s straight to this, so a source is
+ * missing from the list only when the MCU file says the part cannot do it.
+ */
+function clockSelectable(m = M) {
+  const c = m.clock;
+  if (!c) return { sys: [], pllIn: [], pllMul: [], pre: {} };
+  return {
+    sys: [...c.sysclk.sources],
+    pllIn: (c.pll ? c.pll.inputs : []).map((i, index) =>
+      ({ index, name: i.name, source: i.source, div: i.div || 1 })),
+    pllMul: c.pll ? [...c.pll.multipliers] : [],
+    pre: Object.fromEntries(Object.entries(c.prescalers || {}).map(([n, v]) => [n, [...v.options]])),
+  };
+}
+
+// Does HSE reach SYSCLK, directly or through the PLL? The RCC coupling hangs off
+// this: CubeMX switches the crystal on the moment the mux points at it.
+function hseFeedsSysclk(m = M, s = S) {
+  const c = m.clock, k = s.clock;
+  if (!c || !k) return false;
+  if (k.sys === 'HSE') return true;
+  if (k.sys === 'PLLCLK' && c.pll) {
+    const inp = c.pll.inputs[k.pllIn];
+    return !!inp && inp.source === 'HSE';
+  }
+  return false;
+}
+
+/**
+ * Every frequency in MHz. Back-compatible keys (SYSCLK, HCLK, PLLCLK, pllIn,
+ * every prescaler output, every derived tap, `over`) plus the round-2 shape the
+ * clock UI binds to: `sources`, `pll`, `sysclk`, `hclk`, `feeding`, `under`,
+ * `selectable`.
+ *
+ * NOTE for MCU files: prescaler and derived-tap names share this object with the
+ * keys above, so a prescaler may not be called `sources`, `pll`, `feeding`,
+ * `over`, `under`, `selectable`, `sysclk` or `hclk`.
+ */
 function clockCalc(m = M, s = S) {
-  const c = m.clock, k = s.clock, out = { over: [] };
+  const c = m.clock, k = s.clock, out = { over: [], under: [] };
   const src = {
     HSI: c.sources.HSI ? c.sources.HSI.mhz : 0,
     HSE: k.hse,
@@ -3361,11 +3970,49 @@ function clockCalc(m = M, s = S) {
       : out.HCLK;
     out[name] = base / k.pre[name];
     if (v.max_mhz && out[name] > v.max_mhz) out.over.push(name);
-    if (v.min_mhz && out[name] < v.min_mhz) out.over.push(name);
-    if (v.target_mhz && Math.abs(out[name] - v.target_mhz) > 0.01) out.over.push(name);
+    if (v.min_mhz && out[name] < v.min_mhz) { out.over.push(name); out.under.push(name); }
+    if (v.target_mhz && Math.abs(out[name] - v.target_mhz) > 0.01) {
+      out.over.push(name);
+      if (out[name] < v.target_mhz) out.under.push(name);
+    }
   }
   for (const d of c.derived || []) out[d.name] = out.HCLK / d.div;
-  if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) out.over.push('HSE');
+  if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) {
+    out.over.push('HSE');
+    if (k.hse < c.sources.HSE.min_mhz) out.under.push('HSE');
+  }
+
+  // ---- the shape the clock UI binds to -------------------------------------
+  // `over` stays the full "out of specification" list (too fast, too slow, off
+  // target) so every red box keeps its meaning; `under` is the subset that is
+  // too SLOW, for a UI that wants to word the two cases differently.
+  const on = feedingSet(c, k);
+  out.feeding = { SYSCLK: true };
+  for (const id of Object.keys(c.sources)) out.feeding[id] = on.has(id);
+  if (c.pll) out.feeding.PLL = on.has('PLL');
+  for (const name of Object.keys(p)) out.feeding['pre:' + name] = on.has('pre:' + name);
+  for (const d of c.derived || []) out.feeding['drv:' + d.name] = on.has('drv:' + d.name);
+
+  out.sources = {};
+  for (const [name, d] of Object.entries(c.sources)) {
+    out.sources[name] = {
+      mhz: src[name],
+      feeding: on.has(name),
+      fixed: !!d.fixed,
+      editable: !d.fixed && d.khz === undefined,
+      min_mhz: d.min_mhz, max_mhz: d.max_mhz,
+      over: out.over.includes(name),
+    };
+  }
+  const inp = c.pll ? c.pll.inputs[k.pllIn] : null;
+  out.pll = c.pll ? {
+    in: out.pllIn, out: out.PLLCLK, mul: k.pllMul || 1,
+    index: k.pllIn, source: inp ? inp.source : null, name: inp ? inp.name : null,
+    feeding: on.has('PLL'),
+  } : null;
+  out.sysclk = out.SYSCLK;
+  out.hclk = out.HCLK;
+  out.selectable = clockSelectable(m);
   return out;
 }
 
@@ -3578,6 +4225,7 @@ function resourceState() {
 
 
 
+
 let E = null;
 
 function compute() {
@@ -3757,12 +4405,88 @@ function setGpioField(pin, key, value) {
 const userLabel = pin => ((S.gpio[pin] || {}).label || '').trim();
 const pinModified = pin => !!(E && E.pins[canon(pin)]) || !!userLabel(pin);
 
-// Clock tab: { sys, hse, pllIn, pllMul, pre: { HB: 2 } } — partial, merged in.
+/**
+ * The RCC setting that switches the external crystal on, read from the data:
+ * `clock.hse_peripheral` / `clock.hse_setting` / `clock.hse_signals`. A file
+ * that carries none of them still works — the peripheral called RCC, and the
+ * setting whose choices claim the crystal pins (or whose name says HSE).
+ * Nothing here knows that those pins are usually called XI and XO: the dummy
+ * part names them OSC_IN/OSC_OUT on purpose.
+ * Returns { pid, setting, crystal, neutral, signals } or null.
+ */
+function hseSetting(m = M) {
+  const c = m.clock || {};
+  const pid = c.hse_peripheral || 'RCC';
+  const P = (m.peripherals || {})[pid];
+  if (!P || !P.settings) return null;
+  const want = c.hse_signals || ['XI', 'XO'];
+  const carries = ch => want.every(sig => (ch.signals || []).includes(sig));
+  const s = (c.hse_setting && P.settings.find(x => x.name === c.hse_setting))
+    || P.settings.find(x => x.choices.some(carries))
+    || P.settings.find(x => /\bHSE\b/i.test(x.name));
+  if (!s) return null;
+  // the crystal choice claims every HSE signal; BYPASS claims only the input
+  const crystal = s.choices.find(carries);
+  if (!crystal) return null;
+  return { pid, setting: s.name, crystal: crystal.name, neutral: neutralChoice(s).name, signals: want };
+}
+
+/**
+ * Clock tab: { sys, hse, pllIn, pllMul, pre: { HB: 2 } } — partial, merged in.
+ *
+ * Every source the MCU file lists is always accepted: the muxes are never
+ * gated on RCC state, which is the whole point of the round-2 P0. Picking HSE
+ * (directly, or as the PLL input feeding SYSCLK) turns the crystal on in RCC
+ * the way CubeMX does, as ONE undo step with the clock change. Switching back
+ * to HSI deliberately leaves the crystal on — that is the user's setting now.
+ *
+ * Returns what else changed, for the toast: { hse: { pid, setting, choice, pins } } or {}.
+ */
 function setClock(patch) {
-  record('Clock');
+  if (!M.clock) throw new Error('this MCU file has no clock: block');
+  const c = M.clock;
+  const bad = (k, v, allowed) =>
+    new Error(`setClock: ${k} "${v}" is not offered by ${M.mcu.name} (has ${allowed.join(', ')})`);
   for (const [k, v] of Object.entries(patch)) {
-    if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+    if (k === 'sys') {
+      if (!c.sysclk.sources.includes(v)) throw bad('sys', v, c.sysclk.sources);
+    } else if (k === 'pllIn') {
+      const inputs = (c.pll || {}).inputs || [];
+      if (!inputs[v]) throw bad('pllIn', v, inputs.map((i, n) => `${n}=${i.name}`));
+    } else if (k === 'pllMul') {
+      const muls = (c.pll || {}).multipliers || [];
+      if (!muls.some(m => String(m) === String(v))) throw bad('pllMul', v, muls.map(String));
+    } else if (k === 'hse') {
+      // out of the datasheet range is ALLOWED and shows red — only nonsense is refused
+      if (!Number.isFinite(v) || v <= 0) throw new Error(`setClock: hse must be a positive number, got ${v}`);
+    } else if (k === 'pre') {
+      for (const [name, val] of Object.entries(v)) {
+        const pre = (c.prescalers || {})[name];
+        if (!pre) throw bad('prescaler', name, Object.keys(c.prescalers || {}));
+        if (!pre.options.some(o => String(o) === String(val))) throw bad(`pre.${name}`, val, pre.options.map(String));
+      }
+    } else {
+      throw new Error(`setClock: unknown field "${k}"`);
+    }
   }
+
+  const changed = {};
+  batch('Clock', () => {
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+    }
+    if (!hseFeedsSysclk()) return;
+    const h = hseSetting();
+    if (!h || S.periph[h.pid].settings[h.setting] !== h.neutral) return;   // already the user's choice: leave it
+    setSetting(h.pid, h.setting, h.crystal);
+    const r = (M.peripherals[h.pid].remaps || [])[S.periph[h.pid].remap] || { pins: {} };
+    changed.hse = {
+      pid: h.pid, setting: h.setting, choice: h.crystal,
+      pins: h.signals.map(sig => r.pins[sig]).filter(Boolean),
+      signals: h.signals,
+    };
+  });
+  return changed;
 }
 
 // selectPeripheral() stays in the UI: it re-renders, and the engine never touches
@@ -4541,6 +5265,33 @@ let LABEL = 190;                 // room outside the chip for signal labels - gr
 let geom = null;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const attr = s => esc(s).replace(/"/g, '&quot;');
+
+// ---- fitting text into an SVG box -------------------------------------------
+// SVG text neither wraps nor ellipsises itself, so anything drawn inside a shape is
+// measured once it is in the document and brought inside the box in three steps:
+// shrink (never past MIN_FS - text too small to read is not an improvement on text
+// that is abbreviated), then swap in the caller's short form, then truncate with an
+// ellipsis. Every one of these elements carries the full string in a <title> or an
+// aria-label, so shortening never loses information.
+const MIN_FS = 7.5;
+function fitSvgText(el, maxLen, alt) {
+  if (!el || !(maxLen > 0) || typeof el.getComputedTextLength !== 'function') return;
+  const len = () => { try { return el.getComputedTextLength(); } catch (e) { return 0; } };
+  if (len() <= maxLen) return;
+  // Read the COMPUTED size and write an inline style, never the font-size attribute: a
+  // presentation attribute loses to any stylesheet rule, and `.pin text{font-size:9.5px}`
+  // is exactly such a rule — it silently defeated the per-pin sizing that was here before.
+  let fs = parseFloat(getComputedStyle(el).fontSize) || parseFloat(el.getAttribute('font-size')) || 10;
+  while (fs > MIN_FS && len() > maxLen) { fs = Math.max(MIN_FS, fs - 0.25); el.style.fontSize = fs + 'px'; }
+  if (len() <= maxLen) return;
+  if (alt && alt !== el.textContent) { el.textContent = alt; if (len() <= maxLen) return; }
+  let s = el.textContent;
+  while (s.length > 1 && len() > maxLen) { s = s.slice(0, -1); el.textContent = s + '…'; }
+}
+/** Fit every `data-fitw` text in a freshly written SVG. */
+function fitSvgTexts(root) {
+  root.querySelectorAll('text[data-fitw]').forEach(t => fitSvgText(t, +t.dataset.fitw, t.dataset.alt));
+}
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
 const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false,
             cview: 'pinout', rot: 0, flip: false, hits: [], pick: -1 };
@@ -4622,11 +5373,35 @@ function renderChip() {
   if (geom.pk.epad || epad) {
     const ex = b.x + b.w * .3, ey = b.y + b.h * .3, ew = b.w * .4, eh = b.h * .4;
     g.push(`<rect x="${ex}" y="${ey}" width="${ew}" height="${eh}" fill="var(--chip-dk)" rx="3"/>`);
-    if (epad) g.push(`<text x="${ex + ew / 2}" y="${ey + eh - 6}" text-anchor="middle" font-size="9" fill="var(--chip-sub)" font-family="var(--font)">pad: ${esc(epad.join('/'))}</text>`);
   }
   g.push(`<circle cx="${b.x + 14}" cy="${b.y + 14}" r="4.5" fill="var(--chip-dot)"/>`);
-  g.push(`<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 - 4}" text-anchor="middle" font-size="${Math.min(24, b.w / 9)}" font-weight="700" fill="var(--chip-text)" font-family="var(--font)">${esc(M.mcu.name)}</text>`);
-  g.push(`<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 + 22}" text-anchor="middle" font-size="${Math.min(20, b.w / 11)}" font-style="italic" font-weight="600" fill="var(--chip-text)" font-family="var(--font)">${esc(S.pkg)}</text>`);
+  // The part name, the package and the exposed-pad caption are ONE centred stack with
+  // real line heights, not three texts at fixed offsets. At fixed offsets "pad: VSS"
+  // landed on top of the package name on QFN12 and QFN20, and a long part name ran off
+  // the chip body on every narrow package. Each line is fitted to the body width after
+  // insertion (data-fitw below), so nothing can leave the rectangle either.
+  {
+    // Every size is floored at MIN_FS: the fitting pass only ever shrinks, so a size
+    // that starts below the floor stays there. On QFN12 the pad caption was 5.9 px.
+    const size = (cap, div) => Math.max(MIN_FS, Math.min(cap, b.w / div));
+    const lines = [
+      { t: M.mcu.name, fs: size(24, 9), w: 700, style: '' },
+      { t: S.pkg, fs: size(20, 11), w: 600, style: ' font-style="italic"' },
+    ];
+    if (epad) lines.push({ t: `pad: ${epad.join('/')}`, fs: size(11, 20), w: 400, style: '', fill: 'var(--chip-sub)' });
+    const LEAD = 1.25;
+    const total = lines.reduce((a, l) => a + l.fs * LEAD, 0);
+    let y = b.y + b.h / 2 - total / 2;
+    for (const l of lines) {
+      y += l.fs * LEAD;
+      // The <title> is a sibling, never a child of <text>: a title inside <text> would
+      // land in its textContent and the truncation step would abbreviate the wrong string.
+      g.push(`<g><title>${esc(l.t)}</title>`
+        + `<text x="${b.x + b.w / 2}" y="${y - l.fs * .3}" text-anchor="middle" style="font-size:${l.fs}px"`
+        + ` font-weight="${l.w}"${l.style} fill="${l.fill || 'var(--chip-text)'}" font-family="var(--font)"`
+        + ` data-fitw="${Math.max(10, b.w - 16)}">${esc(l.t)}</text></g>`);
+    }
+  }
   const vert = p => p.side === 1 || p.side === 3;
   for (const p of geom.pins) {
     const grp = names[p.num]; if (!grp) continue;
@@ -4647,9 +5422,14 @@ function renderChip() {
     g.push(`<g class="${cls}" data-pin="${esc(name)}" data-num="${p.num}" role="${t === 'io' ? 'button' : 'img'}" aria-label="${attr(tip)}"><title>${esc(tip)}</title>`);
     g.push(`<rect x="${p.x}" y="${p.y}" width="${w}" height="${h}" rx="2"/>`);
     const cx = p.x + w / 2, cy = p.y + h / 2;
-    const fs = shown.length > 4 ? ` font-size="${Math.max(6, 9.5 - (shown.length - 4) * 0.9)}"` : '';
-    if (vert(p)) g.push(`<text transform="translate(${cx + 3.5},${cy}) rotate(-90)" text-anchor="middle"${fs}>${esc(shown)}</text>`);
-    else g.push(`<text x="${cx}" y="${cy + 3.5}" text-anchor="middle"${fs}>${esc(shown)}</text>`);
+    // Never below MIN_FS here: a name shrunk to 6 px is not readable, so the fitting
+    // pass abbreviates ("PD7/PA4" -> "PD7+") instead of shrinking further. The full
+    // pair stays in the <title> above and in the picker.
+    const fs = shown.length > 4 ? ` style="font-size:${Math.max(MIN_FS, 9.5 - (shown.length - 4) * 0.9)}px"` : '';
+    // the text runs along the pin's long axis, which rotation may have swapped
+    const fit = ` data-fitw="${Math.max(8, (vert(p) ? h : w) - 4)}" data-alt="${attr(grp.length > 1 ? grp[0] + '+' : grp[0])}"`;
+    if (vert(p)) g.push(`<text transform="translate(${cx + 3.5},${cy}) rotate(-90)" text-anchor="middle"${fs}${fit}>${esc(shown)}</text>`);
+    else g.push(`<text x="${cx}" y="${cy + 3.5}" text-anchor="middle"${fs}${fit}>${esc(shown)}</text>`);
     // pin number just outside
     const numPos = p.side === 0 ? [p.x - 8, cy + 3, 'end'] : p.side === 2 ? [p.x + w + 8, cy + 3, 'start'] : null;
     if (numPos) g.push(`<text class="pinnum" x="${numPos[0]}" y="${numPos[1]}" text-anchor="${numPos[2]}">${p.num}</text>`);
@@ -4671,6 +5451,7 @@ function renderChip() {
   }
   g.push('</g>');
   svg.innerHTML = g.join('');
+  fitSvgTexts(svg);
   // unused GPIO counter
   const io = Object.entries(names).filter(([n, g]) => n !== '0' && pinType(g[0]) === 'io').map(([, g]) => g[0]);
   const used = io.filter(n => E.pins[n]).length;
@@ -4770,7 +5551,7 @@ function openPicker(pin, cx, cy) {
   const d = document.createElement('div'); d.className = 'picker'; d.id = 'picker';
   const num = pinNum(pin), grp = groupOf(pin);
   const cur = E.pins[canon(pin)];
-  let h = `<h4>${grp.join(' / ')} <small style="opacity:.75">pin ${num}</small></h4>`;
+  let h = `<h4>${esc(grp.join(' / '))} <small>pin ${num}</small></h4>`;
   if (grp.length > 1) h += `<div class="note" style="color:var(--bad)">${grp.join(' and ')} are shorted inside this package — one physical pin, never both outputs.</div>`;
   for (const n of grp) if (M.pins[n] && M.pins[n].notes) h += `<div class="note">${n}: ${M.pins[n].notes}</div>`;
   if (cur) h += `<div class="note" style="color:${cur.state === 'conflict' ? 'var(--bad)' : 'var(--ok)'}">Currently: ${cur.label}${cur.state === 'conflict' ? ' — CONFLICT' : ''}</div>`;
@@ -4822,7 +5603,7 @@ function openPinMenu(pin, cx, cy) {
   const grp = groupOf(pin), num = pinNum(pin), info = E.pins[canon(pin)], ul = userLabel(pin), io = pinType(pin) === 'io';
   const d = document.createElement('div'); d.className = 'ctxmenu'; d.id = 'ctxmenu';
   d.innerHTML =
-    `<div class="hd">${esc(grp.join(' / '))} <span style="opacity:.7">pin ${num}</span></div>` +
+    `<div class="hd">${esc(grp.join(' / '))} <span class="num">pin ${num}</span></div>` +
     `<div class="mi" data-a="label">${ul ? 'Edit user label…' : 'Set user label…'}<small>${ul ? esc(ul) : '<span class="kb">L</span>'}</small></div>` +
     (ul ? `<div class="mi" data-a="clear">Clear user label</div>` : '') +
     `<div class="sep"></div>` +
@@ -5371,7 +6152,7 @@ function resourceBanner() {
     return `<span class="rw">${r.severity === 'warning' ? '⚑' : '⚠'} ${esc(r.text)}${links ? ' — ' + links : ''}</span>`;
   };
   return `<div class="resbar" role="status" aria-live="polite">${n} shared-resource issue${n > 1 ? 's' : ''}` +
-    ` <span style="opacity:.8">(EXTI lines and DMA channels, not pin conflicts)</span>${rows.map(line).join('')}</div>`;
+    ` <span class="note">(EXTI lines and DMA channels, not pin conflicts)</span>${rows.map(line).join('')}</div>`;
 }
 
 document.getElementById('ptitle').addEventListener('click', e => {
@@ -5399,11 +6180,11 @@ function renderCentre() {
   let h = '';
   if (E.status[pid] === 'na') h += `<div class="issue">${pid} is not available on ${S.pkg}: none of its pin mappings are bonded out on this package.</div>`;
   for (const s of P.settings || []) {
-    h += `<label>${s.name}</label>`;
+    h += `<label>${esc(s.name)}</label>`;
     if (s.type === 'checkboxes') {
-      h += `<div class="checks">` + s.choices.map(c => `<label><input type="checkbox" data-s="${s.name}" data-c="${c.name}"${st.settings[s.name].has(c.name) ? ' checked' : ''}> ${c.name}</label>`).join('') + '</div>';
+      h += `<div class="checks">` + s.choices.map(c => `<label><input type="checkbox" data-s="${attr(s.name)}" data-c="${attr(c.name)}"${st.settings[s.name].has(c.name) ? ' checked' : ''}> ${esc(c.name)}</label>`).join('') + '</div>';
     } else {
-      h += `<select data-s="${s.name}">` + s.choices.map(c => `<option${st.settings[s.name] === c.name ? ' selected' : ''}>${c.name}</option>`).join('') + '</select>';
+      h += `<select data-s="${attr(s.name)}">` + s.choices.map(c => `<option${st.settings[s.name] === c.name ? ' selected' : ''}>${esc(c.name)}</option>`).join('') + '</select>';
     }
   }
   if (P.notes) h += `<div class="hint">${P.notes}</div>`;
@@ -5627,38 +6408,59 @@ function renderClock() {
   const f = v => Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '\u2014';
   const fp = firstPre(c);
   const COLW = [188, 208, 198, 216, 240];
+  // Every option list is clockCalc().selectable \u2014 the MCU file's FULL list, never
+  // filtered by the current state. An option is missing from a mux only when the data
+  // says this part cannot do it; nothing here may add a second reason.
+  const sel = r.selectable || clockSelectable(M);
+  // "Is this box carrying a clock right now" is the engine's answer too, so the tree
+  // cannot disagree with the frequencies beside it. An engine without `feeding` (older
+  // bundle) lights everything rather than dimming something that is in fact running.
+  const lit = id => (r.feeding ? !!r.feeding[id] : true);
 
   // ---- 1. the graph, derived entirely from M.clock + clockCalc() -------------
   const nodes = [], edges = [], byId = {};
   const node = (id, col, o) => { const n = Object.assign({ id, col, w: COLW[col] || 200 }, o); nodes.push(n); byId[id] = n; return n; };
   const edge = (from, to, active) => { if (byId[from] && byId[to]) edges.push({ from, to, active: !!active }); };
-  const preSel = n => `<select data-pre="${attr(n)}">` + c.prescalers[n].options
-    .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  const preSel = n => `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
+    + (sel.pre[n] || c.prescalers[n].options)
+      .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
   const TITLE = { HSI: 'HSI RC oscillator', HSE: 'HSE crystal / clock in', LSI: 'LSI RC oscillator', LSE: 'LSE crystal' };
 
   for (const s of ['HSI', 'HSE', 'LSI', 'LSE']) {
     const d = c.sources[s]; if (!d) continue;
     const khz = d.khz !== undefined;
+    const rs = (r.sources || {})[s] || {};
+    // The crystal frequency carries no `max` attribute on purpose: the datasheet range is
+    // shown underneath and an out-of-range value has to be TYPEABLE so it can go red.
+    // A spinner that refuses 30 MHz would hide the very limit it is meant to teach.
     node(s, 0, {
       title: TITLE[s] || s,
-      body: s === 'HSE' ? `<input type="number" step="0.001" min="0" id="ck-hse" value="${k.hse}">` : '',
+      body: s === 'HSE'
+        ? `<input type="number" step="0.001" min="0" id="ck-hse" value="${k.hse}"`
+          + ` aria-label="HSE crystal frequency in MHz"`
+          + ` title="External crystal or clock input, in MHz${d.min_mhz !== undefined ? ` (datasheet ${d.min_mhz}\u2013${d.max_mhz})` : ''}">`
+        : '',
       val: khz ? d.khz : (s === 'HSE' ? k.hse : d.mhz),
       unit: khz ? 'kHz' : 'MHz',
       lim: d.min_mhz !== undefined ? `${d.min_mhz}\u2013${d.max_mhz} MHz` : (d.fixed ? 'fixed' : ''),
-      over: r.over.includes(s),
+      over: rs.over !== undefined ? rs.over : r.over.includes(s),
     });
   }
   if (c.pll) node('PLL', 1, {
     title: 'PLL',
-    body: `<select id="ck-pllin">` + c.pll.inputs.map((i2, n) =>
-        `<option value="${n}"${k.pllIn === n ? ' selected' : ''}>${esc(i2.name)}${i2.div > 1 ? ' / ' + i2.div : ''}</option>`).join('') + '</select>' +
-      `<div class="mul"><span>\u00d7</span><select id="ck-pllmul">` + c.pll.multipliers.map(m =>
+    // The divider is appended only when the input's own name does not already carry it.
+    // The dummy part calls its inputs "HSI/2" and "HSE/2", which read as "HSI/2 / 2".
+    body: `<select id="ck-pllin" aria-label="PLL source">` + sel.pllIn.map(i2 =>
+        `<option value="${i2.index}"${k.pllIn === i2.index ? ' selected' : ''}>${esc(i2.name)}`
+        + `${i2.div > 1 && !new RegExp('/\\s*' + i2.div + '$').test(i2.name) ? ' / ' + i2.div : ''}</option>`).join('') + '</select>' +
+      `<div class="mul"><span>\u00d7</span><select id="ck-pllmul" aria-label="PLL multiplier">` + sel.pllMul.map(m =>
         `<option value="${m}"${String(m) === String(k.pllMul) ? ' selected' : ''}>${m}</option>`).join('') + '</select></div>',
     val: r.PLLCLK, unit: 'MHz PLLCLK', lim: `input ${f(r.pllIn)} MHz`,
   });
   node('SYSCLK', 2, {
     title: 'System clock mux',
-    body: `<select id="ck-sys">` + c.sysclk.sources.map(s => `<option${s === k.sys ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>',
+    body: `<select id="ck-sys" aria-label="System clock source">`
+      + sel.sys.map(s => `<option${s === k.sys ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>',
     val: r.SYSCLK, unit: 'MHz SYSCLK', lim: `max ${c.sysclk.max_mhz} MHz`, over: r.over.includes('SYSCLK'),
   });
   if (fp) node('pre:' + fp, 3, {
@@ -5682,22 +6484,16 @@ function renderClock() {
     title: d.name, val: r[d.name], unit: 'MHz', lim: `${d.source || fp || 'SYSCLK'} / ${d.div}`,
   });
 
-  // which nodes actually carry a clock right now -> everything else is greyed
-  const on = new Set(['SYSCLK']);
-  const pllSrc = c.pll ? (c.pll.inputs[k.pllIn] || {}).source : null;
-  if (Object.values(c.prescalers || {}).some(v => v.source === 'PLLCLK')) on.add('PLL');
-  if (k.sys === 'PLLCLK') on.add('PLL'); else on.add(k.sys);
-  if (on.has('PLL') && pllSrc) on.add(pllSrc);
-  if (fp) on.add('pre:' + fp);
-  for (const name of Object.keys(prebase)) if (on.has(prebase[name])) on.add('pre:' + name);
-  for (const d of c.derived || []) if (!fp || on.has('pre:' + fp)) on.add('drv:' + d.name);
-  for (const n of nodes) n.off = !on.has(n.id);
+  // Which nodes actually carry a clock right now. This used to be recomputed here from
+  // M.clock, so the tree could contradict the frequencies printed inside it; it is
+  // clockCalc().feeding now, and dimming is purely how a non-feeding branch LOOKS.
+  for (const n of nodes) n.off = !lit(n.id);
 
-  if (c.pll) c.pll.inputs.forEach((i2, n) => edge(i2.source, 'PLL', on.has('PLL') && k.pllIn === n));
-  for (const s of c.sysclk.sources) edge(s === 'PLLCLK' ? 'PLL' : s, 'SYSCLK', k.sys === s);
+  if (c.pll) sel.pllIn.forEach(i2 => edge(i2.source, 'PLL', lit('PLL') && k.pllIn === i2.index));
+  for (const s of sel.sys) edge(s === 'PLLCLK' ? 'PLL' : s, 'SYSCLK', k.sys === s);
   if (fp) edge('SYSCLK', 'pre:' + fp, true);
-  for (const [name, base] of Object.entries(prebase)) edge(base, 'pre:' + name, on.has('pre:' + name));
-  for (const d of c.derived || []) edge(fp ? 'pre:' + fp : 'SYSCLK', 'drv:' + d.name, on.has('drv:' + d.name));
+  for (const [name, base] of Object.entries(prebase)) edge(base, 'pre:' + name, lit('pre:' + name));
+  for (const d of c.derived || []) edge(fp ? 'pre:' + fp : 'SYSCLK', 'drv:' + d.name, lit('drv:' + d.name));
 
   // ---- 2. paint the boxes ----------------------------------------------------
   let h = `<div class="cnote">This tree is drawn from the MCU file's <b>clock:</b> block \u2014 no part-specific UI. `
@@ -5710,13 +6506,33 @@ function renderClock() {
       + (n.val !== undefined ? `<div class="val">${f(n.val)}<small>${esc(n.unit || '')}</small></div>` : '')
       + (n.lim ? `<div class="lim">${esc(n.lim)}</div>` : '') + '</div>').join('')
     + `</div>`;
-  if (r.over.length) h += `<div class="issues">\u26a0 Out of specification: ${esc(r.over.join(', '))}</div>`;
+  if (r.over.length) {
+    // `over` is everything out of specification; `under` is the subset that is too SLOW.
+    // Saying which way it is wrong is the difference between a warning the user can act
+    // on and one they have to go and re-derive from the limit line.
+    const under = new Set(r.under || []);
+    const why = n => under.has(n) ? 'below minimum'
+      : ((c.prescalers || {})[n] || {}).target_mhz ? 'off target' : 'above maximum';
+    h += `<div class="issues">\u26a0 Out of specification: ${esc(r.over.map(n => `${n} (${why(n)})`).join(', '))}</div>`;
+  }
   if (c.notes) h += `<div class="cnote">${esc(c.notes)}</div>`;
   if (c.buses) h += `<div class="cnote">Bus assignment \u2014 ` + Object.entries(c.buses)
     .map(([b, l]) => `<b>${esc(b)}</b>: ${esc(l.join(', '))}`).join(' &nbsp;\u00b7&nbsp; ') + `</div>`;
   el.innerHTML = h;
 
+  // Re-sync every control from S, whether or not the layout pass below runs. The markup
+  // carries `selected` already; this is the guarantee that a <select> can never sit
+  // showing a configuration the engine does not have (it could, before round 2).
+  const setVal = (q, v) => { const n = el.querySelector(q); if (n && String(n.value) !== String(v)) n.value = String(v); };
+  setVal('#ck-sys', k.sys); setVal('#ck-pllin', k.pllIn); setVal('#ck-pllmul', k.pllMul); setVal('#ck-hse', k.hse);
+  el.querySelectorAll('select[data-pre]').forEach(s => {
+    if (String(s.value) !== String(k.pre[s.dataset.pre])) s.value = String(k.pre[s.dataset.pre]);
+  });
+
   // ---- 3. measure, place, connect --------------------------------------------
+  // Only the GEOMETRY can be deferred. Interaction is bound once, by delegation, below
+  // renderClock() — a handler bound after this early return left every control on the
+  // tab dead while the tab had never been shown, which is how the round-2 P0 looked.
   const wrap = el.querySelector('#ctreewrap');
   if (!wrap.offsetParent) { U.clockPending = true; return; }   // tab hidden: heights are 0, redo when shown
   U.clockPending = false;
@@ -5758,14 +6574,44 @@ function renderClock() {
       + `<path class="carrow${cls}" d="M${x2 + 7} ${y2} l-7 -4.5 v9 z"/>`;
   }).join('');
 
-  // ---- 4. handlers (same contract as before) ---------------------------------
-  const apply = patch => { setClock(patch); renderClock(); PROJECT.dirty = true; updateCrumb(); };
-  const hse = el.querySelector('#ck-hse'); if (hse) hse.onchange = () => apply({ hse: +hse.value });
-  const pi = el.querySelector('#ck-pllin'); if (pi) pi.onchange = () => apply({ pllIn: +pi.value });
-  const pm = el.querySelector('#ck-pllmul'); if (pm) pm.onchange = () => apply({ pllMul: +pm.value });
-  const sy = el.querySelector('#ck-sys'); if (sy) sy.onchange = () => apply({ sys: sy.value });
-  el.querySelectorAll('select[data-pre]').forEach(s => s.onchange = () => apply({ pre: { [s.dataset.pre]: +s.value } }));
 }
+
+// ---- clock interaction ------------------------------------------------------
+// Bound ONCE, by delegation on #clock, and deliberately NOT inside renderClock():
+// the layout pass there returns early while the tab has never been visible, and a
+// per-element handler bound after that point leaves a fully drawn tree in which
+// nothing reaches the engine. Delegation has nothing to lose, so the controls work
+// whether or not the tree has ever been measured.
+function clockApply(patch) {
+  let changed;
+  try {
+    changed = setClock(patch) || {};
+  } catch (e) {
+    // The engine refuses only values the MCU file does not offer (or nonsense in the
+    // crystal box). Say so and redraw, so the control snaps back to what S actually holds.
+    toast('⚠ ' + e.message);
+    renderClock();
+    return;
+  }
+  // Not renderClock(): selecting HSE can switch the crystal on in RCC, which claims
+  // pins, so the chip, the tree and the GPIO table all have to catch up. renderAll()
+  // also marks the project dirty and refreshes the breadcrumb.
+  renderAll();
+  if (changed.hse) {
+    const pins = changed.hse.pins.length ? changed.hse.pins.join('/') : 'the crystal pins';
+    const sigs = changed.hse.signals.map(s => `${changed.hse.pid}_${s}`).join('/');
+    toast(`HSE enabled in RCC — ${pins} now ${sigs}`);
+  }
+}
+document.getElementById('clock').addEventListener('change', e => {
+  const t = e.target;
+  if (!t || !t.tagName) return;
+  if (t.id === 'ck-sys') clockApply({ sys: t.value });
+  else if (t.id === 'ck-pllin') clockApply({ pllIn: +t.value });
+  else if (t.id === 'ck-pllmul') clockApply({ pllMul: +t.value });
+  else if (t.id === 'ck-hse') clockApply({ hse: +t.value });
+  else if (t.dataset.pre) clockApply({ pre: { [t.dataset.pre]: +t.value } });
+});
 // The clock tab is display:none until selected, and hidden boxes measure 0, so
 // lay the tree out the moment the tab becomes visible.
 new MutationObserver(() => {
@@ -5942,7 +6788,9 @@ window.addEventListener('keydown', e => {
 document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + b.dataset.view));
-  if (b.dataset.view === 'pinout') fitChip();
+  // Text measured while the view was hidden comes back 0, so a repaint made from
+  // another tab leaves the chip unfitted. Re-fit on the way in; it is idempotent.
+  if (b.dataset.view === 'pinout') { fitSvgTexts(svg); fitChip(); }
 });
 document.getElementById('pkgsel').onchange = e => {
   closePicker();
@@ -5978,7 +6826,26 @@ document.getElementById('m-help').onclick = () => alert('WCHCube\n\n• Click a 
 const ms = document.getElementById('mcusel');
 for (const k of Object.keys(MCU_FILES)) { const o = document.createElement('option'); o.value = k; o.textContent = k; ms.appendChild(o); }
 ms.onchange = () => { openMcu(MCU_FILES[ms.value]); setProject({ name: `${ms.value}_${S.pkg}`, variant: null, dirty: false }); updateCrumb(); };
-openMcu(MCU_FILES[Object.keys(MCU_FILES).sort()[0]]);
+/**
+ * Which part opens on a cold start. It used to be whichever name sorted first, which
+ * made it CH32V005 — a part DERIVED from CH32V006 through `inherits:`, with TKEY and
+ * TIM3 removed. Nobody means "the cut-down variant" by "the default part".
+ *
+ * Order: an MCU file that says `mcu.default: true`; else the first part that is neither
+ * derived (`inherits:`) nor a test fixture (`mcu.fixture: true`); else the first file.
+ * Every step reads the data, so a new part changes the answer without changing this code.
+ */
+function defaultMcuName() {
+  const names = Object.keys(MCU_FILES).sort();
+  const head = {};
+  for (const n of names) {
+    try { head[n] = (jsyaml.load(MCU_FILES[n]) || {}).mcu || {}; } catch (e) { head[n] = {}; }
+  }
+  return names.find(n => head[n].default === true)
+    || names.find(n => !head[n].inherits && !head[n].fixture)
+    || names[0];
+}
+openMcu(MCU_FILES[defaultMcuName()]);
 setProject({ name: `${M.mcu.name}_${S.pkg}`, dirty: false }); updateCrumb();
 </script>
 </body>
