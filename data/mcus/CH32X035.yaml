@@ -1827,6 +1827,163 @@ peripherals:
         pins: { CC1: PC14, CC2: PC15 }
 
 # -----------------------------------------------------------------------------
+# DMA1 - EIGHT channels, against CH32V006's seven (RM 9.2: "The DMA controller
+# provides 8 channels"; ch32x035.h defines DMA1_Channel1_BASE .. DMA1_Channel8_BASE).
+#
+# THE REQUEST MAP IS PARTIAL AND EVERY ENTRY IS CITED. RM Table 9-2's request-mapping
+# table is one of the places the PDF conversion did real damage: the peripheral rows
+# survive but the COLUMN POSITIONS are gone, so "USART1 USART1_TX USART1_RX" says which
+# requests exist and no longer says which channels they sit on. Reading a channel number
+# off that is exactly the guess this round bans.
+#
+# What IS here comes from WCH's own EVT examples, which name the channel in code and
+# often in a comment beside it - the top authority, and unambiguous:
+#
+#   ADC1        ch1    EXAM/ADC/ADC_DMA/User/main.c
+#   SPI1_RX     ch2    EXAM/SPI/SPI_DMA/User/main.c:221  DMA_Rx_Init(DMA1_Channel2, &SPI1->DATAR)
+#   SPI1_TX     ch3    EXAM/SPI/SPI_DMA/User/main.c:220  DMA_Tx_Init(DMA1_Channel3, &SPI1->DATAR)
+#   USART3_TX   ch2    EXAM/USART/USART_DMA/User/main.c:123  /* USART3 Tx */
+#   USART3_RX   ch3    EXAM/USART/USART_DMA/User/main.c:124  /* USART3 Rx */
+#   USART2_RX   ch6    EXAM/USART/USART_DMA/User/main.c:122  /* USART2 Rx */
+#   USART2_TX   ch7    EXAM/USART/USART_DMA/User/main.c:121  /* USART2 Tx */
+#   I2C1_TX     ch6    EXAM/I2C/I2C_DMA/User/main.c:192  DMA_Tx_Init(DMA1_Channel6, &I2C1->DATAR)
+#   I2C1_RX     ch7    EXAM/I2C/I2C_DMA/User/main.c:215  DMA_Rx_Init(DMA1_Channel7, &I2C1->DATAR)
+#
+# Those also tell us something about the mangled table: the RM lists each peripheral's
+# requests LEFT TO RIGHT IN CHANNEL ORDER. "USART2 USART2_RX USART2_TX" is RX then TX and
+# the example confirms 6 then 7; "USART3 USART3_TX USART3_RX" is TX then RX and the
+# example confirms 2 then 3. So the row ORDER survived and only the column POSITIONS were
+# lost - which is why the remaining rows are recoverable in principle but not yet.
+#
+# STILL OPEN, recorded rather than guessed, and tracked in CH32X035.notes.md:
+# USART1_TX/RX, USART4_TX/RX, and every TIM1 and TIM2 request. See the board.
+dma:
+  controller: DMA1
+  channels: 8
+
+  requests:
+    1: [ADC1]
+    2: [SPI1_RX, USART3_TX]
+    3: [SPI1_TX, USART3_RX]
+    6: [USART2_RX, I2C1_TX]
+    7: [USART2_TX, I2C1_RX]
+
+  init_struct: DMA_InitTypeDef
+
+  # Ported from CH32V006 - DMA_InitTypeDef is member-for-member identical between
+  # the two families - and re-checked against the X035 headers by verify_sdk_names.
+  channel_params:
+    - key: dir
+      name: Direction
+      type: enum
+      group: Basic
+      field: DIR
+      sdk_field: DMA_DIR
+      default: Peripheral to memory
+      options:
+        - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+        - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+      help: "DMA_CFGRx DIR, bit 4: 0 reads from the peripheral, 1 reads from memory. The SDK names it after what the PERIPHERAL is - PeripheralSRC is peripheral-to-memory."
+    - key: priority
+      name: Priority
+      type: enum
+      group: Basic
+      field: PL
+      sdk_field: DMA_Priority
+      default: Low
+      options:
+        - { name: Low,       value: 0, sdk: DMA_Priority_Low }
+        - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
+        - { name: High,      value: 2, sdk: DMA_Priority_High }
+        - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
+      help: "DMA_CFGRx PL[13:12]. Software priority; ties are broken by channel number, lowest wins (RM 8.2)."
+    - key: mode
+      name: Mode
+      type: enum
+      group: Basic
+      field: CIRC
+      sdk_field: DMA_Mode
+      default: Normal
+      options:
+        - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
+        - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
+      help: "DMA_CFGRx CIRC, bit 5. Circular reloads the transfer count and runs forever - what a continuously sampling ADC or a repeating PWM pattern wants. RM 8.2.4: circular mode is NOT available in memory-to-memory mode."
+    - key: pinc
+      name: Increment peripheral address
+      type: bool
+      group: Basic
+      field: PINC
+      sdk_field: DMA_PeripheralInc
+      default: false
+      sdk_enabled: DMA_PeripheralInc_Enable
+      sdk_disabled: DMA_PeripheralInc_Disable
+      help: "DMA_CFGRx PINC, bit 6. Off for a normal peripheral: its data register is one fixed address."
+    - key: minc
+      name: Increment memory address
+      type: bool
+      group: Basic
+      field: MINC
+      sdk_field: DMA_MemoryInc
+      default: true
+      sdk_enabled: DMA_MemoryInc_Enable
+      sdk_disabled: DMA_MemoryInc_Disable
+      help: "DMA_CFGRx MINC, bit 7. On for a buffer - off would rewrite one variable over and over."
+    - key: psize
+      name: Peripheral data width
+      type: enum
+      group: Basic
+      field: PSIZE
+      sdk_field: DMA_PeripheralDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
+      help: "DMA_CFGRx PSIZE[9:8]: 00 8-bit, 01 16-bit, 10 32-bit. 11 is reserved, which is why there are three options and not four. Match the peripheral's own register width."
+    - key: msize
+      name: Memory data width
+      type: enum
+      group: Basic
+      field: MSIZE
+      sdk_field: DMA_MemoryDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
+      help: "DMA_CFGRx MSIZE[11:10], same encoding as PSIZE. Widths may differ from the peripheral's; the DMA packs or unpacks between them."
+    - key: m2m
+      name: Memory to memory
+      type: bool
+      group: Advanced
+      field: MEM2MEM
+      sdk_field: DMA_M2M
+      default: false
+      sdk_enabled: DMA_M2M_Enable
+      sdk_disabled: DMA_M2M_Disable
+      help: "DMA_CFGRx MEM2MEM, bit 14. A hardware peripheral request must leave this off: the channel would ignore the request line and run from a software trigger instead."
+
+  # Interrupt-enable bits in the same register. They are not user parameters - the app
+  # turns them on when the matching NVIC vector is enabled - but codegen needs the names.
+
+  request_defaults:
+    ADC1:      { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+    SPI1_RX:   { dir: Peripheral to memory }
+    SPI1_TX:   { dir: Memory to peripheral }
+    USART2_RX: { dir: Peripheral to memory }
+    USART2_TX: { dir: Memory to peripheral }
+    USART3_RX: { dir: Peripheral to memory }
+    USART3_TX: { dir: Memory to peripheral }
+    I2C1_RX:   { dir: Peripheral to memory }
+    I2C1_TX:   { dir: Memory to peripheral }
+
+  notes: >
+    The ADC default is half-word both sides and circular for the same reason as on
+    CH32V006 - ADC_RDATAR is 12 bits in a 16-bit field, so a byte transfer truncates
+    every sample, and a one-shot ADC rarely needs DMA at all. USART and I2C data
+    registers are 8 bits, so byte/byte is right there.
+
+# -----------------------------------------------------------------------------
 # Clock tree.
 #
 # **NO HSE, AND NO PLL.** The only source is the internal 48 MHz RC oscillator.
