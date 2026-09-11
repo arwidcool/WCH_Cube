@@ -220,60 +220,62 @@ still validate**. A second part must not cost the first one anything.
 
 ---
 
-## Current — round 4, cycle 1
+## Current — round 4, cycle 2
 
-### Done
+**CH32X035 is in, it validates, and it compiles.** `pio run -e CH32X035G8U6` on a
+configured fixture exits 0. 27 peripherals, all seven package tables at 0 differences,
+all 45 vectors, all ten remap tables, `params:` on nine peripherals, 8 DMA channels.
+`node tests/run.js` ALL GREEN 418, and CH32V006/CH32V005 pay nothing for it.
 
-- **The CH32X035 pin table parses to 0 differences** on all seven packages against the DS
-  model table's own I/O column. Three parser fixes in `tools/extract_pins.py`, none of
-  them X035-specific, and CH32V006/CH32V005 re-run to 0 differences after every one.
-- **Two rows the PDF destroyed are DECLARED**, in
-  `data/sources/X035/Datasheets/CH32X035_pin_corrections.yaml`, printed on every run,
-  each certain from the rows around it. The tool refuses an entry with no `reason:`.
-- **`data/mcus/CH32X035.yaml` lands and validates** — validate_mcu 0 errors,
-  verify_sdk_names 0 errors against the X035 EVT headers. Partial, and the file says so.
-- **`CH32X035.notes.md`** with a source for every fact and an open question for every
-  thing I could not settle.
-- **QSOP28 and LQFP64M** added to `packages.yaml`; three existing geometries corrected.
-- **The schema decisions** AGENT-4 asked for, posted before filling anything: a `macro:`
-  per remap entry with `codegen.remap.style`, and `lines: [first, last]` on a grouped
-  NVIC vector.
+### Done since cycle 1
+
+- **DS Table 2-3 decoded** — `tools/extract_x035_remaps.py`, 60 pins, 101 tokens, 101
+  decoded, 0 refused — and **cross-checked against the EVT macro counts from the opposite
+  direction: 10 peripherals, 10 agreements, 0 disagreements.**
+- The **V4C PFIC scheme**, read from this RM rather than assumed: three priority bits at
+  [7:5], not the V2A's two at [7:6]. Eight levels against four.
+- `params:` for USART1-4, SPI1, I2C1, TIM1/2/3, ADC1 — ported from CH32V006 behind the
+  gate. **`dma:` with eight channels.** `data/FORMAT.md` for all five new schema shapes.
+- **TouchKey settled**: a mode of the ADC here too (`TKey1` = `ADC1_BASE`), so the DS/EVT
+  "disagreement" is the answer rather than a contradiction — and unlike CH32V006 there is
+  no `ADC_TKeyCmd()` at all, so the example sets the bit by hand.
 
 ### What checking found that reading would not
 
-Five, and the first two are mine:
+Seven this round, and three of them are mine:
 
-1. **I shipped CH32V006's GPIO mode list into CH32X035 and the gate caught it.** This part
-   has **no open-drain at all** — `GPIOMode_TypeDef` has six members, not eight. Real,
-   correctly spelled SPL names belonging to a different chip. Round 3's defect class,
-   committed by me, one round later, and caught only because I built the checker.
-2. **I guessed `USBFS_DEVICE` as the register-block handle.** It is `USBFSD`, and there is
-   also `USBFSH` at the same base address — two handles, one `periph_handle` slot.
-3. **The brief's "47 vectors" is 45**, counted from `IRQn_Type` and the startup `.word`
-   table independently; they agree on every number, name and handler.
-4. **There is no RCC vector at all** on this part, where CH32V006 has `RCC_IRQn = 19`.
-5. **The V4C PFIC has three priority bits at [7:5]**, not the V2A's two at [7:6] — eight
-   priority levels against four. The brief was right that it must not be assumed.
+1. **I shipped CH32V006's GPIO mode list into CH32X035.** No open-drain on this part —
+   six members, not eight. The gate rejected it.
+2. **I added 44 remap macros and nothing checked them.** A planted
+   `GPIO_FullRemap_USART2X` passed. The key was new and I had not written its checker.
+3. **My own `extract_pins.py` hardcoded `P[A-D][0-7]`** and silently missed two thirds of
+   this part's pins.
+4. **45 vectors, not the brief's 47**, and **no RCC vector at all.**
+5. **ADC sample times are 4–11 cycles here**, not CH32V006's 3.5–239.5, and named
+   completely differently. All eight ported options rejected.
+6. **`ADC_OutputBuffer` and `ADC_Pga` have no macros anywhere** — the header `@ref`s
+   groups it does not define and no example assigns them. Not modelled.
+7. **A CH32X033 pin function sits in a CH32X035 table**: RST on PB7 belongs to the other
+   part (DS:2584). Third time this DS has interleaved the two.
 
-And one I got wrong in public: my round-3 board entry said port C had one hole. It has
-two. That was reading rather than parsing, and I corrected it on the board rather than
-quietly.
+### The rule I got wrong, stated so I do not repeat it
 
-### Three per-pin capabilities the schema cannot express
+**A number is not verified because I read it carefully. It is verified when something
+refuses the wrong one.** Every new schema key needs its checker in the same commit —
+`macro:` went in without one and 44 entries rode in unchecked.
 
-Raised with AGENT-2 as one problem rather than three, because one mechanism would cover
-all of them: **pull-down works only on PA0-PA15 and PC16-PC17**; **every shorted pair is
-"prohibited from being configured as output functions"**; and **PC10/PC11 must be floating
-inputs while USB is enabled**, which is a peripheral-to-pin coupling like round 2's HSE.
+And a bound on the technique I leaned on: **porting behind a gate only finds one of the
+two kinds of difference.** A member the new part LACKS is a loud gate error. A member it
+HAS and the old one does not is silent, and has to be found by reading the struct.
 
-### Next, in order
+### Next
 
-1. **DS Table 2-3** — ~470 lines of abbreviated per-pin tokens (`T2C1_2`, `CTS2_1`, `A13`)
-   with the remap index in the suffix (DS note 2). Needs its own parser and a second pass
-   diffed against the RM's AFIO_PCFR1 section, to the CH32V006 standard. This is the gate
-   on every remaining peripheral.
-2. The pin-bearing peripherals behind it: 4×USART, TIM1/2/3, SPI1, I2C1, ADC1, PWR, FLASH,
-   EXTI, PIOC, OPA, AWU — and the 25 vectors waiting on them.
-3. `dma:` with 8 channels and its request map.
-4. `data/FORMAT.md` for everything new this round.
-5. Whether TouchKey is a mode of the ADC here as it is on CH32V006, before modelling it.
+1. **BLOCKED, and it is the one thing I cannot do from here:** the DMA request map for
+   USART1, USART4 and every TIM1/TIM2 request. RM Table 9-2 lost its column positions in
+   the conversion; nine requests are recovered from EVT examples, the rest need the
+   original PDF or an example that uses them.
+2. The three per-pin capabilities the schema cannot express — pull-down on some pins,
+   shorted pairs that may not be outputs, PC10/PC11 floating while USB is on. One
+   mechanism would cover all three; waiting on AGENT-2.
+3. `ADC_OutputBuffer` / `ADC_Pga` values from the RM's ADC chapter, or leave them out.
+4. `CH32X033.yaml` from DS Table 2-2, once someone wants it.

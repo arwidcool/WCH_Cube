@@ -353,10 +353,12 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [x] (AGENT-1) `clock:` with **no HSE** — `grep -c HSE ch32x035_rcc.h` = 0. One 48 MHz RC, SYSCLK
       48/24/16/12/8. No HSE branch "for symmetry", not even a disabled one. Post it early.
       — DONE. Also found: `RCC_CFGR0` has **no SW field at all**, and HCLK resets to SYSCLK/6.
-- [~] (AGENT-1) Remap schema: a **`macro:` per remap index** alongside `lsb`/`bits`, because this
+- [x] (AGENT-1) Remap schema: a **`macro:` per remap index** alongside `lsb`/`bits`, because this
       part's EVT exposes 40 named macros applied with `GPIO_PinRemapConfig`. Agree it with AGENT-2
       before filling 40 entries. Re-derive from RM AFIO_PCFR1 independently and diff.
-- [~] (AGENT-1) SYS/RCC/DMA1/IWDG/WWDG/USBFS/USBPD landed; the rest wait on the Table 2-3 decode.
+- [x] (AGENT-1) 27 peripherals landed with all ten remap tables, generated from Table 2-3 and
+      cross-checked against the EVT macro counts (10 agree, 0 disagree). Still out: TouchKey
+      (settled as an ADC mode, so correctly not a peripheral) and the 1-wire IO2W controller.
       Peripherals incl. four kinds this repo has never modelled: **USBFS** (host+device),
       **USBPD** (Type-C source/sink/DRP), **PIOC**, **AWU** — plus 4×USART, TIM1/2/3, SPI1, I2C1,
       ADC1, 2×OPA, 3×CMP, PWR, FLASH, EXTI, IWDG, WWDG. No "Activated" stubs.
@@ -365,12 +367,14 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       assumed from the V2A — NVIC scheme DONE (V4C has **three** priority bits at [7:5], not the
       V2A's two, so 8 levels not 4). Vector COUNT is **45**, not 47: `IRQn_Type` and the startup
       `.word` table agree on every one, and there is **no RCC vector**. 20 of 45 emitted; the rest
-      arrive with their peripherals. `dma:` still to do.
+      arrive with their peripherals. **`dma:` DONE** - 8 channels, `channel_params`, and 9
+      requests cited to EVT examples; the rest BLOCKED on the RM conversion, see the board.
 - [x] (AGENT-1) `codegen:` — header `ch32x035.h`, `RCC_APB2PeriphClockCmd` / `RCC_APB2Periph_GPIO$PORT`,
       domains **AHB/APB1/APB2**, one speed `GPIO_Speed_50MHz` — DONE, plus `codegen.rcc`. Found:
       **no open-drain modes on this part** (6 members of GPIOMode_TypeDef, not 8).
-- [ ] (AGENT-1) `params:` with `struct:`/`field:`/`sdk_call` for every peripheral landed;
+- [x] (AGENT-1) `params:` with `struct:`/`field:`/`sdk_call` for every peripheral landed;
       `pio_board`/`pio_env` per variant, omitted rather than approximated where no board ships
+      - USART1-4, SPI1, I2C1, TIM1/2/3, ADC1. QFN12 (D8U6) has no board, so it says nothing.
 - [x] (AGENT-1) `verify_sdk_names.py` prefers `data/sources/<PART>/Evt/` over the PlatformIO package
       and **says which headers it used**; both parts 0 errors — already built that way in round 3;
       confirmed reporting "checked against EVT data/sources/X035/Evt (97 files)".
@@ -430,7 +434,7 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [ ] (AGENT-4) The stale "until the EVT package arrives" language: `PROGRESS.md`,
       `data/firmware/ARCHITECTURE.md`, the round-3 pack. Post the list.
 - [ ] (AGENT-1) `data/sources/README.md` — which parts have EVT and where its headers live
-- [ ] (AGENT-1) `data/FORMAT.md` — the remap `macro:` form, grouped NVIC vectors, a part with no
+- [x] (AGENT-1) `data/FORMAT.md` — the remap `macro:` form, grouped NVIC vectors, a part with no
       HSE, 24-bit and non-contiguous ports, `pio_board`/`pio_env`
 - [ ] (AGENT-4) `PROGRESS.md` §5/§6/§7/§9 rewritten for a second family and a flashable artefact
 
