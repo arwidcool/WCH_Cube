@@ -262,15 +262,95 @@ peripherals:
 
   IWDG:
     category: System Core
+    # The independent watchdog has NO init struct and NO handle: every setting is its own
+    # call and the peripheral is a singleton. ch32v00X_iwdg.h declares
+    # IWDG_SetPrescaler(uint8_t), IWDG_SetReload(uint16_t) and IWDG_Enable(void) - not one
+    # of them takes an IWDG_TypeDef*. So `sdk_args` here is [$VALUE] with no $HANDLE, and
+    # there is no `struct:` to name. There is no IWDG_InitTypeDef on this part.
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: prescaler
+        name: Prescaler
+        sdk_call: IWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: "64"
+        options:
+          - { name: "4",   value: 0, sdk: IWDG_Prescaler_4 }
+          - { name: "8",   value: 1, sdk: IWDG_Prescaler_8 }
+          - { name: "16",  value: 2, sdk: IWDG_Prescaler_16 }
+          - { name: "32",  value: 3, sdk: IWDG_Prescaler_32 }
+          - { name: "64",  value: 4, sdk: IWDG_Prescaler_64 }
+          - { name: "128", value: 5, sdk: IWDG_Prescaler_128 }
+          - { name: "256", value: 6, sdk: IWDG_Prescaler_256 }
+        help: "Divides the LSI, which is the only clock this watchdog has. The header stops at 256 - there is no IWDG_Prescaler_512 on this part, however familiar that name is elsewhere."
+      - key: reload
+        name: Reload value
+        sdk_call: IWDG_SetReload
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 4095
+        min: 0
+        max: 4095
+        help: "12-bit down-counter, so 4095 is the ceiling. Timeout is (prescaler x (reload + 1)) / f_LSI."
+      - key: write_access
+        name: Register write access
+        sdk_call: IWDG_WriteAccessCmd
+        sdk_args: [$VALUE]
+        type: enum
+        group: Advanced
+        default: Enable before writing
+        options:
+          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
+          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
+        help: "The prescaler and reload registers are write-protected until this key is written. The two values are the literal key words 0x5555 and 0x0000, not a flag."
 
   WWDG:
     category: System Core
+    # Also struct-free and handle-free (ch32v00X_wwdg.h). Note WWDG_Enable(uint8_t Counter)
+    # TAKES the counter, so "switch it on" and "set the counter" are one call rather than
+    # two - which is why `counter` below names WWDG_Enable and not WWDG_SetCounter.
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: prescaler
+        name: Prescaler
+        sdk_call: WWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: WWDG_Prescaler_1 }
+          - { name: "2", value: 1, sdk: WWDG_Prescaler_2 }
+          - { name: "4", value: 2, sdk: WWDG_Prescaler_4 }
+          - { name: "8", value: 3, sdk: WWDG_Prescaler_8 }
+        help: "Divides HCLK/4096. Four options only - the header stops at 8."
+      - key: window
+        name: Window value
+        sdk_call: WWDG_SetWindowValue
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 127
+        min: 64
+        max: 127
+        help: "Refreshing EARLIER than this resets the part, which is the whole point of a windowed watchdog. The counter's bit 6 must stay set, so the usable range starts at 64."
+      - key: counter
+        name: Counter start value
+        sdk_call: WWDG_Enable
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 127
+        min: 64
+        max: 127
+        help: "WWDG_Enable takes the counter as its argument, so this value and switching the watchdog on are the same call. Below 64 the counter has already underflowed and the part resets at once."
 
   # RM ch.2. Nothing here claims a pin: the supply monitor and the auto-wake-up are
   # internal, and their interrupts reach the core over EXTI lines 8 and 9, which have no
@@ -952,10 +1032,73 @@ peripherals:
 
   TIM3:
     category: Timers
-    notes: Streamlined timer — output compare only, no external pins (RM ch.13). Not on CH32V005.
+    notes: >
+      Streamlined timer - output compare only, no external pins (RM ch.13). Not on CH32V005.
+      It shares the full TIM driver, so its time base is TIM_TimeBaseInitTypeDef exactly like
+      TIM1 and TIM2; what it lacks is pins, not registers. No repetition-counter or dead-time
+      parameter here: RCR and BDTR belong to the advanced-control timer, TIM1. And note that
+      RM Table 6-1 gives this part NO TIM3 interrupt vector - confirmed against the EVT
+      IRQn_Type enum and the startup table, see CH32V006.notes.md.
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: prescaler
+        name: Prescaler
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        group: Basic
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. The counter is clocked at f_TIM / (prescaler + 1)."
+      - key: period
+        name: Counter period (auto-reload)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        group: Basic
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR. 16-bit, so 65535 is the ceiling."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        group: Basic
+        default: Up
+        options:
+          - { name: Up,               value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down,             value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 4, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 6, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR and CMS. The option values are the register encodings, which is why they run 0/1/2/4/6 rather than 0..4."
+      - key: ckd
+        name: Clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        group: Advanced
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD - the ratio between the timer clock and the digital filter sampling clock."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        group: Advanced
+        default: false
+        help: "Buffers writes to the auto-reload register until the next update event. Not a member of TIM_TimeBaseInitTypeDef - it is a call after TIM_TimeBaseInit (ch32v00X_tim.h:468)."
 
   # ---------------- Connectivity ----------------
   USART1:

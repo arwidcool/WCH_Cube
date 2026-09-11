@@ -23,10 +23,18 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: '64'
+      reload: 4095
+      write_access: Enable before writing
   WWDG:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: '1'
+      window: 127
+      counter: 127
   PWR:
     settings:
       Power voltage detector (PVD): Disable

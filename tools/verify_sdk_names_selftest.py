@@ -190,8 +190,12 @@ def build_cases(doc: dict):
                  {"sdk_call": "ADC_Init", "sdk_args": ["$HANDEL", "$VALUE"]}),
              f"peripherals.{pid}.params[{pi}]", "$HANDEL"),
 
+            # `pop` as well as `update`: the subject parameter may already carry sdk_args,
+            # and a case that quietly depends on which parameter gets picked is a case
+            # that passes for the wrong reason. It did exactly that once.
             ("sdk_call with no sdk_args -> WARN, because it becomes a TODO",
-             lambda d: d["peripherals"][pid]["params"][pi].update({"sdk_call": "ADC_Init"}),
+             lambda d: (d["peripherals"][pid]["params"][pi].pop("sdk_args", None),
+                        d["peripherals"][pid]["params"][pi].update({"sdk_call": "ADC_Init"})),
              f"peripherals.{pid}.params[{pi}]", "how"),
 
             ("params option sdk, a macro that does not exist",
