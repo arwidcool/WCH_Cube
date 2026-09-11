@@ -124,6 +124,18 @@ const ABSENT = {
   'CH32X035.CMP3.nvic': 'shares OPA_IRQn = 48; there is no CMP vector in ch32x035.h',
   'CH32X035.OPA2.nvic': 'shares OPA_IRQn = 48 with OPA1; the enum has one OPA vector, not two',
 
+  // --- CH32V003: an absence that is the OPPOSITE of its sibling's, on the same
+  //     peripheral name. CH32V006 gives the OPA/comparator block OPCM_IRQn = 40;
+  //     CH32V003 has no OPA vector at all. This is why the key is per-part: "the
+  //     OPA has an interrupt" is exactly the kind of family-wide assumption
+  //     round 4 and round 5 exist to break, and it would have been wrong here.
+  'CH32V003.OPA1.nvic': 'CH32V003 has NO OPA interrupt. `IRQn_Type` in '
+    + 'data/sources/V003/evt/EXAM/SRC/Peripheral/inc/ch32v00x.h is the complete list and ends at '
+    + '`TIM2_IRQn = 38`; a search for `OPA.*IRQn` in that header returns nothing, where '
+    + 'CH32V006 has `OPCM_IRQn = 40`. The part\'s own notes say the same. Recorded as absent '
+    + 'rather than left blank because the two are different: ABSENT is "the silicon does not '
+    + 'have it", OPEN is "nobody has written it down yet"',
+
   'CH32X035.RCC.nvic': 'CH32X035 has no RCC interrupt AT ALL. `IRQn_Type` in '
     + 'data/sources/X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035.h jumps FLASH_IRQn = 18 straight to '
     + 'EXTI7_0_IRQn = 20, and Startup/startup_ch32x035.S has `.word 0` in that slot — two '

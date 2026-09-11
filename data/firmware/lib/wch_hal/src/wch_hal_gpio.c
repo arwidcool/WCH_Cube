@@ -1,14 +1,26 @@
 #include "wch_hal_gpio.h"
 
 /* The port -> clock-enable mapping is per series and is NOT guessable:
+ *   CH32V003   ports A C D only — ch32v00x.h defines GPIOA/GPIOC/GPIOD and no
+ *              GPIOB at all, and ch32v00x_rcc.h defines RCC_APB2Periph_GPIOA at
+ *              :87, _GPIOC at :88, _GPIOD at :89 and _AFIO at :86. Falling off
+ *              the end returns -1 rather than "enable something close".
  *   CH32V00Xx  ports A B C D, register RCC_PB2PCENR, SPL fn RCC_PB2PeriphClockCmd
  *              (the register really is spelled "PB2" on this family — CH32V00X
  *              RM v1.4 §3.4.7, R32_RCC_PB2PCENR at 0x40021018)
  *   CH32X035   ports A B C only, SPL fn RCC_APB2PeriphClockCmd
- * Falling off the end returns -1 rather than enabling "something close". */
+ */
 static int port_clock(const GPIO_TypeDef *port, FunctionalState state)
 {
-#if defined(WCH_HAL_SERIES_CH32V00XX)
+#if defined(WCH_HAL_SERIES_CH32V003)
+    uint32_t bit;
+    if      (port == GPIOA) bit = RCC_APB2Periph_GPIOA;
+    else if (port == GPIOC) bit = RCC_APB2Periph_GPIOC;
+    else if (port == GPIOD) bit = RCC_APB2Periph_GPIOD;
+    else return -1;
+    RCC_APB2PeriphClockCmd(bit, state);
+    return 0;
+#elif defined(WCH_HAL_SERIES_CH32V00XX)
     uint32_t bit;
     if      (port == GPIOA) bit = RCC_PB2Periph_GPIOA;
     else if (port == GPIOB) bit = RCC_PB2Periph_GPIOB;

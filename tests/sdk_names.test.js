@@ -19,8 +19,15 @@
 //      1   at least one ERROR (or a WARN under --strict)
 //  Anything else is treated as the tool failing rather than the data failing, and
 //  is reported as such — a crashed checker must never read as a pass.
+//
+//  A part the tool resolved to no header exits 0 too. That is a report saying "not
+//  checked", not a pass, so each shipped part is its own test here: the ones with an
+//  SDK behind them are asserted green, and the ones without become a counted SKIP
+//  naming the part and the reason. Round-5 E3 — a check that did not run must reach
+//  the run summary the way every other skip does, not hide behind exit code 0.
 // =============================================================================
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { suite, test, assert, skip } from './lib/harness.js';
@@ -42,6 +49,50 @@ function runPy(script, args = []) {
   return { missing: true, tried };
 }
 
+// The tool is honest about a part it cannot check: it prints NOT CHECKED with the
+// reason and still exits 0. Exiting 0 is right for a report and WRONG for a gate —
+// a green tick over a file nobody checked is the exact failure this repo keeps
+// finding (round 3 asserted "the generated C compiles" for a whole round while
+// nothing compiled it). So this gate reads the report, not just the exit code, and
+// any part that was not actually resolved against a header becomes a counted SKIP.
+// Read the report's own wording, not a loose phrase: the failure message for an
+// unchecked part also contains the words "checked against a header", so a bare
+// /checked against / would read its own explanation as a pass.
+const CHECKED = /codegen\.sdk: checked against /;
+const NOT_CHECKED = /NOT CHECKED|NOTHING in this file was checked/i;
+
+/** The first line that explains why a part was not checked, trimmed for a summary. */
+function whyNotChecked(out) {
+  const line = (out.split('\n').find(l => NOT_CHECKED.test(l)) || out.split('\n')[0] || '').trim();
+  return (`verify_sdk_names.py did NOT check this part, so this gate has nothing to say about it: `
+    + line.replace(/^\s*(warn|info)\s+/, '')).trim();
+}
+
+/** One test per shipped part, so the summary names which file went unchecked. */
+const MCU_DIR = path.join(ROOT, 'data', 'mcus');
+const SHIPPED = fs.existsSync(MCU_DIR)
+  ? fs.readdirSync(MCU_DIR).filter(n => n.endsWith('.yaml')).sort()
+  : [];
+
+for (const file of SHIPPED) {
+  test(`${file}: every SPL name it claims exists in its SDK`, () => {
+    if (!fs.existsSync(TOOL)) skip(`${path.relative(ROOT, TOOL)} does not exist yet (AGENT-1's P0)`);
+    const rel = path.posix.join('data', 'mcus', file);
+    const res = runPy(TOOL, [rel, '--quiet']);
+    if (res.missing) skip(`no python interpreter on PATH (tried: ${res.tried.join(', ')})`);
+    if (/PyYAML is required/.test(res.out)) skip('PyYAML is not installed — pip install pyyaml');
+
+    assert.ok(res.status === 0 || res.status === 1,
+      `verify_sdk_names.py exited ${res.status}, which is neither 0 (clean) nor 1 (findings). `
+      + `The checker itself failed, so this proves nothing:\n${res.out}`);
+    assert.equal(res.status, 0,
+      `verify_sdk_names.py found names that do not exist in ${file}'s SDK:\n${res.out}`);
+
+    // Green exit code AND a real header behind it, or it did not run.
+    if (!CHECKED.test(res.out)) skip(whyNotChecked(res.out));
+  });
+}
+
 test('every SPL name an MCU file claims exists in that part\'s headers', () => {
   if (!fs.existsSync(TOOL)) skip(`${path.relative(ROOT, TOOL)} does not exist yet (AGENT-1's P0)`);
   const res = runPy(TOOL, ['--quiet']);
@@ -52,6 +103,50 @@ test('every SPL name an MCU file claims exists in that part\'s headers', () => {
     `verify_sdk_names.py exited ${res.status}, which is neither 0 (clean) nor 1 (findings). `
     + `The checker itself failed, so this proves nothing:\n${res.out}`);
   assert.equal(res.status, 0, `verify_sdk_names.py found names that do not exist in the SDK:\n${res.out}`);
+  // The per-part tests above turn a NOT CHECKED file into a counted skip. If this
+  // whole run resolved nothing at all, the green tick would be reporting silence.
+  if (!CHECKED.test(res.out)) skip(whyNotChecked(res.out));
+});
+
+// The skip above is only worth having if it actually fires. Plant the condition —
+// a file with no `codegen.sdk` block at all — and insist this gate notices that
+// nothing was checked instead of reading the tool's exit 0 as a pass.
+test('the gate notices a part that was not checked, instead of passing it', () => {
+  if (!fs.existsSync(TOOL)) skip(`${path.relative(ROOT, TOOL)} does not exist yet (AGENT-1's P0)`);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-nosdk-'));
+  try {
+    const yaml = path.join(dir, 'nosdk.yaml');
+    // No `codegen:` block, so there is no SDK to resolve. Written outside data/mcus/
+    // on purpose: this is a planted break, not a part the app ships.
+    fs.writeFileSync(yaml, 'mcu:\n  name: NOSDK-CHECK\npins: {}\n', 'utf8');
+    const res = runPy(TOOL, [yaml, '--quiet']);
+    if (res.missing) skip(`no python interpreter on PATH (tried: ${res.tried.join(', ')})`);
+    assert.equal(res.status, 0,
+      `a file with no SDK is reported, not failed — that is the tool's contract:\n${res.out}`);
+    assert.notOk(CHECKED.test(res.out),
+      `the tool reported a header check for a file that declares no SDK:\n${res.out}`);
+    assert.ok(NOT_CHECKED.test(res.out),
+      `nothing in the output says this file went unchecked, so the skip above could never fire:\n${res.out}`);
+    assert.match(whyNotChecked(res.out), /did NOT check this part/,
+      'the reason has to say what happened, because it is the whole text of the skip');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The per-part checks above walk `data/mcus/*.yaml` off disk, so a part DATA lands is
+// covered the moment the file exists. Assert that this is the same set the app ships:
+// a file the CLI does not know about would be checked by nothing, and a part the CLI
+// ships with no file would be a hole in both.
+test('the gate covers every part the app ships, not a remembered list', () => {
+  const cli = path.join(ROOT, 'tools', 'wchcube_cli.js');
+  if (!fs.existsSync(cli)) skip('tools/wchcube_cli.js does not exist');
+  const res = spawnSync(process.execPath, [cli, '--list'], { cwd: ROOT, encoding: 'utf8' });
+  assert.equal(res.status, 0, `wchcube_cli.js --list failed:\n${res.stderr || res.stdout}`);
+  const shipped = res.stdout.split('\n')
+    .filter(l => l && !/^\s/.test(l)).map(l => l.trim()).filter(Boolean).sort();
+  assert.deep(SHIPPED.map(n => n.replace(/\.yaml$/, '')).sort(), shipped,
+    'the MCU files on disk and the parts the CLI ships have drifted apart');
+  assert.ok(shipped.length >= 3,
+    `only ${shipped.length} part(s) listed — the per-part checks above would be nearly vacuous`);
 });
 
 test('the SDK-name checker catches its own planted breaks', () => {

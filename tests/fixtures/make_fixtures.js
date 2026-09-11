@@ -190,6 +190,44 @@ export const FIXTURES = [
       eng.setGpioField('PA5', 'pull', 'Pull-up');
     },
   },
+  {
+    file: 'CH32V003_TSSOP20_full.wchproj',
+    name: 'compile-gate CH32V003 TSSOP20',
+    mcu: 'CH32V003',
+    pkg: 'TSSOP20',
+    env: 'CH32V003F4P6',
+    build() {
+      // The THIRD family, and the smallest part the app ships: RV32EC, 16 KB of
+      // flash, 18 I/O on TSSOP20 and no shorted pair at all. It exists because
+      // `tests/strict.test.js` refuses a part with no fixture behind the
+      // `--strict` gate — a new part must not arrive with its generated C
+      // unproven — and because the smallest package is where a codegen
+      // assumption about "there are four ports" is most likely to be wrong.
+      //
+      // Remap 0 everywhere, so this fixture is about the part and not about the
+      // AFIO word: TX=PD5 RX=PD6, SCL=PC2 SDA=PC1, TIM1_CH1=PD2, AIN2=PC4.
+      eng.setSetting('USART1', 'Mode', 'Asynchronous');
+      eng.setRemap('USART1', 0);
+      eng.setParam('USART1', 'baud', 115200);
+
+      eng.setSetting('I2C1', 'Mode', 'I2C');
+      eng.setRemap('I2C1', 0);
+      eng.setParam('I2C1', 'speed', 100000);
+
+      eng.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+      eng.setParam('TIM1', 'prescaler', 23);
+      eng.setParam('TIM1', 'period', 999);
+
+      eng.toggleSetting('ADC1', 'Channels', 'IN2', true);      // IN2 = PC4 -> AIN
+
+      eng.assignSignal('PA1', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PA2', { gpio: 'GPIO_Input' });
+      eng.assignSignal('PC0', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PC3', { gpio: 'GPIO_Input' });
+      eng.assignSignal('PD4', { gpio: 'GPIO_Output' });
+      eng.setGpioField('PC0', 'label', 'LED');
+    },
+  },
 ];
 
 /** Build one fixture and return its serialised .wchproj text. */

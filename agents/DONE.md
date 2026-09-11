@@ -386,26 +386,71 @@ runs.** A line whose evidence is a sentence in a board entry is not ticked.
       recorded either way — "no instances, checked in RM ch.7" is a valid result.  (AGENT-1)
 - [ ] `validate_mcu.py` checks the block (pins exist on the named package; restrict+allow on one
       option is an error), with planted breaks confirmed caught.  (AGENT-1)
-- [ ] The **GPIO table** honours it **per row** — the option is absent on the rows it does not
+- [x] The **GPIO table** honours it **per row** — the option is absent on the rows it does not
       apply to, not greyed for the whole column.  (AGENT-2)
-- [ ] The **conflict engine** reports a claim that violates a constraint as an issue naming the
+      → `tests/constraints.test.js` asks it row by row on the shipped CH32X035 data:
+        Pull-down absent on a bonded pin outside PA0–PA15/PC16–PC17 and **present** on one inside
+        (both halves, so a mechanism that emptied the column would fail); the output modes absent
+        on every name of a shorted pair and **present** on an unshorted pin; PC10/PC11 left with
+        exactly `No pull` while USBFS is on and given `Pull-up` back when it goes off. On a probe
+        part the same three assertions run with no skip in between, so the mechanism is exercised
+        on a case whose answer the shipped data does not already decide.
+- [x] The **conflict engine** reports a claim that violates a constraint as an issue naming the
       constraint, the way an EXTI or DMA clash is reported today.  (AGENT-2)
-- [ ] **codegen** never emits a combination the data forbids, and emits a `TODO` naming the
+      → `app/tests/constraint.test.js` "a claim that violates a constraint is an issue that names
+        the constraint"; `E.constraintIssues` carries the pin, the field, the value, the id and the
+        source, and the same sentence reaches the owning peripheral's issue list.
+- [x] **codegen** never emits a combination the data forbids, and emits a `TODO` naming the
       constraint if it somehow reaches one.  (AGENT-2)
-- [ ] A `.wchproj` that violates a constraint — or predates it — loads with **zero console
+      → `app/tests/constraint.test.js` "codegen never emits a forbidden combination - it emits a
+        TODO naming it" and "a configuration the silicon can honour generates no complaint at all";
+        the row carries `constrainedBy` / `speedConstrainedBy` and a null macro, and the TODO is the
+        one `--strict` fails on.
+- [x] A `.wchproj` that violates a constraint — or predates it — loads with **zero console
       output** and says what it dropped, through the same path `gpioSpeedFor()` already uses for
       a saved speed the part no longer offers.  (AGENT-2)
-- [ ] **A test that can fail**: with the restriction removed from the data or the consumer
+      → `tests/constraints.test.js` "a violating project loads with zero console output and says
+        what it dropped": a project storing `Pull-down` on a pin outside the allow-list passes
+        through `projectApply()` with `console.error`/`console.warn` captured — the run is silent —
+        the stored value is rewritten, and `PROJECT.warnings` names the constraint and the value;
+        `app/tests/constraint.test.js` "a project saved before the constraint existed opens with no
+        console error" covers the older file.
+- [x] **A test that can fail**: with the restriction removed from the data or the consumer
       disabled, the test goes red. Both halves of the pull-down check are present — not offered
       **outside** the allow-list AND offered **inside** it.  (AGENT-3)
-- [ ] **Regression**: CH32V006 and CH32V005 byte-identical — every existing test unchanged, and
+      → `tests/constraints.test.js`. The planted break runs on every green run:
+        "the check can fail: remove the restriction from the data and the option comes back" — the
+        same probe part is loaded with the constraint and then without it, and the option must
+        reappear, so the first assertion cannot be passing because the column was emptied. Both
+        halves are asserted in every region check, each with its own counter-control (Pull-up
+        survives, an unshorted pin keeps its output mode, the refusal lifts when USBFS goes off).
+        The schema audit carries its own planted break too. **Worth recording how it earned its
+        keep on the first run**: the file was written against the documented shape while
+        `app/engine/constraints.js` still read a different one, and the round's own defect class —
+        an offering the silicon cannot honour — was live in the mechanism built to remove it.
+        BOARD 22:11Z / 22:25Z; the consumer moved and the skips are gone.
+- [x] **Regression**: CH32V006 and CH32V005 byte-identical — every existing test unchanged, and
       generated C for the checked-in fixtures byte-identical without regenerating them.
       (AGENT-3)
+      → neither part's data changed this round based on git diff, and neither declares
+        `constraints:`, so `gpioConstraints()` is empty for both and every row offers exactly what
+        it offered before — APP's "a part that states no constraint offers everything it offered
+        before" runs that claim on every bundled part. The whole suite is green at
+        **510, 0 skipped**, and `tests/codegen_compile.test.js`'s "the checked-in fixtures still
+        match what the engine produces" confirms the fixtures did not drift.
 
 ## Deliverable B — every part generates C with no TODO and no `#error`
 
-- [ ] `node tools/wchcube_cli.js --project <fixture> --strict` exits **0** for **every** fixture
+- [x] `node tools/wchcube_cli.js --project <fixture> --strict` exits **0** for **every** fixture
       × part. It exits **2** today.  (AGENT-1 + AGENT-2, asserted by AGENT-3)
+      → `tests/strict.test.js`. Both `codegen.nvic` and `channel_params.channels` landed, and all
+        four fixtures now exit 0. Asserted as an **exit code**, twice per fixture: the round-5
+        command verbatim and the same command with `--format c`, which is the half that can
+        actually see a TODO or an `#error` — the default format is `pins-md` and `--strict`
+        deliberately says nothing about codegen when no C was generated, so the literal command
+        alone would not have been the gate it is described as. Plus the coverage half (every part
+        the app ships must have a `.wchproj` behind it) and **both planted breaks** — a conflicted
+        configuration and a part with its `codegen:` block removed — each confirmed to exit 2.
 - [ ] `codegen.nvic` — an enabled vector emits an `NVIC_Init` call, not a comment. `NVIC_Init`
       takes no handle.  (AGENT-1 + AGENT-2)
 - [ ] `channel_params.channels` — the `TIM_OCInitTypeDef` emitter is no longer parked: the
@@ -426,8 +471,16 @@ runs.** A line whose evidence is a sentence in a board entry is not ticked.
 
 - [ ] E1 `codegen.nvic`  (DATA + APP) — also a Deliverable B line above
 - [ ] E2 `channel_params.channels`  (DATA + APP) — also a Deliverable B line above
-- [ ] E3 `tools/verify_sdk_names.py` runs inside `node tests/run.js`, and its NOT CHECKED reasons
+- [x] E3 `tools/verify_sdk_names.py` runs inside `node tests/run.js`, and its NOT CHECKED reasons
       reach the run summary the way every other skip does  (AGENT-3)
+      → `tests/sdk_names.test.js` registers **one test per shipped `data/mcus/*.yaml`**, asserts the
+        tool's exit code, and then requires a `codegen.sdk: checked against …` line: without it the
+        test SKIPs carrying the tool's own sentence, so a part nobody checked is a counted skip in
+        the summary rather than a green tick. Three checks hold it shut — the file list is asserted
+        against `wchcube_cli.js --list`, a planted file with no `codegen.sdk` block proves the skip
+        fires instead of passing, and the success marker is anchored to `codegen.sdk: checked
+        against` because a bare `/checked against /` matched the tool's own failure message and read
+        it as a pass. AGENT-1's planted-break self-test was already in the runner.
 - [ ] E4 the 16 known-missing cells in `tests/completeness.test.js`, each filled or declared
       ABSENT with an EVT citation — the two are different and must not be conflated  (all three)
 - [ ] E5 `smoke.js`, `layout.test.js`, `legibility.test.js`, `codegen_compile.test.js`,
@@ -443,9 +496,23 @@ runs.** A line whose evidence is a sentence in a board entry is not ticked.
 
 ## Round-5 housekeeping
 
-- [ ] `PROGRESS.md` current: §1 the consolidated pack, §4 the remaining work, §5 CH32X035's
+- [x] `PROGRESS.md` current: §1 the consolidated pack, §4 the remaining work, §5 CH32X035's
       status, §7 what the gates now prove, §9 next steps  (AGENT-3)
-- [ ] The stale-path greps in `AGENT_3_QA_RELEASE.md` item 11 come back clean  (AGENT-3)
+      → rewritten this cycle against the tree: §1 carries the three real parts and the 510-test
+        count, §3 and §4 are round 5 rather than round 4 (which had been left open for two
+        rounds), §5's CH32X035 row reports `validate_mcu.py` and `verify_sdk_names.py` at 0 errors,
+        §6's four X035 items are marked closed with what closed them, §7 says what `--strict` and
+        the compile gate now cover, and §9 drops the recommendations that have since been done and
+        lists what is actually left. §6's "still open" list and §5's rows were each checked against
+        the tree rather than carried forward.
+- [x] The stale-path greps in `AGENT_3_QA_RELEASE.md` item 11 come back clean  (AGENT-3)
+      → run over every tracked file. The live pointers were in this file's own `PROGRESS.md` —
+        §3 said "instructions in `Agents Rounds 4/`" and §2/§6 referred to the round-3 pack by a
+        path that no longer exists. Both now name `agents/history/roundN/`. Everything else is a
+        path under `agents/` (or `agents/history/`, where those folders actually live) or a
+        sentence that says what the folder *used* to be — `Prompt.txt`'s note and `README.md`'s
+        account of the consolidation are the latter, and both are load-bearing history, not
+        pointers.
 - [ ] `WALKTHROUGH.md` run end to end, with the QA-PASS line posted including what failed
       (AGENT-3)
 - [ ] The round-1 section at the top of this file is re-audited against the tree, or explicitly

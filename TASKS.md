@@ -641,6 +641,18 @@ Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT
       tool's own NOT CHECKED sentence into a counted SKIP, so a part whose SDK was not resolved
       can no longer read as a green tick; the file list is asserted against `wchcube_cli.js --list`
       and a planted no-`codegen.sdk` file proves the skip fires.
+- [x] (AGENT-3) **CH32V003 arrived mid-round and two gates caught it.** `tests/strict.test.js`'s
+      coverage check (a shipped part with no fixture behind the `--strict` gate) and
+      `tests/completeness.test.js` (`CH32V003 OPA1: nvic`). Closed on evidence: a fifth fixture
+      `tests/fixtures/CH32V003_TSSOP20_full.wchproj`, `[env:CH32V003F4P6]` in
+      `data/firmware/platformio.ini`, a `WCH_HAL_SERIES_CH32V003` branch in `lib/wch_hal`
+      (small-x `ch32v00x`, ports A/C/D and no GPIOB), and the OPA vector declared **ABSENT**
+      citing `ch32v00x.h`'s `TIM2_IRQn = 38`.
+- [ ] (AGENT-1) **`CH32V003` variants carry `pio_board` but no `pio_env`**, so nothing checks that
+      its firmware environment exists — `verify_sdk_names.py` does that cross-check on the other
+      three parts and would catch a typo. `[env:CH32V003F4P6]` exists as of this cycle; add
+      `pio_env: CH32V003F4P6` (or deliberately none, as `CH32X035D8U6` does) so it becomes a
+      checked claim. Minor: `params:` for `CH32V003 OPA1` is still open and prints every run.
 - [x] (AGENT-1) **The constraint mechanism, DATA half.** Schema posted on the board BEFORE any
       entry was filled; `data/FORMAT.md` gains `## constraints` (mechanism, key table, the rules
       the validator enforces, how the three consumers read it, and why "must be a floating input"
@@ -694,8 +706,20 @@ Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT
       USBPD `params:`. EVT headers are the citation, `data/FORMAT.md` the contract.
 - [ ] (AGENT-1) **The ADC internal Vrefint channel** - a repo-wide decision, not an X035 miss,
       because the same gap exists on CH32V006. Decide once, apply to every part.
-- [ ] (AGENT-1) **USART LIN / SmartCard / IrDA** on X035 as `params:` mode flags — the DS
-      advertises them and the SPL has the calls.
+- [x] (AGENT-1) **USART LIN / SmartCard / IrDA** on X035 — `params:` with `sdk_call` on all four
+      USARTs (`USART_LINCmd` `ch32x035_usart.h:165`, `USART_SmartCardCmd` `:171`, `USART_IrDACmd`
+      `:175`), each a `bool` emitting both its ENABLE and DISABLE forms. **They are `params:` and
+      not `settings:`, because none of the three claims a pin** — a setting exists to claim one.
+      Compiled on the compile-gate fixture with USART1 `Asynchronous` + `lin`/`irda` true:
+      `pio run` succeeds for CH32X035G8U6 and the calls appear. `validate_mcu.py` and
+      `verify_sdk_names.py` both exit 0 (97 EVT header files).
+- [ ] (AGENT-1) **The two USART refinements that live INSIDE a mode**, cited and recorded but not
+      wired: LIN break detection length (`USART_LINBreakDetectLengthConfig`,
+      `ch32x035_usart.h:164`, macros `_10b`/`_11b` at `:134-135`) and the IrDA low-power pulse
+      width (`USART_IrDAConfig`, `:174`, macros `USART_IrDAMode_Normal`/`_LowPower` at
+      `:138-139`). Both need `depends_on:` on the mode flag; before emitting them unconditionally
+      I want the dependency's lookup key (param `key` vs display `name`) proved from
+      `app/engine/params.js`, which is APP's file. Recorded in `CH32X035.notes.md`.
 
 ### Deliverable A — the three consumers (AGENT-2)
 

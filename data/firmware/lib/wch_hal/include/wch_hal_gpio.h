@@ -1,17 +1,22 @@
 /* ---------------------------------------------------------------------------
  *  wch_hal_gpio.h — GPIO, as the part actually implements it.
  *
- *  Deliberately NOT a portable "speed" abstraction. On both series this project
- *  builds for, the GPIO output driver has exactly ONE speed setting:
+ *  Deliberately NOT a portable "speed" abstraction. On every series this project
+ *  builds for, the GPIO output driver has ONE speed setting:
  *
  *    CH32V00Xx  GPIOx_CFGLR MODEy is a single bit — "1: output mode, maximum
  *               speed 30MHz; 0: input mode" (CH32V00X RM v1.4, §7.3.1.1), and
  *               the SPL enum GPIOSpeed_TypeDef has one member,
  *               GPIO_Speed_30MHz.
+ *    CH32V003   GPIOSpeed_TypeDef has THREE members (2/10/30 MHz) — the mode
+ *               field really is two bits here — and the reset/default choice is
+ *               the fastest one. That is a part where the configurator DOES
+ *               offer a choice, and the one fixture that exercises it.
  *    CH32X035   the SPL enum has one member, GPIO_Speed_50MHz.
  *
- *  So there is no Low/Medium/High to pick, and this header does not pretend
- *  there is. WCH_HAL_GPIO_SPEED_MAX is the only value the hardware offers.
+ *  So there is no Low/Medium/High to pick on two of the three, and this header
+ *  does not pretend there is. WCH_HAL_GPIO_SPEED_MAX is the fastest the
+ *  hardware offers, which for the fixed-speed parts is the only value there is.
  * ------------------------------------------------------------------------- */
 #ifndef WCH_HAL_GPIO_H
 #define WCH_HAL_GPIO_H
@@ -22,7 +27,9 @@
 extern "C" {
 #endif
 
-#if defined(WCH_HAL_SERIES_CH32V00XX)
+#if defined(WCH_HAL_SERIES_CH32V003)
+#  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_30MHz
+#elif defined(WCH_HAL_SERIES_CH32V00XX)
 #  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_30MHz
 #elif defined(WCH_HAL_SERIES_CH32X035)
 #  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_50MHz

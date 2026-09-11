@@ -96,10 +96,42 @@ it in the same commit that notices, and never let a second authoritative copy ap
 
 ## Current
 
-**Opening round 5.** The pack was consolidated to this one directory; rounds 1–4 are under
-`agents/history/` and `INDEX.md` says what each produced. State on entry: **468 tests green**,
-`task firmware` 4 of 4 environments, `pio check` clean on CH32V006 and CH32X035, the
-generated-project gate green in the system temp directory, and **`--strict` exits 2**.
+**Round 5, cycle 1 — done. Four things shipped, and the two P0 gates are real.**
 
-Three things are yours before anything else: the constraint test that can fail (P0.1), the
-`--strict` gate (P0.2), and `verify_sdk_names.py` inside the runner (E3).
+1. **P0.1 — the constraint mechanism's test.** `tests/constraints.test.js`, 13 tests. The
+   mechanism's own algebra is exercised on a probe part (region, pad, `when:`) with both
+   directions asserted and a counter-control for each, and the round's three acceptance cases
+   run against the shipped CH32X035 data: Pull-down absent outside PA0–PA15/PC16–PC17 and
+   present inside; every name of a shorted pair loses the output modes with the row naming the
+   constraint; PC10/PC11 keep exactly `No pull` while USBFS is on and get `Pull-up` back when
+   it goes off; a violating `.wchproj` loads silently and reports what it dropped. The planted
+   break runs every time — the same probe with the restriction removed, where the option must
+   come back. **It earned its keep before it was finished**: the data and the consumer had been
+   written against two different schemas in one shared tree, so the mechanism was a complete
+   no-op on the shipped parts while the GPIO table went on offering impossible choices. QA-FAIL
+   22:11Z, corrected 22:25Z, closed 22:52Z. The skips came out of the file once the consumer
+   moved: a guard that can hide while the code is broken is the thing this repo keeps finding.
+2. **P0.2 — `--strict` as a gate.** `tests/strict.test.js`, 11 tests. Every fixture × both
+   formats, asserted on the exit code — including `--format c`, which is the only one that can
+   see a TODO, because the default `pins-md` makes `--strict` silent about codegen by design.
+   Every shipped part must have a fixture behind it. Both planted breaks confirmed red.
+3. **E3 — `verify_sdk_names.py` in the runner.** One test per shipped part; a part the checker
+   cannot resolve is now a counted SKIP carrying the tool's own sentence, with a planted file
+   proving the skip fires and the success marker anchored so the tool's failure message cannot
+   be read as a pass.
+4. **Round-5 housekeeping.** `PROGRESS.md` §1/§3–§7/§9 rewritten against the tree — §3 and §4
+   had been describing round 4 as open for two rounds. The stale-path greps ran clean after
+   fixing this file's own live pointers at `Agents Rounds 4/`. Five `DONE.md` lines ticked on
+   tests that ran; `TASKS.md` closed both constraint gaps.
+
+State: **`python build.py && node tests/run.js` → 510 green, 0 skipped.** `validate_mcu.py` 0
+errors, `verify_sdk_names.py` 0 errors, generated-project gate green, `--strict` exit 0 on all
+four fixtures. **E1, E2 and E9's `--strict` half are done** — the `codegen.nvic` and
+`channel_params.channels` keys landed.
+
+**Next, in order:** (a) E5 — seven CH32X035 packages in `layout.test.js` and `legibility.test.js`,
+which still cover fewer than the rest; (b) run `WALKTHROUGH.md` end to end and post the QA-PASS
+with what failed; (c) E8 — `src-tauri` is still unverified in a window, so `PROGRESS.md` §4 says
+so plainly; (d) re-audit or explicitly supersede the round-1 section of `DONE.md`, which still
+carries a round-3 count; (e) E4's 16 known-missing cells as DATA lands them. Do not tick
+`DONE.md`'s flash line — it reads "builds, not flashed" and nobody has rounded it up.
