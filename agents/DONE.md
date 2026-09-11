@@ -257,3 +257,120 @@ Status at 2026-09-11T16:05Z: **5 of 13.**
         landed, the test count, both defects still written as open, and §7's "not yet known
         to compile in general"). §7 now carries an explicit *what this does and does not
         support saying*. Re-checked every cycle — that is the line's whole point.
+
+---
+
+# Round 4 — "a second family, and a project you can flash"
+
+From `Agents Rounds 4/00_PROJECT.md`. Same rule: **QA ticks on something that
+runs, never on a claim.** Every `[x]` names the test.
+
+Status at 2026-09-11T17:12Z: **6 of 21.**
+
+## Deliverable A — CH32X035 end to end
+
+- [ ] `data/mcus/CH32X035.yaml` — 8 variants, 7 packages, every peripheral the RM
+      describes, remaps re-derived by a second pass and diffed to 0 differences
+      → **in progress** (AGENT-1). It loads, 7 packages draw with 0 conflicts, and
+        7 peripherals are in so far.
+- [ ] `validate_mcu.py` 0 errors; `verify_sdk_names.py` against the X035 EVT 0 errors
+      → **RED, correctly**, and this is the gate doing its job on a second family:
+        `gpio.modes` claims `GPIO_Mode_Out_OD` and `GPIO_Mode_AF_OD`, and
+        `GPIOMode_TypeDef` (`ch32x035_gpio.h:29-37`) has six members with **no
+        open-drain at all**. Plus `codegen.periph_handle.USBFS: USBFS_DEVICE`,
+        which is 0 occurrences in the whole X035 EVT tree.
+- [x] `grep -ri "x035" app/engine/ app/template.html` is empty. No part special-cased
+      → `tests/no_part_names.test.js`, and it is a real check rather than a grep in
+        a comment: comments MAY name parts (explaining why a piece of code reads the
+        file is worth more than a green tick), code may not. Self-tested both ways.
+- [x] Generated C for CH32X035 **compiles**: `pio run -e CH32X035G8U6` exits 0
+      → `tests/codegen_compile.test.js`, fixture `CH32X035_QFN28_full.wchproj`.
+        Pins on three ports including the 24-bit port C, and PC16 which is shorted
+        to PC11 in QFN28 — so the shorted-pin path runs on a part that is not
+        CH32V006. **Zero TODO sections of an untracked kind and zero `#error`.**
+- [x] Every existing test still passes on CH32V006 and CH32V005 — no regression
+      paid for X035
+      → the whole suite, 413 green. The compile matrix runs all four fixtures
+        every time, which is the place a shared codegen change would break the
+        part nobody is looking at.
+- [ ] `smoke.js`, `layout.test.js`, `legibility.test.js`, `completeness.test.js`
+      and `codegen_compile.test.js` all cover CH32X035 × every package
+      → `smoke.js` and `completeness.test.js` cover it automatically (they iterate
+        the registered parts — that design paying off), and `codegen_compile` has
+        it explicitly. `layout` and `legibility` still need the X035 packages
+        added; LQFP64M with names like `USBPD_CC1` is the first real stress the
+        legibility test has had.
+- [ ] The clock tab on CH32X035 shows an HSI-only tree: no HSE box, no greyed
+      placeholder, no console output. CH32V006 unchanged.  (AGENT-3)
+- [ ] 24-bit ports and the PC holes work everywhere: masks, GPIO table, drawing,
+      EXTI map, generated `GPIO_Pin_*`.
+- [ ] DMA tab shows 8 channels; NVIC tab shows **45** vectors, the three grouped
+      EXTI vectors once each, and **no `RCC_IRQn`** — this part does not have one.
+- [ ] Package geometries for all seven; `QSOP28` added; `LQFP64M` resolved against
+      the DS mechanical drawing.  (AGENT-1)
+- [ ] `CH32X035.notes.md` cites a source for every fact.  (AGENT-1)
+
+## Deliverable B — the generated PlatformIO project
+
+- [ ] `Generate PlatformIO project` produces a folder that builds with no manual
+      step, for CH32V006 TSSOP20 and CH32X035
+      → **`tests/generated_project.test.js` is written and SKIPPING**, with the
+        reason printed on every run: `app/engine/` exports no `projectFiles()`
+        yet. Written against the contract on purpose, so it runs the moment
+        AGENT-2 lands it rather than being retrofitted around what got built.
+- [ ] `platformio.ini` names the board from `variants[*].pio_board`; a variant
+      without one is refused by name  → asserted by that gate, skipping.
+- [ ] `main.c` prints the part, the configured SYSCLK and `SystemCoreClock` read
+      back, and blinks a pin **only** if the user configured an output
+      → asserted in BOTH directions by that gate, skipping.
+- [ ] The generated README explains the two-clock-owners behaviour in one sentence
+      → asserted by that gate, skipping.
+- [ ] Desktop writes a folder through a native picker; the browser delivers a
+      `.zip` with no external library
+      → the desktop half is **done** (D5 below). AGENT-3 has the ZIP writer.
+- [x] `tests/generated_project.test.js`: generate to a scratch dir, `pio run`,
+      exit 0, clean up; skips with a printed reason when `pio` is absent
+      → the FILE exists and behaves correctly; its nine checks skip loudly until
+        the seam lands. The test is ticked, the feature it tests is not.
+- [ ] **A human has flashed one generated project, or this line says
+      "builds, not flashed"** → **BUILDS, NOT FLASHED.** Every green result in
+      this repository is a compile. `pio run -t upload` has never been run here
+      and nobody has hardware attached. `agents/HUMAN_TODO.md` item 6 is the
+      specific request, with the exact commands and what to send back.
+
+## Carried over from round 3
+
+- [ ] D1 `generateAll()` returns `{ name, language, text }` per file  (AGENT-2)
+- [ ] D2 Generator options in `S.project`, round-tripped and undoable  (AGENT-2)
+- [ ] D3 User code sections preserved across regeneration  (AGENT-2)
+- [x] D4 `Tools` tab implemented  (AGENT-3)
+      → AGENT-3's 16:57Z sweep: the only `disabled` control left anywhere is
+        `#m-redo`, which reflects undo history rather than an option the silicon
+        lacks. That also makes round 3's "no `disabled` control not justified by
+        the MCU data" true.
+- [x] D5 Tauri command to write generated files to a chosen folder
+      → `write_project(name, files, overwrite)`. Validates every path BEFORE
+        creating anything (there is a test on that ORDERING, not just the
+        behaviour), refuses a non-relative path, a `..`, and a non-empty folder.
+        `safe_relative()` unit-tested in Rust over 5 real paths and 9 escapes;
+        `cargo test` now runs inside `node tests/run.js`.
+- [x] D6 Host-side unit tests for `lib/util` under `[env:native]`
+      → 10 Unity tests over the ring buffer, run by `tests/firmware_native.test.js`.
+        Found a host compiler nobody knew this box had: MinGW 9.2.0 at `C:\MinGW`,
+        not on PATH.
+- [x] D7 `agents/README.md` "Environment facts"; round-3 section in `agents/DONE.md`
+      → both done; the README also had a stale current-round pointer.
+- [x] D8 RM chapter 20 (EXTEN) on V006  (AGENT-1) — modelled, not whitelisted.
+- [~] D9 `#m-open` / `#m-openproj` sweep; `Taskfile.yml` adopt-or-leave
+      → **Taskfile ADOPTED** (`task` 3.53.1 is installed): build, test, gate,
+        validate, firmware, firmware:native, firmware:check, tauri, tauri:test,
+        fixtures, generate, all. `task firmware` clears the drop zone first, which
+        is the fix for the cross-part build failure. The dead-control sweep half
+        is superseded by AGENT-3's 16:57Z result and needs confirming.
+
+## Round-4 housekeeping
+
+- [x] `PROGRESS.md` current; the stale "EVT has not arrived" language corrected
+      → §5 has the second family, §6 the five live X035 findings, §7 the second
+        family in the compile table. `data/firmware/{ARCHITECTURE,README}.md`
+        corrected; `data/sources/README.md` is AGENT-1's.
