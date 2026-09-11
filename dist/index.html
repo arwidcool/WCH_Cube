@@ -640,18 +640,65 @@
   #fileinput{display:none}
   .modal{position:fixed;inset:0;background:rgba(3,35,75,.55);display:none;align-items:center;justify-content:center;z-index:200}
   .modal.show{display:flex}
-  .dlg{background:var(--panel);width:640px;max-width:95vw;border-radius:4px;box-shadow:0 12px 40px rgba(0,0,0,.4);overflow:hidden}
-  .dlg h3{margin:0;background:var(--navy);color:#fff;font-weight:500;font-size:15px;padding:10px 16px}
-  .dlg .row{display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:start;padding:10px 16px;border-bottom:1px solid var(--line-soft)}
-  .dlg .row.hint{display:block;color:var(--muted);font-size:12px}
-  .dlg label{padding-top:4px;color:var(--text)}
-  .dlg select,.dlg input{width:100%;padding:5px 8px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
-  .variants{display:grid;gap:2px;max-height:260px;overflow:auto}
-  .variants label{display:grid;grid-template-columns:20px 150px 90px 1fr;gap:8px;padding:4px 6px;border-radius:3px;cursor:pointer;font-size:12.5px}
-  .variants label:hover{background:var(--blue-pale)}
-  .variants label.on{background:var(--blue-hdr);color:#fff}
-  .variants small{color:inherit}
-  .btns{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px}
+  /* The dialog is a resize target: `resize:both` needs `overflow` other than visible,
+     and a grid whose middle row is the only one that grows, so dragging the corner
+     gives the list the space rather than stretching the header and the buttons. The
+     size is remembered per browser (same pattern as the theme). */
+  .dlg{background:var(--panel);width:min(1080px,94vw);height:min(680px,88vh);
+       min-width:560px;min-height:400px;max-width:97vw;max-height:94vh;
+       border-radius:4px;box-shadow:0 12px 40px rgba(0,0,0,.4);
+       overflow:hidden;resize:both;display:grid;grid-template-rows:auto 1fr auto auto}
+  .dlg h3{margin:0;background:var(--navy);color:#fff;font-weight:500;font-size:15px;padding:10px 16px;
+          display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .dlg h3 .np-hint{font-size:11px;opacity:.7;font-weight:400}
+  .dlg label{color:var(--text)}
+  .dlg input{padding:5px 8px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+
+  /* two panes: facets, then search + table */
+  .np-body{display:grid;grid-template-columns:216px 1fr;min-height:0;overflow:hidden}
+  .np-facets{border-right:1px solid var(--line-soft);overflow:auto;padding:10px 12px;font-size:12px}
+  .np-facets h4{margin:12px 0 5px;font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .np-facets h4:first-child{margin-top:0}
+  .np-facets label{display:flex;align-items:center;gap:6px;padding:2px 3px;border-radius:3px;cursor:pointer}
+  .np-facets label:hover{background:var(--blue-pale)}
+  .np-facets input[type=checkbox]{margin:0;flex:none}
+  .np-facets .np-n{margin-left:auto;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+  .np-facets .np-range{display:flex;align-items:center;gap:6px;padding:2px 3px}
+  .np-facets .np-range input{width:74px;padding:3px 6px;font-size:12px}
+  .np-clear{margin-top:12px;width:100%;padding:5px;border:1px solid var(--line);border-radius:3px;
+            background:var(--panel);color:var(--text);cursor:pointer;font-size:12px}
+  .np-clear:hover{background:var(--bg)}
+  .np-clear[disabled]{opacity:.45;cursor:default}
+
+  .np-results{display:grid;grid-template-rows:auto 1fr;min-height:0;min-width:0}
+  .np-search{display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line-soft)}
+  .np-search input{flex:1;min-width:0}
+  .np-count{color:var(--muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  /* auto, not hidden: a long part number scrolls rather than being cut off - the
+     same rule the GPIO table follows. */
+  .np-tablewrap{overflow:auto;min-height:0}
+  .np-tablewrap:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+  .np-table{border-collapse:collapse;width:100%;font-size:12.5px}
+  .np-table th{position:sticky;top:0;z-index:1;background:var(--bg);text-align:left;font-weight:600;
+               padding:6px 10px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;color:var(--text)}
+  .np-table th:hover{background:var(--blue-pale)}
+  .np-table th .np-sort{color:var(--muted);font-size:10px;margin-left:3px}
+  .np-table td{padding:4px 10px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+  .np-table td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .np-table tbody tr{cursor:pointer}
+  .np-table tbody tr:hover{background:var(--blue-pale)}
+  .np-table tbody tr.on,.np-table tbody tr.on:hover{background:var(--blue-hdr);color:#fff}
+  .np-table tbody tr.on .np-muted,.np-table tbody tr.on .np-no{color:#dbe7f2}
+  .np-muted{color:var(--muted)}
+  .np-no{color:var(--muted);font-style:italic}
+  .np-empty{padding:22px 16px;color:var(--muted);font-size:13px}
+
+  .np-detail{border-top:1px solid var(--line);padding:9px 16px;font-size:12px;color:var(--muted);
+             min-height:34px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline}
+  .np-detail b{color:var(--text);font-weight:600}
+  .np-name{display:flex;align-items:center;gap:8px;margin-right:auto;font-size:13px}
+  .np-name input{width:260px}
+  .btns{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;align-items:center;border-top:1px solid var(--line-soft)}
   .btns button{padding:6px 16px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:3px}
   .btns .primary{background:var(--blue-hdr);color:#fff;border-color:var(--blue-hdr)}
   .toast{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:8px 14px;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.3);z-index:99;opacity:0;transition:opacity .2s;pointer-events:none}
@@ -3694,9 +3741,35 @@ peripherals:
         choices:
           - { name: Serial Wire (SDI), signals: [DIO, DCK] }
           - { name: Disable }
+      # Option byte USER[4:3] = RST_MODE, RM v1.9 20.3.8 / the USER byte table:
+      #   00: RST multiplexing enabled  -  the pin IS the external reset
+      #   11: multiplexing off, PA21/PC3/PB7 for GPIO function
+      # Reset value is 11b, so unlike CH32V006 - whose factory RST_MODE is 10b and holds
+      # the pin - a blank CH32X035 leaves the pin as GPIO and the user opts IN. That is
+      # why "Disabled" is choices[0] here and the enabled choice is not the default; on
+      # CH32V006 it is the other way round and validate_mcu warns about it on purpose.
+      - name: External reset pin
+        choices:
+          - { name: "RST disabled - pin is GPIO (RST_MODE=11, factory default)" }
+          - { name: "RST enabled (RST_MODE=00)", signals: [RST] }
+    # WHICH pin is the reset depends on the package, exactly as on CH32V006.
+    #   PA21 - RM USER-byte note: "PA21 can be multiplexed as an external reset pin in
+    #          64-pin R8T6 and 48-pin C8T6 packages". PA21 is bonded only on those two.
+    #   PC3  - DS:2583: "The RST function on pin PC3 is only available for the CH32X035
+    #          in the QSOP28 package and TSSOP20 package."
+    # PB7 also carries RST in DS Table 2-3, but DS:2584 says that is CH32X033 in TSSOP20
+    # - a different part - so it is NOT offered here. That one was found by the remap
+    # collision check reporting RST on three pins at index 0.
+    #
+    # QFN28, QFN20 and QFN12 are NOT in remap_by_package: PA21 is not bonded on any of
+    # them and neither source says PC3 is the reset there. An absent entry is the honest
+    # answer - see CH32X035.notes.md. Do not fill them in by analogy.
     remaps:
-      - name: Default
-        pins: { DIO: PC18, DCK: PC19 }
+      - name: RST on PA21 (LQFP64M / LQFP48)
+        pins: { DIO: PC18, DCK: PC19, RST: PA21 }
+      - name: RST on PC3 (QSOP28 / TSSOP20)
+        pins: { DIO: PC18, DCK: PC19, RST: PC3 }
+    remap_by_package: { LQFP64M: 0, LQFP48: 0, QSOP28: 1, TSSOP20: 1 }
 
   RCC:
     category: System Core
@@ -4974,7 +5047,29 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled }
+      # DS Features: "Low power modes: Sleep, Stop, Standby", and the SPL has
+      # PWR_EnterSTOPMode(PWR_STOPEntry) and PWR_EnterSTANDBYMode() (ch32x035_pwr.h).
+      # Sleep is WFI/WFE on the core and needs no PWR call, which is why it is a choice
+      # here and not a param. None of these claims a pin.
+      - name: Low power mode
+        choices:
+          - { name: None }
+          - { name: Sleep }
+          - { name: Stop }
+          - { name: Standby }
     params:
+      - key: stop_entry
+        name: Stop mode entry
+        sdk_call: PWR_EnterSTOPMode
+        sdk_args: [$VALUE]
+        type: enum
+        group: Advanced
+        default: WFI
+        options:
+          - { name: WFI, value: 1, sdk: PWR_STOPEntry_WFI }
+          - { name: WFE, value: 2, sdk: PWR_STOPEntry_WFE }
+        help: "Which instruction puts the core to sleep when entering Stop. Only meaningful when the low power mode is Stop."
+        when: { setting: Low power mode, is: Stop }
       - key: pvd_level
         name: PVD threshold
         sdk_call: PWR_PVDLevelConfig
@@ -5001,7 +5096,15 @@ peripherals:
         choices:
           - { name: Started by software (factory default) }
           - { name: Started by hardware }
-      - name: Reset on entering Standby (STANDBY_RST)
+      - name: Reset on entering Standby (STANDY_RST)
+        choices:
+          - { name: No reset (factory default) }
+          - { name: Reset }
+      # A user option byte CH32V006 DOES NOT HAVE. RM v1.9 USER byte, bit 1: "System
+      # reset control in Stop mode: 1: Disable, system will not be reset when entering
+      # Stop mode; 0: Enable". Reset value 1. Found by auditing the USER byte against
+      # CH32V006's, which has STANDBY_RST but no Stop-mode equivalent.
+      - name: Reset on entering Stop (STOP_RST)
         choices:
           - { name: No reset (factory default) }
           - { name: Reset }
@@ -11366,15 +11469,33 @@ function projectZip() {
 <input type="file" id="projinput" accept=".wchproj,.yaml,.yml" style="display:none">
 
 <!-- New project dialog (CubeMX "MCU selector") -->
+<!-- New Project / MCU selector.
+     One flat catalogue of every PART NUMBER in data/mcus/, not a dropdown of MCU
+     families with a second list inside it. With four parts the dropdown was merely
+     clumsy; the moment there are fifty it stops being usable at all, and the search
+     box is the only control anybody would touch. Facets are counted from the loaded
+     files at open time - nothing here names a part, a family or a package. -->
 <div class="modal" id="newproj">
-  <div class="dlg">
-    <h3>New Project</h3>
-    <div class="row"><label>MCU</label><select id="np-mcu"></select></div>
-    <div class="row"><label>Part / package</label>
-      <div id="np-variants" class="variants"></div></div>
-    <div class="row"><label>Project name</label><input id="np-name"></div>
-    <div class="row hint" id="np-info"></div>
-    <div class="btns"><button id="np-cancel">Cancel</button><button class="primary" id="np-create">Create project</button></div>
+  <div class="dlg" id="np-dlg" role="dialog" aria-modal="true" aria-labelledby="np-title">
+    <h3 id="np-title">New Project<span class="np-hint">drag the corner to resize</span></h3>
+    <div class="np-body">
+      <aside class="np-facets" id="np-facets"></aside>
+      <section class="np-results">
+        <div class="np-search">
+          <input id="np-q" type="search" placeholder="Search part number, family, core or package"
+                 aria-label="Search parts" autocomplete="off" spellcheck="false">
+          <span id="np-count" class="np-count"></span>
+        </div>
+        <div class="np-tablewrap" id="np-tablewrap" tabindex="0" role="group" aria-label="Matching parts">
+          <table class="np-table" id="np-table"></table>
+        </div>
+      </section>
+    </div>
+    <div class="np-detail" id="np-detail"></div>
+    <div class="btns">
+      <label class="np-name">Project name <input id="np-name" autocomplete="off"></label>
+      <button id="np-cancel">Cancel</button><button class="primary" id="np-create">Create project</button>
+    </div>
   </div>
 </div>
 
@@ -14118,36 +14239,319 @@ function pmWhereText() {
   btn.onclick = pmGenerate;
 })();
 // New-project dialog
-function openNewProject() {
-  const dlg = document.getElementById('newproj'), sel = document.getElementById('np-mcu');
-  sel.innerHTML = Object.keys(MCU_FILES).sort().map(n => `<option${M && n === M.mcu.name ? ' selected' : ''}>${n}</option>`).join('');
-  fillVariants(); dlg.classList.add('show');
-}
-let npPick = null;
-function fillVariants() {
-  const name = document.getElementById('np-mcu').value, y = mcuModel(name);   // resolves mcu.inherits
-  const box = document.getElementById('np-variants'), rows = [];
-  const pkgIo = pk => { const map = y.packages[pk]; return Object.entries(map).filter(([n]) => n !== '0').map(([, v]) => Array.isArray(v) ? v[0] : v).filter(p => ((y.pins[p] || {}).type || 'io') === 'io').length; };
-  if (y.mcu.variants) for (const [v, info] of Object.entries(y.mcu.variants)) rows.push({ variant: v, pkg: info.package, desc: `${info.flash_kb || y.mcu.flash_kb} KB flash · ${info.sram_kb || y.mcu.sram_kb} KB SRAM · ${pkgIo(info.package)} I/O · ${info.temp ? info.temp + ' °C' : ''}${info.notes ? ' · ' + info.notes : ''}` });
-  else for (const pk of Object.keys(y.packages)) rows.push({ variant: null, pkg: pk, desc: `${pkgIo(pk)} I/O` });
-  npPick = rows[0];
-  box.innerHTML = rows.map((r, i) => `<label class="${i === 0 ? 'on' : ''}" data-i="${i}"><input type="radio" name="np" ${i === 0 ? 'checked' : ''}><b>${r.variant || y.mcu.name}</b><span>${r.pkg}${PACKAGES[r.pkg] ? '' : ' (no drawing)'}</span><small>${r.desc}</small></label>`).join('');
-  box.querySelectorAll('label').forEach(l => l.onclick = () => { box.querySelectorAll('label').forEach(x => x.classList.remove('on')); l.classList.add('on'); npPick = rows[+l.dataset.i]; setNpName(); });
-  document.getElementById('np-info').textContent = `${y.mcu.core || ''} · ${y.mcu.vendor || ''} · max ${y.mcu.max_sysclk_mhz || '?'} MHz`;
-  setNpName();
-}
-function setNpName() { document.getElementById('np-name').value = `${npPick.variant || document.getElementById('np-mcu').value}_${npPick.pkg}`; }
-document.getElementById('np-mcu').onchange = fillVariants;
-document.getElementById('np-cancel').onclick = () => document.getElementById('newproj').classList.remove('show');
-document.getElementById('np-create').onclick = () => {
-  const name = document.getElementById('np-mcu').value;
-  loadMcu(MCU_FILES[name]);
-  setPackage(npPick.pkg);
-  syncMcuUi();
-  setProject({ name: document.getElementById('np-name').value.trim() || 'Untitled', variant: npPick.variant, dirty: false });
-  document.getElementById('newproj').classList.remove('show'); updateCrumb(); renderAll(true);
-  toast(`New project: ${PROJECT.name}`);
+/* =============================================================================
+   New Project — the MCU selector.
+
+   One flat catalogue of PART NUMBERS, searched and filtered, rather than a family
+   dropdown with a second list inside it. Every row is something you can actually
+   build: a part number on a package, or — for a file with no `variants:` — the MCU
+   on one of its packages.
+
+   Nothing here names a part, a family, a package or a core. The facets are COUNTED
+   from the loaded files each time the dialog opens, so a new MCU file appears in
+   the search, in the family list and in the package list with no UI change at all.
+   That is the contract the tree and the Project Manager already keep, and
+   `tests/no_part_names.test.js` holds the line.
+   ========================================================================== */
+const NP = {
+  rows: [],                     // the catalogue, built at open
+  view: [],                     // what the filters leave
+  pick: null,                   // the selected row
+  q: '',
+  facets: { family: new Set(), pkg: new Set(), core: new Set() },
+  minFlash: 0, minSram: 0,
+  sort: { key: 'part', dir: 1 },
+  named: false,                 // has the user typed their own project name?
+  resized: false,               // has the user dragged the resize gripper? (see npRememberSize)
 };
+
+/** Count the I/O pins of a package, the way the old dialog did. */
+function npIoCount(y, pk) {
+  const map = y.packages[pk] || {};
+  return Object.entries(map).filter(([n]) => n !== '0')
+    .map(([, v]) => Array.isArray(v) ? v[0] : v)
+    .filter(p => ((y.pins[p] || {}).type || 'io') === 'io').length;
+}
+
+/** Every buildable part across every loaded MCU file, flattened into rows. */
+function npCatalogue() {
+  const rows = [];
+  for (const mcuName of Object.keys(MCU_FILES).sort()) {
+    let y;
+    try { y = mcuModel(mcuName); } catch (e) { console.warn('New Project: skipping', mcuName, e); continue; }
+    if (!y || !y.mcu || !y.packages) continue;
+    const m = y.mcu;
+    const base = {
+      mcu: mcuName, family: m.family || mcuName, core: m.core || '', vendor: m.vendor || '',
+      mhz: m.max_sysclk_mhz || null, vdd: Array.isArray(m.vdd_v) ? m.vdd_v : null,
+      periphs: Object.keys(y.peripherals || {}).length,
+    };
+    const variants = m.variants || null;
+    if (variants && Object.keys(variants).length) {
+      for (const [part, info] of Object.entries(variants)) {
+        rows.push({
+          ...base, part, variant: part, pkg: info.package,
+          flash: info.flash_kb || m.flash_kb || 0, sram: info.sram_kb || m.sram_kb || 0,
+          io: npIoCount(y, info.package), temp: info.temp || null,
+          board: info.pio_board || null, env: info.pio_env || null,
+          note: info.notes || '', geom: !!PACKAGES[info.package],
+        });
+      }
+    } else {
+      // No `variants:` — the part IS the MCU, once per package it ships in.
+      for (const pk of Object.keys(y.packages)) {
+        rows.push({
+          ...base, part: mcuName, variant: null, pkg: pk,
+          flash: m.flash_kb || 0, sram: m.sram_kb || 0, io: npIoCount(y, pk),
+          temp: null, board: null, env: null, note: '', geom: !!PACKAGES[pk],
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+const NP_COLS = [
+  { key: 'part', label: 'Part number', get: r => r.part },
+  { key: 'mcu', label: 'MCU', get: r => r.mcu },
+  { key: 'pkg', label: 'Package', get: r => r.pkg },
+  { key: 'flash', label: 'Flash', num: true, get: r => r.flash },
+  { key: 'sram', label: 'SRAM', num: true, get: r => r.sram },
+  { key: 'io', label: 'I/O', num: true, get: r => r.io },
+  { key: 'temp', label: 'Temp', num: true, get: r => r.temp || 0 },
+  { key: 'board', label: 'PlatformIO board', get: r => r.board || '' },
+];
+
+/** Does a row survive the current search and facets? */
+function npMatches(r) {
+  const f = NP.facets;
+  if (f.family.size && !f.family.has(r.family)) return false;
+  if (f.pkg.size && !f.pkg.has(r.pkg)) return false;
+  if (f.core.size && !f.core.has(r.core)) return false;
+  if (r.flash < NP.minFlash || r.sram < NP.minSram) return false;
+  if (!NP.q) return true;
+  // Every whitespace-separated term must appear somewhere in the row, so "v006 qfn"
+  // finds the QFN parts of that family without an exact-phrase rule to explain.
+  const hay = `${r.part} ${r.mcu} ${r.family} ${r.core} ${r.pkg} ${r.vendor} ${r.board || ''}`.toLowerCase();
+  return NP.q.toLowerCase().split(/\s+/).filter(Boolean).every(t => hay.includes(t));
+}
+
+function npApply() {
+  const col = NP_COLS.find(c => c.key === NP.sort.key) || NP_COLS[0];
+  NP.view = NP.rows.filter(npMatches).sort((a, b) => {
+    const x = col.get(a), y = col.get(b);
+    const c = col.num ? (x - y) : String(x).localeCompare(String(y), undefined, { numeric: true });
+    return (c || String(a.part).localeCompare(String(b.part), undefined, { numeric: true })) * NP.sort.dir;
+  });
+  if (!NP.view.includes(NP.pick)) npSelect(NP.view[0] || null, false);
+  npRenderTable(); npRenderFacets(); npRenderDetail();
+}
+
+function npSelect(row, scroll = true) {
+  NP.pick = row;
+  if (row && !NP.named) {
+    document.getElementById('np-name').value = `${row.part}_${row.pkg}`;
+  }
+  if (scroll) {
+    const el = document.querySelector('#np-table tbody tr.on');
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function npRenderTable() {
+  const head = `<thead><tr>${NP_COLS.map(c => {
+    const on = NP.sort.key === c.key;
+    return `<th data-k="${c.key}" class="${c.num ? 'num' : ''}" title="Sort by ${attr(c.label)}">${esc(c.label)}`
+      + `<span class="np-sort">${on ? (NP.sort.dir > 0 ? '▲' : '▼') : ''}</span></th>`;
+  }).join('')}</tr></thead>`;
+  const body = NP.view.map((r, i) => `<tr data-i="${i}" class="${r === NP.pick ? 'on' : ''}">`
+    + `<td><b>${esc(r.part)}</b></td>`
+    + `<td class="np-muted">${esc(r.mcu)}</td>`
+    + `<td>${esc(r.pkg)}${r.geom ? '' : ' <span class="np-no">no drawing</span>'}</td>`
+    + `<td class="num">${r.flash} KB</td><td class="num">${r.sram} KB</td><td class="num">${r.io}</td>`
+    + `<td class="num">${r.temp ? r.temp + ' °C' : '<span class="np-muted">—</span>'}</td>`
+    + `<td>${r.board ? esc(r.board) : '<span class="np-no">none</span>'}</td></tr>`).join('');
+  const table = document.getElementById('np-table');
+  table.innerHTML = head + (NP.view.length ? `<tbody>${body}</tbody>` : '');
+  document.getElementById('np-count').textContent =
+    `${NP.view.length} of ${NP.rows.length} part${NP.rows.length === 1 ? '' : 's'}`;
+  const wrap = document.getElementById('np-tablewrap');
+  const old = wrap.querySelector('.np-empty');
+  if (old) old.remove();
+  if (!NP.view.length) {
+    const d = document.createElement('div');
+    d.className = 'np-empty';
+    d.textContent = 'No part matches. Clear a filter, or widen the search.';
+    wrap.appendChild(d);
+  }
+  table.querySelectorAll('th').forEach(th => th.onclick = () => {
+    const k = th.dataset.k;
+    NP.sort = { key: k, dir: NP.sort.key === k ? -NP.sort.dir : 1 };
+    npApply();
+  });
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    tr.onclick = () => { npSelect(NP.view[+tr.dataset.i], false); npRenderTable(); npRenderDetail(); };
+    tr.ondblclick = () => { npSelect(NP.view[+tr.dataset.i], false); npCreate(); };
+  });
+}
+
+/**
+ * The facets, counted from the catalogue on every render.
+ *
+ * A count is taken against the OTHER filters with this group's own lifted: ticking a
+ * second package should say how many parts that ADDS, not zero because the first
+ * package already excluded them. A value that leads nowhere is dropped rather than
+ * shown as a dead 0, and a group with only one value is not shown at all — it would
+ * be a control that cannot change the result, which this app does not ship.
+ */
+function npRenderFacets() {
+  const groups = [
+    { key: 'family', label: 'Family', of: r => r.family },
+    { key: 'pkg', label: 'Package', of: r => r.pkg },
+    { key: 'core', label: 'Core', of: r => r.core },
+  ];
+  let h = '';
+  for (const g of groups) {
+    const chosen = NP.facets[g.key];
+    const save = NP.facets;
+    NP.facets = { ...NP.facets, [g.key]: new Set() };
+    const counts = new Map();
+    for (const r of NP.rows) if (npMatches(r)) {
+      const v = g.of(r); if (v) counts.set(v, (counts.get(v) || 0) + 1);
+    }
+    NP.facets = save;
+    const values = [...counts.keys()].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+    if (values.length < 2 && !chosen.size) continue;
+    h += `<h4>${esc(g.label)}</h4>` + values.map(v =>
+      `<label title="${attr(v)}"><input type="checkbox" data-f="${g.key}" value="${attr(v)}"${chosen.has(v) ? ' checked' : ''}>`
+      + `<span>${esc(v)}</span><span class="np-n">${counts.get(v)}</span></label>`).join('');
+  }
+  h += `<h4>Memory</h4>`
+    + `<div class="np-range"><label for="np-flash">Flash ≥</label><input id="np-flash" type="number" min="0" step="1" value="${NP.minFlash || ''}" placeholder="KB"></div>`
+    + `<div class="np-range"><label for="np-sram">SRAM ≥</label><input id="np-sram" type="number" min="0" step="1" value="${NP.minSram || ''}" placeholder="KB"></div>`;
+  const any = NP.q || NP.minFlash || NP.minSram || groups.some(g => NP.facets[g.key].size);
+  h += `<button class="np-clear" id="np-clear"${any ? '' : ' disabled'}>Clear filters</button>`;
+  const box = document.getElementById('np-facets');
+  box.innerHTML = h;
+  box.querySelectorAll('input[data-f]').forEach(cb => cb.onchange = () => {
+    const set = NP.facets[cb.dataset.f];
+    if (cb.checked) set.add(cb.value); else set.delete(cb.value);
+    npApply();
+  });
+  const fl = box.querySelector('#np-flash'), sr = box.querySelector('#np-sram');
+  fl.oninput = () => { NP.minFlash = +fl.value || 0; npApply(); };
+  sr.oninput = () => { NP.minSram = +sr.value || 0; npApply(); };
+  const clr = box.querySelector('#np-clear');
+  if (clr) clr.onclick = () => {
+    NP.q = ''; document.getElementById('np-q').value = '';
+    NP.minFlash = NP.minSram = 0;
+    for (const g of groups) NP.facets[g.key].clear();
+    npApply();
+  };
+}
+
+/** The selected part, spelled out — including what it will NOT be able to do. */
+function npRenderDetail() {
+  const r = NP.pick, box = document.getElementById('np-detail');
+  if (!r) { box.innerHTML = '<span>Nothing selected.</span>'; return; }
+  const bits = [
+    `<b>${esc(r.part)}</b>`,
+    esc(r.pkg) + (r.geom ? '' : ' <span class="np-no">(no drawing for this package)</span>'),
+    `${r.flash} KB flash`, `${r.sram} KB SRAM`, `${r.io} I/O`,
+  ];
+  if (r.temp) bits.push(`${r.temp} °C`);
+  if (r.core) bits.push(esc(r.core));
+  if (r.mhz) bits.push(`max ${r.mhz} MHz`);
+  if (r.vdd) bits.push(`${r.vdd[0]}–${r.vdd[1]} V`);
+  bits.push(`${r.periphs} peripherals`);
+  bits.push(r.board
+    ? `PlatformIO <b>${esc(r.board)}</b>${r.env ? ` · env <b>${esc(r.env)}</b>` : ''}`
+    : `<span class="np-no">no PlatformIO board — no project can be generated for this part number</span>`);
+  if (r.note) bits.push(`<span class="np-muted">${esc(r.note)}</span>`);
+  box.innerHTML = bits.map(b => `<span>${b}</span>`).join('');
+}
+
+function openNewProject() {
+  NP.rows = npCatalogue();
+  NP.pick = null; NP.named = false;
+  // Start on the part that is loaded, so "New project" on the part you are already
+  // looking at is one keystroke rather than a search.
+  const here = M ? NP.rows.find(r => r.mcu === M.mcu.name && r.pkg === S.pkg) : null;
+  npApply();
+  if (here) { npSelect(here, false); npRenderTable(); npRenderDetail(); }
+  document.getElementById('newproj').classList.add('show');
+  npRestoreSize();
+  const q = document.getElementById('np-q');
+  q.value = NP.q;
+  setTimeout(() => { q.focus(); const el = document.querySelector('#np-table tbody tr.on'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }, 0);
+}
+function npClose() {
+  npRememberSize();
+  document.getElementById('newproj').classList.remove('show');
+}
+function npCreate() {
+  const r = NP.pick;
+  if (!r) { toast('Pick a part first'); return; }
+  loadMcu(MCU_FILES[r.mcu]);
+  setPackage(r.pkg);
+  syncMcuUi();
+  setProject({ name: document.getElementById('np-name').value.trim() || 'Untitled', variant: r.variant, dirty: false });
+  npClose(); updateCrumb(); renderAll(true);
+  toast(`New project: ${PROJECT.name} — ${r.part} on ${r.pkg}`);
+}
+
+/* The dialog is resizable, and the size is worth keeping: someone who widened it to
+   read the part numbers should not have to do it again next time. Same storage
+   pattern as the theme, and the same try/catch — private mode throws on file://.
+
+   Only a size the user CHOSE is remembered. Storing the size of every close would
+   freeze the responsive `min(1080px, 94vw)` into fixed pixels the first time the
+   dialog is opened in a small window, and it would then stay small on a large
+   monitor for ever — which is the opposite of what "remember my size" should mean.
+   The only way to trigger CSS `resize` is a drag that starts on the bottom-right
+   gripper, so that is what is watched. */
+function npRememberSize() {
+  if (!NP.resized) return;
+  const d = document.getElementById('np-dlg');
+  try { localStorage.setItem('wchcube.newproj.size', JSON.stringify({ w: d.offsetWidth, h: d.offsetHeight })); }
+  catch (e) { /* private mode */ }
+}
+document.getElementById('np-dlg').addEventListener('pointerdown', e => {
+  const r = e.currentTarget.getBoundingClientRect();
+  if (r.right - e.clientX < 22 && r.bottom - e.clientY < 22) NP.resized = true;
+});
+function npRestoreSize() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem('wchcube.newproj.size') || 'null'); } catch (e) { /* private mode */ }
+  const d = document.getElementById('np-dlg');
+  // Nothing stored: hand the dialog back to the responsive rule rather than leaving
+  // inline pixels from an earlier open in this session.
+  if (!s || !s.w || !s.h) { d.style.width = d.style.height = ''; return; }
+  // Clamp to the window it is restored INTO: a size saved on a 4K monitor must not
+  // open off-screen on a laptop.
+  d.style.width = Math.min(s.w, Math.round(innerWidth * 0.97)) + 'px';
+  d.style.height = Math.min(s.h, Math.round(innerHeight * 0.94)) + 'px';
+}
+
+document.getElementById('np-q').oninput = e => { NP.q = e.target.value; npApply(); };
+document.getElementById('np-name').oninput = () => { NP.named = true; };
+document.getElementById('np-cancel').onclick = npClose;
+document.getElementById('np-create').onclick = npCreate;
+// Click the backdrop to dismiss — but only a click that STARTED there, or a drag
+// that ends on the backdrop (resizing, or selecting a part number) closes it.
+document.getElementById('newproj').onmousedown = e => { if (e.target.id === 'newproj') npClose(); };
+// The list is navigable from the search box without touching the mouse.
+document.getElementById('newproj').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.preventDefault(); npClose(); return; }
+  if (e.key === 'Enter' && !e.target.matches('button')) { e.preventDefault(); npCreate(); return; }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  if (e.target.matches('input[type=number]')) return;      // the spinner owns the arrows
+  e.preventDefault();
+  const i = NP.view.indexOf(NP.pick);
+  const j = i < 0 ? 0 : i + (e.key === 'ArrowDown' ? 1 : -1);
+  const next = NP.view[Math.max(0, Math.min(NP.view.length - 1, j))];
+  if (next) { npSelect(next); npRenderTable(); npRenderDetail(); }
+});
 document.getElementById('m-new').onclick = openNewProject;
 document.getElementById('m-save').onclick = saveProject;
 document.getElementById('m-openproj').onclick = () => document.getElementById('projinput').click();
