@@ -90,10 +90,17 @@ export function clockSummaryMarkdown() {
 //  here rather than a hardcoded set of checkboxes. Adding an option to this list is
 //  a promise that generateAll() obeys it.
 //
-//  Deliberately ABSENT, and recorded on the board rather than greyed out: "one file
-//  pair, or a pair per peripheral". The split is not implemented, and an option that
-//  silently does nothing is worse than an option that is not there.
 const GENERATOR_OPTIONS = [
+  {
+    key: 'split_peripherals',
+    name: 'A file pair per peripheral, instead of one pair',
+    type: 'bool',
+    default: false,
+    help: 'Off: everything is in wchcube_init.c/.h. On: each configured peripheral gets its '
+      + 'own wchcube_<peripheral>.c/.h holding WCHCube_<PERIPHERAL>_Init(), and wchcube_init.c '
+      + 'keeps the clocks, the pins, DMA, the interrupts and the entry point. The per-peripheral '
+      + 'function exists either way - the option only decides which file it lands in.',
+  },
   {
     key: 'reports',
     name: 'Also generate the pin table and clock summary',

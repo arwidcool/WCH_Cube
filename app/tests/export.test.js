@@ -92,7 +92,7 @@ test('generateAll names its files after the part and package', () => {
 
 test('generateAll obeys the generator options, and only the ones that exist', () => {
   const e = fresh('CH32V006', 'QFN32');
-  assert.deepEqual(e.generatorOptions().map(o => o.key), ['reports', 'user_code'],
+  assert.deepEqual(e.generatorOptions().map(o => o.key), ['split_peripherals', 'reports', 'user_code'],
     'an option the engine cannot honour is not offered at all');
   assert.equal(e.generatorOption('reports'), true, 'the default comes from the definition');
 
@@ -102,8 +102,8 @@ test('generateAll obeys the generator options, and only the ones that exist', ()
   e.undo();
   assert.equal(e.generateAll().length, 5, 'and it is one undo step like everything else');
 
-  assert.throws(() => e.setGeneratorOption('split_per_peripheral', true),
-    /No generator option "split_per_peripheral"/);
+  assert.throws(() => e.setGeneratorOption('no_such_option', true),
+    /No generator option "no_such_option"/);
   assert.throws(() => e.setGeneratorOption('reports', 'maybe'), /expected true or false/);
 });
 

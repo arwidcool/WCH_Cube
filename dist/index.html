@@ -1188,7 +1188,32 @@ peripherals:
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    # ORDER IS LOAD-BEARING HERE, and it was wrong until AGENT-2 asked (BOARD 16:30Z).
+    # The generator emits `sdk_call` parameters in the order this list gives them, so
+    # `write_access` MUST come first: IWDG_PSCR and IWDG_RLDR are write-protected until
+    # 0x5555 is written to IWDG_CTLR, and a prescaler or reload written while locked is
+    # discarded with no error anywhere. RM 4.2 says it twice - "Operation method: first
+    # write 0x5555 to the IWDG_CTLR register, and then modify the frequency division
+    # value in the IWDG_PSCR register", and the same sentence again for IWDG_RLDR - and
+    # WCH's own example agrees: EXAM/IWDG/IWDG/User/main.c:83-87 is
+    # IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable) then SetPrescaler then SetReload.
+    #
+    # Listed before `prescaler` rather than given an ordering key, because one list read
+    # top to bottom is easier to keep right than a second mechanism that says when to
+    # ignore it. If a part ever needs a value set both before and after something else,
+    # that is when an explicit key earns its place - not before.
     params:
+      - key: write_access
+        name: Register write access
+        sdk_call: IWDG_WriteAccessCmd
+        sdk_args: [$VALUE]
+        type: enum
+        group: Advanced
+        default: Enable before writing
+        options:
+          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
+          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
+        help: "Unlocks IWDG_PSCR and IWDG_RLDR, and must be written BEFORE either of them - a prescaler or reload written while locked is silently discarded (RM 4.2). The two values are the literal key words 0x5555 and 0x0000, not a flag."
       - key: prescaler
         name: Prescaler
         sdk_call: IWDG_SetPrescaler
@@ -1215,17 +1240,6 @@ peripherals:
         min: 0
         max: 4095
         help: "12-bit down-counter, so 4095 is the ceiling. Timeout is (prescaler x (reload + 1)) / f_LSI."
-      - key: write_access
-        name: Register write access
-        sdk_call: IWDG_WriteAccessCmd
-        sdk_args: [$VALUE]
-        type: enum
-        group: Advanced
-        default: Enable before writing
-        options:
-          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
-          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
-        help: "The prescaler and reload registers are write-protected until this key is written. The two values are the literal key words 0x5555 and 0x0000, not a flag."
 
   WWDG:
     category: System Core
@@ -1794,6 +1808,113 @@ peripherals:
           - { name: "CH1 pin (TIM1_RM = 0000..1001)" }
           - { name: "Internal LSI for calibration (TIM1_RM = 11xx — frees the CH1 pin)" }
     # RM Table 7-8, TIM1_RM[3:0] — index == register value
+    # OUTPUT COMPARE, per channel. AGENT-2 asked for the shape (BOARD 16:30Z) and this is
+    # it: `channel_params` is a MAP carrying the struct and the call table, and its
+    # `params:` list uses exactly the same entry schema as `dma.channel_params`, so the
+    # existing per-channel editors and the existing verifier both work unchanged.
+    #
+    # It needs its own shape for two reasons the other init structs do not have:
+    #
+    #  1. It is PER CHANNEL, not per peripheral. A TIM has one time base and up to four
+    #     independent compare units, so one TIM_OCInitTypeDef is filled and applied once
+    #     for each channel that is configured.
+    #  2. **Four different functions apply it** - TIM_OC1Init .. TIM_OC4Init
+    #     (ch32v00X_tim.h:432-435), one per channel. `codegen.init_structs` maps a struct
+    #     to a single `fn` and cannot express that, so the call table lives here instead.
+    #     `sdk_calls` is written out rather than left as `TIM_OC${n}Init`: deriving a
+    #     function name by pasting a number together is the same class of guess as
+    #     deriving one from a struct name, which the generator already refuses to do.
+    #
+    # Struct member order is the header's own (tim.h:54-85). Every macro below is checked
+    # by tools/verify_sdk_names.py against GPIOMode-style enum membership.
+    channel_params:
+      struct: TIM_OCInitTypeDef
+      applies_per: channel
+      sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+      params:
+        - key: ocmode
+          name: Output compare mode
+          sdk_field: TIM_OCMode
+          type: enum
+          group: Basic
+          default: PWM mode 1
+          options:
+            - { name: Frozen,          value: 0, sdk: TIM_OCMode_Timing }
+            - { name: Active on match, value: 1, sdk: TIM_OCMode_Active }
+            - { name: Inactive on match, value: 2, sdk: TIM_OCMode_Inactive }
+            - { name: Toggle,          value: 3, sdk: TIM_OCMode_Toggle }
+            - { name: PWM mode 1,      value: 6, sdk: TIM_OCMode_PWM1 }
+            - { name: PWM mode 2,      value: 7, sdk: TIM_OCMode_PWM2 }
+          help: "TIMx_CHCTLRn OCxM. The option values are the register encodings, so PWM mode 1 is 6 rather than 4 - modes 4 and 5 are the forced-low/forced-high settings, which TIM_ForcedAction* sets rather than this struct."
+        - key: pulse
+          name: Pulse (compare value)
+          sdk_field: TIM_Pulse
+          type: int
+          group: Basic
+          default: 0
+          min: 0
+          max: 65535
+          help: "TIMx_CHnCVR. With PWM mode 1 and an up-counter the output is active while the counter is below this, so duty is pulse / (period + 1)."
+        - key: ocpolarity
+          name: Output polarity
+          sdk_field: TIM_OCPolarity
+          type: enum
+          group: Basic
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCPolarity_Low }
+          help: "TIMx_CHCTLR CCxP. The only member of this struct the header does not mark as TIM1/TIM2 only."
+        - key: outputstate
+          name: Output state
+          sdk_field: TIM_OutputState
+          type: enum
+          group: Basic
+          default: Enable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputState_Enable }
+          help: "TIMx_CCER CCxE - whether the compare unit reaches the pin at all."
+        - key: outputnstate
+          name: Complementary output state
+          sdk_field: TIM_OutputNState
+          type: enum
+          group: Advanced
+          default: Disable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputNState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputNState_Enable }
+          help: "TIMx_CCER CCxNE. The header marks this valid only for TIM1 and TIM2."
+        - key: ocnpolarity
+          name: Complementary output polarity
+          sdk_field: TIM_OCNPolarity
+          type: enum
+          group: Advanced
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCNPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCNPolarity_Low }
+          help: "TIMx_CCER CCxNP. The header marks this valid only for TIM1 and TIM2."
+        - key: ocidlestate
+          name: Idle state
+          sdk_field: TIM_OCIdleState
+          type: enum
+          group: Advanced
+          default: Reset
+          options:
+            - { name: Reset, value: 0, sdk: TIM_OCIdleState_Reset }
+            - { name: Set,   value: 1, sdk: TIM_OCIdleState_Set }
+          help: "TIMx_CTLR2 OISx - the level the pin takes when the outputs are disabled by the break input or by MOE. The header marks it valid ONLY for TIM1, so it is absent from TIM2 rather than offered and ignored."
+        - key: ocnidlestate
+          name: Complementary idle state
+          sdk_field: TIM_OCNIdleState
+          type: enum
+          group: Advanced
+          default: Reset
+          options:
+            - { name: Reset, value: 0, sdk: TIM_OCNIdleState_Reset }
+            - { name: Set,   value: 1, sdk: TIM_OCNIdleState_Set }
+          help: "TIMx_CTLR2 OISxN. TIM1 only, like the member above."
     remaps:
       - { name: "0000 Default",  pins: { ETR: PC5, CH1: PD2, CH2: PA1, CH3: PC3, CH4: PC4, BKIN: PC2, CH1N: PD0, CH2N: PA2, CH3N: PD1 } }
       - { name: "0001 Partial",  pins: { ETR: PD4, CH1: PD2, CH2: PA1, CH3: PC3, CH4: PC4, BKIN: PC2, CH1N: PD0, CH2N: PA2, CH3N: PD1 } }
@@ -1925,6 +2046,93 @@ peripherals:
           - { name: CH2N on the CH4 pin, signals: [CH4] }
           - { name: CH1N + CH2N on the CH3/CH4 pins, signals: [CH3, CH4] }
     # RM Table 7-9-1 (CH32V002/004/005/006), TIM2_RM[2:0]
+    # OUTPUT COMPARE, per channel. AGENT-2 asked for the shape (BOARD 16:30Z) and this is
+    # it: `channel_params` is a MAP carrying the struct and the call table, and its
+    # `params:` list uses exactly the same entry schema as `dma.channel_params`, so the
+    # existing per-channel editors and the existing verifier both work unchanged.
+    #
+    # It needs its own shape for two reasons the other init structs do not have:
+    #
+    #  1. It is PER CHANNEL, not per peripheral. A TIM has one time base and up to four
+    #     independent compare units, so one TIM_OCInitTypeDef is filled and applied once
+    #     for each channel that is configured.
+    #  2. **Four different functions apply it** - TIM_OC1Init .. TIM_OC4Init
+    #     (ch32v00X_tim.h:432-435), one per channel. `codegen.init_structs` maps a struct
+    #     to a single `fn` and cannot express that, so the call table lives here instead.
+    #     `sdk_calls` is written out rather than left as `TIM_OC${n}Init`: deriving a
+    #     function name by pasting a number together is the same class of guess as
+    #     deriving one from a struct name, which the generator already refuses to do.
+    #
+    # Struct member order is the header's own (tim.h:54-85). Every macro below is checked
+    # by tools/verify_sdk_names.py against GPIOMode-style enum membership.
+    channel_params:
+      struct: TIM_OCInitTypeDef
+      applies_per: channel
+      sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+      params:
+        - key: ocmode
+          name: Output compare mode
+          sdk_field: TIM_OCMode
+          type: enum
+          group: Basic
+          default: PWM mode 1
+          options:
+            - { name: Frozen,          value: 0, sdk: TIM_OCMode_Timing }
+            - { name: Active on match, value: 1, sdk: TIM_OCMode_Active }
+            - { name: Inactive on match, value: 2, sdk: TIM_OCMode_Inactive }
+            - { name: Toggle,          value: 3, sdk: TIM_OCMode_Toggle }
+            - { name: PWM mode 1,      value: 6, sdk: TIM_OCMode_PWM1 }
+            - { name: PWM mode 2,      value: 7, sdk: TIM_OCMode_PWM2 }
+          help: "TIMx_CHCTLRn OCxM. The option values are the register encodings, so PWM mode 1 is 6 rather than 4 - modes 4 and 5 are the forced-low/forced-high settings, which TIM_ForcedAction* sets rather than this struct."
+        - key: pulse
+          name: Pulse (compare value)
+          sdk_field: TIM_Pulse
+          type: int
+          group: Basic
+          default: 0
+          min: 0
+          max: 65535
+          help: "TIMx_CHnCVR. With PWM mode 1 and an up-counter the output is active while the counter is below this, so duty is pulse / (period + 1)."
+        - key: ocpolarity
+          name: Output polarity
+          sdk_field: TIM_OCPolarity
+          type: enum
+          group: Basic
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCPolarity_Low }
+          help: "TIMx_CHCTLR CCxP. The only member of this struct the header does not mark as TIM1/TIM2 only."
+        - key: outputstate
+          name: Output state
+          sdk_field: TIM_OutputState
+          type: enum
+          group: Basic
+          default: Enable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputState_Enable }
+          help: "TIMx_CCER CCxE - whether the compare unit reaches the pin at all."
+        - key: outputnstate
+          name: Complementary output state
+          sdk_field: TIM_OutputNState
+          type: enum
+          group: Advanced
+          default: Disable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputNState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputNState_Enable }
+          help: "TIMx_CCER CCxNE. The header marks this valid only for TIM1 and TIM2."
+        - key: ocnpolarity
+          name: Complementary output polarity
+          sdk_field: TIM_OCNPolarity
+          type: enum
+          group: Advanced
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCNPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCNPolarity_Low }
+          help: "TIMx_CCER CCxNP. The header marks this valid only for TIM1 and TIM2."
     remaps:
       - { name: "000 Default", pins: { CH1_ETR: PD4, CH2: PD3, CH3: PC0, CH4: PD7 } }
       - { name: "001 Partial", pins: { CH1_ETR: PC1, CH2: PD3, CH3: PC0, CH4: PD7 } }
@@ -6806,6 +7014,12 @@ function cHeader() {
     'void WCHCube_NVIC_Init(void);   /* the enabled vectors, with PFIC priorities */',
     'void WCHCube_Init(void);        /* all of them, in the right order */',
     '',
+    // Declared here only when they are DEFINED here; in split mode each one is
+    // declared by its own header, and declaring it twice would be a second place to
+    // keep in step.
+    ...(generatorOption('split_peripherals') ? [] : initPeripherals().map(
+      pid => `void ${periphInitName(pid)}(void);   /* ${pid} */`)),
+    ...(generatorOption('split_peripherals') || !initPeripherals().length ? [] : ['']),
     ...user('Prototypes'),
     ...(generatorOption('user_code') ? [''] : []),
     `#endif /* ${guard} */`,
@@ -6969,7 +7183,13 @@ function isFixture() {
 
 function cSource() {
   const e = E || compute();
-  const L = [headerComment(), '', '#include "wchcube_init.h"', ''];
+  const L = [headerComment(), '', '#include "wchcube_init.h"'];
+  // In split mode the bodies are in their own translation units, so this one needs
+  // their declarations to call them.
+  if (generatorOption('split_peripherals')) {
+    for (const pid of initPeripherals()) L.push(`#include "${periphFileBase(pid)}.h"`);
+  }
+  L.push('');
   const inc = user('Includes'), pv = user('PV');
   if (inc.length) L.push(...inc, '');
   if (pv.length) L.push(...pv, '');
@@ -7235,22 +7455,52 @@ function periphBlock(pid) {
   return L;
 }
 
-function periphSection() {
+// A peripheral id is not guaranteed to be a C identifier, so one place turns it into
+// one and everything - function name, file name, include guard - derives from that.
+const cIdent = pid => String(pid).replace(/[^A-Za-z0-9_]/g, '_');
+const periphInitName = pid => `WCHCube_${cIdent(pid)}_Init`;
+const periphFileBase = pid => `wchcube_${cIdent(pid).toLowerCase()}`;
+
+/**
+ * One `void WCHCube_<PID>_Init(void)` per configured peripheral, whichever layout the
+ * user picked. The split is then a question of which FILE each function lands in rather
+ * than a second way of generating code - and even in one file it is better shaped,
+ * because re-initialising one peripheral after a mode change becomes a call instead of
+ * a copy of half of WCHCube_Periph_Init().
+ */
+function periphFunction(pid) {
+  const body = periphBlock(pid);
   const L = [];
-  L.push(banner('Peripherals'));
+  L.push(body[0].trimStart());          // the "---- PID ----" banner, now at file scope
+  L.push(`void ${periphInitName(pid)}(void)`);
+  L.push('{');
+  for (const line of body.slice(1)) L.push(line);
+  while (L[L.length - 1] === '') L.pop();
+  L.push(...user(`Periph_${cIdent(pid)}`, '    '));
+  L.push('}');
+  return L.join('\n');
+}
+
+/** `WCHCube_Periph_Init()`: call each one, in the order they are declared. */
+function periphDispatch() {
+  const L = [];
   L.push('void WCHCube_Periph_Init(void)');
   L.push('{');
   const pids = initPeripherals();
-  if (!pids.length) {
-    L.push('    /* No peripheral is switched on. */');
-    L.push(...user('Periph', '    '));
-    L.push('}');
-    return L.join('\n');
-  }
-  for (const pid of pids) L.push(...periphBlock(pid));
-  if (L[L.length - 1] === '') L.pop();
+  if (!pids.length) L.push('    /* No peripheral is switched on. */');
+  for (const pid of pids) L.push(`    ${periphInitName(pid)}();`);
   L.push(...user('Periph', '    '));
   L.push('}');
+  return L.join('\n');
+}
+
+function periphSection() {
+  const L = [banner('Peripherals'), ''];
+  // In split mode the bodies live in their own files and only the dispatcher stays.
+  if (!generatorOption('split_peripherals')) {
+    for (const pid of initPeripherals()) L.push(periphFunction(pid), '');
+  }
+  L.push(periphDispatch());
   return L.join('\n');
 }
 
@@ -7402,8 +7652,54 @@ function nvicSection() {
   return L.join('\n');
 }
 
+/** One peripheral's own .h, in split mode. */
+function periphHeader(pid) {
+  const guard = `WCHCUBE_${cIdent(pid).toUpperCase()}_H`;
+  return [
+    headerComment(),
+    '',
+    `#ifndef ${guard}`,
+    `#define ${guard}`,
+    '',
+    `#include "${cfg().header || 'debug.h'}"`,
+    '',
+    `void ${periphInitName(pid)}(void);`,
+    '',
+    ...user(`Prototypes_${cIdent(pid)}`),
+    ...(generatorOption('user_code') ? [''] : []),
+    `#endif /* ${guard} */`,
+    '',
+  ].join('\n');
+}
+
+/** One peripheral's own .c, in split mode. */
+function periphSource(pid) {
+  return [
+    headerComment(),
+    '',
+    `#include "${periphFileBase(pid)}.h"`,
+    '',
+    ...(user(`Includes_${cIdent(pid)}`).length ? [...user(`Includes_${cIdent(pid)}`), ''] : []),
+    periphFunction(pid),
+    '',
+  ].join('\n');
+}
+
+/**
+ * The C files, as `{ name: text }`. Always the wchcube_init pair; in split mode also a
+ * pair per configured peripheral. The header/source ORDER is fixed and the peripherals
+ * are in initPeripherals() order, which is sorted - two runs of the same configuration
+ * must produce the same files in the same order or the byte-identical test is a lie.
+ */
 function cFiles() {
-  return { 'wchcube_init.h': cHeader(), 'wchcube_init.c': cSource() };
+  const out = { 'wchcube_init.h': cHeader(), 'wchcube_init.c': cSource() };
+  if (generatorOption('split_peripherals')) {
+    for (const pid of initPeripherals()) {
+      out[`${periphFileBase(pid)}.h`] = periphHeader(pid);
+      out[`${periphFileBase(pid)}.c`] = periphSource(pid);
+    }
+  }
+  return out;
 }
 
 // ---- complaints ---------------------------------------------------------------
@@ -7521,10 +7817,17 @@ function clockSummaryMarkdown() {
 //  here rather than a hardcoded set of checkboxes. Adding an option to this list is
 //  a promise that generateAll() obeys it.
 //
-//  Deliberately ABSENT, and recorded on the board rather than greyed out: "one file
-//  pair, or a pair per peripheral". The split is not implemented, and an option that
-//  silently does nothing is worse than an option that is not there.
 const GENERATOR_OPTIONS = [
+  {
+    key: 'split_peripherals',
+    name: 'A file pair per peripheral, instead of one pair',
+    type: 'bool',
+    default: false,
+    help: 'Off: everything is in wchcube_init.c/.h. On: each configured peripheral gets its '
+      + 'own wchcube_<peripheral>.c/.h holding WCHCube_<PERIPHERAL>_Init(), and wchcube_init.c '
+      + 'keeps the clocks, the pins, DMA, the interrupts and the entry point. The per-peripheral '
+      + 'function exists either way - the option only decides which file it lands in.',
+  },
   {
     key: 'reports',
     name: 'Also generate the pin table and clock summary',

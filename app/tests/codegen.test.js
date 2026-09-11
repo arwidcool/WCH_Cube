@@ -499,9 +499,10 @@ test('every value emitted for an enum is a macro the MCU file gives, never a num
   e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
   e.compute();
   const c = e.cSource();
-  // The peripheral, DMA and interrupt blocks only. GPIO_Mode_* and GPIO_Pin_* are the
-  // generator's own table and mask - covered by their own tests and by the compile gate.
-  const from = c.indexOf('void WCHCube_Periph_Init');
+  // The peripheral, DMA and interrupt blocks only. GPIO_Mode_* and GPIO_Pin_* have their
+  // own tests and the compile gate. Anchored on the Peripherals BANNER, not on
+  // WCHCube_Periph_Init - that is the dispatcher and it comes after the bodies now.
+  const from = c.indexOf(' * Peripherals');
   const data = JSON.stringify(e.M);
   let checked = 0;
   for (const line of c.slice(from).split(/\r?\n/)) {
@@ -875,4 +876,125 @@ peripherals:
   const c = e.cSource();
   assert.equal(/$HANDEL/.test(c), false, 'a typo must never reach generated C as text');
   assert.match(c, /is not a placeholder this generator knows/);
+});
+
+// =============================================================================
+//  The per-peripheral file split — the option is offered because it is honoured
+// =============================================================================
+
+test('each configured peripheral gets its own init function, in either layout', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setSetting('I2C1', 'Mode', 'I2C');
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('void WCHCube_USART1_Init(void)'));
+  assert.ok(c.includes('void WCHCube_I2C1_Init(void)'));
+  // and the dispatcher calls them rather than repeating their bodies
+  assert.ok(c.includes('    WCHCube_USART1_Init();'));
+  assert.ok(c.includes('    WCHCube_I2C1_Init();'));
+  assert.equal((c.match(/USART_Init\(USART1/g) || []).length, 1, 'the body exists exactly once');
+  // declared in the header, because they are defined here
+  assert.ok(e.cHeader().includes('void WCHCube_USART1_Init(void);'));
+});
+
+test('split mode puts each peripheral in its own pair and declares it once', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setSetting('I2C1', 'Mode', 'I2C');
+  e.setGeneratorOption('split_peripherals', true);
+  e.compute();
+  const files = e.cFiles();
+  assert.deepEqual(Object.keys(files), [
+    'wchcube_init.h', 'wchcube_init.c',
+    'wchcube_i2c1.h', 'wchcube_i2c1.c',
+    'wchcube_usart1.h', 'wchcube_usart1.c',
+  ], 'sorted, so two runs of one configuration produce the same files in the same order');
+
+  // the body moved out of wchcube_init.c entirely
+  assert.equal(/USART_Init\(USART1/.test(files['wchcube_init.c']), false);
+  assert.ok(files['wchcube_usart1.c'].includes('USART_Init(USART1, &USART_InitStructure);'));
+  assert.ok(files['wchcube_usart1.c'].includes('#include "wchcube_usart1.h"'));
+  assert.ok(files['wchcube_usart1.h'].includes('void WCHCube_USART1_Init(void);'));
+  assert.ok(files['wchcube_usart1.h'].includes('#ifndef WCHCUBE_USART1_H'));
+
+  // declared once, not in two places that can drift
+  assert.equal(files['wchcube_init.h'].includes('void WCHCube_USART1_Init(void);'), false);
+  assert.ok(files['wchcube_init.c'].includes('#include "wchcube_usart1.h"'), 'so the call resolves');
+  assert.ok(files['wchcube_init.c'].includes('    WCHCube_USART1_Init();'));
+});
+
+test('the split changes where the code lives, not what it says', () => {
+  // fresh() hands back the ONE engine singleton, so each configuration has to be read
+  // out before the next one starts - holding two "engines" at once holds one twice.
+  const configure = e => {
+    e.setSetting('USART1', 'Mode', 'Asynchronous');
+    e.setParam('USART1', 'baud', 9600);
+    e.toggleSetting('ADC1', 'Channels', 'IN2', true);
+    e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+    e.compute();
+  };
+  const bodyOf = (text, name) => {
+    const at = text.indexOf(`void ${name}(void)`);
+    return at < 0 ? null : text.slice(at, text.indexOf('\n}', at));
+  };
+
+  const one = fresh('CH32V006', 'TSSOP20');
+  configure(one);
+  const singleBody = bodyOf(one.cSource(), 'WCHCube_USART1_Init');
+
+  const many = fresh('CH32V006', 'TSSOP20');
+  many.setGeneratorOption('split_peripherals', true);
+  configure(many);
+  const splitFiles = many.cFiles();
+  const splitBody = bodyOf(splitFiles['wchcube_usart1.c'], 'WCHCube_USART1_Init');
+
+  assert.ok(singleBody, 'the function exists in one-file mode');
+  assert.ok(splitBody, 'and in its own file in split mode');
+  assert.equal(splitBody, singleBody, 'the same function, character for character');
+
+  // and the clocks, pins, DMA and interrupts stay in wchcube_init.c either way
+  for (const fn of ['WCHCube_RCC_Init', 'WCHCube_GPIO_Init', 'WCHCube_DMA_Init',
+    'WCHCube_NVIC_Init', 'WCHCube_Init', 'WCHCube_Periph_Init']) {
+    assert.ok(splitFiles['wchcube_init.c'].includes(`void ${fn}(void)`), fn);
+  }
+});
+
+test('split mode regenerates byte-identically after save, close and open', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setGeneratorOption('split_peripherals', true);
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setSetting('SPI1', 'Mode', 'Full-Duplex Master');
+  e.compute();
+  const before = e.cFiles();
+  const text = e.projectSerialize();
+
+  e.loadMcu(e.MCU_FILES.CH32V005);
+  e.projectApply(text);
+  e.compute();
+  assert.equal(e.generatorOption('split_peripherals'), true, 'the option round-tripped');
+  const after = e.cFiles();
+  assert.deepEqual(Object.keys(after), Object.keys(before));
+  for (const name of Object.keys(before)) assert.equal(after[name], before[name], name);
+});
+
+test('a peripheral file name is a C-safe identifier, not the tree id as typed', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.equal(e.periphInitName('USART1'), 'WCHCube_USART1_Init');
+  assert.equal(e.periphInitName('WCH-ODD.1'), 'WCHCube_WCH_ODD_1_Init',
+    'anything that is not a C identifier character becomes an underscore');
+});
+
+test('complaints in a split file are reported against that file', () => {
+  const e = withFile(NO_SPEEDS, 'CH32V006-NOSPEEDS');
+  e.setGeneratorOption('split_peripherals', true);
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.compute();
+  const list = e.cComplaints(e.cFiles());
+  assert.ok(list.length, 'the speed TODO is still found');
+  for (const c of list) {
+    assert.ok(Object.keys(e.cFiles()).includes(c.file), `${c.file} is one of the generated files`);
+    assert.ok(c.line > 0);
+  }
 });

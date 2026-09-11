@@ -282,6 +282,12 @@ export function cHeader() {
     'void WCHCube_NVIC_Init(void);   /* the enabled vectors, with PFIC priorities */',
     'void WCHCube_Init(void);        /* all of them, in the right order */',
     '',
+    // Declared here only when they are DEFINED here; in split mode each one is
+    // declared by its own header, and declaring it twice would be a second place to
+    // keep in step.
+    ...(generatorOption('split_peripherals') ? [] : initPeripherals().map(
+      pid => `void ${periphInitName(pid)}(void);   /* ${pid} */`)),
+    ...(generatorOption('split_peripherals') || !initPeripherals().length ? [] : ['']),
     ...user('Prototypes'),
     ...(generatorOption('user_code') ? [''] : []),
     `#endif /* ${guard} */`,
@@ -445,7 +451,13 @@ export function isFixture() {
 
 export function cSource() {
   const e = E || compute();
-  const L = [headerComment(), '', '#include "wchcube_init.h"', ''];
+  const L = [headerComment(), '', '#include "wchcube_init.h"'];
+  // In split mode the bodies are in their own translation units, so this one needs
+  // their declarations to call them.
+  if (generatorOption('split_peripherals')) {
+    for (const pid of initPeripherals()) L.push(`#include "${periphFileBase(pid)}.h"`);
+  }
+  L.push('');
   const inc = user('Includes'), pv = user('PV');
   if (inc.length) L.push(...inc, '');
   if (pv.length) L.push(...pv, '');
@@ -711,22 +723,52 @@ function periphBlock(pid) {
   return L;
 }
 
-function periphSection() {
+// A peripheral id is not guaranteed to be a C identifier, so one place turns it into
+// one and everything - function name, file name, include guard - derives from that.
+const cIdent = pid => String(pid).replace(/[^A-Za-z0-9_]/g, '_');
+export const periphInitName = pid => `WCHCube_${cIdent(pid)}_Init`;
+const periphFileBase = pid => `wchcube_${cIdent(pid).toLowerCase()}`;
+
+/**
+ * One `void WCHCube_<PID>_Init(void)` per configured peripheral, whichever layout the
+ * user picked. The split is then a question of which FILE each function lands in rather
+ * than a second way of generating code - and even in one file it is better shaped,
+ * because re-initialising one peripheral after a mode change becomes a call instead of
+ * a copy of half of WCHCube_Periph_Init().
+ */
+function periphFunction(pid) {
+  const body = periphBlock(pid);
   const L = [];
-  L.push(banner('Peripherals'));
+  L.push(body[0].trimStart());          // the "---- PID ----" banner, now at file scope
+  L.push(`void ${periphInitName(pid)}(void)`);
+  L.push('{');
+  for (const line of body.slice(1)) L.push(line);
+  while (L[L.length - 1] === '') L.pop();
+  L.push(...user(`Periph_${cIdent(pid)}`, '    '));
+  L.push('}');
+  return L.join('\n');
+}
+
+/** `WCHCube_Periph_Init()`: call each one, in the order they are declared. */
+function periphDispatch() {
+  const L = [];
   L.push('void WCHCube_Periph_Init(void)');
   L.push('{');
   const pids = initPeripherals();
-  if (!pids.length) {
-    L.push('    /* No peripheral is switched on. */');
-    L.push(...user('Periph', '    '));
-    L.push('}');
-    return L.join('\n');
-  }
-  for (const pid of pids) L.push(...periphBlock(pid));
-  if (L[L.length - 1] === '') L.pop();
+  if (!pids.length) L.push('    /* No peripheral is switched on. */');
+  for (const pid of pids) L.push(`    ${periphInitName(pid)}();`);
   L.push(...user('Periph', '    '));
   L.push('}');
+  return L.join('\n');
+}
+
+function periphSection() {
+  const L = [banner('Peripherals'), ''];
+  // In split mode the bodies live in their own files and only the dispatcher stays.
+  if (!generatorOption('split_peripherals')) {
+    for (const pid of initPeripherals()) L.push(periphFunction(pid), '');
+  }
+  L.push(periphDispatch());
   return L.join('\n');
 }
 
@@ -878,8 +920,54 @@ function nvicSection() {
   return L.join('\n');
 }
 
+/** One peripheral's own .h, in split mode. */
+function periphHeader(pid) {
+  const guard = `WCHCUBE_${cIdent(pid).toUpperCase()}_H`;
+  return [
+    headerComment(),
+    '',
+    `#ifndef ${guard}`,
+    `#define ${guard}`,
+    '',
+    `#include "${cfg().header || 'debug.h'}"`,
+    '',
+    `void ${periphInitName(pid)}(void);`,
+    '',
+    ...user(`Prototypes_${cIdent(pid)}`),
+    ...(generatorOption('user_code') ? [''] : []),
+    `#endif /* ${guard} */`,
+    '',
+  ].join('\n');
+}
+
+/** One peripheral's own .c, in split mode. */
+function periphSource(pid) {
+  return [
+    headerComment(),
+    '',
+    `#include "${periphFileBase(pid)}.h"`,
+    '',
+    ...(user(`Includes_${cIdent(pid)}`).length ? [...user(`Includes_${cIdent(pid)}`), ''] : []),
+    periphFunction(pid),
+    '',
+  ].join('\n');
+}
+
+/**
+ * The C files, as `{ name: text }`. Always the wchcube_init pair; in split mode also a
+ * pair per configured peripheral. The header/source ORDER is fixed and the peripherals
+ * are in initPeripherals() order, which is sorted - two runs of the same configuration
+ * must produce the same files in the same order or the byte-identical test is a lie.
+ */
 export function cFiles() {
-  return { 'wchcube_init.h': cHeader(), 'wchcube_init.c': cSource() };
+  const out = { 'wchcube_init.h': cHeader(), 'wchcube_init.c': cSource() };
+  if (generatorOption('split_peripherals')) {
+    for (const pid of initPeripherals()) {
+      out[`${periphFileBase(pid)}.h`] = periphHeader(pid);
+      out[`${periphFileBase(pid)}.c`] = periphSource(pid);
+    }
+  }
+  return out;
 }
 
 // ---- complaints ---------------------------------------------------------------
