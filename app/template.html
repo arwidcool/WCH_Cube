@@ -36,18 +36,32 @@
   button{cursor:pointer}
   .app{display:grid;grid-template-rows:44px 30px 32px 1fr;height:100%}
 
-  /* ---- menu bar ---- */
-  .menubar{display:flex;align-items:center;gap:6px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--line)}
-  .logo{display:flex;align-items:center;gap:8px;margin-right:24px}
-  .logo .cube{width:26px;height:26px;background:linear-gradient(135deg,var(--blue-lt),var(--navy));border-radius:4px}
-  .logo b{color:var(--ink-strong);font-size:15px}
-  .logo small{display:block;color:var(--muted);font-size:10px;margin-top:-2px}
-  .menu{padding:6px 14px;border:0;background:none;color:var(--text);border-radius:3px}
+  /* ---- menu bar ----
+     Everything in this bar is nowrap and flex:0 0 auto on purpose. It used to be
+     shrinkable, so at 1280 the buttons were squeezed narrower than their labels and
+     "New project" / "Open MCU file…" wrapped to two and three lines inside a 44 px
+     row — the row clipped them, and the brand block's third line ("clocks") with
+     them (round-2 finding L1). Nothing here may wrap; what does not fit is dropped
+     to a short label by the media queries at the end of this stylesheet, with the
+     full wording kept in title= and aria-label=. Only #mcu-meta may shrink, and it
+     ellipsises rather than wrapping. */
+  .menubar{display:flex;align-items:center;gap:4px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow:hidden}
+  .menubar>*{flex:0 0 auto}
+  .logo{display:flex;align-items:center;gap:8px;margin-right:16px}
+  .logo .cube{width:26px;height:26px;background:linear-gradient(135deg,var(--blue-lt),var(--navy));border-radius:4px;flex:0 0 auto}
+  .logo b{color:var(--ink-strong);font-size:15px;display:block;line-height:1.15;white-space:nowrap}
+  .logo small{display:block;color:var(--muted);font-size:10px;line-height:1.2;white-space:nowrap}
+  .menu{padding:6px 12px;border:0;background:none;color:var(--text);border-radius:3px;white-space:nowrap;line-height:1.35}
   .menu:hover{background:var(--blue-pale)}
   .menu[disabled]{opacity:.38;cursor:default;background:none}
   .menu.icon{padding:6px 9px;font-size:15px;line-height:1}
-  .menubar .spacer{flex:1}
-  .menubar .mcu-name{color:var(--muted)}
+  /* Short labels are the narrow-window spelling; one of the pair is always hidden. */
+  .menu .lbl-short{display:none}
+  .menubar .spacer{flex:1 1 0;min-width:4px}
+  .menubar .mcu-name{color:var(--muted);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .menubar .mcusel-wrap{display:flex;align-items:center;gap:5px;flex:0 1 auto;min-width:0}
+  .menubar .mcusel-wrap>span{color:var(--muted);white-space:nowrap}
+  #mcusel{max-width:190px;min-width:96px}
 
   /* ---- breadcrumb ---- */
   .crumbs{display:flex;align-items:center;background:var(--navy);color:#fff;padding:0 8px;gap:0}
@@ -148,11 +162,39 @@
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
   .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text)}
   .ctab.active{background:var(--blue-hdr);color:#fff;border-color:var(--blue-hdr)}
-  .cbody{flex:1;overflow:auto;border-top:3px solid var(--blue-lt);padding:8px}
-  table.gpio{border-collapse:collapse;width:100%;font-size:12.5px}
-  table.gpio th{background:var(--blue-hdr);color:#fff;font-weight:500;text-align:left;padding:3px 6px;border-right:1px solid #fff;position:sticky;top:0}
+  /* Six columns of real GPIO values need 694 px and the centre column is ~440 px at 1280,
+     so this scrolls sideways. A cut edge with no affordance reads as a broken layout, so
+     the classic scroll-shadow pair rides the local background: the shadow on an edge is
+     visible exactly while there is content to scroll toward, and disappears at the end. */
+  .cbody{flex:1;overflow:auto;border-top:3px solid var(--blue-lt);padding:8px;
+         background:
+           linear-gradient(to right,var(--panel) 30%,rgba(0,0,0,0)) left center,
+           linear-gradient(to left,var(--panel) 30%,rgba(0,0,0,0)) right center,
+           radial-gradient(farthest-side at 0 50%,var(--shadow),rgba(0,0,0,0)) left center,
+           radial-gradient(farthest-side at 100% 50%,var(--shadow),rgba(0,0,0,0)) right center;
+         background-repeat:no-repeat;
+         background-size:34px 100%,34px 100%,11px 100%,11px 100%;
+         background-attachment:local,local,scroll,scroll}
+  /* The GPIO table carries six columns of real values — "Alternate Function Push Pull"
+     is 160 px of text. Squeezed into the centre column at 1280 every <select> was about
+     60 px wide and showed "No pu" (round-2 finding L4). It has a min-width per column
+     now and #cbody scrolls sideways when the panel is narrower than the values, which
+     is what CubeMX does too: a value is either fully readable or it is not shown. */
+  table.gpio{border-collapse:collapse;width:100%;min-width:694px;font-size:12.5px;table-layout:fixed}
+  /* The header keeps CubeMX's wording and WRAPS; the columns are sized for the VALUES.
+     A header that wraps costs one row of height once, a value that is clipped costs the
+     user the fact. "Alternate Function Push Pull" is 155 px of text plus a select's
+     arrow, which is where the 196 px comes from - it is measured, not guessed. */
+  table.gpio th{background:var(--blue-hdr);color:#fff;font-weight:500;text-align:left;padding:3px 6px;border-right:1px solid #fff;position:sticky;top:0;white-space:normal;line-height:1.15;vertical-align:bottom}
   table.gpio td{padding:2px 6px;border-bottom:1px solid var(--line-soft)}
   table.gpio tr:hover td{background:var(--blue-pale)}
+  table.gpio th:nth-child(1),table.gpio td:nth-child(1){width:90px}
+  table.gpio th:nth-child(2),table.gpio td:nth-child(2){width:112px}
+  table.gpio th:nth-child(3),table.gpio td:nth-child(3){width:196px}
+  table.gpio th:nth-child(4),table.gpio td:nth-child(4){width:98px}
+  table.gpio th:nth-child(5),table.gpio td:nth-child(5){width:88px}
+  table.gpio th:nth-child(6),table.gpio td:nth-child(6){width:110px}
+  table.gpio td:nth-child(1),table.gpio td:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Parameter Settings: CubeMX puts a grey band per group and one editor per row */
   table.params{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
   table.params th{background:var(--head);color:var(--on-accent);text-align:left;padding:5px 8px;font-weight:600}
@@ -299,9 +341,14 @@
   .picker .opt.cur small{color:#1a1a1a}
   .picker .grp{padding:4px 10px 2px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
 
-  /* ---- clock view: boxes positioned over an SVG connector layer ---- */
-  #view-clock{grid-template-columns:1fr;overflow:auto}
-  .clock{padding:16px 22px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+  /* ---- clock view: boxes positioned over an SVG connector layer ----
+     `minmax(0,1fr)`, not `1fr`: a 1fr track takes its min-content from the child, so the
+     1282 px tree made #clock 1326 px wide inside a 1280 px window and everything from the
+     ADC prescaler rightwards was painted past the viewport edge (round-2 finding L2), and
+     the notes below it wrapped to that 1326 px instead of the window (finding L3). The
+     track is capped at the panel now and renderClock() sizes the tree to fit it. */
+  #view-clock{grid-template-columns:minmax(0,1fr);overflow:auto}
+  .clock{padding:16px 22px;display:flex;flex-direction:column;gap:12px;align-items:flex-start;max-width:100%}
   .ctreewrap{position:relative}
   #ctree-svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
   .cedge{fill:none;stroke:var(--line);stroke-width:1.4;stroke-dasharray:4 3}
@@ -330,8 +377,13 @@
   .clegend i{display:inline-block;width:22px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:5px}
   .clegend i.dim{border-top:1.5px dashed var(--line)}
   .clegend em{display:inline-block;width:12px;height:12px;border:1px solid var(--bad);background:var(--bad-bg);vertical-align:-2px;margin-right:5px}
-  .cnote{color:var(--muted);font-size:12px;max-width:1100px}
-  .clock .issues{color:var(--bad);font-weight:500}
+  /* max-width was a flat 1100px, which is wider than the window at 125 % zoom (1024 CSS
+     px) — the sentence ran off the right edge. It wraps to the panel now, never past it. */
+  .cnote{color:var(--muted);font-size:12px;max-width:min(1100px,100%);align-self:stretch}
+  .clock .issues{color:var(--bad);font-weight:500;max-width:100%}
+  /* The tree is sized to the panel by renderClock(); if a window is narrower than the
+     floor it can shrink to, this scrolls rather than painting past the edge. */
+  .ctreescroll{align-self:stretch;max-width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
 
   /* Dark theme. Off by default; the toggle in the menu bar sets data-theme on <html>. */
   :root[data-theme="dark"]{
@@ -389,7 +441,14 @@
     #view-pinout{grid-template-columns:266px minmax(360px,1fr) minmax(450px,1.3fr)}
     .subbar{gap:60px}
     .chipbar{flex-wrap:wrap}
-    #pin-search{width:120px!important}
+    /* 152, not 120: the placeholder "🔍 find pin or signal" measures 132 px in this
+       font, and a 120 px box clipped it to "find pin or sigr" (round-2 finding L5). */
+    #pin-search{width:152px!important}
+    /* The menu bar stops fitting its full wording here. Swap to the short spelling
+       rather than let a label wrap and be clipped by the 44 px row — title= and
+       aria-label= still carry the full phrase for hover and for screen readers. */
+    .menu .lbl-full{display:none}
+    .menu .lbl-short{display:inline}
   }
   @media (max-width:1180px){
     #view-pinout{grid-template-columns:212px minmax(296px,1fr) minmax(356px,1.25fr)}
@@ -397,6 +456,8 @@
     table.gpio{font-size:11.5px}
     .mode{padding:8px 10px}
     .menubar .menu{padding:6px 8px}
+    .menubar{gap:2px}
+    .logo{margin-right:10px}
   }
   @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
 </style>
@@ -408,18 +469,21 @@
 <div class="app">
   <div class="menubar">
     <div class="logo"><div class="cube"></div><div><b>WCHCube</b><small>pinout · peripherals · clocks</small></div></div>
-    <button class="menu" id="m-new">New project</button>
-    <button class="menu" id="m-openproj">Open project…</button>
-    <button class="menu" id="m-save">Save project</button>
-    <button class="menu" id="m-open">Open MCU file…</button>
-    <button class="menu" id="m-reset">Reset configuration</button>
+    <button class="menu" id="m-new" title="New project (Ctrl+N)" aria-label="New project"><span class="lbl-full">New project</span><span class="lbl-short">New</span></button>
+    <button class="menu" id="m-openproj" title="Open a saved .wchproj project" aria-label="Open project"><span class="lbl-full">Open project…</span><span class="lbl-short">Open…</span></button>
+    <button class="menu" id="m-save" title="Save this project as .wchproj (Ctrl+S)" aria-label="Save project"><span class="lbl-full">Save project</span><span class="lbl-short">Save</span></button>
+    <button class="menu" id="m-open" title="Open an MCU description file (the YAML format in data/mcus/)" aria-label="Open MCU file"><span class="lbl-full">Open MCU file…</span><span class="lbl-short">MCU file…</span></button>
+    <button class="menu" id="m-reset" title="Reset every pin and peripheral setting" aria-label="Reset configuration"><span class="lbl-full">Reset configuration</span><span class="lbl-short">Reset</span></button>
     <button class="menu icon" id="m-undo" disabled>↶</button>
     <button class="menu icon" id="m-redo" disabled>↷</button>
     <button class="menu icon" id="m-theme" title="Dark theme">◑</button>
-    <button class="menu" id="m-keys" title="Keyboard shortcuts (?)">⌨ Shortcuts</button>
+    <button class="menu" id="m-keys" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><span class="lbl-full">⌨ Shortcuts</span><span class="lbl-short">⌨</span></button>
     <button class="menu" id="m-help">Help</button>
     <div class="spacer"></div>
-    <select id="mcusel" class="menu" style="border:1px solid var(--line)"></select>
+    <!-- Labelled, because an unlabelled part name in a menu bar reads as "the part that
+         is loaded" and it is in fact "load a different part". It is kept in step with
+         M.mcu.name by syncShellSelectors() on every render. -->
+    <span class="mcusel-wrap"><span>Load part:</span><label class="sr" for="mcusel">Load a different MCU</label><select id="mcusel" class="menu" title="Load a different MCU part" style="border:1px solid var(--line)"></select></span>
     <span class="mcu-name" id="mcu-meta"></span>
   </div>
 
@@ -680,17 +744,24 @@ function renderChip() {
       { t: S.pkg, fs: size(20, 11), w: 600, style: ' font-style="italic"' },
     ];
     if (epad) lines.push({ t: `pad: ${epad.join('/')}`, fs: size(11, 20), w: 400, style: '', fill: 'var(--chip-sub)' });
-    const LEAD = 1.25;
-    const total = lines.reduce((a, l) => a + l.fs * LEAD, 0);
-    let y = b.y + b.h / 2 - total / 2;
+    // Lines are stacked by their real line BOXES, not by a baseline fudge. The old
+    // `y += fs*1.25` then `baseline = y - fs*0.3` put consecutive baselines 23.9 px
+    // apart where the two boxes need 25.2, so "CH32V006" and "TSSOP20" overlapped by
+    // ~2.6 px on TSSOP20 (round-2 finding L8). ASC/DESC are the em fractions that bound
+    // a line in this font stack; GAP is a hair of leading. Because the box heights are
+    // computed from each line's own size, no combination of sizes can collide.
+    const ASC = 1.10, DESC = 0.30, GAP = 0.08;
+    const lineH = l => l.fs * (ASC + DESC + GAP);
+    const total = lines.reduce((a, l) => a + lineH(l), 0);
+    let y = b.y + b.h / 2 - total / 2;      // top of the stack
     for (const l of lines) {
-      y += l.fs * LEAD;
       // The <title> is a sibling, never a child of <text>: a title inside <text> would
       // land in its textContent and the truncation step would abbreviate the wrong string.
       g.push(`<g><title>${esc(l.t)}</title>`
-        + `<text x="${b.x + b.w / 2}" y="${y - l.fs * .3}" text-anchor="middle" style="font-size:${l.fs}px"`
+        + `<text x="${b.x + b.w / 2}" y="${y + l.fs * ASC}" text-anchor="middle" style="font-size:${l.fs}px"`
         + ` font-weight="${l.w}"${l.style} fill="${l.fill || 'var(--chip-text)'}" font-family="var(--font)"`
         + ` data-fitw="${Math.max(10, b.w - 16)}">${esc(l.t)}</text></g>`);
+      y += lineH(l);
     }
   }
   const vert = p => p.side === 1 || p.side === 3;
@@ -770,18 +841,62 @@ function pkgIoCount(pk) {
   }
   return n;
 }
+/**
+ * The package selector's option text, and the guarantee that it shows the package the
+ * engine actually has.
+ *
+ * The option used to read "TSSOP20 - 18 I/O - CH32V006F8P7 105C", which needs 390 px in
+ * a 250 px control. A <select> clips its own value, so it read "CH32V006F8P7 105" with
+ * the temperature grade cut mid-value (round-2 finding L6). What is DISPLAYED is now
+ * only what a package selector has to say - the package and its usable I/O count - and
+ * that fits at every window size. The part numbers and temperature grades are not lost:
+ * they are in the option's title=, in the New Project dialog, and in the Project Manager
+ * tab, all of which have room for them.
+ *
+ * Called from renderChip(), so `value` is re-synced on every render whatever changed
+ * S.pkg - projectApply() driven from a script included, which is how opening a project
+ * for another package used to leave this reading the old one (finding S2 / C6).
+ */
 function decoratePkgSel() {
   const ps = document.getElementById('pkgsel');
+  const want = Object.keys(M.packages);
+  // The loaded part can change under us (Open MCU file..., a project for another part).
+  // Rebuild rather than decorate options belonging to a part that is no longer loaded.
+  if (want.length !== ps.options.length || want.some((k, i) => ps.options[i].value !== k)) {
+    ps.innerHTML = '';
+    for (const k of want) { const o = document.createElement('option'); o.value = k; ps.appendChild(o); }
+  }
   for (const o of ps.options) {
     const pk = o.value, bits = [`${pkgIoCount(pk)} I/O`];
     const vs = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === pk)
       .map(([v, i]) => v + (i.temp ? ` ${i.temp}\u00b0C` : ''));
-    if (vs.length) bits.push(vs.slice(0, 2).join(', ') + (vs.length > 2 ? ` +${vs.length - 2}` : ''));
     if (!PACKAGES[pk]) bits.push('no drawing');
     const txt = `${pk} · ${bits.join(' · ')}`;
     if (o.textContent !== txt) o.textContent = txt;
-    o.title = txt;
+    o.title = vs.length ? `${txt} — ${vs.join(', ')}` : txt;
   }
+  if (ps.value !== S.pkg) ps.value = S.pkg;
+  ps.title = (ps.selectedOptions[0] || {}).title || 'Package';
+}
+
+/**
+ * Every selector in the app chrome, re-read from the model, on every render - so a
+ * control cannot sit showing a configuration the engine does not have.
+ *
+ * #mcusel was filled once at start-up and never given a value, so it showed whichever
+ * part sorted first: CH32V005 while CH32V006 was the part that was loaded (round-2
+ * finding S1 / C6). It is keyed by MCU_FILES key; when the loaded part has no key of its
+ * own (a file opened from disk under a name that is not in the bundle) the option is
+ * added, rather than leaving the control pointing at a different part.
+ */
+function syncShellSelectors() {
+  const ms = document.getElementById('mcusel');
+  if (!ms || !M || !M.mcu) return;
+  const name = M.mcu.name;
+  if (![...ms.options].some(o => o.value === name)) {
+    const o = document.createElement('option'); o.value = o.textContent = name; ms.appendChild(o);
+  }
+  if (ms.value !== name) ms.value = name;
 }
 
 // Real extent of the drawing, text included. Estimating from character counts is not
@@ -1698,6 +1813,12 @@ function renderClock() {
   const c = M.clock, k = S.clock, r = clockCalc();
   const f = v => Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '\u2014';
   const fp = firstPre(c);
+  // Column widths at full size. They are a STARTING point, not a fixed layout: the tree
+  // used to measure a fixed 1282 px, which is wider than a 1280 px window and much wider
+  // than the 1024 CSS px a 1280 window has at 125 % zoom, so the right-hand column was
+  // painted past the viewport edge with the ADC prescaler's <select> sliced through
+  // (round-2 finding L2). The layout pass at the bottom of this function shrinks the gap
+  // and then the columns to the room the panel actually has.
   const COLW = [188, 208, 198, 216, 240];
   // Every option list is clockCalc().selectable \u2014 the MCU file's FULL list, never
   // filtered by the current state. An option is missing from a mux only when the data
@@ -1791,12 +1912,12 @@ function renderClock() {
     + `Change any selector and every frequency recomputes.</div>`
     + `<div class="clegend"><span><i></i>active path</span><span><i class="dim"></i>not feeding SYSCLK</span>`
     + `<span><em></em>out of specification</span></div>`
-    + `<div class="ctreewrap" id="ctreewrap"><svg id="ctree-svg"></svg>`
+    + `<div class="ctreescroll"><div class="ctreewrap" id="ctreewrap"><svg id="ctree-svg"></svg>`
     + nodes.map(n => `<div class="cnode${n.over ? ' over' : ''}${n.off ? ' off' : ''}" data-id="${attr(n.id)}" style="width:${n.w}px">`
       + `<h5>${esc(n.title)}</h5>${n.body || ''}`
       + (n.val !== undefined ? `<div class="val">${f(n.val)}<small>${esc(n.unit || '')}</small></div>` : '')
       + (n.lim ? `<div class="lim">${esc(n.lim)}</div>` : '') + '</div>').join('')
-    + `</div>`;
+    + `</div></div>`;
   if (r.over.length) {
     // `over` is everything out of specification; `under` is the subset that is too SLOW.
     // Saying which way it is wrong is the difference between a warning the user can act
@@ -1829,8 +1950,27 @@ function renderClock() {
   U.clockPending = false;
   const box = {};
   wrap.querySelectorAll('.cnode').forEach(d => box[d.dataset.id] = d);
-  const GAPX = 56, GAPY = 16, PAD = 4;
+  const GAPY = 16, PAD = 4;
   const cols = [...new Set(nodes.map(n => n.col))].sort((a, b) => a - b);
+
+  // Fit the tree to the panel before anything is measured. Room comes from the scroll
+  // container, which is capped at the view by `#view-clock{grid-template-columns:
+  // minmax(0,1fr)}`; give the gap up first (it carries no text), then scale the columns,
+  // and stop at a floor rather than shrink a box past the point where its own <select>
+  // and its "min 16, max 48 MHz" line are readable. Under that floor .ctreescroll
+  // scrolls — which is visible and reversible, unlike painting past the window edge.
+  const GAPX_MAX = 56, GAPX_MIN = 20, SCALE_MIN = 0.78;
+  const scroller = wrap.parentElement;
+  const room = (scroller && scroller.clientWidth ? scroller.clientWidth : el.clientWidth) - 2 * PAD;
+  const baseW = cols.reduce((a, col) => a + Math.max(...nodes.filter(n => n.col === col).map(n => n.w)), 0);
+  const gaps = Math.max(0, cols.length - 1);
+  let GAPX = GAPX_MAX, wscale = 1;
+  if (room > 0 && baseW + gaps * GAPX_MAX > room) {
+    GAPX = gaps ? Math.max(GAPX_MIN, Math.floor((room - baseW) / gaps)) : 0;
+    if (baseW + gaps * GAPX > room) wscale = Math.max(SCALE_MIN, (room - gaps * GAPX) / baseW);
+  }
+  if (wscale < 1) for (const n of nodes) { n.w = Math.max(120, Math.floor(n.w * wscale)); box[n.id].style.width = n.w + 'px'; }
+
   let x = PAD; const colX = {}, colH = {};
   for (const col of cols) {
     const mine = nodes.filter(n => n.col === col);
@@ -1866,6 +2006,22 @@ function renderClock() {
   }).join('');
 
 }
+
+// Nothing used to react to the window changing size: the chip kept the zoom it was fitted
+// at and the clock tree kept the column widths it was laid out with, so dragging a window
+// narrower reproduced finding L2 on a layout that had been measured as fitting. Both are
+// re-fitted here, debounced, and only when the panel is actually visible.
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!M || !E) return;
+    if (document.getElementById('view-clock').classList.contains('active')) renderClock();
+    else U.clockPending = true;
+    if (U.cview === 'system') renderSystem();
+    else if (U.autoFit) fitChip();
+  }, 120);
+});
 
 // ---- clock interaction ------------------------------------------------------
 // Bound ONCE, by delegation on #clock, and deliberately NOT inside renderClock():
@@ -2055,6 +2211,7 @@ function renderAll(fit) {
   if (!firstRender && !fit) { PROJECT.dirty = true; }
   firstRender = false; updateCrumb();
   compute();
+  syncShellSelectors();
   renderTree(); renderCentre(); renderChip(); renderClock();
   if (fit) fitChip();
   const key = E.conflicts.join('|');
