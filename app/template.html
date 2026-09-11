@@ -301,6 +301,8 @@
   table.nvictab tr.off td{color:var(--muted)}
   table.nvictab tr.off td code{color:var(--muted)}
   table.nvictab a{color:var(--link);text-decoration:underline;cursor:pointer}
+  /* "its peripheral is off" is a live link to the peripheral, not a grey checkbox. */
+  .needson{font-size:11.5px;white-space:nowrap}
   .fixedval{color:var(--text);white-space:nowrap}
   .ro{color:var(--muted)}
   .mode code{white-space:nowrap}
@@ -2065,16 +2067,44 @@ function dmaTable(pid) {
 // and one sub-priority bit, both 0-1. A spinner offering 0-15 would be offering settings
 // the silicon throws away. A field the active grouping gives zero bits is rendered as
 // fixed text, not a disabled control - the same rule as the GPIO speed column.
+// A priority is settable whether or not the vector is enabled: the value is stored
+// either way, and disabling the control because of another control's state is the thing
+// round 2 forbade. Zero bits in the active grouping IS a hardware fact, and that renders
+// as fixed text - never as a disabled select.
 function nvicPriorityCell(v, which, spec) {
   if (!spec) return '<span class="ro">—</span>';
   const value = which === 'preempt' ? v.preempt : v.sub;
-  if (!v.enabled) return `<span class="ro">${value}</span>`;
   if (spec.max <= spec.min) {
     return `<span class="fixedval" title="${attr(`This grouping gives ${which === 'preempt' ? 'preemption' : 'sub-'}priority ${spec.bits || 0} bits, so ${spec.min} is the only value`)}">${spec.min}</span>`;
   }
   let o = '';
   for (let i = spec.min; i <= spec.max; i++) o += `<option${i === value ? ' selected' : ''}>${i}</option>`;
   return `<select data-nv="${attr(v.name)}" data-nk="${which}" aria-label="${attr(`${v.name} ${which} priority`)}">${o}</select>`;
+}
+
+/**
+ * The Enabled cell.
+ *
+ * It used to be a `disabled` checkbox whenever the owning peripheral was switched off,
+ * which is exactly what round 2 forbids: greying is for an option the MCU data says the
+ * part does not have, never a consequence of another control's state. "USART1 is off" is
+ * UI state. So instead of a dead checkbox the cell says so and offers the fix - one click
+ * to the peripheral that has to be switched on first. A live control that explains itself
+ * beats a grey one that does not.
+ */
+function nvicEnableCell(v) {
+  if (v.fixed) {
+    return `<span class="fixedval" title="${attr(`${v.name} is always active on this core and cannot be switched off`)}">always on</span>`;
+  }
+  if (v.peripheral && !M.peripherals[v.peripheral]) {
+    return `<span class="ro" title="${attr(`${M.mcu.name} has no ${v.peripheral}`)}">not on this part</span>`;
+  }
+  if (!v.available && v.peripheral) {
+    return `<a data-goto="${attr(v.peripheral)}" class="needson"`
+      + ` title="${attr(`${v.peripheral} is switched off. Switch it on and this interrupt can be enabled.`)}">${esc(v.peripheral)} is off</a>`;
+  }
+  return `<input type="checkbox" data-nv="${attr(v.name)}" data-nk="enabled"${v.enabled ? ' checked' : ''}`
+    + ` aria-label="${attr(`Enable the ${v.name} interrupt`)}">`;
 }
 
 function nvicTable(rows, { showOwner }) {
@@ -2086,14 +2116,10 @@ function nvicTable(rows, { showOwner }) {
     const who = v.system ? '<span class="ro">core</span>'
       : M.peripherals[v.peripheral] ? `<a data-goto="${attr(v.peripheral)}" title="Go to ${attr(v.peripheral)}">${esc(v.peripheral)}</a>`
         : esc(v.peripheral || '—');
-    const box = v.fixed
-      ? `<span class="fixedval" title="${attr(`${v.name} is always active on this core and cannot be switched off`)}">always on</span>`
-      : `<input type="checkbox" data-nv="${attr(v.name)}" data-nk="enabled"${v.enabled ? ' checked' : ''}`
-        + `${v.available ? '' : ' disabled'} aria-label="${attr(`Enable the ${v.name} interrupt`)}">`;
     return `<tr class="${v.enabled ? 'on' : ''}${v.available ? '' : ' off'}" title="${attr(v.description || v.name)}">`
       + `<td>${v.vector}</td><td>${esc(v.name)}<br><code>${esc(v.irqn || '')}</code></td>`
       + (showOwner ? `<td>${who}</td>` : '')
-      + `<td>${box}</td><td>${nvicPriorityCell(v, 'preempt', pre)}</td><td>${nvicPriorityCell(v, 'sub', sub)}</td>`
+      + `<td>${nvicEnableCell(v)}</td><td>${nvicPriorityCell(v, 'preempt', pre)}</td><td>${nvicPriorityCell(v, 'sub', sub)}</td>`
       + `<td><code>${esc(v.handler || '')}</code></td></tr>`;
   }).join('');
   return `<table class="nvictab${showOwner ? '' : ' noowner'}"><thead><tr><th>No.</th><th>Interrupt</th>`
