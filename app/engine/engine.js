@@ -167,10 +167,25 @@ export function resetPin(pin) {
 // works and the UI never has to know how S is shaped. (AGENT-3: route the centre
 // panel and the clock tab here — these replace the thin writers in section 4b.)
 
+// Shared by both setting writers: the peripheral has to exist on this part, and
+// so does the setting. A generic caller — the peripheral tabs drive every setting
+// by name — gets a sentence, not a TypeError from `undefined.settings`.
+function findSetting(pid, setting) {
+  const p = M.peripherals[pid];
+  if (!p) throw new Error(`no peripheral "${pid}" on ${M.mcu.name}`);
+  const s = (p.settings || []).find(x => x.name === setting);
+  if (!s) throw new Error(`${pid} has no setting "${setting}"`);
+  return s;
+}
+
 // A dropdown setting: "Mode" -> "Asynchronous".
 export function setSetting(pid, setting, choice) {
-  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
-  if (!s) throw new Error(`${pid} has no setting "${setting}"`);
+  const s = findSetting(pid, setting);
+  // Round-3 C5. Writing a String over the Set left the next compute() calling
+  // `v.has(...)` on a string — a blank app until reload, and no exception at the
+  // call site to say who did it. Reject it here, by name, with the way out.
+  if (s.type === 'checkboxes')
+    throw new Error(`${pid}.${setting} is a checkbox setting — use toggleSetting(pid, setting, choice, on), not setSetting`);
   if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
   record(`${pid} ${setting}`);
   S.periph[pid].settings[setting] = choice;
@@ -178,8 +193,9 @@ export function setSetting(pid, setting, choice) {
 
 // A checkbox setting: ADC1 "Channels" IN3 on or off.
 export function toggleSetting(pid, setting, choice, on) {
-  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
-  if (!s || s.type !== 'checkboxes') throw new Error(`${pid}.${setting} is not a checkbox setting`);
+  const s = findSetting(pid, setting);
+  if (s.type !== 'checkboxes')
+    throw new Error(`${pid}.${setting} is not a checkbox setting — use setSetting(pid, setting, choice)`);
   if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
   record(`${pid} ${choice}`);
   const set = S.periph[pid].settings[setting];

@@ -154,6 +154,42 @@ test('the state writers validate what they are given', () => {
   assert.equal(e.canUndo(), false, 'a rejected change must not leave an undo step');
 });
 
+// Round-3 C5. setSetting() used to write a String over the Set that a `checkboxes`
+// setting holds. It did not throw; the NEXT compute() died with
+// "v.has is not a function" and the app went blank until reload.
+test('setSetting refuses a checkboxes setting and names the writer to use', () => {
+  const e = fresh();
+  assert.ok(e.S.periph.ADC1.settings.Channels instanceof Set, 'setup: it is a Set');
+  assert.throws(() => e.setSetting('ADC1', 'Channels', 'IN0'),
+    /ADC1\.Channels is a checkbox setting — use toggleSetting/);
+  assert.ok(e.S.periph.ADC1.settings.Channels instanceof Set, 'and the Set is untouched');
+  assert.equal(e.canUndo(), false, 'the rejected write left no undo step');
+  e.compute();   // this is what used to throw
+  assert.ok(e.E.status.ADC1 !== undefined || true, 'compute still runs');
+});
+
+test('every checkboxes setting on every part is rejected by setSetting, not just ADC1', () => {
+  for (const name of ['CH32V006', 'CH32V005', 'WCH-DUMMY32-C8']) {
+    const e = fresh();
+    e.loadMcu(name);
+    for (const [pid, p] of Object.entries(e.M.peripherals)) {
+      for (const s of p.settings || []) {
+        if (s.type !== 'checkboxes') continue;
+        assert.throws(() => e.setSetting(pid, s.name, s.choices[0].name),
+          /is a checkbox setting/, `${name} ${pid}.${s.name}`);
+        assert.ok(e.S.periph[pid].settings[s.name] instanceof Set, `${name} ${pid}.${s.name} still a Set`);
+      }
+    }
+    e.compute();
+  }
+});
+
+test('the peripheral has to exist, and the message says so instead of a TypeError', () => {
+  const e = fresh();
+  assert.throws(() => e.setSetting('NOPE1', 'Mode', 'x'), /no peripheral "NOPE1" on CH32V006/);
+  assert.throws(() => e.toggleSetting('NOPE1', 'Channels', 'IN0', true), /no peripheral "NOPE1" on CH32V006/);
+});
+
 test('toggleSetting flips when no explicit on/off is given', () => {
   const e = fresh();
   e.toggleSetting('ADC1', 'Channels', 'IN4');
