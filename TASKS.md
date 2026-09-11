@@ -143,8 +143,9 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 - [x] C6 (AGENT-3) `#mcusel` shows the wrong part at boot; `#pkgsel` keeps the old package after a
       project load — both re-read from the model on every render, and `#mcusel` is
       labelled "Load part:" so it no longer reads as "the part you have"
-- [ ] C7 (AGENT-1) `WCH-DUMMY32-C8` has no `dma` / `nvic` / `params` / `codegen`, so every new tab
-      is exercised on exactly one part
+- [x] C7 (AGENT-1) `WCH-DUMMY32-C8` has no `dma` / `nvic` / `params` / `codegen`, so every new tab
+      is exercised on exactly one part — done, and deliberately DIFFERENT from CH32V006:
+      three GPIO speeds, four NVIC priority bits, nine DMA channel params, APB2 spelling
 - [x] C8 (AGENT-4) `tests/completeness.test.js` — per-peripheral matrix over every real part
       (settings / params / clock bit / vectors), DMA-request ownership both ways, generated C
       reached by every peripheral that holds a pin, and the RM chapter list read out of the
@@ -164,11 +165,15 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 - [ ] (AGENT-2) Emit the part's one speed macro; never a Low/Medium/High mapping
 - [ ] (AGENT-3) Remove the GPIO speed select where the data says there is one speed — show the
       fixed value as text, driven by the data, never by a hardcoded part name
-- [~] (AGENT-1) `tools/verify_sdk_names.py` — check every `codegen:` / `params:` / `dma:` /
+- [x] (AGENT-1) `tools/verify_sdk_names.py` — check every `codegen:` / `params:` / `dma:` /
       `nvic:` name a part claims against that part's SDK headers, suggest the closest match on a
       miss, say "no SDK for series X, not checked" rather than passing silently. Planted-break
       tested like `validate_mcu.py` was.  **EVT has landed** — headers are at
       `data/sources/<PART>/Evt/EXAM/SRC/Peripheral/inc/`, so EVT first, PlatformIO as fallback.
+- [x] (AGENT-1) FOUND BY IT: `nvic` vector 29 claimed `ADC1_IRQn`, which exists in neither the
+      IRQn_Type enum nor the startup table. Vectors now carry `irqn` AND `handler`; all 29 pairs
+      extracted mechanically from EVT. The TIM3-vector contradiction is settled — EVT confirms
+      there is no TIM3 vector, so the round-2 decision not to invent one was right.
 - [ ] (AGENT-4) Wire `verify_sdk_names.py` into `node tests/run.js`
 - [x] (AGENT-4) **The compile gate**: `tests/codegen_compile.test.js` — generates from fixtures
       that assign pins and params, then `pio run` for CH32V006 TSSOP20 + QFN32 and CH32V005
