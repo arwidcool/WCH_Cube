@@ -14,20 +14,22 @@ Update this file every session. Newest notes at the bottom of each section.
 | Look & feel | Mirror STM32CubeMX (blue tab bar, three-column layout, grey chip, green/yellow/orange pins) | Per brief |
 
 ## Multi-agent mode
-Four autonomous agents (DATA / ENGINE / UI / QA+RELEASE) work this file. The working agreement is
-`agents/README.md`; the current marching orders are the **round-3 pack**:
+Three autonomous agents — **DATA / APP / QA+RELEASE** — work this file. The working agreement is
+`agents/README.md`; the current marching orders are **round 5**:
 
 | File | What it is |
 |---|---|
-| `Agents Rounds 4/00_PROJECT.md` | the round brief — read first, every cycle |
-| `Agents Rounds 4/AGENT_n_*.md` | your standing instructions + your "Current" section |
-| `Agents Rounds 4/BOARD.md` | the message board for this round (append-only) |
-| `Agents Rounds 4/WALKTHROUGH.md` | the acceptance script: a second family, and a folder you can flash |
-| `PROGRESS.md` | where the project actually stands (AGENT-4 keeps it true) |
+| `agents/PROJECT.md` | the round brief — read first, every cycle |
+| `agents/AGENT_n_*.md` | your standing instructions + your "Current" section |
+| `agents/BOARD.md` | the message board (append-only) — the ONLY board |
+| `agents/WALKTHROUGH.md` | the round-5 acceptance script |
+| `agents/PROMPT.txt` | the launcher prompt; only the agent number differs |
+| `PROGRESS.md` | where the project actually stands (AGENT-3 keeps it true) |
 
 Claim with `[~] (AGENT-n)`. Communicate only via the board. Done = all of `agents/DONE.md`.
-Earlier boards (`agents/BOARD.md`, `Agents Rounds 2/BOARD.md`, `Agents Rounds 3/BOARD.md`) are
-history and still binding — read the last entries of the round-3 board before your first cycle.
+`agents/` is the single agent working directory; rounds 1–4 are archived under `agents/history/`
+(`INDEX.md` says what each produced) and are read only when a decision is genuinely in question.
+ENGINE and UI were merged into APP in round 5 — one owner of `app/`.
 
 ## Status legend
 `[ ]` todo  `[~]` in progress  `[x]` done  `[-]` dropped
@@ -78,9 +80,9 @@ history and still binding — read the last entries of the round-3 board before 
 - [x] Per-pin notes (SWIO/SWCLK, XI/XO, RST-per-package); [-] 5V-tolerance — the V006 DS does not state it per pin, nothing to extract (AGENT-1)
 - [x] V00x clock tree (HB domain, ADCPRE incl. /1 ADC_CLK_MODE)  [ ] other families (V003: HSI 24 MHz & PLL x2; V20x/V30x: F1-style with PLL mults; L103; X035)
 
-## Round 2 — fully functional and polished  (NOT finished — open items carry into round 3 as C1–C8)
+## Round 2 — fully functional and polished  (closed; archived)
 
-See `Agents Rounds 2/00_PROJECT.md`. Data lines only; the other three areas track their own.
+See `agents/history/round2/00_PROJECT.md`. Data lines only; the other three areas track their own.
 
 - [x] (AGENT-1) HSE coupling data — `clock.hse_peripheral` / `hse_setting` / `hse_signals` on
       CH32V006, CH32V005 (inherited) and the dummy part, which spells the same pins
@@ -118,10 +120,10 @@ standing source of truth for project progress. AGENT-4 owns it and keeps it true
       `data/sources/<PART>/Evt/` and are the top authority for every name the software uses.
 - [x] (AGENT-4) `PROGRESS.md` at the repo root.
 
-## Round 3 — the generated code is the product  (open items carry into round 4 as D1–D9)
+## Round 3 — the generated code is the product  (closed; archived as round 4's D1–D9)
 
-Brief: `Agents Rounds 3/00_PROJECT.md`. One file per agent beside it; board is
-`Agents Rounds 3/BOARD.md`; acceptance script is `Agents Rounds 3/WALKTHROUGH.md`.
+Brief: `agents/history/round3/00_PROJECT.md`. One file per agent beside it; board is
+`agents/history/round3/BOARD.md`; acceptance script is `agents/history/round3/WALKTHROUGH.md`.
 
 The round's rule: **a name nobody compiled is a guess.** `data/firmware/` builds the generated C
 for real silicon, so "generated C compiles" is a gate now, not an aspiration. Claim a line with
@@ -281,11 +283,11 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 - [ ] (AGENT-4) The human's `Taskfile.yml` is a stub. Make it the real task runner (build, test,
       firmware, validate) or leave it alone and say so — do not half-adopt it.
 
-## Round 4 — a second family, and a project you can flash  (CURRENT)
+## Round 4 — a second family, and a project you can flash  (closed; archived as round 5's E1–E9)
 
-Brief: `Agents Rounds 4/00_PROJECT.md`. One file per agent beside it; board is
-`Agents Rounds 4/BOARD.md`; acceptance script is `Agents Rounds 4/WALKTHROUGH.md`;
-launcher `Agents Rounds 4/run_round4.ps1`.
+Brief: `agents/history/round4/00_PROJECT.md`. One file per agent beside it; board is
+`agents/history/round4/BOARD.md`; acceptance script is `agents/history/round4/WALKTHROUGH.md`;
+launcher `agents/history/round4/run_round4.ps1` (superseded by `agents/run_agents.ps1`).
 
 Two deliverables that prove each other. **A: CH32X035 end to end** — a second MCU family, read from
 its own DS and RM and checked against its own EVT package. **B: "Generate PlatformIO project"** — a
@@ -294,6 +296,26 @@ for is a part nobody has actually used.**
 
 Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/sources/X035/Evt/`
 (2 239 files). Every "until the EVT package arrives" sentence in the repo is now stale.
+
+### Delivery edge — one Generate, one archive, real parts only (2026-09-12, hand edit)
+
+- [x] **GENERATE CODE and GENERATE PROJECT are one action.** One file list, one button
+      (the breadcrumb and the Project Manager both call `pmGenerate`), one delivery:
+      `<Name>.zip` in a browser, `<folder>/<Name>/` on the desktop or via the File System
+      Access API. The pin table and clock summary moved to `docs/` inside the archive.
+      Rationale: init code with no `platformio.ini`, `main.c` or README around it is not
+      something a user can flash, and the code button downloaded it as loose files.
+- [x] **The page's duplicate ZIP writer is deleted.** `app/template.html` carried a second
+      hand-rolled implementation of the format next to `app/engine/zip.js`; it was tested by
+      nothing. The page is now a thin `zipOf()` over the engine's `zipFiles`.
+- [x] **`WCH-DUMMY32-C8` is out of `data/mcus/`** → `tests/fixtures/mcus/`, kept because it
+      is still the only fixture reaching LQFP100/LQFP144, with three GPIO speeds, a
+      different NVIC priority scheme and the `OSC_IN`/`OSC_OUT` HSE spelling. The bundle
+      dropped 726 KB → 675 KB. `tests/data.test.js` now fails if a synthetic part reappears
+      in `data/mcus/`; `tests/clock_ui.test.js` covers the no-HSE/no-PLL clock shape on
+      CH32X035 instead.
+- [x] The app's part selector, the built bundle and `wchcube_cli.js --list` offer the three
+      real parts and nothing else — verified in a real browser.
 
 ### D — carried over from round 3. These outrank everything below.
 
@@ -569,3 +591,21 @@ encodes /4), ADCPRE has no /1 code at all (that is ADC_CLK_MODE at bit 31), SPI 
 on this family, and the ADC sampling-time list was wrong in every middle entry. Also corrected my own
 earlier claim that this part has no PB1/PB2 split — it has one prescaler but three clock enable
 registers. Three tests are red and none needs a data change; verified fixes are on the board.
+
+## Round 5 - every choice the app offers must be one the silicon can honour  (CURRENT)
+
+Brief: `agents/PROJECT.md`. Standing instructions `agents/AGENT_n_*.md`; the ONLY board is `agents/BOARD.md`; acceptance script `agents/WALKTHROUGH.md`; launcher `agents/run_agents.ps1`.
+
+Three agents: DATA / APP / QA+RELEASE. Since round 5 `agents/` is the single agent working
+directory - rounds 1-4 are archived under `agents/history/` and `INDEX.md` says what each
+produced. Claim a line with `[~] (AGENT-n)`.
+
+**A - the data can state a constraint.** Three documented instances on CH32X035 (the pull-down
+allow-list PA0-PA15/PC16-PC17; output functions prohibited on shorted pins; PC10/PC11 floating
+only while USBFS is on), one mechanism, consumed by the GPIO table per row, the conflict engine
+and codegen - with CH32V006/CH32V005 byte-identical as the regression half.
+
+**B - every part generates C with no TODO and no #error**, so `--strict` exits 0. It exits 2
+today, blocked on `codegen.nvic`, `channel_params.channels` and the CH32X035 params gaps.
+
+Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT.md`.

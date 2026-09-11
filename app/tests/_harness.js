@@ -20,9 +20,25 @@ export const jsyaml = loadVendorYaml();
 eng.setYaml(jsyaml);
 
 export const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
-export const mcuFiles = () => fs.readdirSync(path.join(ROOT, 'data', 'mcus'))
-  .filter(f => f.endsWith('.yaml'))
-  .map(f => path.join('data', 'mcus', f));
+
+/**
+ * Every MCU file the engine tests can load: the real parts the app ships, plus the
+ * synthetic fixture that only the tests use.
+ *
+ * `WCH-DUMMY32-C8` lives in `tests/fixtures/mcus/` rather than `data/mcus/` on purpose.
+ * It is not silicon and it must never appear in the app's part list or in the built
+ * bundle — but it is the only fixture that reaches LQFP100/LQFP144, that has THREE GPIO
+ * speeds, that uses a different NVIC priority scheme, and that spells the HSE pins
+ * `OSC_IN`/`OSC_OUT` instead of `XI`/`XO`, which is what proves the HSE coupling is read
+ * from the data rather than hardcoded. Deleting it would delete all four of those.
+ */
+const MCU_DIRS = ['data/mcus', 'tests/fixtures/mcus'];
+const mcuDirOf = name => MCU_DIRS.find(d => fs.existsSync(path.join(ROOT, d, `${name}.yaml`))) || MCU_DIRS[0];
+export const mcuFiles = () => MCU_DIRS.flatMap(d => {
+  const dir = path.join(ROOT, d);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter(f => f.endsWith('.yaml')).map(f => path.join(d, f));
+});
 
 let packagesLoaded = false;
 // Fresh engine state: real package library, real MCU file, optional package.
@@ -32,7 +48,7 @@ export function fresh(mcu = 'CH32V006', pkg) {
   if (!packagesLoaded) { eng.loadPackages(read('data/packages/packages.yaml')); packagesLoaded = true; }
   for (const k of Object.keys(eng.MCU_FILES)) delete eng.MCU_FILES[k];
   for (const f of mcuFiles()) eng.registerMcuFile(read(f));
-  eng.loadMcu(read(`data/mcus/${mcu}.yaml`));
+  eng.loadMcu(read(path.join(mcuDirOf(mcu), `${mcu}.yaml`)));
   if (pkg) eng.setPackage(pkg);
   eng.compute();
   return eng;

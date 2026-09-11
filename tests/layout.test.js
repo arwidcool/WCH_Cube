@@ -35,7 +35,7 @@ test('the four CubeMX tabs are present, in order, with the first one active', ()
   } finally { a.close(); }
 });
 
-test('the breadcrumb reads Home / part / project, with Generate Code on the right', () => {
+test('the breadcrumb reads Home / part / project, with Generate Project on the right', () => {
   const a = boot();
   try {
     const crumbs = [...a.document.querySelectorAll('.crumbs .crumb')].map(text);
@@ -43,7 +43,7 @@ test('the breadcrumb reads Home / part / project, with Generate Code on the righ
     assert.equal(crumbs[1], a.M.mcu.name, 'the second crumb should be the part');
     assert.match(crumbs[2], /\.wchproj/, 'the third crumb should be the project file');
     const gen = a.document.querySelector('.crumbs .gen');
-    assert.ok(gen, 'the GENERATE CODE button is missing');
+    assert.ok(gen, 'the GENERATE PROJECT button is missing');
     assert.match(text(gen), /generate/i);
   } finally { a.close(); }
 });
@@ -108,7 +108,7 @@ for (const size of SIZES) {
   });
 }
 
-test('nothing is drawn outside the chip drawing from QFN12 up to LQFP144', () => {
+test('nothing is drawn outside the chip drawing from the smallest package up to the largest', () => {
   const a = boot();
   const problems = [];
   try {

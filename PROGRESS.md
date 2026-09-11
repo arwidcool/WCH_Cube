@@ -3,14 +3,36 @@
 The ongoing source of truth for where this project stands. Keep it current: if a
 statement here stops being true, change it here first.
 
-- **Last updated:** 2026-09-11T20:30Z (round 4, cycle 2)
+- **Last updated:** 2026-09-12 (hand edit — one delivery path, real parts only)
 - **Branch:** `main` (no remote)
-- **Verified this pass:** `python build.py` → OK · `task firmware` → **4 of 4
-  environments build** from an empty drop zone · `pio check` on CH32V006 **and
-  CH32X035** → **no defects** · `node tests/run.js` → **460 green, 0 skipped** —
-  the generated-project gate now RUNS: `projectFiles()` landed, and a whole
-  project builds standalone in the system temp directory for all four fixtures
-  (CH32V006 TSSOP20 + QFN32, CH32V005, CH32X035).
+- **Verified this pass:** `python build.py` → OK · `node tests/run.js` → **467
+  green, 0 skipped** · the browser Generate button re-checked by hand at the
+  hand-off below.
+- **New this pass: one Generate button, one archive, and no invented silicon.**
+  Three changes, all on the delivery edge rather than in the engine:
+  1. **GENERATE CODE and GENERATE PROJECT became ONE action.** The split was
+     never real: the init code without `platformio.ini`, `src/main.c` and a
+     README around it is a handful of files in Downloads that nobody can flash.
+     There is now one file list, one button (two, doing literally the same
+     thing: the breadcrumb and the Project Manager), and one delivery:
+     `<Name>.zip` in a browser, `<folder>/<Name>/` on the desktop or through the
+     File System Access API. The pin table and clock summary moved under
+     `docs/` inside the archive.
+  2. **The page no longer carries its own ZIP writer.** `app/template.html`
+     had a second, hand-rolled copy of the format next to `app/engine/zip.js` —
+     ~60 lines nothing tested, beside one `app/tests/zip.test.js` proves against
+     a real unzipper. The page is now a thin `zipOf()` over the engine's
+     `zipFiles`; one implementation, one set of evidence.
+  3. **`WCH-DUMMY32-C8` is out of the shipped data.** It is not silicon, and it
+     was in the part selector and in the built bundle (726 KB → **675 KB**). It
+     moved to `tests/fixtures/mcus/`, kept rather than deleted because it is
+     still the only fixture that reaches LQFP100/LQFP144, that has three GPIO
+     speeds, that uses a different NVIC priority scheme, and that spells the HSE
+     pins `OSC_IN`/`OSC_OUT`. `tests/data.test.js` now fails if a synthetic part
+     reappears in `data/mcus/`, and `tests/clock_ui.test.js` covers the "no HSE,
+     no PLL" clock shape on CH32X035 instead.
+- **Not yet true, and the words matter:** nothing here has been **flashed**.
+  Every green result in this repository is a compile. See §6 and `HUMAN_TODO` 6.
 - **New this pass:** the CH32X035 DMA request map that the RM's markdown
   conversion had destroyed (RM Table 9-2 — rows kept, columns lost) is
   recovered from the original PDF by word position, cross-checked against the
@@ -32,14 +54,13 @@ Related documents, none of which this file duplicates:
 | Read this | For |
 |---|---|
 | `TASKS.md` | the backlog, claimed and unclaimed |
-| `Agents Rounds 4/00_PROJECT.md` | **the current round brief** and its definition of done |
-| `Agents Rounds 4/AGENT_n_*.md` | the four agents' standing instructions |
-| `Agents Rounds 4/BOARD.md` | the current message board — decisions, handoffs, QA results |
-| `Agents Rounds 4/WALKTHROUGH.md` | the round-4 acceptance script: a second family, and a folder you can flash |
-| `Agents Rounds 3/*` | round 3, whose open lines carry over as D1–D9 |
-| `Agents Rounds 2/*` | round 2 |
-| `agents/README.md` | the working agreement: ownership, cycle, rules |
+| `agents/PROJECT.md` | **the current round brief** and its definition of done |
+| `agents/AGENT_n_*.md` | the three agents' standing instructions |
+| `agents/BOARD.md` | the current message board — decisions, handoffs, QA results |
+| `agents/WALKTHROUGH.md` | the round-5 acceptance script |
+| `agents/README.md` | the working agreement: ownership, cycle, gates, rules |
 | `agents/HUMAN_TODO.md` | things only the human can do |
+| `agents/history/INDEX.md` | rounds 1–4, what each produced, and why they are archived |
 | `data/FORMAT.md` | the MCU YAML schema — the DATA↔ENGINE contract |
 | `data/firmware/ARCHITECTURE.md` | firmware layering, seams and ownership |
 | `data/sources/README.md` | where hardware facts come from, and the EVT rule |
@@ -90,7 +111,9 @@ held shut by a test that compiles.**
   23 DMA requests with defaults, `params:` for USART1/2, SPI1, I2C1, TIM1, TIM2,
   ADC1, and a `codegen:` register-encoding block.
 - **CH32V005** via `inherits:`, pinout verified against DS Table 2-2 (0 diffs).
-- `WCH-DUMMY32-C8` synthetic part covering QFN12 → LQFP144 for layout testing.
+- `WCH-DUMMY32-C8` synthetic part covering QFN12 → LQFP144 for layout testing —
+  **moved to `tests/fixtures/mcus/`** (2026-09-12): a fixture is not something
+  the app should offer in its part selector.
 - `tools/validate_mcu.py` — schema, geometry, pin existence, remap parity, I/O
   counts, EXTI legality, HSE coupling, codegen names, DMA and NVIC checks.
   14 planted breaks, 14 caught.
@@ -192,8 +215,10 @@ Ordered by what blocks the most.
    into the C, and the fixtures grown to cover them.
 4. **`tests/completeness.test.js`** — the per-peripheral matrix that fails by
    name when a cell is missing.
-5. **`WCH-DUMMY32-C8` gets `dma`/`nvic`/`params`/`codegen`**, so every new tab is
-   exercised on more than one part.
+5. ~~`WCH-DUMMY32-C8` gets `dma`/`nvic`/`params`/`codegen`~~ — **done in round 3
+   (C7), and the part has since left `data/mcus/` entirely (2026-09-12).** It is
+   now `tests/fixtures/mcus/WCH-DUMMY32-C8.yaml`, registered only by the test
+   harnesses that want it, so the app offers real parts and nothing else.
 6. **The remaining round-2 DONE lines**: zero dead controls, no TODO sections in
    generated C, full round-trip through save/open including clock and params.
 7. **More parts.** CH32X035 datasheet and RM arrived this round and there is no
@@ -211,7 +236,7 @@ Ordered by what blocks the most.
 | CH32V006 | DS v2.0 + RM v1.4, `data/sources/V006/Datasheets/` | complete | `CH32V006F8P6`, `CH32V006K8U6` | the reference part. 7 packages, 18 peripherals, 29 vectors, 23 DMA requests |
 | CH32V005 | same RM (family) | `inherits: CH32V006` | `CH32V005F6P6` | drops TKEY, TIM3, QFN32 |
 | CH32X035 | DS v2.2 + RM, `data/sources/X035/Datasheets/` + **EVT, 2 239 files** | **landed, in progress** | `CH32X035G8U6` | the second family. 7 packages, 8 variants, all packages draw with 0 conflicts; generated C **compiles**. Extraction is not finished — 7 peripherals so far, and `gpio.modes` still claims two open-drain modes this part does not have (§6) |
-| WCH-DUMMY32-C8 | n/a — synthetic | complete | n/a | layout/scale fixture, QFN12 → LQFP144 |
+| WCH-DUMMY32-C8 | n/a — synthetic | `tests/fixtures/mcus/` | n/a | layout/scale fixture, QFN12 → LQFP144. Not shipped, not offered in the part selector |
 | CH32V003, V203, V307 | none | none | none | waiting on sources |
 
 **Both EVT packages have landed** — `data/sources/V006/Evt/` (988 files) and

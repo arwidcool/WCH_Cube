@@ -759,7 +759,7 @@
     <span class="crumb" id="crumb-mcu">MCU</span>
     <span class="crumb" id="crumb-proj">Untitled.wchproj - Pinout &amp; Configuration</span>
     <div class="spacer"></div>
-    <button class="gen" title="Export the pin table (Markdown + CSV) and the clock summary (Markdown)">GENERATE CODE</button>
+    <button class="gen" title="Generate the whole PlatformIO project — one .zip in a browser, a folder on the desktop">GENERATE PROJECT</button>
   </div>
 
   <div class="tabs" role="tablist" aria-label="Views">
@@ -3019,27 +3019,29 @@ function renderTools() {
 
 // ---------- 7c. Project Manager ------------------------------------------------
 /**
- * Everything the generator produces, normalised to [{ name, language, text }].
+ * Everything the generator produces, as ONE project: `[{ path, name, text, language }]`.
  *
- * `generateAll()` returns a `{ name: text }` map today and AGENT-2 is reshaping it to
- * return the list form (board, 14:30Z). Both are read here so the reshape can land
- * whenever suits them without this panel changing. `language` is a hint for the preview
- * and nothing else.
+ * There used to be two lists here and two Generate buttons — "code" (the init files, the
+ * pin table and the clock summary, downloaded as loose files) and "project" (the whole
+ * PlatformIO folder, zipped). The split was never real: the init code without
+ * `platformio.ini`, `main.c` and a README around it is a handful of files in Downloads
+ * that nobody can flash. There is now one list, one delivery path and one archive.
+ *
+ * `path` is the identity — it is what the file list, the preview and the skip set key on,
+ * because a basename is not unique across `include/` and `src/`.
  */
-const PM_LANG = { '.c': 'c', '.h': 'c', '.md': 'markdown', '.csv': 'csv' };
-function generatedFiles() {
-  let raw;
-  try { raw = generateAll(); } catch (e) { console.error('generateAll', e); return []; }
-  const list = Array.isArray(raw) ? raw
-    : Object.entries(raw || {}).map(([name, text]) => ({ name, text }));
-  return list.map(f => {
-    const dot = String(f.name).lastIndexOf('.');
-    return { name: f.name, text: String(f.text ?? ''), language: f.language || PM_LANG[String(f.name).slice(dot)] || 'text' };
+const PM_LANG = { '.c': 'c', '.h': 'c', '.md': 'markdown', '.csv': 'csv', '.ini': 'ini', '.gitignore': 'text' };
+function pmFileList() {
+  return pmProjectFiles().map(f => {
+    const path = String(f.path);
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    const dot = name.lastIndexOf('.');
+    return {
+      path, name, text: String(f.text ?? ''),
+      language: PM_LANG[name.slice(dot)] || 'text',
+    };
   });
 }
-const mimeFor = name => name.endsWith('.csv') ? 'text/csv'
-  : name.endsWith('.md') ? 'text/markdown'
-    : /\.[ch]$/.test(name) ? 'text/x-c' : 'text/plain';
 
 // UI-only, and deliberately not in S: which of the generated files Generate writes, and
 // which one the preview is showing. Neither is a property of the hardware configuration,
@@ -3062,7 +3064,7 @@ function complaintsByFile(files) {
   let list = [];
   try {
     const map = {};
-    for (const f of files) map[f.name] = f.text;
+    for (const f of files) map[f.path] = f.text;
     list = cComplaints(map) || [];
   } catch (e) { console.error('cComplaints', e); return out; }
   for (const c of list) ((out[c.file] ||= {})[c.line] = c.kind);
@@ -3072,12 +3074,12 @@ function complaintsByFile(files) {
 function renderProjectManager() {
   const view = document.getElementById('view-pm');
   if (!view || !view.classList.contains('active')) return;   // hidden: nothing to measure, nothing to paint
-  const files = generatedFiles();
+  const files = pmFileList();
   const flags = complaintsByFile(files);
-  if (!files.some(f => f.name === PM.pick)) PM.pick = files.length ? files[0].name : null;
+  if (!files.some(f => f.path === PM.pick)) PM.pick = files.length ? files[0].path : null;
   renderPmConfig(files);
   renderPmFiles(files, flags);
-  renderPmCode(files.find(f => f.name === PM.pick) || null, flags);
+  renderPmCode(files.find(f => f.path === PM.pick) || null, flags);
 }
 
 function renderPmConfig(files) {
@@ -3090,7 +3092,7 @@ function renderPmConfig(files) {
       : pkgVariants.length ? `<span class="ro">not chosen. ${esc(pkgVariants.join(', '))} all use ${esc(S.pkg)} — pick one in New project</span>`
         : '<span class="ro">this MCU file lists no part numbers</span>';
   const dd = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
-  const chosen = files.filter(f => !PM.skip.has(f.name));
+  const chosen = files.filter(f => !PM.skip.has(f.path));
 
   let h = `<div class="pmsec"><h4>Project</h4>`
     + `<label class="row"><span>Name</span><input type="text" id="pm-name" value="${attr(PROJECT.name)}" maxlength="64" aria-label="Project name"></label>`
@@ -3131,8 +3133,8 @@ function renderPmConfig(files) {
         + `<span>${esc(o.name)}${o.help ? `<small>${esc(o.help)}</small>` : ''}</span></label>`;
     }).join('') : '<p>This build offers no generator options.</p>')
     + `<h4 style="margin-top:12px">Files</h4>`
-    + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.name)}"${PM.skip.has(f.name) ? '' : ' checked'}>`
-      + `<span><code>${esc(f.name)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
+    + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.path)}"${PM.skip.has(f.path) ? '' : ' checked'}>`
+      + `<span><code>${esc(f.path)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
       : '<p>This configuration generates nothing.</p>')
     + `</div>`;
 
@@ -3147,9 +3149,8 @@ function renderPmConfig(files) {
       + (PM.outDir ? ` <button id="pm-outdir-clear" class="pmbtn">Back to downloads</button>` : '') + `</p>` : '')
     + `</div>`;
 
-  h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE CODE</button>`
-    + `<p>${chosen.length ? `${pmIsDesktop() || PM.outDir ? 'Writes' : 'Downloads'} ${chosen.length} file${chosen.length === 1 ? '' : 's'}` : 'Nothing selected'}`
-    + ` — the init code, the pin table and the clock summary, not the project around them.</p></div>`;
+  h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE PROJECT</button>`
+    + `<p>${chosen.length ? pmDeliverSentence(chosen.length, files.length) : pmCannotGenerateSentence()}</p></div>`;
 
   const box = document.getElementById('pm-config');
   box.innerHTML = h;
@@ -3174,8 +3175,26 @@ function renderPmConfig(files) {
   if (od) od.onclick = pmChooseOutDir;
   const oc = box.querySelector('#pm-outdir-clear');
   if (oc) oc.onclick = () => { PM.outDir = null; PM.written = null; renderProjectManager(); };
-  const gp = box.querySelector('#pm-genproject');
-  if (gp) gp.onclick = pmGenerateProject;
+}
+
+/** One sentence for the Generate button: what it will make, and where it will land. */
+function pmDeliverSentence(n, total) {
+  const what = n === total
+    ? `the whole project — ${n} file${n === 1 ? '' : 's'}`
+    : `${n} of ${total} files`;
+  if (pmIsDesktop()) return `Writes ${what} into a folder you pick, under "${pmFolderName()}/".`;
+  if (PM.outDir) return `Writes ${what} into "${pmFolderName()}/" inside the folder you chose under Output.`;
+  return `Downloads one ${esc(pmFolderName())}.zip containing ${what}. Choose a folder under Output to write it there instead.`;
+}
+
+/** Why the button is disabled, in the generator's own words rather than a shrug. */
+function pmCannotGenerateSentence() {
+  if (typeof projectFiles !== 'function') return 'This build generates the init code but not the project around it.';
+  if (!pmFileList().length) {
+    const board = pmBoard(PROJECT.variant || null);
+    if (!board.ok) return `${esc(board.why)} — so there is no project to generate.`;
+  }
+  return 'Nothing is selected. Tick at least one file above.';
 }
 
 /**
@@ -3196,7 +3215,6 @@ function pmProjectSection(board, files) {
   const willDo = pmMainWillDo();
   const engineHasProject = typeof projectFiles === 'function';
   const layout = engineHasProject ? pmProjectFiles().map(f => f.path) : PM_LAYOUT;
-  const canGenerate = board.ok && engineHasProject && layout.length > 0;
 
   let h = `<div class="pmsec"><h4>PlatformIO project</h4>`
     + `<p>A complete folder: open it in VS Code, press Upload, and the chip runs this configuration.`
@@ -3221,15 +3239,13 @@ function pmProjectSection(board, files) {
       + ` project around it. The layout above is what it will write.</div>`;
   }
 
-  if (canGenerate) {
-    const name = (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
-    h += `<div class="pmgen" style="padding:10px 0 0"><button id="pm-genproject">GENERATE PROJECT</button>`
-      + `<p>${pmIsDesktop() ? `Asks for a folder, then writes the project into "${esc(name)}/" inside it.`
-        : PM.outDir ? `Writes the project into "${esc(name)}/" inside the folder you chose under Output.`
-        : `Downloads one ${esc(name)}.zip with the folder inside it. Choose a folder under Output to write it there instead.`}</p></div>`;
-  }
+  // No button here: there is one Generate button, under Files, and it makes all of this.
+  // Two buttons that did the same thing was the shape this section used to have.
   return h + pmWrittenHtml() + `</div>`;
 }
+
+/** The folder the project is written into, and the name its archive carries. */
+const pmFolderName = () => (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
 
 /** The layout the generator writes, for the "what you get" list before it exists. */
 const PM_LAYOUT = [
@@ -3355,12 +3371,12 @@ function pmDescribe(f) {
 function renderPmFiles(files, flags) {
   const box = document.getElementById('pm-files');
   box.innerHTML = files.map(f => {
-    const kinds = Object.values(flags[f.name] || {});
+    const kinds = Object.values(flags[f.path] || {});
     const flag = kinds.includes('error') ? `<span class="flag" title="this file contains #error">#error</span>`
       : kinds.length ? `<span class="flag todo" title="${kinds.length} TODO section${kinds.length === 1 ? '' : 's'}">TODO</span>` : '';
-    return `<button class="pmfile${f.name === PM.pick ? ' on' : ''}" data-pmpick="${attr(f.name)}" role="option"`
-      + ` title="${attr(f.name)}" aria-selected="${f.name === PM.pick}">${flag}<span class="nm">${esc(f.name)}</span>`
-      + `<small>${f.text.split('\n').length} lines${PM.skip.has(f.name) ? ' · not generated' : ''}</small></button>`;
+    return `<button class="pmfile${f.path === PM.pick ? ' on' : ''}" data-pmpick="${attr(f.path)}" role="option"`
+      + ` title="${attr(f.path)}" aria-selected="${f.path === PM.pick}">${flag}<span class="nm">${esc(f.path)}</span>`
+      + `<small>${f.text.split('\n').length} lines${PM.skip.has(f.path) ? ' · not generated' : ''}</small></button>`;
   }).join('') || '<div class="treenone">Nothing to preview.</div>';
   box.querySelectorAll('[data-pmpick]').forEach(b => b.onclick = () => { PM.pick = b.dataset.pmpick; renderProjectManager(); });
 }
@@ -3368,11 +3384,11 @@ function renderPmFiles(files, flags) {
 function renderPmCode(file, flags) {
   const head = document.getElementById('pm-texthead'), code = document.getElementById('pm-code');
   if (!file) { head.innerHTML = ''; code.innerHTML = '<div class="empty">Nothing to preview.</div>'; return; }
-  const marks = flags[file.name] || {};
+  const marks = flags[file.path] || {};
   const errs = Object.values(marks).filter(k => k === 'error').length;
   const todos = Object.values(marks).filter(k => k === 'todo').length;
   const lines = file.text.split('\n');
-  head.innerHTML = `<b>${esc(file.name)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
+  head.innerHTML = `<b>${esc(file.path)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
     + `<div class="spacer"></div><button id="pm-copy">Copy</button>`;
   head.querySelector('#pm-copy').onclick = () => pmCopy(file);
   const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — <b>this file will not compile as it stands.</b>`
@@ -3421,84 +3437,55 @@ function pmCopyFallback(file, done) {
   ok ? done() : toast('Could not copy — select the text and copy it yourself');
 }
 
-// ---- a ZIP writer, because the app is one offline file ------------------------
+// ---- the ZIP writer, which lives in the engine --------------------------------
 //
-// Browser mode has to deliver a FOLDER, and the app is a single offline HTML file with no
-// CDN and no bundler - so a library is not available at any price. A stored-entry ZIP
-// (compression method 0) is the whole format we need: local header, data, central
-// directory, end record. Sixty lines and a CRC-32 table, which is what the round brief
-// costed it at, and it means the browser and the desktop ship the identical file list.
-const CRC32 = (() => {
-  const t = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-    t[i] = c >>> 0;
-  }
-  return t;
-})();
-function crc32(bytes) {
-  let c = 0xFFFFFFFF;
-  for (let i = 0; i < bytes.length; i++) c = CRC32[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
-}
-/** One stored-entry ZIP from [{ path, text }]. Returns a Blob. */
+// Browser mode has to deliver a FOLDER and has no filesystem, so an archive is the only
+// shape that works. The writer itself is `app/engine/zip.js`, which build.py bundles into
+// this page as `zipFiles` — ONE implementation, shared with the CLI, and exercised by
+// `app/tests/zip.test.js` against a real unzipper. There used to be a second copy of the
+// format here; it was never tested by anything, and a subtly wrong archive is exactly the
+// kind of defect that only shows up in the user's Downloads folder.
+/** `[{ path, text }]` as a downloadable ZIP Blob. */
 function zipOf(entries) {
-  const enc = new TextEncoder();
-  const parts = [], central = [];
-  let offset = 0;
-  const u16 = n => [n & 0xFF, (n >>> 8) & 0xFF];
-  const u32 = n => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
-  for (const e of entries) {
-    // Paths are stored with forward slashes and no leading slash - the ZIP spec's rule
-    // and, conveniently, the same one write_project enforces on the desktop side.
-    const name = enc.encode(String(e.path).replace(/\\/g, '/').replace(/^\/+/, ''));
-    const data = enc.encode(String(e.text ?? ''));
-    const crc = crc32(data);
-    // Local file header. No data descriptor: sizes are known before writing.
-    const local = [...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0),
-      ...u16(0), ...u16(0),                    // mtime/mdate: zero, deliberately
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(name.length), ...u16(0)];
-    parts.push(new Uint8Array(local), name, data);
-    central.push([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0),
-      ...u16(0), ...u16(0),
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
-      ...u32(0), ...u32(offset), name]);
-    offset += local.length + name.length + data.length;
-  }
-  let cdSize = 0;
-  for (const c of central) {
-    const name = c.pop();
-    const head = new Uint8Array(c);
-    parts.push(head, name);
-    cdSize += head.length + name.length;
-  }
-  parts.push(new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0),
-    ...u16(entries.length), ...u16(entries.length), ...u32(cdSize), ...u32(offset), ...u16(0)]));
-  return new Blob(parts, { type: 'application/zip' });
+  return new Blob([zipFiles(entries)], { type: 'application/zip' });
 }
 
 /**
- * Generate the project. Desktop: the bridge's native folder picker. Browser: one .zip.
+ * Generate the project, and deliver it. ONE action behind every Generate button.
+ *
+ * Three destinations, tried in this order:
+ *   desktop                      → the shell's native folder picker
+ *   browser with a chosen folder → written into <chosen>/<name>/, the shape the desktop
+ *                                  build writes, refusing a non-empty target
+ *   browser, nothing chosen      → ONE <name>.zip, the whole project under it
+ *
+ * The last one is why this is a single function. A browser has no filesystem, so an
+ * archive is the only way it can hand over a FOLDER — and a download per file, which is
+ * what the code button used to do, scattered unopenable fragments into Downloads.
  *
  * `window.generateProjectFiles` is the name src-tauri/desktop.js looks for, so defining it
  * here is what switches the desktop path on; the page still contains no Tauri code.
  */
 window.generateProjectFiles = () => pmProjectFiles();
-async function pmGenerateProject() {
-  const files = pmProjectFiles();
-  if (!files.length) { toast('This build does not generate a project yet'); return; }
-  const name = (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
+async function pmGenerate() {
+  const name = pmFolderName();
+  const files = pmFileList().filter(f => !PM.skip.has(f.path));
+  if (!files.length) { toast('Nothing selected to generate'); return; }
+  const bad = complaintsByFile(files);
+  const errs = Object.values(bad).reduce((n, m) => n + Object.values(m).filter(k => k === 'error').length, 0);
+  const warn = errs ? ` — ${errs} #error line(s), see the preview` : '';
+  const flat = files.map(f => ({ path: f.path, text: f.text }));
+
   if (pmIsDesktop()) {
     try {
-      const res = await window.desktopWriteProject(name, files);
+      const res = await window.desktopWriteProject(name, flat);
       if (!res) return;                                  // the user cancelled the picker
       pmShowWritten(res.root, res.written);
+      toast(`Wrote ${res.written.length} file(s)${warn}`);
     } catch (e) { toast(String(e && e.message ? e.message : e)); }
     return;
   }
+
   if (PM.outDir) {
     // The project goes under <chosen>/<name>/, the same shape the desktop build writes.
     // A non-empty <name>/ is refused unless confirmed - the same rule the Rust side has.
@@ -3510,19 +3497,19 @@ async function pmGenerateProject() {
       } catch (e) { if (!e || e.name !== 'NotFoundError') throw e; }
       if (existing && !window.confirm(`"${name}" already exists in ${PM.outDir.name} and is not empty. Overwrite the generated files in it?`)) return;
       const root = await PM.outDir.getDirectoryHandle(name, { create: true });
-      const written = await pmWriteToDir(root, files);
+      const written = await pmWriteToDir(root, flat);
       pmShowWritten(`${PM.outDir.name}/${name}`, written, { nameOnly: true });
-      toast(`Wrote ${written.length} files to ${PM.outDir.name}/${name}`);
+      toast(`Wrote ${written.length} file(s) to ${PM.outDir.name}/${name}${warn}`);
     } catch (e) { toast(`Could not write the project: ${e && e.message ? e.message : e}`); }
     return;
   }
-  const blob = zipOf(files.map(f => ({ path: `${name}/${f.path}`, text: f.text })));
+
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(zipOf(flat.map(f => ({ path: `${name}/${f.path}`, text: f.text }))));
   a.download = `${name}.zip`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast(`Generated ${name}.zip — ${files.length} files`);
+  toast(`Downloaded ${name}.zip — ${files.length} file(s)${warn}`);
 }
 
 /**
@@ -3549,42 +3536,6 @@ function pmWrittenHtml() {
       + `<p class="ro">The first build downloads the toolchain if PlatformIO has not seen this platform before.</p>`;
   }
   return h + `</div>`;
-}
-
-/**
- * Write the selected files, where the user said. Three ways out, tried in this order:
- *   desktop  → the shell's native folder picker, files straight into the picked folder;
- *   browser with a chosen folder (File System Access API) → written into it;
- *   otherwise → one download per file, which lands wherever the browser puts downloads.
- * The panel says which of the three will happen BEFORE the click, so "where did it go?"
- * is never the question.
- */
-async function pmGenerate() {
-  const files = generatedFiles().filter(f => !PM.skip.has(f.name));
-  if (!files.length) { toast('Nothing selected to generate'); return; }
-  const bad = complaintsByFile(files);
-  const errs = Object.values(bad).reduce((n, m) => n + Object.values(m).filter(k => k === 'error').length, 0);
-  const warn = errs ? ` — ${errs} #error line(s), see the preview` : '';
-  const flat = files.map(f => ({ path: f.name, text: f.text }));
-  if (pmIsDesktop()) {
-    try {
-      const res = await window.desktopWriteProject(PROJECT.name || 'WCHCubeProject', flat, { subfolder: false });
-      if (!res) return;                                  // the user cancelled the picker
-      pmShowWritten(res.root, res.written, { loose: true });
-      toast(`Wrote ${res.written.length} file(s)${warn}`);
-    } catch (e) { toast(String(e && e.message ? e.message : e)); }
-    return;
-  }
-  if (PM.outDir) {
-    try {
-      const written = await pmWriteToDir(PM.outDir, flat);
-      pmShowWritten(PM.outDir.name, written, { loose: true, nameOnly: true });
-      toast(`Wrote ${written.length} file(s) to ${PM.outDir.name}${warn}`);
-    } catch (e) { toast(`Could not write to ${PM.outDir.name}: ${e && e.message ? e.message : e}`); }
-    return;
-  }
-  for (const f of files) downloadText(f.name, f.text, mimeFor(f.name));
-  toast(`Downloaded ${files.map(f => f.name).join(', ')}${warn}`);
 }
 
 /**
@@ -3622,15 +3573,15 @@ async function pmWriteToDir(dir, files) {
 function pmWhereText() {
   if (pmIsDesktop()) return 'The desktop build asks for a folder every time you generate.';
   if (PM.outDir) return `Writes into the folder you chose, "${PM.outDir.name}".`;
-  if (typeof window.showDirectoryPicker === 'function') return 'No folder chosen — files go to your browser\'s Downloads folder. Choose one to write them where you want.';
-  return 'This browser cannot write into a folder you choose (it has no File System Access API), so files go to its Downloads folder. Edge and Chrome can.';
+  if (typeof window.showDirectoryPicker === 'function') return 'No folder chosen — you get one .zip in your browser\'s Downloads folder. Choose one to write the project into it instead.';
+  return 'This browser cannot write into a folder you choose (it has no File System Access API), so you get one .zip in its Downloads folder. Edge and Chrome can write a folder instead.';
 }
 
-// GENERATE CODE in the breadcrumb: the same thing the Project Manager's button does, so
-// there is one behaviour rather than two that can drift apart.
+// The breadcrumb button: the same action as the Project Manager's, literally the same
+// function, so there is one behaviour rather than two that can drift apart.
 (() => {
   const btn = document.querySelector('.gen');
-  btn.title = 'Generate the init code, the pin table and the clock summary — see them first on the Project Manager tab';
+  btn.title = 'Generate the whole PlatformIO project — preview every file first on the Project Manager tab';
   btn.onclick = pmGenerate;
 })();
 // New-project dialog

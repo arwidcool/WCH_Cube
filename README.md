@@ -80,8 +80,9 @@ MCU file has to be loaded first — bundled, in your override folder, or via **O
 
 ## Add an MCU
 
-1. Copy `data/mcus/WCH-DUMMY32-C8.yaml`. Its header documents the format, and
-   `data/mcus/CH32V006.yaml` is a complete real example with datasheet citations.
+1. Start from `data/mcus/CH32V006.yaml` — a complete real part with datasheet citations
+   on every block — and read `data/FORMAT.md` for the schema. (`data/mcus/` holds real
+   silicon only; the synthetic layout fixture lives in `tests/fixtures/mcus/`.)
 2. Fill in `mcu:`, the `packages:` pin tables, the `pins:` list and the `peripherals:`.
 3. Check it:
 
@@ -163,11 +164,13 @@ the details and `data/firmware/ARCHITECTURE.md` has the layering and ownership r
 
 ## How this repo is built
 
-Four Claude Code agents work on it in parallel — **DATA**, **ENGINE**, **UI** and
-**QA + RELEASE** — each owning a part of the tree so they never edit the same file.
-They coordinate only through `agents/BOARD.md` (append-only) and claim work in `TASKS.md`.
-`agents/README.md` has the rules, `agents/DONE.md` is the definition of done, and QA is the
-only agent that ticks it. If you are picking the project up by hand, read `TASKS.md` first.
+Three Claude Code agents work on it in parallel — **DATA**, **APP** and **QA + RELEASE** —
+each owning a part of the tree so they never edit the same file. They coordinate only through
+`agents/BOARD.md` (append-only) and claim work in `TASKS.md`. `agents/` is the single agent
+working directory: `README.md` has the rules, `PROJECT.md` is the current round brief,
+`DONE.md` is the definition of done, and QA is the only agent that ticks it. Rounds 1–4 are
+archived under `agents/history/`. If you are picking the project up by hand, read `TASKS.md`
+first.
 
 ## Stack
 

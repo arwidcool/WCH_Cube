@@ -31,7 +31,11 @@ async function onClockTab(page, mcu) {
   return page;
 }
 
-const MCUS = ['CH32V006', 'CH32V005', 'WCH-DUMMY32-C8'];
+// Real parts only — and deliberately two different clock SHAPES: the V00x pair have HSE
+// and a PLL, CH32X035 has neither (one 48 MHz RC, SYSCLK divided down). That is what
+// keeps this a data-drivenness check rather than a CH32V006 check, and it is what the
+// synthetic fixture used to stand in for before it moved out of `data/mcus/`.
+const MCUS = ['CH32V006', 'CH32V005', 'CH32X035'];
 
 for (const mcu of MCUS) {
   test(`${mcu}: the SYSCLK mux offers every source in the data, none disabled`, async () => {

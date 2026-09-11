@@ -79,7 +79,7 @@ agent packs are stale where they say otherwise.
 |---|---|---|---|
 | CH32V005, CH32V006 | `V006/Evt/` | `V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_*.h` | `.../Startup/startup_ch32v00X.S` |
 | CH32X035 | `X035/Evt/` | `X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035_*.h` | `.../Startup/` |
-| WCH-DUMMY32-C8 | n/a | synthetic — declares `codegen.sdk: { synthetic: true }` | |
+| WCH-DUMMY32-C8 | n/a | synthetic — declares `codegen.sdk: { synthetic: true }`; lives in `tests/fixtures/mcus/`, never in `data/mcus/` | |
 
 The layout is not the one the round-3 brief guessed: the headers sit under `EXAM/SRC/`,
 beside the examples, rather than at the root of the drop. `tools/verify_sdk_names.py`

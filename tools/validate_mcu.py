@@ -10,7 +10,7 @@ Exit code 0 = clean.  1 = at least one ERROR (or a WARN under --strict).
 
 What it checks
   schema             required keys and value types, per the format header in
-                     data/mcus/WCH-DUMMY32-C8.yaml
+                     data/mcus/CH32V006.yaml and the schema in data/FORMAT.md
   packages           the package id has a geometry in data/packages/packages.yaml,
                      pin numbers are 1..N with no gaps or duplicates, N matches the
                      geometry, pin 0 is the exposed pad and only on packages that have one

@@ -5658,1524 +5658,6 @@ gpio:
         pins_note: "Only PA0-PA15 and PC16-PC17 support input pull-down (ch32x035_gpio.h)" }
 
 </script>
-<script type="text/x-yaml" id="yaml-mcu-WCH-DUMMY32-C8" data-file="data/mcus/WCH-DUMMY32-C8.yaml">
-# =============================================================================
-#  WCH-DUMMY32-C8 — a DUMMY part used to develop the UI.
-#  Its pinout deliberately resembles a CH32V203C8 (LQFP48 / QFN48) with a
-#  TSSOP20 / QFN20 variant, so it exercises remap groups, missing pins, etc.
-#  Nothing here is verified against a real datasheet.
-# =============================================================================
-#
-#  HOW THIS FILE WORKS
-#  -------------------
-#  * `packages`     maps pin NUMBER -> pin NAME for each package the part ships in.
-#                   A pin name that is not present in a package simply doesn't exist
-#                   there, and any peripheral remap that needs it becomes unavailable.
-#  * `pins`         one entry per pin NAME: its type and free-text notes.
-#                   Alternate functions are NOT listed here — they are derived from
-#                   the `peripherals` section so there is one place to edit.
-#  * `peripherals`  each has a `category` (left-hand tree), `settings` (the dropdowns /
-#                   checkboxes shown in the centre panel), and `remaps` (which pin each
-#                   signal lands on for each AFIO remap value).
-#                   - a setting `choice` lists the `signals` it needs.
-#                   - `type: checkboxes` renders each choice as a checkbox (ADC channels).
-#                   - signals with no pin (e.g. internal temperature channel) are fine.
-#  * `clock`        the clock tree used by the Clock Configuration tab.
-#
-#  Signal naming: "<PERIPHERAL>_<SIGNAL>" is displayed on the chip, e.g. USART1_TX.
-
-mcu:
-  name: WCH-DUMMY32-C8
-  vendor: WCH (dummy data)
-  family: DUMMY32
-  core: RISC-V4B (QingKe)
-  flash_kb: 64
-  sram_kb: 20
-  vdd_v: [2.7, 5.5]
-  max_sysclk_mhz: 144
-  default_package: LQFP48
-
-# -----------------------------------------------------------------------------
-packages:
-  LQFP48:
-    1: VBAT
-    2: PC13
-    3: PC14
-    4: PC15
-    5: PD0
-    6: PD1
-    7: NRST
-    8: VSSA
-    9: VDDA
-    10: PA0
-    11: PA1
-    12: PA2
-    13: PA3
-    14: PA4
-    15: PA5
-    16: PA6
-    17: PA7
-    18: PB0
-    19: PB1
-    20: PB2
-    21: PB10
-    22: PB11
-    23: VSS
-    24: VDD
-    25: PB12
-    26: PB13
-    27: PB14
-    28: PB15
-    29: PA8
-    30: PA9
-    31: PA10
-    32: PA11
-    33: PA12
-    34: PA13
-    35: VSS
-    36: VDD
-    37: PA14
-    38: PA15
-    39: PB3
-    40: PB4
-    41: PB5
-    42: PB6
-    43: PB7
-    44: BOOT0
-    45: PB8
-    46: PB9
-    47: VSS
-    48: VDD
-
-  QFN48:
-    0: VSS                        # exposed pad — the geometry declares epad: true
-    1: VBAT
-    2: PC13
-    3: PC14
-    4: PC15
-    5: PD0
-    6: PD1
-    7: NRST
-    8: VSSA
-    9: VDDA
-    10: PA0
-    11: PA1
-    12: PA2
-    13: PA3
-    14: PA4
-    15: PA5
-    16: PA6
-    17: PA7
-    18: PB0
-    19: PB1
-    20: PB2
-    21: PB10
-    22: PB11
-    23: VSS
-    24: VDD
-    25: PB12
-    26: PB13
-    27: PB14
-    28: PB15
-    29: PA8
-    30: PA9
-    31: PA10
-    32: PA11
-    33: PA12
-    34: PA13
-    35: VSS
-    36: VDD
-    37: PA14
-    38: PA15
-    39: PB3
-    40: PB4
-    41: PB5
-    42: PB6
-    43: PB7
-    44: BOOT0
-    45: PB8
-    46: PB9
-    47: VSS
-    48: VDD
-
-  TSSOP20:
-    1: VDD
-    2: PC13
-    3: PD0
-    4: PD1
-    5: NRST
-    6: VDDA
-    7: PA0
-    8: PA1
-    9: PA2
-    10: PA3
-    11: PA4
-    12: PA5
-    13: PA6
-    14: PA7
-    15: VSS
-    16: PA9
-    17: PA10
-    18: PA13
-    19: PA14
-    20: BOOT0
-
-  QFN20:
-    0: VSS                        # exposed pad — the geometry declares epad: true
-    1: VDD
-    2: PC13
-    3: PD0
-    4: PD1
-    5: NRST
-    6: VDDA
-    7: PA0
-    8: PA1
-    9: PA2
-    10: PA3
-    11: PA4
-    12: PA5
-    13: PA6
-    14: PA7
-    15: VSS
-    16: PA9
-    17: PA10
-    18: PA13
-    19: PA14
-    20: BOOT0
-
-  # ---- large packages, for layout testing only -------------------------------
-  # This part is a fixture, not a real MCU: these three tables exist so the chip
-  # renderer and the overflow audit are exercised across the whole QFN12..LQFP144
-  # range DONE.md asks for. The pin maps are plain sequential port pins and carry
-  # no peripheral meaning. Handed over by AGENT-3 (BOARD 10:49Z), who measured
-  # 144 pins / 144 labels / 0 overlaps / 0 clipping at 1024x768.
-  LQFP64:
-    1: PA0
-    2: PA1
-    3: PA2
-    4: PA3
-    5: PA4
-    6: PA5
-    7: PA6
-    8: PA7
-    9: PA8
-    10: PA9
-    11: PA10
-    12: PA11
-    13: PA12
-    14: PA13
-    15: PA14
-    16: PA15
-    17: PB0
-    18: PB1
-    19: PB2
-    20: PB3
-    21: PB4
-    22: PB5
-    23: PB6
-    24: PB7
-    25: PB8
-    26: PB9
-    27: PB10
-    28: PB11
-    29: PB12
-    30: PB13
-    31: PB14
-    32: PB15
-    33: PC0
-    34: PC1
-    35: PC2
-    36: PC3
-    37: PC4
-    38: PC5
-    39: PC6
-    40: PC7
-    41: PC8
-    42: PC9
-    43: PC10
-    44: PC11
-    45: PC12
-    46: PC13
-    47: PC14
-    48: PC15
-    49: PD0
-    50: PD1
-    51: PD2
-    52: PD3
-    53: PD4
-    54: PD5
-    55: PD6
-    56: PD7
-    57: PD8
-    58: PD9
-    59: PD10
-    60: PD11
-    61: PD12
-    62: PD13
-    63: PD14
-    64: PD15
-  LQFP100:
-    1: PA0
-    2: PA1
-    3: PA2
-    4: PA3
-    5: PA4
-    6: PA5
-    7: PA6
-    8: PA7
-    9: PA8
-    10: PA9
-    11: PA10
-    12: PA11
-    13: PA12
-    14: PA13
-    15: PA14
-    16: PA15
-    17: PB0
-    18: PB1
-    19: PB2
-    20: PB3
-    21: PB4
-    22: PB5
-    23: PB6
-    24: PB7
-    25: PB8
-    26: PB9
-    27: PB10
-    28: PB11
-    29: PB12
-    30: PB13
-    31: PB14
-    32: PB15
-    33: PC0
-    34: PC1
-    35: PC2
-    36: PC3
-    37: PC4
-    38: PC5
-    39: PC6
-    40: PC7
-    41: PC8
-    42: PC9
-    43: PC10
-    44: PC11
-    45: PC12
-    46: PC13
-    47: PC14
-    48: PC15
-    49: PD0
-    50: PD1
-    51: PD2
-    52: PD3
-    53: PD4
-    54: PD5
-    55: PD6
-    56: PD7
-    57: PD8
-    58: PD9
-    59: PD10
-    60: PD11
-    61: PD12
-    62: PD13
-    63: PD14
-    64: PD15
-    65: PE0
-    66: PE1
-    67: PE2
-    68: PE3
-    69: PE4
-    70: PE5
-    71: PE6
-    72: PE7
-    73: PE8
-    74: PE9
-    75: PE10
-    76: PE11
-    77: PE12
-    78: PE13
-    79: PE14
-    80: PE15
-    81: PF0
-    82: PF1
-    83: PF2
-    84: PF3
-    85: PF4
-    86: PF5
-    87: PF6
-    88: PF7
-    89: PF8
-    90: PF9
-    91: PF10
-    92: PF11
-    93: PF12
-    94: PF13
-    95: PF14
-    96: PF15
-    97: PG0
-    98: PG1
-    99: PG2
-    100: PG3
-  LQFP144:
-    1: PA0
-    2: PA1
-    3: PA2
-    4: PA3
-    5: PA4
-    6: PA5
-    7: PA6
-    8: PA7
-    9: PA8
-    10: PA9
-    11: PA10
-    12: PA11
-    13: PA12
-    14: PA13
-    15: PA14
-    16: PA15
-    17: PB0
-    18: PB1
-    19: PB2
-    20: PB3
-    21: PB4
-    22: PB5
-    23: PB6
-    24: PB7
-    25: PB8
-    26: PB9
-    27: PB10
-    28: PB11
-    29: PB12
-    30: PB13
-    31: PB14
-    32: PB15
-    33: PC0
-    34: PC1
-    35: PC2
-    36: PC3
-    37: PC4
-    38: PC5
-    39: PC6
-    40: PC7
-    41: PC8
-    42: PC9
-    43: PC10
-    44: PC11
-    45: PC12
-    46: PC13
-    47: PC14
-    48: PC15
-    49: PD0
-    50: PD1
-    51: PD2
-    52: PD3
-    53: PD4
-    54: PD5
-    55: PD6
-    56: PD7
-    57: PD8
-    58: PD9
-    59: PD10
-    60: PD11
-    61: PD12
-    62: PD13
-    63: PD14
-    64: PD15
-    65: PE0
-    66: PE1
-    67: PE2
-    68: PE3
-    69: PE4
-    70: PE5
-    71: PE6
-    72: PE7
-    73: PE8
-    74: PE9
-    75: PE10
-    76: PE11
-    77: PE12
-    78: PE13
-    79: PE14
-    80: PE15
-    81: PF0
-    82: PF1
-    83: PF2
-    84: PF3
-    85: PF4
-    86: PF5
-    87: PF6
-    88: PF7
-    89: PF8
-    90: PF9
-    91: PF10
-    92: PF11
-    93: PF12
-    94: PF13
-    95: PF14
-    96: PF15
-    97: PG0
-    98: PG1
-    99: PG2
-    100: PG3
-    101: PG4
-    102: PG5
-    103: PG6
-    104: PG7
-    105: PG8
-    106: PG9
-    107: PG10
-    108: PG11
-    109: PG12
-    110: PG13
-    111: PG14
-    112: PG15
-    113: PH0
-    114: PH1
-    115: PH2
-    116: PH3
-    117: PH4
-    118: PH5
-    119: PH6
-    120: PH7
-    121: PH8
-    122: PH9
-    123: PH10
-    124: PH11
-    125: PH12
-    126: PH13
-    127: PH14
-    128: PH15
-    129: PI0
-    130: PI1
-    131: PI2
-    132: PI3
-    133: PI4
-    134: PI5
-    135: PI6
-    136: PI7
-    137: PI8
-    138: PI9
-    139: PI10
-    140: PI11
-    141: PI12
-    142: PI13
-    143: PI14
-    144: PI15
-
-# -----------------------------------------------------------------------------
-# pin types: io | power | ground | reset | boot | osc
-pins:
-  VDD:   { type: power }
-  VDDA:  { type: power,  notes: Analog supply }
-  VBAT:  { type: power,  notes: Backup domain supply }
-  VSS:   { type: ground }
-  VSSA:  { type: ground, notes: Analog ground }
-  NRST:  { type: reset }
-  BOOT0: { type: boot }
-  PD0:   { type: io, notes: OSC_IN when HSE enabled }
-  PD1:   { type: io, notes: OSC_OUT when HSE enabled }
-  PC13:  { type: io, notes: "Low drive strength, 3 mA max" }
-  PC14:  { type: io, notes: OSC32_IN when LSE enabled }
-  PC15:  { type: io, notes: OSC32_OUT when LSE enabled }
-  PA0:   { type: io, notes: "5 V tolerant, WKUP" }
-  PA1:   { type: io, notes: 5 V tolerant }
-  PA2:   { type: io, notes: 5 V tolerant }
-  PA3:   { type: io, notes: 5 V tolerant }
-  PA4:   { type: io }
-  PA5:   { type: io }
-  PA6:   { type: io }
-  PA7:   { type: io }
-  PA8:   { type: io, notes: 5 V tolerant }
-  PA9:   { type: io, notes: 5 V tolerant }
-  PA10:  { type: io, notes: 5 V tolerant }
-  PA11:  { type: io, notes: 5 V tolerant }
-  PA12:  { type: io, notes: 5 V tolerant }
-  PA13:  { type: io, notes: SWDIO after reset }
-  PA14:  { type: io, notes: SWCLK after reset }
-  PA15:  { type: io, notes: JTDI after reset }
-  PB0:   { type: io }
-  PB1:   { type: io }
-  PB2:   { type: io, notes: BOOT1 }
-  PB3:   { type: io, notes: JTDO after reset }
-  PB4:   { type: io, notes: NJTRST after reset }
-  PB5:   { type: io }
-  PB6:   { type: io, notes: 5 V tolerant }
-  PB7:   { type: io, notes: 5 V tolerant }
-  PB8:   { type: io, notes: 5 V tolerant }
-  PB9:   { type: io, notes: 5 V tolerant }
-  PB10:  { type: io, notes: 5 V tolerant }
-  PB11:  { type: io, notes: 5 V tolerant }
-  PB12:  { type: io, notes: 5 V tolerant }
-  PB13:  { type: io, notes: 5 V tolerant }
-  PB14:  { type: io, notes: 5 V tolerant }
-  PB15:  { type: io, notes: 5 V tolerant }
-  PC10:  { type: io, notes: Only on 64-pin parts }
-  PC11:  { type: io, notes: Only on 64-pin parts }
-
-  # ---- ports E..I, bonded only on the large fixture packages above ------------
-  PC0: { type: io }
-  PC1: { type: io }
-  PC12: { type: io }
-  PC2: { type: io }
-  PC3: { type: io }
-  PC4: { type: io }
-  PC5: { type: io }
-  PC6: { type: io }
-  PC7: { type: io }
-  PC8: { type: io }
-  PC9: { type: io }
-  PD10: { type: io }
-  PD11: { type: io }
-  PD12: { type: io }
-  PD13: { type: io }
-  PD14: { type: io }
-  PD15: { type: io }
-  PD2: { type: io }
-  PD3: { type: io }
-  PD4: { type: io }
-  PD5: { type: io }
-  PD6: { type: io }
-  PD7: { type: io }
-  PD8: { type: io }
-  PD9: { type: io }
-  PE0: { type: io }
-  PE1: { type: io }
-  PE10: { type: io }
-  PE11: { type: io }
-  PE12: { type: io }
-  PE13: { type: io }
-  PE14: { type: io }
-  PE15: { type: io }
-  PE2: { type: io }
-  PE3: { type: io }
-  PE4: { type: io }
-  PE5: { type: io }
-  PE6: { type: io }
-  PE7: { type: io }
-  PE8: { type: io }
-  PE9: { type: io }
-  PF0: { type: io }
-  PF1: { type: io }
-  PF10: { type: io }
-  PF11: { type: io }
-  PF12: { type: io }
-  PF13: { type: io }
-  PF14: { type: io }
-  PF15: { type: io }
-  PF2: { type: io }
-  PF3: { type: io }
-  PF4: { type: io }
-  PF5: { type: io }
-  PF6: { type: io }
-  PF7: { type: io }
-  PF8: { type: io }
-  PF9: { type: io }
-  PG0: { type: io }
-  PG1: { type: io }
-  PG10: { type: io }
-  PG11: { type: io }
-  PG12: { type: io }
-  PG13: { type: io }
-  PG14: { type: io }
-  PG15: { type: io }
-  PG2: { type: io }
-  PG3: { type: io }
-  PG4: { type: io }
-  PG5: { type: io }
-  PG6: { type: io }
-  PG7: { type: io }
-  PG8: { type: io }
-  PG9: { type: io }
-  PH0: { type: io }
-  PH1: { type: io }
-  PH10: { type: io }
-  PH11: { type: io }
-  PH12: { type: io }
-  PH13: { type: io }
-  PH14: { type: io }
-  PH15: { type: io }
-  PH2: { type: io }
-  PH3: { type: io }
-  PH4: { type: io }
-  PH5: { type: io }
-  PH6: { type: io }
-  PH7: { type: io }
-  PH8: { type: io }
-  PH9: { type: io }
-  PI0: { type: io }
-  PI1: { type: io }
-  PI10: { type: io }
-  PI11: { type: io }
-  PI12: { type: io }
-  PI13: { type: io }
-  PI14: { type: io }
-  PI15: { type: io }
-  PI2: { type: io }
-  PI3: { type: io }
-  PI4: { type: io }
-  PI5: { type: io }
-  PI6: { type: io }
-  PI7: { type: io }
-  PI8: { type: io }
-  PI9: { type: io }
-
-# -----------------------------------------------------------------------------
-peripherals:
-
-  # ---------------- System Core ----------------
-  SYS:
-    category: System Core
-    settings:
-      - name: Debug
-        choices:
-          - { name: No Debug }
-          - { name: Serial Wire, signals: [SWDIO, SWCLK] }
-          - { name: JTAG (5 pins), signals: [JTMS, JTCK, JTDI, JTDO, NJTRST] }
-      - name: System Wake-Up
-        choices:
-          - { name: Disable }
-          - { name: WKUP pin, signals: [WKUP] }
-    remaps:
-      - name: Default
-        pins: { SWDIO: PA13, SWCLK: PA14, JTMS: PA13, JTCK: PA14, JTDI: PA15, JTDO: PB3, NJTRST: PB4, WKUP: PA0 }
-
-  RCC:
-    category: System Core
-    settings:
-      - name: High Speed Clock (HSE)
-        choices:
-          - { name: Disable }
-          - { name: BYPASS Clock Source, signals: [OSC_IN] }
-          - { name: Crystal/Ceramic Resonator, signals: [OSC_IN, OSC_OUT] }
-      - name: Low Speed Clock (LSE)
-        choices:
-          - { name: Disable }
-          - { name: BYPASS Clock Source, signals: [OSC32_IN] }
-          - { name: Crystal/Ceramic Resonator, signals: [OSC32_IN, OSC32_OUT] }
-      - name: Master Clock Output
-        choices:
-          - { name: Disable }
-          - { name: Enable, signals: [MCO] }
-    remaps:
-      - name: Default
-        pins: { OSC_IN: PD0, OSC_OUT: PD1, OSC32_IN: PC14, OSC32_OUT: PC15, MCO: PA8 }
-
-  IWDG:
-    category: System Core
-    settings:
-      - name: Mode
-        choices: [ { name: Disable }, { name: Activated } ]
-
-  WWDG:
-    category: System Core
-    settings:
-      - name: Mode
-        choices: [ { name: Disable }, { name: Activated } ]
-
-  DMA1:
-    category: System Core
-    settings:
-      - name: Mode
-        choices: [ { name: Disable }, { name: Activated } ]
-
-  # ---------------- Analog ----------------
-  ADC1:
-    category: Analog
-    settings:
-      - name: Channels
-        type: checkboxes
-        choices:
-          - { name: IN0, signals: [IN0] }
-          - { name: IN1, signals: [IN1] }
-          - { name: IN2, signals: [IN2] }
-          - { name: IN3, signals: [IN3] }
-          - { name: IN4, signals: [IN4] }
-          - { name: IN5, signals: [IN5] }
-          - { name: IN6, signals: [IN6] }
-          - { name: IN7, signals: [IN7] }
-          - { name: IN8, signals: [IN8] }
-          - { name: IN9, signals: [IN9] }
-          - { name: Temperature Sensor Channel }
-          - { name: Vrefint Channel }
-      - name: External Trigger
-        choices:
-          - { name: Disable }
-          - { name: External trigger on EXTI11, signals: [EXTI11] }
-    remaps:
-      - name: Default
-        pins: { IN0: PA0, IN1: PA1, IN2: PA2, IN3: PA3, IN4: PA4, IN5: PA5, IN6: PA6, IN7: PA7, IN8: PB0, IN9: PB1, EXTI11: PB11 }
-
-  ADC2:
-    category: Analog
-    settings:
-      - name: Channels
-        type: checkboxes
-        choices:
-          - { name: IN0, signals: [IN0] }
-          - { name: IN1, signals: [IN1] }
-          - { name: IN2, signals: [IN2] }
-          - { name: IN3, signals: [IN3] }
-          - { name: IN4, signals: [IN4] }
-          - { name: IN5, signals: [IN5] }
-          - { name: IN6, signals: [IN6] }
-          - { name: IN7, signals: [IN7] }
-          - { name: IN8, signals: [IN8] }
-          - { name: IN9, signals: [IN9] }
-    remaps:
-      - name: Default
-        pins: { IN0: PA0, IN1: PA1, IN2: PA2, IN3: PA3, IN4: PA4, IN5: PA5, IN6: PA6, IN7: PA7, IN8: PB0, IN9: PB1 }
-
-  OPA1:
-    category: Analog
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Standalone, signals: [VINP, VINM, VOUT] }
-    remaps:
-      - name: Default
-        pins: { VINP: PB1, VINM: PB0, VOUT: PA3 }
-
-  # ---------------- Timers ----------------
-  TIM1:
-    category: Timers
-    settings:
-      - name: Channel1
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH1] }
-          - { name: PWM Generation CH1, signals: [CH1] }
-          - { name: PWM Generation CH1 CH1N, signals: [CH1, CH1N] }
-      - name: Channel2
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH2] }
-          - { name: PWM Generation CH2, signals: [CH2] }
-          - { name: PWM Generation CH2 CH2N, signals: [CH2, CH2N] }
-      - name: Channel3
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH3] }
-          - { name: PWM Generation CH3, signals: [CH3] }
-          - { name: PWM Generation CH3 CH3N, signals: [CH3, CH3N] }
-      - name: Channel4
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH4] }
-          - { name: PWM Generation CH4, signals: [CH4] }
-      - name: Clock Source
-        choices:
-          - { name: Internal Clock }
-          - { name: ETR2, signals: [ETR] }
-      - name: Break Input
-        choices:
-          - { name: Disable }
-          - { name: Activate-Break-Input, signals: [BKIN] }
-    remaps:
-      - name: No remap
-        pins: { CH1: PA8, CH2: PA9, CH3: PA10, CH4: PA11, ETR: PA12, BKIN: PB12, CH1N: PB13, CH2N: PB14, CH3N: PB15 }
-      - name: Partial remap
-        pins: { CH1: PA8, CH2: PA9, CH3: PA10, CH4: PA11, ETR: PA12, BKIN: PA6, CH1N: PA7, CH2N: PB0, CH3N: PB1 }
-
-  TIM2:
-    category: Timers
-    settings:
-      - name: Channel1
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH1] }
-          - { name: PWM Generation CH1, signals: [CH1] }
-      - name: Channel2
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH2] }
-          - { name: PWM Generation CH2, signals: [CH2] }
-      - name: Channel3
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH3] }
-          - { name: PWM Generation CH3, signals: [CH3] }
-      - name: Channel4
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH4] }
-          - { name: PWM Generation CH4, signals: [CH4] }
-      - name: Clock Source
-        choices:
-          - { name: Internal Clock }
-          - { name: ETR2, signals: [ETR] }
-    remaps:
-      - name: No remap
-        pins: { CH1: PA0, ETR: PA0, CH2: PA1, CH3: PA2, CH4: PA3 }
-      - name: Partial remap 1
-        pins: { CH1: PA15, ETR: PA15, CH2: PB3, CH3: PA2, CH4: PA3 }
-      - name: Partial remap 2
-        pins: { CH1: PA0, ETR: PA0, CH2: PA1, CH3: PB10, CH4: PB11 }
-      - name: Full remap
-        pins: { CH1: PA15, ETR: PA15, CH2: PB3, CH3: PB10, CH4: PB11 }
-
-  TIM3:
-    category: Timers
-    settings:
-      - name: Channel1
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH1] }
-          - { name: PWM Generation CH1, signals: [CH1] }
-      - name: Channel2
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH2] }
-          - { name: PWM Generation CH2, signals: [CH2] }
-      - name: Channel3
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH3] }
-          - { name: PWM Generation CH3, signals: [CH3] }
-      - name: Channel4
-        choices:
-          - { name: Disable }
-          - { name: Input Capture direct mode, signals: [CH4] }
-          - { name: PWM Generation CH4, signals: [CH4] }
-    remaps:
-      - name: No remap
-        pins: { CH1: PA6, CH2: PA7, CH3: PB0, CH4: PB1 }
-      - name: Partial remap
-        pins: { CH1: PB4, CH2: PB5, CH3: PB0, CH4: PB1 }
-
-  TIM4:
-    category: Timers
-    settings:
-      - name: Channel1
-        choices:
-          - { name: Disable }
-          - { name: PWM Generation CH1, signals: [CH1] }
-      - name: Channel2
-        choices:
-          - { name: Disable }
-          - { name: PWM Generation CH2, signals: [CH2] }
-      - name: Channel3
-        choices:
-          - { name: Disable }
-          - { name: PWM Generation CH3, signals: [CH3] }
-      - name: Channel4
-        choices:
-          - { name: Disable }
-          - { name: PWM Generation CH4, signals: [CH4] }
-    remaps:
-      - name: No remap
-        pins: { CH1: PB6, CH2: PB7, CH3: PB8, CH4: PB9 }
-
-  # ---------------- Connectivity ----------------
-  USART1:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Asynchronous, signals: [TX, RX] }
-          - { name: Synchronous, signals: [TX, RX, CK] }
-          - { name: Single Wire (Half-Duplex), signals: [TX] }
-      - name: Hardware Flow Control (RS232)
-        choices:
-          - { name: Disable }
-          - { name: CTS Only, signals: [CTS] }
-          - { name: RTS Only, signals: [RTS] }
-          - { name: CTS/RTS, signals: [CTS, RTS] }
-    remaps:
-      - name: No remap
-        pins: { TX: PA9, RX: PA10, CK: PA8, CTS: PA11, RTS: PA12 }
-      - name: Remap
-        pins: { TX: PB6, RX: PB7, CK: PA8, CTS: PA11, RTS: PA12 }
-
-  USART2:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Asynchronous, signals: [TX, RX] }
-          - { name: Synchronous, signals: [TX, RX, CK] }
-          - { name: Single Wire (Half-Duplex), signals: [TX] }
-      - name: Hardware Flow Control (RS232)
-        choices:
-          - { name: Disable }
-          - { name: CTS Only, signals: [CTS] }
-          - { name: RTS Only, signals: [RTS] }
-          - { name: CTS/RTS, signals: [CTS, RTS] }
-    remaps:
-      - name: No remap
-        pins: { TX: PA2, RX: PA3, CK: PA4, CTS: PA0, RTS: PA1 }
-
-  USART3:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Asynchronous, signals: [TX, RX] }
-          - { name: Synchronous, signals: [TX, RX, CK] }
-    remaps:
-      - name: No remap
-        pins: { TX: PB10, RX: PB11, CK: PB12 }
-      - name: Partial remap
-        pins: { TX: PC10, RX: PC11, CK: PB12 }   # PC10/PC11 don't exist on 48-pin: unavailable here
-
-  SPI1:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Full-Duplex Master, signals: [SCK, MISO, MOSI] }
-          - { name: Full-Duplex Slave, signals: [SCK, MISO, MOSI] }
-          - { name: Half-Duplex Master, signals: [SCK, MOSI] }
-          - { name: Receive Only Master, signals: [SCK, MISO] }
-          - { name: Transmit Only Master, signals: [SCK, MOSI] }
-      - name: Hardware NSS Signal
-        choices:
-          - { name: Disable }
-          - { name: Hardware NSS Input Signal, signals: [NSS] }
-          - { name: Hardware NSS Output Signal, signals: [NSS] }
-    remaps:
-      - name: No remap
-        pins: { NSS: PA4, SCK: PA5, MISO: PA6, MOSI: PA7 }
-      - name: Remap
-        pins: { NSS: PA15, SCK: PB3, MISO: PB4, MOSI: PB5 }
-
-  SPI2:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Full-Duplex Master, signals: [SCK, MISO, MOSI] }
-          - { name: Full-Duplex Slave, signals: [SCK, MISO, MOSI] }
-          - { name: Transmit Only Master, signals: [SCK, MOSI] }
-      - name: Hardware NSS Signal
-        choices:
-          - { name: Disable }
-          - { name: Hardware NSS Input Signal, signals: [NSS] }
-          - { name: Hardware NSS Output Signal, signals: [NSS] }
-    remaps:
-      - name: No remap
-        pins: { NSS: PB12, SCK: PB13, MISO: PB14, MOSI: PB15 }
-
-  I2C1:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: I2C, signals: [SCL, SDA] }
-    remaps:
-      - name: No remap
-        pins: { SCL: PB6, SDA: PB7 }
-      - name: Remap
-        pins: { SCL: PB8, SDA: PB9 }
-
-  I2C2:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: I2C, signals: [SCL, SDA] }
-    remaps:
-      - name: No remap
-        pins: { SCL: PB10, SDA: PB11 }
-
-  CAN1:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Activated, signals: [RX, TX] }
-    remaps:
-      - name: No remap
-        pins: { RX: PA11, TX: PA12 }
-      - name: Remap
-        pins: { RX: PB8, TX: PB9 }
-
-  USB:
-    category: Connectivity
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Device (FS), signals: [DM, DP] }
-    remaps:
-      - name: No remap
-        pins: { DM: PA11, DP: PA12 }
-
-# -----------------------------------------------------------------------------
-# GPIO capabilities.
-#
-# THIS PART DELIBERATELY HAS THREE OUTPUT SPEEDS, and it is the only part in the
-# repo that does. CH32V005 and CH32V006 both have exactly one (GPIOx_CFGLR.MODEy is
-# a single bit on that silicon), so without this the multi-speed branch of the UI and
-# the engine would have no part behind it: the selector would never be rendered, and
-# `setGpioField` rejecting a speed the part does not offer would never be exercised
-# outside an inline test fixture. Same reasoning as this file's OSC_IN/OSC_OUT HSE
-# pins - spell it differently, on purpose, so a hardcoded assumption cannot hide.
-#
-# FORMAT.md: a ONE-entry list means the control is not shown; two or more means a real
-# selector with exactly these entries.
-gpio:
-  speeds:
-    - { name: "2 MHz",  macro: GPIO_Speed_2MHz }
-    - { name: "10 MHz", macro: GPIO_Speed_10MHz }
-    - { name: "50 MHz", macro: GPIO_Speed_50MHz }
-
-  # The SPL macro for each GPIO-table mode, so the generator stops carrying its own
-  # table. Same reasoning as `speeds` above and the same defect class: `GPIOMode_TypeDef`
-  # is per family, and a mode macro from another CH32 part is a name that compiles
-  # nowhere. All EIGHT members of the enum in
-  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 28-38 are
-  # accounted for below - five here, three under `input_modes`.
-  modes:
-    - { name: Output Push Pull,              macro: GPIO_Mode_Out_PP }
-    - { name: Output Open Drain,             macro: GPIO_Mode_Out_OD }
-    - { name: Alternate Function Push Pull,  macro: GPIO_Mode_AF_PP }
-    - { name: Alternate Function Open Drain, macro: GPIO_Mode_AF_OD }
-    - { name: Analog,                        macro: GPIO_Mode_AIN }
-
-  # Mode `Input` does not have one macro: the SPL folds the PULL setting into the mode,
-  # so which of these three applies is decided by the GPIO table's Pull-up/Pull-down
-  # column, not by a fourth mode entry. Keyed by the pull name for that reason.
-  input_modes:
-    - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
-    - { name: Pull-up,   macro: GPIO_Mode_IPU }
-    - { name: Pull-down, macro: GPIO_Mode_IPD }
-
-# -----------------------------------------------------------------------------
-# DMA1 - seven channels, F1-style.
-#
-# Same schema as CH32V006's `dma:` block, so the DMA Settings tab renders from one
-# set of editors on both parts. The CONTENT is deliberately different: different
-# request names, a different channel layout, and an eighth parameter CH32V006 does
-# not have (`fifo`), so a tab that quietly assumes V006's parameter list shows up.
-dma:
-  controller: DMA1
-  channels: 7
-
-  requests:
-    1: [ADC1, TIM2_CH3, TIM4_CH1]
-    2: [SPI1_RX, USART3_TX, TIM1_CH1, TIM2_UP]
-    3: [SPI1_TX, USART3_RX, TIM1_CH2, TIM3_CH4]
-    4: [SPI2_RX, USART1_TX, I2C2_TX, TIM1_CH4, TIM4_CH2]
-    5: [SPI2_TX, USART1_RX, I2C2_RX, TIM2_CH1, TIM4_CH3]
-    6: [USART2_RX, I2C1_TX, TIM1_CH3, TIM3_CH1, ADC2]
-    7: [USART2_TX, I2C1_RX, TIM2_CH2, TIM4_CH4]
-
-  init_struct: DMA_InitTypeDef
-
-  # DMA_CFGRx, one per channel, 20 bytes apart. Synthetic but self-consistent: the
-  # field layout matches what `channel_params` below claims, which is what
-  # validate_mcu.py cross-checks.
-  register:
-    name: DMA_CFGRx
-    address: 0x40020008
-    stride: 20
-    channel_macro: DMA1_Channel$CH
-    fields:
-      EN:     { lsb: 0,  bits: 1 }
-      TCIE:   { lsb: 1,  bits: 1 }
-      HTIE:   { lsb: 2,  bits: 1 }
-      TEIE:   { lsb: 3,  bits: 1 }
-      DIR:    { lsb: 4,  bits: 1 }
-      CIRC:   { lsb: 5,  bits: 1 }
-      PINC:   { lsb: 6,  bits: 1 }
-      MINC:   { lsb: 7,  bits: 1 }
-      PSIZE:  { lsb: 8,  bits: 2 }
-      MSIZE:  { lsb: 10, bits: 2 }
-      PL:     { lsb: 12, bits: 2 }
-      MEM2MEM: { lsb: 14, bits: 1 }
-
-  interrupt_fields: [TCIE, HTIE, TEIE]
-
-  # Every field of DMA_InitTypeDef the user picks. Identical KEYS to CH32V006 so one
-  # editor renders both, plus `fifo`, which this part has and that one does not.
-  channel_params:
-    - key: dir
-      name: Direction
-      type: enum
-      group: Basic
-      field: DIR
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_DIR
-      default: Peripheral to memory
-      options:
-        - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
-        - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
-      help: "DMA_CFGRx DIR, bit 4. The SDK names it after what the PERIPHERAL is, so PeripheralSRC is peripheral-to-memory."
-    - key: priority
-      name: Priority
-      type: enum
-      group: Basic
-      field: PL
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_Priority
-      default: Low
-      options:
-        - { name: Low,       value: 0, sdk: DMA_Priority_Low }
-        - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
-        - { name: High,      value: 2, sdk: DMA_Priority_High }
-        - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
-      help: "DMA_CFGRx PL[13:12]. Only decides who wins when two channels want the bus in the same cycle; a lower-numbered channel breaks a tie."
-    - key: mode
-      name: Mode
-      type: enum
-      group: Basic
-      field: CIRC
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_Mode
-      default: Normal
-      options:
-        - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
-        - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
-      help: "DMA_CFGRx CIRC, bit 5. Circular reloads CNTR when it reaches zero and never stops."
-    - key: pinc
-      name: Peripheral increment
-      type: enum
-      group: Advanced
-      field: PINC
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_PeripheralInc
-      default: Disable
-      options:
-        - { name: Disable, value: 0, sdk: DMA_PeripheralInc_Disable }
-        - { name: Enable,  value: 1, sdk: DMA_PeripheralInc_Enable }
-      help: "DMA_CFGRx PINC, bit 6. Almost always Disable: a peripheral data register does not move."
-    - key: minc
-      name: Memory increment
-      type: enum
-      group: Advanced
-      field: MINC
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_MemoryInc
-      default: Enable
-      options:
-        - { name: Disable, value: 0, sdk: DMA_MemoryInc_Disable }
-        - { name: Enable,  value: 1, sdk: DMA_MemoryInc_Enable }
-      help: "DMA_CFGRx MINC, bit 7. Enable for a buffer, Disable to hammer one address."
-    - key: psize
-      name: Peripheral data width
-      type: enum
-      group: Advanced
-      field: PSIZE
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_PeripheralDataSize
-      default: Byte
-      options:
-        - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
-        - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
-        - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
-      help: "DMA_CFGRx PSIZE[9:8]. Must match the peripheral's data register width or every transfer truncates."
-    - key: msize
-      name: Memory data width
-      type: enum
-      group: Advanced
-      field: MSIZE
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_MemoryDataSize
-      default: Byte
-      options:
-        - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
-        - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
-        - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
-      help: "DMA_CFGRx MSIZE[11:10]. May differ from PSIZE; the controller packs or unpacks."
-    - key: m2m
-      name: Memory to memory
-      type: enum
-      group: Advanced
-      field: MEM2MEM
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_M2M
-      default: Disable
-      options:
-        - { name: Disable, value: 0, sdk: DMA_M2M_Disable }
-        - { name: Enable,  value: 1, sdk: DMA_M2M_Enable }
-      help: "DMA_CFGRx MEM2MEM, bit 14. Ignores the peripheral request line and runs flat out."
-    - key: fifo
-      name: FIFO threshold
-      type: enum
-      group: Advanced
-      struct: DMA_InitTypeDef
-      sdk_field: DMA_FIFOThreshold
-      default: Half full
-      options:
-        - { name: Quarter full,       value: 0, sdk: DMA_FIFOThreshold_1QuarterFull }
-        - { name: Half full,          value: 1, sdk: DMA_FIFOThreshold_HalfFull }
-        - { name: Three quarters full, value: 2, sdk: DMA_FIFOThreshold_3QuartersFull }
-        - { name: Full,               value: 3, sdk: DMA_FIFOThreshold_Full }
-      help: >
-        Deliberately has NO `field:` - this part's FIFO threshold lives in a second
-        register, not in DMA_CFGRx. It is here so that a generator or a tab which
-        assumes every channel parameter maps to a bitfield of one register is caught
-        by a part rather than by a user. CH32V006 has no equivalent.
-
-  # Starting values, so a request that is switched on is already configured sensibly.
-  # Same rule as CH32V006: the width follows the peripheral's data register.
-  request_defaults:
-    ADC1:      { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
-    ADC2:      { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
-    USART1_TX: { dir: Memory to peripheral }
-    USART1_RX: { dir: Peripheral to memory }
-    USART2_TX: { dir: Memory to peripheral }
-    USART2_RX: { dir: Peripheral to memory }
-    USART3_TX: { dir: Memory to peripheral }
-    USART3_RX: { dir: Peripheral to memory }
-    SPI1_TX:   { dir: Memory to peripheral }
-    SPI1_RX:   { dir: Peripheral to memory }
-    SPI2_TX:   { dir: Memory to peripheral }
-    SPI2_RX:   { dir: Peripheral to memory }
-    I2C1_TX:   { dir: Memory to peripheral }
-    I2C1_RX:   { dir: Peripheral to memory }
-    I2C2_TX:   { dir: Memory to peripheral }
-    I2C2_RX:   { dir: Peripheral to memory }
-    TIM1_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM1_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM1_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM1_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM2_UP:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM2_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM2_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM2_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM3_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM3_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM4_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM4_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM4_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-    TIM4_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
-
-  request_notes:
-    TIM: >
-      A TIMx_CHy request serves BOTH PWM output (memory to peripheral) and input
-      capture (peripheral to memory) under one name. The default is the common case;
-      change `dir` when you are capturing.
-
-  notes: >
-    Synthetic. Nothing here is from a datasheet - it exists so the DMA Settings tab,
-    the channel-clash detector and the DMA half of code generation are exercised on a
-    SECOND part with a different shape, on packages up to LQFP144.
-
-# -----------------------------------------------------------------------------
-# Interrupt vectors.
-#
-# Deliberately a DIFFERENT priority scheme from CH32V006. That part's PFIC implements
-# TWO priority bits and offers 0-1 / 0-1 or a flat 0-3. This one has FOUR, grouped the
-# Cortex-M way, so ranges run to 0-15. A NVIC tab that hardcodes either part's ranges
-# is wrong on the other, which is the entire point of having this file.
-nvic:
-  controller: NVIC
-  scheme:
-    register: { name: NVIC_IPR, address: 0xE000E400, bits_per_vector: 8 }
-    priority_bits: 4
-    priority_lsb: 4
-    max_nesting: 8
-    groups:
-      - name: 4 bits for pre-emption priority, 0 bits for subpriority
-        preempt: { bits: 4, lsb: 4, min: 0, max: 15 }
-        sub:     { bits: 0, min: 0, max: 0 }
-      - name: 3 bits for pre-emption priority, 1 bit for subpriority
-        default: true
-        preempt: { bits: 3, lsb: 5, min: 0, max: 7 }
-        sub:     { bits: 1, lsb: 4, min: 0, max: 1 }
-      - name: 2 bits for pre-emption priority, 2 bits for subpriority
-        preempt: { bits: 2, lsb: 6, min: 0, max: 3 }
-        sub:     { bits: 2, lsb: 4, min: 0, max: 3 }
-      - name: 0 bits for pre-emption priority, 4 bits for subpriority
-        preempt: { bits: 0, min: 0, max: 0 }
-        sub:     { bits: 4, lsb: 4, min: 0, max: 15 }
-  enable:  { register: NVIC_ISER, address: 0xE000E100 }
-  disable: { register: NVIC_ICER, address: 0xE000E180 }
-  notes: >
-    Synthetic. Four priority bits and four grouping choices, against CH32V006's two
-    bits and two choices, so neither the spinner ranges nor the number of groups can
-    be hardcoded anywhere.
-  vectors:
-    - { name: NMI,       vector: 2,  irqn: NonMaskableInt_IRQn, handler: NMI_Handler,              system: true, fixed: true, description: Non-maskable interrupt }
-    - { name: HardFault, vector: 3,  irqn: HardFault_IRQn,      handler: HardFault_Handler,        system: true, fixed: true, description: Abnormal interrupt (exception) }
-    - { name: SVCall,    vector: 11, irqn: SVCall_IRQn,         handler: SVC_Handler,              system: true, description: Supervisor call }
-    - { name: PendSV,    vector: 14, irqn: PendSV_IRQn,         handler: PendSV_Handler,           system: true, description: Pendable request for system service }
-    - { name: SysTick,   vector: 15, irqn: SysTick_IRQn,        handler: SysTick_Handler,          system: true, description: System timer interrupt }
-    - { name: WWDG,      vector: 16, irqn: WWDG_IRQn,           handler: WWDG_IRQHandler,          peripheral: WWDG, description: Window watchdog timer interrupt }
-    - { name: RCC,       vector: 21, irqn: RCC_IRQn,            handler: RCC_IRQHandler,           peripheral: RCC, description: Reset and clock control interrupt }
-    - { name: DMA1_CH1,  vector: 27, irqn: DMA1_Channel1_IRQn,  handler: DMA1_Channel1_IRQHandler, peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
-    - { name: DMA1_CH2,  vector: 28, irqn: DMA1_Channel2_IRQn,  handler: DMA1_Channel2_IRQHandler, peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
-    - { name: DMA1_CH3,  vector: 29, irqn: DMA1_Channel3_IRQn,  handler: DMA1_Channel3_IRQHandler, peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
-    - { name: DMA1_CH4,  vector: 30, irqn: DMA1_Channel4_IRQn,  handler: DMA1_Channel4_IRQHandler, peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
-    - { name: DMA1_CH5,  vector: 31, irqn: DMA1_Channel5_IRQn,  handler: DMA1_Channel5_IRQHandler, peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
-    - { name: DMA1_CH6,  vector: 32, irqn: DMA1_Channel6_IRQn,  handler: DMA1_Channel6_IRQHandler, peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
-    - { name: DMA1_CH7,  vector: 33, irqn: DMA1_Channel7_IRQn,  handler: DMA1_Channel7_IRQHandler, peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
-    - { name: ADC1_2,    vector: 34, irqn: ADC1_2_IRQn,         handler: ADC1_2_IRQHandler,        peripheral: ADC1, description: ADC1 and ADC2 global interrupt (one vector for both) }
-    - { name: USB_HP,    vector: 35, irqn: USB_HP_IRQn,         handler: USB_HP_IRQHandler,        peripheral: USB, description: USB high priority interrupt }
-    - { name: USB_LP,    vector: 36, irqn: USB_LP_IRQn,         handler: USB_LP_IRQHandler,        peripheral: USB, description: USB low priority interrupt }
-    - { name: CAN1_TX,   vector: 37, irqn: CAN1_TX_IRQn,        handler: CAN1_TX_IRQHandler,       peripheral: CAN1, description: CAN1 TX interrupt }
-    - { name: CAN1_RX0,  vector: 38, irqn: CAN1_RX0_IRQn,       handler: CAN1_RX0_IRQHandler,      peripheral: CAN1, description: CAN1 RX0 interrupt }
-    - { name: TIM1_BRK,  vector: 40, irqn: TIM1_BRK_IRQn,       handler: TIM1_BRK_IRQHandler,      peripheral: TIM1, description: TIM1 break interrupt }
-    - { name: TIM1_UP,   vector: 41, irqn: TIM1_UP_IRQn,        handler: TIM1_UP_IRQHandler,       peripheral: TIM1, description: TIM1 update interrupt }
-    - { name: TIM1_TRG,  vector: 42, irqn: TIM1_TRG_COM_IRQn,   handler: TIM1_TRG_COM_IRQHandler,  peripheral: TIM1, description: TIM1 trigger and commutation interrupt }
-    - { name: TIM1_CC,   vector: 43, irqn: TIM1_CC_IRQn,        handler: TIM1_CC_IRQHandler,       peripheral: TIM1, description: TIM1 capture/compare interrupt }
-    - { name: TIM2,      vector: 44, irqn: TIM2_IRQn,           handler: TIM2_IRQHandler,          peripheral: TIM2, description: TIM2 global interrupt }
-    - { name: TIM3,      vector: 45, irqn: TIM3_IRQn,           handler: TIM3_IRQHandler,          peripheral: TIM3, description: TIM3 global interrupt }
-    - { name: TIM4,      vector: 46, irqn: TIM4_IRQn,           handler: TIM4_IRQHandler,          peripheral: TIM4, description: TIM4 global interrupt }
-    - { name: I2C1_EV,   vector: 47, irqn: I2C1_EV_IRQn,        handler: I2C1_EV_IRQHandler,       peripheral: I2C1, description: I2C1 event interrupt }
-    - { name: I2C1_ER,   vector: 48, irqn: I2C1_ER_IRQn,        handler: I2C1_ER_IRQHandler,       peripheral: I2C1, description: I2C1 error interrupt }
-    - { name: I2C2_EV,   vector: 49, irqn: I2C2_EV_IRQn,        handler: I2C2_EV_IRQHandler,       peripheral: I2C2, description: I2C2 event interrupt }
-    - { name: I2C2_ER,   vector: 50, irqn: I2C2_ER_IRQn,        handler: I2C2_ER_IRQHandler,       peripheral: I2C2, description: I2C2 error interrupt }
-    - { name: SPI1,      vector: 51, irqn: SPI1_IRQn,           handler: SPI1_IRQHandler,          peripheral: SPI1, description: SPI1 global interrupt }
-    - { name: SPI2,      vector: 52, irqn: SPI2_IRQn,           handler: SPI2_IRQHandler,          peripheral: SPI2, description: SPI2 global interrupt }
-    - { name: USART1,    vector: 53, irqn: USART1_IRQn,         handler: USART1_IRQHandler,        peripheral: USART1, description: USART1 global interrupt }
-    - { name: USART2,    vector: 54, irqn: USART2_IRQn,         handler: USART2_IRQHandler,        peripheral: USART2, description: USART2 global interrupt }
-    - { name: USART3,    vector: 55, irqn: USART3_IRQn,         handler: USART3_IRQHandler,        peripheral: USART3, description: USART3 global interrupt }
-    - { name: IWDG,      vector: 57, irqn: IWDG_IRQn,           handler: IWDG_IRQHandler,          peripheral: IWDG, description: Independent watchdog early-wake interrupt }
-    - { name: OPA1,      vector: 58, irqn: OPA1_IRQn,           handler: OPA1_IRQHandler,          peripheral: OPA1, description: Operational amplifier comparator output interrupt }
-
-# -----------------------------------------------------------------------------
-# Code generation.
-#
-# `sdk: { synthetic: true }` is how a part that is NOT real silicon opts out of
-# tools/verify_sdk_names.py. It is a declaration in the data, not a name hardcoded in
-# the checker, so a second fixture part needs no change to the tool. Everything below
-# is F1-shaped and self-consistent, and none of it is checked against any header
-# because there is no header to check it against - that is the point of saying so.
-codegen:
-  header: dummy32.h
-  sdk: { synthetic: true }
-
-  # NOTE the spelling: APB2, not the PB2 that CH32V006 uses. Two live spellings in the
-  # repo means neither can be hardcoded in the generator.
-  gpio_clock: { fn: RCC_APB2PeriphClockCmd, port: RCC_APB2Periph_GPIO$PORT, afio: RCC_APB2Periph_AFIO }
-
-  # Three real speeds here, against CH32V006's one. `gpio.speeds` above is what the
-  # part OFFERS; this maps a stored name to its macro.
-  speeds:
-    "2 MHz":  GPIO_Speed_2MHz
-    "10 MHz": GPIO_Speed_10MHz
-    "50 MHz": GPIO_Speed_50MHz
-
-  # AFIO_MAPR-style remap word. Only peripherals whose `remaps:` INDEX is the field
-  # value belong here - SYS is absent for the same reason as on CH32V006: its remap
-  # list picks a debug-pin arrangement, not an AFIO field.
-  remap:
-    register: "AFIO->MAPR"
-    fields:
-      SPI1:   [{ lsb: 0,  bits: 1 }]
-      I2C1:   [{ lsb: 1,  bits: 1 }]
-      USART1: [{ lsb: 2,  bits: 1 }]
-      USART2: [{ lsb: 3,  bits: 1 }]
-      USART3: [{ lsb: 4,  bits: 2 }]
-      TIM1:   [{ lsb: 6,  bits: 2 }]
-      TIM2:   [{ lsb: 8,  bits: 2 }]
-      TIM3:   [{ lsb: 10, bits: 2 }]
-      TIM4:   [{ lsb: 12, bits: 1 }]
-      CAN1:   [{ lsb: 13, bits: 2 }]
-
-  analog_signals:
-    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9]
-    ADC2: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7]
-    OPA1: [VINP, VINM, VOUT]
-
-  rcc:
-    register: "RCC->CFGR0"
-    sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }
-    pllsrc: { lsb: 16, bits: 1, values: { HSI: 0, HSE: 1 } }
-    # Keys are the choice NAMES of peripherals.RCC "Master Clock Output". On this part
-    # that setting is a plain Disable/Enable pair rather than a source list, so the
-    # encoding is a two-value field - deliberately unlike CH32V006, whose MCO setting
-    # names its four sources. validate_mcu.py checks these keys still line up.
-    mco:
-      peripheral: RCC
-      setting: Master Clock Output
-      lsb: 24
-      bits: 3
-      values: { Disable: 0, Enable: 4 }
-    prescalers:
-      AHB:  { lsb: 4,  bits: 4, values: { 1: 0, 2: 8, 4: 9, 8: 10, 16: 11, 64: 12, 128: 13, 256: 14, 512: 15 } }
-      APB1: { lsb: 8,  bits: 3, values: { 1: 0, 2: 4, 4: 5, 8: 6, 16: 7 } }
-      APB2: { lsb: 11, bits: 3, values: { 1: 0, 2: 4, 4: 5, 8: 6, 16: 7 } }
-      ADC:  { lsb: 14, bits: 2, values: { 2: 0, 4: 1, 6: 2, 8: 3 } }
-
-  ctlr:
-    register: "RCC->CTLR"
-    fields:
-      HSION:  { lsb: 0,  bits: 1 }
-      HSIRDY: { lsb: 1,  bits: 1, access: ro }
-      HSEON:  { lsb: 16, bits: 1 }
-      HSERDY: { lsb: 17, bits: 1, access: ro }
-      HSEBYP: { lsb: 18, bits: 1 }
-      PLLON:  { lsb: 24, bits: 1 }
-      PLLRDY: { lsb: 25, bits: 1, access: ro }
-    # Must cover EVERY choice of peripherals.RCC "High Speed Clock (HSE)", and these
-    # are spelled the way that setting spells them (no spaces around the slash), which
-    # is not how CH32V006 spells its equivalent. validate_mcu.py enforces both halves.
-    hse_choices:
-      Disable:                   { HSEON: 0, HSEBYP: 0 }
-      BYPASS Clock Source:       { HSEON: 1, HSEBYP: 1 }
-      Crystal/Ceramic Resonator: { HSEON: 1, HSEBYP: 0 }
-
-  # Which enable register each peripheral's clock bit lives in. Three domains here
-  # against CH32V006's HB/PB2/PB1, and they are spelled AHB/APB2/APB1.
-  periph_clock:
-    AHB:
-      register: RCC_AHBPCENR
-      fn: RCC_AHBPeriphClockCmd
-      prefix: RCC_AHBPeriph_
-      bits: { DMA1: 0 }   # SRAM/FLITF/CRC have no tree entry here, so no enable is claimed
-    APB2:
-      register: RCC_APB2PCENR
-      fn: RCC_APB2PeriphClockCmd
-      prefix: RCC_APB2Periph_
-      bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4, GPIOD: 5, GPIOE: 6, GPIOF: 7, GPIOG: 8, ADC1: 9, ADC2: 10, TIM1: 11, SPI1: 12, USART1: 14 }
-    APB1:
-      register: RCC_APB1PCENR
-      fn: RCC_APB1PeriphClockCmd
-      prefix: RCC_APB1Periph_
-      bits: { TIM2: 0, TIM3: 1, TIM4: 2, WWDG: 11, SPI2: 14, USART2: 17, USART3: 18, I2C1: 21, I2C2: 22, USB: 23, CAN1: 25 }
-    notes: >
-      GPIOH and GPIOI have pins in the LQFP144 package table but no enable bit here.
-      That is deliberate: it is the shape of a real datasheet gap, and it is what the
-      generator meets when a package exposes a port the clock tree does not document.
-
-# -----------------------------------------------------------------------------
-# Clock tree (F1-style). Everything in MHz unless noted.
-clock:
-  sources:
-    HSI: { mhz: 8, fixed: true }
-    HSE: { mhz: 8, min_mhz: 3, max_mhz: 25 }      # default crystal 8, user editable
-    LSI: { khz: 40, fixed: true }
-    LSE: { khz: 32.768, fixed: true }
-  pll:
-    inputs:
-      - { name: HSI/2, source: HSI, div: 2 }
-      - { name: HSI,   source: HSI, div: 1 }
-      - { name: HSE,   source: HSE, div: 1 }
-      - { name: HSE/2, source: HSE, div: 2 }
-    multipliers: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18]
-  sysclk:
-    sources: [HSI, HSE, PLLCLK]
-    max_mhz: 144
-
-  # Same HSE coupling as the real parts (see data/FORMAT.md). This fixture deliberately
-  # names its crystal pins OSC_IN / OSC_OUT rather than XI / XO, so an engine that
-  # hardcoded the CH32V006 spelling would pass on V006 and silently fail here.
-  hse_peripheral: RCC
-  hse_setting: High Speed Clock (HSE)
-  hse_signals: [OSC_IN, OSC_OUT]
-
-  prescalers:
-    AHB:  { options: [1, 2, 4, 8, 16, 64, 128, 256, 512], max_mhz: 144 }
-    APB1: { options: [1, 2, 4, 8, 16], max_mhz: 72 }
-    APB2: { options: [1, 2, 4, 8, 16], max_mhz: 144 }
-    ADC:  { options: [2, 4, 6, 8], source: APB2, max_mhz: 14 }
-    USB:  { options: [1, 1.5, 2, 2.5, 3], source: PLLCLK, target_mhz: 48 }
-  buses:
-    APB1: [TIM2, TIM3, TIM4, USART2, USART3, SPI2, I2C1, I2C2, CAN1, USB, WWDG, IWDG]
-    APB2: [TIM1, USART1, SPI1, ADC1, ADC2, GPIO, AFIO]
-
-</script>
 <script>
 "use strict";
 // Bundled from app/engine/*.js by build.py — do not edit here.
@@ -11364,7 +9846,7 @@ function projectZip() {
     <span class="crumb" id="crumb-mcu">MCU</span>
     <span class="crumb" id="crumb-proj">Untitled.wchproj - Pinout &amp; Configuration</span>
     <div class="spacer"></div>
-    <button class="gen" title="Export the pin table (Markdown + CSV) and the clock summary (Markdown)">GENERATE CODE</button>
+    <button class="gen" title="Generate the whole PlatformIO project — one .zip in a browser, a folder on the desktop">GENERATE PROJECT</button>
   </div>
 
   <div class="tabs" role="tablist" aria-label="Views">
@@ -13624,27 +12106,29 @@ function renderTools() {
 
 // ---------- 7c. Project Manager ------------------------------------------------
 /**
- * Everything the generator produces, normalised to [{ name, language, text }].
+ * Everything the generator produces, as ONE project: `[{ path, name, text, language }]`.
  *
- * `generateAll()` returns a `{ name: text }` map today and AGENT-2 is reshaping it to
- * return the list form (board, 14:30Z). Both are read here so the reshape can land
- * whenever suits them without this panel changing. `language` is a hint for the preview
- * and nothing else.
+ * There used to be two lists here and two Generate buttons — "code" (the init files, the
+ * pin table and the clock summary, downloaded as loose files) and "project" (the whole
+ * PlatformIO folder, zipped). The split was never real: the init code without
+ * `platformio.ini`, `main.c` and a README around it is a handful of files in Downloads
+ * that nobody can flash. There is now one list, one delivery path and one archive.
+ *
+ * `path` is the identity — it is what the file list, the preview and the skip set key on,
+ * because a basename is not unique across `include/` and `src/`.
  */
-const PM_LANG = { '.c': 'c', '.h': 'c', '.md': 'markdown', '.csv': 'csv' };
-function generatedFiles() {
-  let raw;
-  try { raw = generateAll(); } catch (e) { console.error('generateAll', e); return []; }
-  const list = Array.isArray(raw) ? raw
-    : Object.entries(raw || {}).map(([name, text]) => ({ name, text }));
-  return list.map(f => {
-    const dot = String(f.name).lastIndexOf('.');
-    return { name: f.name, text: String(f.text ?? ''), language: f.language || PM_LANG[String(f.name).slice(dot)] || 'text' };
+const PM_LANG = { '.c': 'c', '.h': 'c', '.md': 'markdown', '.csv': 'csv', '.ini': 'ini', '.gitignore': 'text' };
+function pmFileList() {
+  return pmProjectFiles().map(f => {
+    const path = String(f.path);
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    const dot = name.lastIndexOf('.');
+    return {
+      path, name, text: String(f.text ?? ''),
+      language: PM_LANG[name.slice(dot)] || 'text',
+    };
   });
 }
-const mimeFor = name => name.endsWith('.csv') ? 'text/csv'
-  : name.endsWith('.md') ? 'text/markdown'
-    : /\.[ch]$/.test(name) ? 'text/x-c' : 'text/plain';
 
 // UI-only, and deliberately not in S: which of the generated files Generate writes, and
 // which one the preview is showing. Neither is a property of the hardware configuration,
@@ -13667,7 +12151,7 @@ function complaintsByFile(files) {
   let list = [];
   try {
     const map = {};
-    for (const f of files) map[f.name] = f.text;
+    for (const f of files) map[f.path] = f.text;
     list = cComplaints(map) || [];
   } catch (e) { console.error('cComplaints', e); return out; }
   for (const c of list) ((out[c.file] ||= {})[c.line] = c.kind);
@@ -13677,12 +12161,12 @@ function complaintsByFile(files) {
 function renderProjectManager() {
   const view = document.getElementById('view-pm');
   if (!view || !view.classList.contains('active')) return;   // hidden: nothing to measure, nothing to paint
-  const files = generatedFiles();
+  const files = pmFileList();
   const flags = complaintsByFile(files);
-  if (!files.some(f => f.name === PM.pick)) PM.pick = files.length ? files[0].name : null;
+  if (!files.some(f => f.path === PM.pick)) PM.pick = files.length ? files[0].path : null;
   renderPmConfig(files);
   renderPmFiles(files, flags);
-  renderPmCode(files.find(f => f.name === PM.pick) || null, flags);
+  renderPmCode(files.find(f => f.path === PM.pick) || null, flags);
 }
 
 function renderPmConfig(files) {
@@ -13695,7 +12179,7 @@ function renderPmConfig(files) {
       : pkgVariants.length ? `<span class="ro">not chosen. ${esc(pkgVariants.join(', '))} all use ${esc(S.pkg)} — pick one in New project</span>`
         : '<span class="ro">this MCU file lists no part numbers</span>';
   const dd = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
-  const chosen = files.filter(f => !PM.skip.has(f.name));
+  const chosen = files.filter(f => !PM.skip.has(f.path));
 
   let h = `<div class="pmsec"><h4>Project</h4>`
     + `<label class="row"><span>Name</span><input type="text" id="pm-name" value="${attr(PROJECT.name)}" maxlength="64" aria-label="Project name"></label>`
@@ -13736,8 +12220,8 @@ function renderPmConfig(files) {
         + `<span>${esc(o.name)}${o.help ? `<small>${esc(o.help)}</small>` : ''}</span></label>`;
     }).join('') : '<p>This build offers no generator options.</p>')
     + `<h4 style="margin-top:12px">Files</h4>`
-    + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.name)}"${PM.skip.has(f.name) ? '' : ' checked'}>`
-      + `<span><code>${esc(f.name)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
+    + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.path)}"${PM.skip.has(f.path) ? '' : ' checked'}>`
+      + `<span><code>${esc(f.path)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
       : '<p>This configuration generates nothing.</p>')
     + `</div>`;
 
@@ -13752,9 +12236,8 @@ function renderPmConfig(files) {
       + (PM.outDir ? ` <button id="pm-outdir-clear" class="pmbtn">Back to downloads</button>` : '') + `</p>` : '')
     + `</div>`;
 
-  h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE CODE</button>`
-    + `<p>${chosen.length ? `${pmIsDesktop() || PM.outDir ? 'Writes' : 'Downloads'} ${chosen.length} file${chosen.length === 1 ? '' : 's'}` : 'Nothing selected'}`
-    + ` — the init code, the pin table and the clock summary, not the project around them.</p></div>`;
+  h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE PROJECT</button>`
+    + `<p>${chosen.length ? pmDeliverSentence(chosen.length, files.length) : pmCannotGenerateSentence()}</p></div>`;
 
   const box = document.getElementById('pm-config');
   box.innerHTML = h;
@@ -13779,8 +12262,26 @@ function renderPmConfig(files) {
   if (od) od.onclick = pmChooseOutDir;
   const oc = box.querySelector('#pm-outdir-clear');
   if (oc) oc.onclick = () => { PM.outDir = null; PM.written = null; renderProjectManager(); };
-  const gp = box.querySelector('#pm-genproject');
-  if (gp) gp.onclick = pmGenerateProject;
+}
+
+/** One sentence for the Generate button: what it will make, and where it will land. */
+function pmDeliverSentence(n, total) {
+  const what = n === total
+    ? `the whole project — ${n} file${n === 1 ? '' : 's'}`
+    : `${n} of ${total} files`;
+  if (pmIsDesktop()) return `Writes ${what} into a folder you pick, under "${pmFolderName()}/".`;
+  if (PM.outDir) return `Writes ${what} into "${pmFolderName()}/" inside the folder you chose under Output.`;
+  return `Downloads one ${esc(pmFolderName())}.zip containing ${what}. Choose a folder under Output to write it there instead.`;
+}
+
+/** Why the button is disabled, in the generator's own words rather than a shrug. */
+function pmCannotGenerateSentence() {
+  if (typeof projectFiles !== 'function') return 'This build generates the init code but not the project around it.';
+  if (!pmFileList().length) {
+    const board = pmBoard(PROJECT.variant || null);
+    if (!board.ok) return `${esc(board.why)} — so there is no project to generate.`;
+  }
+  return 'Nothing is selected. Tick at least one file above.';
 }
 
 /**
@@ -13801,7 +12302,6 @@ function pmProjectSection(board, files) {
   const willDo = pmMainWillDo();
   const engineHasProject = typeof projectFiles === 'function';
   const layout = engineHasProject ? pmProjectFiles().map(f => f.path) : PM_LAYOUT;
-  const canGenerate = board.ok && engineHasProject && layout.length > 0;
 
   let h = `<div class="pmsec"><h4>PlatformIO project</h4>`
     + `<p>A complete folder: open it in VS Code, press Upload, and the chip runs this configuration.`
@@ -13826,15 +12326,13 @@ function pmProjectSection(board, files) {
       + ` project around it. The layout above is what it will write.</div>`;
   }
 
-  if (canGenerate) {
-    const name = (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
-    h += `<div class="pmgen" style="padding:10px 0 0"><button id="pm-genproject">GENERATE PROJECT</button>`
-      + `<p>${pmIsDesktop() ? `Asks for a folder, then writes the project into "${esc(name)}/" inside it.`
-        : PM.outDir ? `Writes the project into "${esc(name)}/" inside the folder you chose under Output.`
-        : `Downloads one ${esc(name)}.zip with the folder inside it. Choose a folder under Output to write it there instead.`}</p></div>`;
-  }
+  // No button here: there is one Generate button, under Files, and it makes all of this.
+  // Two buttons that did the same thing was the shape this section used to have.
   return h + pmWrittenHtml() + `</div>`;
 }
+
+/** The folder the project is written into, and the name its archive carries. */
+const pmFolderName = () => (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
 
 /** The layout the generator writes, for the "what you get" list before it exists. */
 const PM_LAYOUT = [
@@ -13960,12 +12458,12 @@ function pmDescribe(f) {
 function renderPmFiles(files, flags) {
   const box = document.getElementById('pm-files');
   box.innerHTML = files.map(f => {
-    const kinds = Object.values(flags[f.name] || {});
+    const kinds = Object.values(flags[f.path] || {});
     const flag = kinds.includes('error') ? `<span class="flag" title="this file contains #error">#error</span>`
       : kinds.length ? `<span class="flag todo" title="${kinds.length} TODO section${kinds.length === 1 ? '' : 's'}">TODO</span>` : '';
-    return `<button class="pmfile${f.name === PM.pick ? ' on' : ''}" data-pmpick="${attr(f.name)}" role="option"`
-      + ` title="${attr(f.name)}" aria-selected="${f.name === PM.pick}">${flag}<span class="nm">${esc(f.name)}</span>`
-      + `<small>${f.text.split('\n').length} lines${PM.skip.has(f.name) ? ' · not generated' : ''}</small></button>`;
+    return `<button class="pmfile${f.path === PM.pick ? ' on' : ''}" data-pmpick="${attr(f.path)}" role="option"`
+      + ` title="${attr(f.path)}" aria-selected="${f.path === PM.pick}">${flag}<span class="nm">${esc(f.path)}</span>`
+      + `<small>${f.text.split('\n').length} lines${PM.skip.has(f.path) ? ' · not generated' : ''}</small></button>`;
   }).join('') || '<div class="treenone">Nothing to preview.</div>';
   box.querySelectorAll('[data-pmpick]').forEach(b => b.onclick = () => { PM.pick = b.dataset.pmpick; renderProjectManager(); });
 }
@@ -13973,11 +12471,11 @@ function renderPmFiles(files, flags) {
 function renderPmCode(file, flags) {
   const head = document.getElementById('pm-texthead'), code = document.getElementById('pm-code');
   if (!file) { head.innerHTML = ''; code.innerHTML = '<div class="empty">Nothing to preview.</div>'; return; }
-  const marks = flags[file.name] || {};
+  const marks = flags[file.path] || {};
   const errs = Object.values(marks).filter(k => k === 'error').length;
   const todos = Object.values(marks).filter(k => k === 'todo').length;
   const lines = file.text.split('\n');
-  head.innerHTML = `<b>${esc(file.name)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
+  head.innerHTML = `<b>${esc(file.path)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
     + `<div class="spacer"></div><button id="pm-copy">Copy</button>`;
   head.querySelector('#pm-copy').onclick = () => pmCopy(file);
   const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — <b>this file will not compile as it stands.</b>`
@@ -14026,84 +12524,55 @@ function pmCopyFallback(file, done) {
   ok ? done() : toast('Could not copy — select the text and copy it yourself');
 }
 
-// ---- a ZIP writer, because the app is one offline file ------------------------
+// ---- the ZIP writer, which lives in the engine --------------------------------
 //
-// Browser mode has to deliver a FOLDER, and the app is a single offline HTML file with no
-// CDN and no bundler - so a library is not available at any price. A stored-entry ZIP
-// (compression method 0) is the whole format we need: local header, data, central
-// directory, end record. Sixty lines and a CRC-32 table, which is what the round brief
-// costed it at, and it means the browser and the desktop ship the identical file list.
-const CRC32 = (() => {
-  const t = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-    t[i] = c >>> 0;
-  }
-  return t;
-})();
-function crc32(bytes) {
-  let c = 0xFFFFFFFF;
-  for (let i = 0; i < bytes.length; i++) c = CRC32[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
-}
-/** One stored-entry ZIP from [{ path, text }]. Returns a Blob. */
+// Browser mode has to deliver a FOLDER and has no filesystem, so an archive is the only
+// shape that works. The writer itself is `app/engine/zip.js`, which build.py bundles into
+// this page as `zipFiles` — ONE implementation, shared with the CLI, and exercised by
+// `app/tests/zip.test.js` against a real unzipper. There used to be a second copy of the
+// format here; it was never tested by anything, and a subtly wrong archive is exactly the
+// kind of defect that only shows up in the user's Downloads folder.
+/** `[{ path, text }]` as a downloadable ZIP Blob. */
 function zipOf(entries) {
-  const enc = new TextEncoder();
-  const parts = [], central = [];
-  let offset = 0;
-  const u16 = n => [n & 0xFF, (n >>> 8) & 0xFF];
-  const u32 = n => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
-  for (const e of entries) {
-    // Paths are stored with forward slashes and no leading slash - the ZIP spec's rule
-    // and, conveniently, the same one write_project enforces on the desktop side.
-    const name = enc.encode(String(e.path).replace(/\\/g, '/').replace(/^\/+/, ''));
-    const data = enc.encode(String(e.text ?? ''));
-    const crc = crc32(data);
-    // Local file header. No data descriptor: sizes are known before writing.
-    const local = [...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0),
-      ...u16(0), ...u16(0),                    // mtime/mdate: zero, deliberately
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(name.length), ...u16(0)];
-    parts.push(new Uint8Array(local), name, data);
-    central.push([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0),
-      ...u16(0), ...u16(0),
-      ...u32(crc), ...u32(data.length), ...u32(data.length),
-      ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
-      ...u32(0), ...u32(offset), name]);
-    offset += local.length + name.length + data.length;
-  }
-  let cdSize = 0;
-  for (const c of central) {
-    const name = c.pop();
-    const head = new Uint8Array(c);
-    parts.push(head, name);
-    cdSize += head.length + name.length;
-  }
-  parts.push(new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0),
-    ...u16(entries.length), ...u16(entries.length), ...u32(cdSize), ...u32(offset), ...u16(0)]));
-  return new Blob(parts, { type: 'application/zip' });
+  return new Blob([zipFiles(entries)], { type: 'application/zip' });
 }
 
 /**
- * Generate the project. Desktop: the bridge's native folder picker. Browser: one .zip.
+ * Generate the project, and deliver it. ONE action behind every Generate button.
+ *
+ * Three destinations, tried in this order:
+ *   desktop                      → the shell's native folder picker
+ *   browser with a chosen folder → written into <chosen>/<name>/, the shape the desktop
+ *                                  build writes, refusing a non-empty target
+ *   browser, nothing chosen      → ONE <name>.zip, the whole project under it
+ *
+ * The last one is why this is a single function. A browser has no filesystem, so an
+ * archive is the only way it can hand over a FOLDER — and a download per file, which is
+ * what the code button used to do, scattered unopenable fragments into Downloads.
  *
  * `window.generateProjectFiles` is the name src-tauri/desktop.js looks for, so defining it
  * here is what switches the desktop path on; the page still contains no Tauri code.
  */
 window.generateProjectFiles = () => pmProjectFiles();
-async function pmGenerateProject() {
-  const files = pmProjectFiles();
-  if (!files.length) { toast('This build does not generate a project yet'); return; }
-  const name = (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
+async function pmGenerate() {
+  const name = pmFolderName();
+  const files = pmFileList().filter(f => !PM.skip.has(f.path));
+  if (!files.length) { toast('Nothing selected to generate'); return; }
+  const bad = complaintsByFile(files);
+  const errs = Object.values(bad).reduce((n, m) => n + Object.values(m).filter(k => k === 'error').length, 0);
+  const warn = errs ? ` — ${errs} #error line(s), see the preview` : '';
+  const flat = files.map(f => ({ path: f.path, text: f.text }));
+
   if (pmIsDesktop()) {
     try {
-      const res = await window.desktopWriteProject(name, files);
+      const res = await window.desktopWriteProject(name, flat);
       if (!res) return;                                  // the user cancelled the picker
       pmShowWritten(res.root, res.written);
+      toast(`Wrote ${res.written.length} file(s)${warn}`);
     } catch (e) { toast(String(e && e.message ? e.message : e)); }
     return;
   }
+
   if (PM.outDir) {
     // The project goes under <chosen>/<name>/, the same shape the desktop build writes.
     // A non-empty <name>/ is refused unless confirmed - the same rule the Rust side has.
@@ -14115,19 +12584,19 @@ async function pmGenerateProject() {
       } catch (e) { if (!e || e.name !== 'NotFoundError') throw e; }
       if (existing && !window.confirm(`"${name}" already exists in ${PM.outDir.name} and is not empty. Overwrite the generated files in it?`)) return;
       const root = await PM.outDir.getDirectoryHandle(name, { create: true });
-      const written = await pmWriteToDir(root, files);
+      const written = await pmWriteToDir(root, flat);
       pmShowWritten(`${PM.outDir.name}/${name}`, written, { nameOnly: true });
-      toast(`Wrote ${written.length} files to ${PM.outDir.name}/${name}`);
+      toast(`Wrote ${written.length} file(s) to ${PM.outDir.name}/${name}${warn}`);
     } catch (e) { toast(`Could not write the project: ${e && e.message ? e.message : e}`); }
     return;
   }
-  const blob = zipOf(files.map(f => ({ path: `${name}/${f.path}`, text: f.text })));
+
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(zipOf(flat.map(f => ({ path: `${name}/${f.path}`, text: f.text }))));
   a.download = `${name}.zip`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast(`Generated ${name}.zip — ${files.length} files`);
+  toast(`Downloaded ${name}.zip — ${files.length} file(s)${warn}`);
 }
 
 /**
@@ -14154,42 +12623,6 @@ function pmWrittenHtml() {
       + `<p class="ro">The first build downloads the toolchain if PlatformIO has not seen this platform before.</p>`;
   }
   return h + `</div>`;
-}
-
-/**
- * Write the selected files, where the user said. Three ways out, tried in this order:
- *   desktop  → the shell's native folder picker, files straight into the picked folder;
- *   browser with a chosen folder (File System Access API) → written into it;
- *   otherwise → one download per file, which lands wherever the browser puts downloads.
- * The panel says which of the three will happen BEFORE the click, so "where did it go?"
- * is never the question.
- */
-async function pmGenerate() {
-  const files = generatedFiles().filter(f => !PM.skip.has(f.name));
-  if (!files.length) { toast('Nothing selected to generate'); return; }
-  const bad = complaintsByFile(files);
-  const errs = Object.values(bad).reduce((n, m) => n + Object.values(m).filter(k => k === 'error').length, 0);
-  const warn = errs ? ` — ${errs} #error line(s), see the preview` : '';
-  const flat = files.map(f => ({ path: f.name, text: f.text }));
-  if (pmIsDesktop()) {
-    try {
-      const res = await window.desktopWriteProject(PROJECT.name || 'WCHCubeProject', flat, { subfolder: false });
-      if (!res) return;                                  // the user cancelled the picker
-      pmShowWritten(res.root, res.written, { loose: true });
-      toast(`Wrote ${res.written.length} file(s)${warn}`);
-    } catch (e) { toast(String(e && e.message ? e.message : e)); }
-    return;
-  }
-  if (PM.outDir) {
-    try {
-      const written = await pmWriteToDir(PM.outDir, flat);
-      pmShowWritten(PM.outDir.name, written, { loose: true, nameOnly: true });
-      toast(`Wrote ${written.length} file(s) to ${PM.outDir.name}${warn}`);
-    } catch (e) { toast(`Could not write to ${PM.outDir.name}: ${e && e.message ? e.message : e}`); }
-    return;
-  }
-  for (const f of files) downloadText(f.name, f.text, mimeFor(f.name));
-  toast(`Downloaded ${files.map(f => f.name).join(', ')}${warn}`);
 }
 
 /**
@@ -14227,15 +12660,15 @@ async function pmWriteToDir(dir, files) {
 function pmWhereText() {
   if (pmIsDesktop()) return 'The desktop build asks for a folder every time you generate.';
   if (PM.outDir) return `Writes into the folder you chose, "${PM.outDir.name}".`;
-  if (typeof window.showDirectoryPicker === 'function') return 'No folder chosen — files go to your browser\'s Downloads folder. Choose one to write them where you want.';
-  return 'This browser cannot write into a folder you choose (it has no File System Access API), so files go to its Downloads folder. Edge and Chrome can.';
+  if (typeof window.showDirectoryPicker === 'function') return 'No folder chosen — you get one .zip in your browser\'s Downloads folder. Choose one to write the project into it instead.';
+  return 'This browser cannot write into a folder you choose (it has no File System Access API), so you get one .zip in its Downloads folder. Edge and Chrome can write a folder instead.';
 }
 
-// GENERATE CODE in the breadcrumb: the same thing the Project Manager's button does, so
-// there is one behaviour rather than two that can drift apart.
+// The breadcrumb button: the same action as the Project Manager's, literally the same
+// function, so there is one behaviour rather than two that can drift apart.
 (() => {
   const btn = document.querySelector('.gen');
-  btn.title = 'Generate the init code, the pin table and the clock summary — see them first on the Project Manager tab';
+  btn.title = 'Generate the whole PlatformIO project — preview every file first on the Project Manager tab';
   btn.onclick = pmGenerate;
 })();
 // New-project dialog

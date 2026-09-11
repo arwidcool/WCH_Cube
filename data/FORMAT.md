@@ -679,7 +679,8 @@ every signal in `hse_signals`, i.e. the crystal rather than the bypass), and the
 through the ordinary conflict engine. Selecting *away* from HSE does **not** switch it back
 off: the user wired a crystal to the board, and only the user un-wires it.
 
-Do not hardcode `XI`/`XO` anywhere. `WCH-DUMMY32-C8` deliberately calls the same two pins
+Do not hardcode `XI`/`XO` anywhere. The synthetic fixture
+(`tests/fixtures/mcus/WCH-DUMMY32-C8.yaml`) deliberately calls the same two pins
 `OSC_IN`/`OSC_OUT`, so an engine that assumed the CH32V006 spelling passes on the real part
 and silently fails on the fixture. `validate_mcu.py` checks that all three keys still
 resolve and that some choice of that setting really claims those signals.
@@ -807,7 +808,7 @@ neither is present. A part that is not real silicon says so instead:
 
 ```yaml
 codegen:
-  sdk: { synthetic: true }     # WCH-DUMMY32-C8: a layout fixture, not a chip
+  sdk: { synthetic: true }     # the layout fixture: not a chip
 ```
 
 That is how a synthetic part is skipped — by its own declaration, not by a name

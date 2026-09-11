@@ -51,11 +51,11 @@ boot();
 /**
  * The parts this applies to.
  *
- * `WCH-DUMMY32-C8` is a synthetic layout fixture, not silicon, and is exempt by
- * name — it exists to stress the renderer from QFN12 to LQFP144. It is exempt
- * from THIS file only; `TASKS.md` C7 is about giving it `dma`/`nvic`/`params`
- * so the new tabs are exercised on more than one part, and when that lands the
- * line below is what should be deleted.
+ * Only real silicon counts here, and this file boots from `data/mcus/` alone — so the
+ * synthetic layout fixture is not even registered. `FIXTURE_PARTS` stays as the explicit
+ * statement of the rule rather than an accident of which directory is scanned: the
+ * fixture (now `tests/fixtures/mcus/WCH-DUMMY32-C8.yaml`) is a renderer stress test from
+ * QFN12 to LQFP144, its peripherals are invented, and no RM chapter owns them.
  */
 const FIXTURE_PARTS = new Set(['WCH-DUMMY32-C8']);
 const REAL_PARTS = Object.keys(eng.MCU_FILES).filter(n => !FIXTURE_PARTS.has(n)).sort();

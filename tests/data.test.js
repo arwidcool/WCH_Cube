@@ -54,6 +54,22 @@ test('package geometries are well formed and unique', () => {
   assert.empty(problems, 'package geometry problems');
 });
 
+test('the shipped parts are real silicon, never a fixture', () => {
+  // `data/mcus/` is what the app offers the user. A synthetic part there shows up in the
+  // part selector and in the built bundle, and a user can pick it and generate a project
+  // for a chip that does not exist. The layout fixture lives in `tests/fixtures/mcus/`
+  // and is registered by the test harnesses that want it. A part declares itself either
+  // way — by `codegen.sdk.synthetic` or by `mcu.fixture` — so this reads the file's own
+  // statement rather than matching a name.
+  const offenders = [];
+  for (const f of mcuFiles) {
+    const m = (loadYaml(f) || {}).mcu || {};
+    const synthetic = !!((m.codegen || {}).sdk || {}).synthetic;
+    if (synthetic || m.fixture === true) offenders.push(path.basename(f));
+  }
+  assert.empty(offenders, 'synthetic fixtures in data/mcus/ — they belong in tests/fixtures/mcus/');
+});
+
 test('every package an MCU uses has a geometry to draw it with', () => {
   const geo = new Set(loadYaml(path.join(ROOT, 'data', 'packages', 'packages.yaml')).packages.map(p => p.id));
   const problems = [];
