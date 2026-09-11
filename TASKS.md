@@ -146,24 +146,28 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 ### P0 — the two codegen defects, and the rule behind them
 
-- [ ] (AGENT-1) `codegen.header: ch32v00x.h` on CH32V006 is the **CH32V003** header; this part is
-      `ch32v00X.h`. Builds on Windows only because NTFS ignores case.
-- [ ] (AGENT-1) `codegen.speeds` names GPIO_Speed_2MHz/10MHz/50MHz, none of which exist here —
+- [x] (AGENT-1) `codegen.header: ch32v00x.h` on CH32V006 is the **CH32V003** header; this part is
+      `ch32v00X.h`. Builds on Windows only because NTFS ignores case. — fixed, cited to EVT
+      `ch32v00X.h`:2/:12; compiled with 12 pins assigned
+- [x] (AGENT-1) `codegen.speeds` names GPIO_Speed_2MHz/10MHz/50MHz, none of which exist here —
       `GPIOSpeed_TypeDef` has one member, `GPIO_Speed_30MHz` (RM 7.3.1.1: MODEy is a single bit).
       Add a capability key the UI can read; **a one-entry list means the control is not shown.**
+      — `gpio.speeds: [{name, macro}]`, documented in FORMAT.md, handed off to AGENT-2/AGENT-3
 - [ ] (AGENT-2) Emit the part's one speed macro; never a Low/Medium/High mapping
 - [ ] (AGENT-3) Remove the GPIO speed select where the data says there is one speed — show the
       fixed value as text, driven by the data, never by a hardcoded part name
-- [ ] (AGENT-1) `tools/verify_sdk_names.py` — check every `codegen:` / `params:` / `dma:` /
+- [~] (AGENT-1) `tools/verify_sdk_names.py` — check every `codegen:` / `params:` / `dma:` /
       `nvic:` name a part claims against that part's SDK headers, suggest the closest match on a
       miss, say "no SDK for series X, not checked" rather than passing silently. Planted-break
-      tested like `validate_mcu.py` was.
+      tested like `validate_mcu.py` was.  **EVT has landed** — headers are at
+      `data/sources/<PART>/Evt/EXAM/SRC/Peripheral/inc/`, so EVT first, PlatformIO as fallback.
 - [ ] (AGENT-4) Wire `verify_sdk_names.py` into `node tests/run.js`
 - [ ] (AGENT-4) **The compile gate**: `tests/codegen_compile.test.js` — generate from fixtures
       that assign pins, params, DMA and NVIC, then `pio run` for CH32V006 TSSOP20 + QFN32 and
       CH32V005 TSSOP20. Skips with a printed reason when `pio` is absent; never silently.
-- [ ] (AGENT-1) Mark the port-clock spelling in `CH32V006.notes.md` confirmed — `RCC_PB2PeriphClockCmd`,
+- [x] (AGENT-1) Mark the port-clock spelling in `CH32V006.notes.md` confirmed — `RCC_PB2PeriphClockCmd`,
       `RCC_PB2Periph_GPIOx`, `RCC_PB2Periph_AFIO` and `AFIO->PCFR1` all verified in the SDK headers
+      — re-cited to EVT `ch32v00X_rcc.h`:157/:88/:89-92 and `ch32v00X.h`:197
 
 ### P1 — the code generation UI
 
@@ -215,7 +219,7 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       untracked `Cargo.lock` deliberately
 - [ ] (AGENT-4) Finish the dead-control sweep; `#m-open` / `#m-openproj` need a human or a stub
 - [ ] (AGENT-4) Round-3 section in `agents/DONE.md`; re-audit the round-1 and round-2 lines
-- [ ] (AGENT-1) Stale source paths in `data/FORMAT.md`, `CH32V006.notes.md` and
+- [~] (AGENT-1) Stale source paths in `data/FORMAT.md`, `CH32V006.notes.md` and
       `tools/extract_remaps.py` — they still name the pre-reorganisation `data/sources/*.md`
 - [ ] (AGENT-4) The human's `Taskfile.yml` is a stub. Make it the real task runner (build, test,
       firmware, validate) or leave it alone and say so — do not half-adopt it.

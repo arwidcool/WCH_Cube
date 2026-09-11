@@ -61,6 +61,53 @@ mcu:
 `validate_mcu.py` counts the package table and fails if they disagree. That is what
 catches a dropped or duplicated row in `packages:`, so fill it in.
 
+### `mcu.inherits` and `mcu.remove` — a part defined as a delta
+
+A part that is another part minus some things says so, instead of copying 700 lines that
+then rot apart. `data/mcus/CH32V005.yaml` is CH32V006 without TouchKey, TIM3 and QFN32,
+and is about 130 lines rather than 1600.
+
+```yaml
+mcu:
+  inherits: CH32V006            # the PARENT's mcu.name. Chains allowed, loops rejected.
+  remove:
+    - peripherals.TKEY          # dotted paths into the PARENT
+    - packages.QFN32
+```
+
+How the merge behaves, and every line of this has cost someone a bug:
+
+| Kind | Rule | Why |
+|---|---|---|
+| maps | merge key by key, **the child wins** | so a child can change one setting without restating the peripheral |
+| lists | **replace wholesale — never concatenated** | a `remaps[]` index *is* the AFIO_PCFR1 field value, so appending would silently mis-map every pin after the join |
+| scalars | replace | |
+| `mcu.variants` | replaces rather than merges | a derived part never shares part numbers with its parent |
+
+**`remove` is applied to the parent, BEFORE the child is merged onto it.** A path that
+matches nothing in the parent is a hard error, so a rename upstream fails the load instead
+of leaving a removal that quietly does nothing.
+
+That ordering was the other way round until round 3 and it cost this repo a shipped
+defect: a child that removed a path **and** redefined it lost its own version too.
+CH32V005 removed `dma.request_defaults.TIM3_CH3` and redefined `dma.requests`, and shipped
+for a whole round with **no DMA request map at all**, which silently killed channel-clash
+detection on that part. Now `remove` means what it says — *drop what I inherit* — and
+remove-then-redefine keeps the child's version.
+
+Two habits that follow from this:
+
+- **Prefer redefining to removing** where a map merge already does the job. Listing the
+  seven DMA channels you do have replaces the parent's seven outright; adding a removal as
+  well says the same thing twice and leaves the next reader guessing which is load-bearing.
+- **A new entry in the parent is a new entry in every child.** Adding something to
+  `codegen:` here is worth a thought about whether the derived part has that peripheral at
+  all — `validate_mcu.py`'s codegen name check is what caught `codegen.analog_signals.TKEY`
+  being inherited onto a part with no TouchKey.
+
+Resolution runs before validation, so a child may omit `packages`, `pins` and
+`peripherals` entirely; nothing downstream ever sees `inherits`.
+
 ## `packages`
 
 ```yaml

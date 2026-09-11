@@ -40,8 +40,11 @@ mcu:
   sram_kb: 6
   default_package: TSSOP20
 
-  # Dotted paths into the MERGED document. Each must match something or the load fails,
-  # so a parent rename cannot leave a stale removal silently doing nothing.
+  # Dotted paths into the PARENT document, applied BEFORE the child is merged onto it
+  # (AGENT-2, round-3 C4). Each must match something in the parent or the load fails, so
+  # a parent rename cannot leave a stale removal silently doing nothing. Because removal
+  # now precedes the merge, a path that is removed AND redefined below keeps the child's
+  # version — which is the way anyone reads it, and was not true before round 3.
   remove:
     - packages.QFN32                        # no QFN32 orderable part exists for V005
     - peripherals.TKEY                      # DS: "CH32V005 no TouchKey,TIM3"
@@ -52,9 +55,8 @@ mcu:
     # that has neither. Found by validate_mcu.py's codegen name check, round 2.
     - codegen.analog_signals.TKEY
     - codegen.periph_clock.PB1.bits.TIM3
-    # Starting values for two requests this part does not have. Safe to remove here: the
-    # child does not redefine `dma.request_defaults`, it only inherits it (see the note
-    # on `dma:` below about paths that are removed AND redefined).
+    # Starting values for two requests this part does not have. The child does not
+    # redefine `dma.request_defaults`, it only inherits it, so this is a plain removal.
     - dma.request_defaults.TIM3_CH3
     - dma.request_defaults.TIM3_CH4
 
@@ -99,12 +101,19 @@ peripherals:
 # -----------------------------------------------------------------------------
 # DMA1 — the parent's map with every TIM3 request dropped (RM Table 8-2 note 2 applies
 # to CH32V006/V007; CH32V005 has no TIM3 at all). Channel numbering is unchanged.
-# `dma.requests` is NOT in `mcu.remove` above, and must not be: `mcu.remove` is applied
-# AFTER the parent is merged, so removing a path the child also redefines deletes the
-# child's own version too. It did exactly that until round 2 - CH32V005 shipped with no
-# DMA request map at all, and the engine's channel-clash warnings were dead on this part.
-# Nothing needs removing here anyway: maps merge key by key and the child wins, so
-# listing all seven channels below replaces the parent's seven outright.
+#
+# `dma.requests` is deliberately NOT in `mcu.remove` above, and the reason has changed.
+# It used to be a hazard: `mcu.remove` ran AFTER the parent merge, so removing a path the
+# child also redefined deleted the child's own version, and this part shipped for a while
+# with no DMA request map at all and dead channel-clash warnings. AGENT-2 closed that in
+# round 3 (C4, BOARD 14:21Z) — `mcu.remove` now runs BEFORE the merge, so remove-and-
+# redefine keeps the CHILD's version and either spelling would work.
+#
+# It stays out because it is still the clearer of the two. Maps merge key by key and the
+# child wins, so the seven channels listed below already replace the parent's seven
+# outright; adding a removal would say the same thing twice and give the next reader a
+# reason to wonder which one is load-bearing. Note the second half of C4: a `remove:`
+# path the PARENT does not define is now a hard error, which is what catches a rename.
 dma:
   requests:
     1: [ADC1, TIM2_CH3]
