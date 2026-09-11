@@ -34,6 +34,7 @@ import { M, S, pinType, requiredSignals, gpioSpeeds, gpioSpeedFor, isEnabled } f
 import { paramDefs, paramValue, paramApplies } from './params.js';
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
 import { E, compute } from './engine.js';
+import { generatorOption, userSection } from './export.js';
 import { clockCalc, firstPre } from './clock.js';
 import { PROJECT } from './project.js';
 
@@ -228,6 +229,11 @@ export function rccWord() {
 // ---- the files ---------------------------------------------------------------
 const banner = title => `/* ${'='.repeat(74)}\n * ${title}\n * ${'='.repeat(74)} */`;
 
+// An empty USER CODE block, or nothing at all when the option is off. Off means the
+// markers are ABSENT rather than present-and-ignored: a marker that regeneration does
+// not honour is a promise the file does not keep.
+const user = (tag, indent = '') => (generatorOption('user_code') ? userSection(tag, indent) : []);
+
 function headerComment() {
   const r = M.clock ? clockCalc() : null;
   const lines = [
@@ -263,6 +269,8 @@ export function cHeader() {
     'void WCHCube_NVIC_Init(void);   /* the enabled vectors, with PFIC priorities */',
     'void WCHCube_Init(void);        /* all of them, in the right order */',
     '',
+    ...user('Prototypes'),
+    ...(generatorOption('user_code') ? [''] : []),
     `#endif /* ${guard} */`,
     '',
   ].join('\n');
@@ -287,6 +295,9 @@ function gpioSection() {
   if (!plan.length) {
     if (left.length) L.push(...skipNote(left).slice(0, 2));
     else L.push('    /* No pins configured. */');
+    // The same USER CODE tag as the configured path: the set of tags must not depend
+    // on the configuration, or turning a peripheral off would orphan somebody's code.
+    L.push(...user('GPIO', '    '));
     L.push('}');
     return L.join('\n');
   }
@@ -360,6 +371,7 @@ function gpioSection() {
       L.push('       Add codegen.remap.fields to the MCU YAML and generate again. */');
     }
   }
+  L.push(...user('GPIO', '    '));
   L.push('}');
   return L.join('\n');
 }
@@ -397,6 +409,7 @@ function rccSection() {
     L.push('    /* TODO: the MCU file has no codegen.rcc block, so the register word cannot');
     L.push('       be computed. The settings above are what the configuration asks for. */');
   }
+  L.push(...user('RCC', '    '));
   L.push('}');
   return L.join('\n');
 }
@@ -413,6 +426,9 @@ export function isFixture() {
 export function cSource() {
   const e = E || compute();
   const L = [headerComment(), '', '#include "wchcube_init.h"', ''];
+  const inc = user('Includes'), pv = user('PV');
+  if (inc.length) L.push(...inc, '');
+  if (pv.length) L.push(...pv, '');
   if (!M.codegen && !isFixture()) {
     L.push(`#error "WCHCube: ${M.mcu.name} has no codegen: block, so the AFIO and RCC register `
       + `words cannot be generated. Add one to its MCU file (see data/FORMAT.md); the sections `
@@ -441,6 +457,7 @@ export function cSource() {
   L.push('    WCHCube_Periph_Init();');
   L.push('    WCHCube_DMA_Init();');
   L.push('    WCHCube_NVIC_Init();');
+  L.push(...user('Init', '    '));
   L.push('}');
   L.push('');
   return L.join('\n');
@@ -680,11 +697,13 @@ function periphSection() {
   const pids = initPeripherals();
   if (!pids.length) {
     L.push('    /* No peripheral is switched on. */');
+    L.push(...user('Periph', '    '));
     L.push('}');
     return L.join('\n');
   }
   for (const pid of pids) L.push(...periphBlock(pid));
   if (L[L.length - 1] === '') L.pop();
+  L.push(...user('Periph', '    '));
   L.push('}');
   return L.join('\n');
 }
@@ -713,6 +732,7 @@ function dmaSection() {
   L.push('{');
   if (!rows.length) {
     L.push('    /* No DMA request is configured. */');
+    L.push(...user('DMA', '    '));
     L.push('}');
     return L.join('\n');
   }
@@ -764,6 +784,7 @@ function dmaSection() {
     L.push('');
   }
   if (L[L.length - 1] === '') L.pop();
+  L.push(...user('DMA', '    '));
   L.push('}');
   return L.join('\n');
 }
@@ -786,6 +807,7 @@ function nvicSection() {
   const on = st ? st.vectors.filter(v => v.enabled && !v.fixed) : [];
   if (!st || !on.length) {
     L.push('    /* No interrupt vector is enabled. */');
+    L.push(...user('NVIC', '    '));
     L.push('}');
     return L.join('\n');
   }
@@ -807,6 +829,7 @@ function nvicSection() {
       L.push(`    /*   ${v.irqn || v.name}  preempt ${v.preempt}, sub ${v.sub}`
         + `${v.handler ? `  — ISR: ${v.handler}()` : ''} */`);
     }
+    L.push(...user('NVIC', '    '));
     L.push('}');
     return L.join('\n');
   }
@@ -828,6 +851,7 @@ function nvicSection() {
     L.push('');
   }
   if (L[L.length - 1] === '') L.pop();
+  L.push(...user('NVIC', '    '));
   L.push('}');
   return L.join('\n');
 }

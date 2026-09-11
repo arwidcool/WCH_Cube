@@ -91,6 +91,11 @@ export function initState(m) {
     // Both are shared resources rather than pins, so they live beside `periph` rather
     // than inside it: one DMA channel serves several peripherals, and one vector can be
     // the only interrupt a peripheral has. Shapes and rules: app/engine/resources.js.
+    // Generator options, as the round-3 brief puts them: in S, so they round-trip
+    // through .wchproj and undo like everything else. The list of options that EXIST
+    // is generatorOptions() in export.js - an option the engine cannot honour is not
+    // offered, so this map only ever holds keys that one of them names.
+    project: { options: {} },
     dma: { requests: [] },     // [{ id, request, channel, params: {key: value} }]
     nvic: { group: defaultNvicGroup(m.nvic), vectors: {} },  // name -> { enabled, preempt, sub }
     zoom: 1, panX: 0, panY: 0,

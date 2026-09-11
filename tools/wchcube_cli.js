@@ -134,6 +134,30 @@ function resolveMcu(arg, known) {
 }
 
 // ---------------------------------------------------------------- output
+/**
+ * Write one file, carrying the user's code across if the option is on and there is a
+ * previous version to carry it from. This is the only place a previous version EXISTS:
+ * the browser downloads into a folder it cannot read, so there is nothing to merge
+ * there, and the engine's mergeUserCode() is pure so it can be tested without a disk.
+ */
+function writeFile(dest, text, o) {
+  let out = text;
+  if (eng.generatorOption('user_code') && /[.][ch]$/.test(dest) && fs.existsSync(dest)) {
+    const merged = eng.mergeUserCode(fs.readFileSync(dest, 'utf8'), text);
+    out = merged.text;
+    if (!o.quiet) {
+      for (const i of merged.issues) process.stderr.write(`wchcube: ${dest}: ${i}\n`);
+      if (merged.kept.length) process.stderr.write(`  kept your code in: ${merged.kept.join(', ')}\n`);
+      if (merged.orphaned.length) {
+        process.stderr.write(`  ${merged.orphaned.join(', ')} no longer exist(s) in the template —`
+          + ` your code is kept at the end of the file under USER CODE ORPHANED\n`);
+      }
+    }
+  }
+  fs.writeFileSync(dest, out, 'utf8');
+  if (!o.quiet) process.stderr.write(`wrote ${dest}\n`);
+}
+
 function outputs(formats) {
   const base = `${eng.M.mcu.name}_${eng.S.pkg}`;
   const files = {};
@@ -205,15 +229,11 @@ function main() {
       const sub = PIO_SUBDIR[path.extname(name)];
       const dir = path.join(o.pio, ...PIO_COMPONENT, ...(sub ? [sub] : []));
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, name), text, 'utf8');
-      if (!o.quiet) process.stderr.write(`wrote ${path.join(dir, name)}\n`);
+      writeFile(path.join(dir, name), text, o);
     }
   } else if (o.out) {
     fs.mkdirSync(o.out, { recursive: true });
-    for (const [name, text] of Object.entries(files)) {
-      fs.writeFileSync(path.join(o.out, name), text, 'utf8');
-      if (!o.quiet) process.stderr.write(`wrote ${path.join(o.out, name)}\n`);
-    }
+    for (const [name, text] of Object.entries(files)) writeFile(path.join(o.out, name), text, o);
   } else {
     const many = Object.keys(files).length > 1;
     for (const [name, text] of Object.entries(files)) {

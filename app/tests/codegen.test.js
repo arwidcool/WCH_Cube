@@ -307,7 +307,7 @@ test('the generated C is structurally sound: balanced braces, every statement cl
 
 test('generateAll ships the reports and the C files together', () => {
   const e = withCodegen();
-  const files = Object.keys(e.generateAll());
+  const files = e.generateAll().map(f => f.name);
   assert.ok(files.includes('wchcube_init.c'));
   assert.ok(files.includes('wchcube_init.h'));
   assert.ok(files.some(f => f.endsWith('_pinout.md')));

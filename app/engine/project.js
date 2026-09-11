@@ -11,6 +11,7 @@ import {
   addDmaRequest, setDmaParam, setDmaRequest, dmaLegalChannels,
   setNvicVector, setNvicGroup, nvicGroups,
 } from './resources.js';
+import { generatorOptions, setGeneratorOption } from './export.js';
 import { applyParams, paramsObject } from './params.js';
 import { clearHistory } from './history.js';
 
@@ -75,7 +76,19 @@ export function projectObject() {
     clock: S.clock,
     ...dmaObject(),
     ...nvicObject(),
+    ...generatorObject(),
   };
+}
+
+// Only options the user actually changed, so a project written by a build with fewer
+// options still opens and a diff shows only real decisions.
+function generatorObject() {
+  const opts = ((S.project || {}).options) || {};
+  const out = {};
+  for (const d of generatorOptions()) {
+    if (opts[d.key] !== undefined && opts[d.key] !== d.default) out[d.key] = opts[d.key];
+  }
+  return Object.keys(out).length ? { generator: out } : {};
 }
 
 // Both blocks are omitted when the user has not touched them, so a project saved
@@ -151,6 +164,21 @@ function applyDma(list) {
   return out;
 }
 
+/**
+ * Generator options. An option this build does not have is dropped and reported -
+ * a project saved by a build that could split files per peripheral must still open
+ * on one that cannot, rather than quietly pretending the option is in force.
+ */
+function applyGenerator(obj) {
+  const out = [];
+  if (!obj || typeof obj !== 'object') return out;
+  for (const [k, v] of Object.entries(obj)) {
+    try { setGeneratorOption(k, v); }
+    catch (e) { out.push(`generator: ${e.message}`); }
+  }
+  return out;
+}
+
 /** The same, for interrupt vectors and the priority grouping. */
 function applyNvic(obj) {
   const out = [];
@@ -205,6 +233,7 @@ export function projectApply(src) {
   dropped.push(...normaliseGpioSpeeds());
   dropped.push(...applyDma(obj.dma));
   dropped.push(...applyNvic(obj.nvic));
+  dropped.push(...applyGenerator(obj.generator));
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
