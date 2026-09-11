@@ -323,6 +323,39 @@ rather than a finding. And note ADC `sample`: it is `sdk_call: ADC_RegularChanne
 because sample time is an argument set **per channel**, not a property of the peripheral —
 a mapping that is invisible from the display name and wrong if assumed.
 
+### `channel_params` — an init struct that is filled once per channel
+
+Most init structs are filled once per peripheral. `TIM_OCInitTypeDef` is not: a timer has
+one time base and up to four independent compare units, so the struct is filled and
+applied once for **each configured channel**.
+
+```yaml
+TIM1:
+  channel_params:
+    struct: TIM_OCInitTypeDef
+    applies_per: channel
+    sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+    params:
+      - key: ocmode
+        sdk_field: TIM_OCMode
+        options: [{ name: PWM mode 1, value: 6, sdk: TIM_OCMode_PWM1 }]
+```
+
+The entries under `params:` use **exactly the same schema** as `dma.channel_params`, so
+one set of per-channel editors renders both and one checker checks both.
+
+**`sdk_calls` is a table, not a pattern.** Four different functions apply this struct —
+`TIM_OC1Init` … `TIM_OC4Init` — so `codegen.init_structs`, which maps a struct to a single
+`fn`, cannot express it. Write the four out rather than leaving the generator to paste
+`TIM_OC${n}Init` together from a number: deriving a function name from a number is the
+same class of guess as deriving one from a struct name, which the generator already
+refuses to do.
+
+**A member the peripheral does not have is absent, not disabled.** The header marks
+`TIM_OCIdleState` and `TIM_OCNIdleState` valid *only* for TIM1, so TIM2's list has six
+entries and TIM1's has eight. That is the same rule as `gpio.speeds`: what the part does
+not have is not offered.
+
 ### Give every enum its register encoding
 
 Write `options` as `{ name, value }` whenever the reference manual states the field

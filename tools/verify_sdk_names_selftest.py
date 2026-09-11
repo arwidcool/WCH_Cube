@@ -130,6 +130,14 @@ def build_cases(doc: dict):
          lambda d: set_path(d, "dma.channel_params.0.options.0.sdk", "DMA_DIR_PeripheralSrc"),
          "dma.channel_params[0]", "DMA_DIR_PeripheralSrc"),
 
+        ("channel_params sdk_calls, a per-channel Init that does not exist",
+         lambda d: set_path(d, "peripherals.TIM1.channel_params.sdk_calls.3", "TIM_OC3Config"),
+         "peripherals.TIM1.channel_params.sdk_calls.3", "TIM_OC3Config"),
+
+        ("channel_params sdk_field, not a member of TIM_OCInitTypeDef",
+         lambda d: set_path(d, "peripherals.TIM1.channel_params.params.0.sdk_field", "TIM_OCMode_"),
+         "peripherals.TIM1.channel_params.params[0]", "TIM_OCMode_"),
+
         ("dma.remaps macro, a plausible EXTEN bit name that does not exist",
          lambda d: set_path(d, "dma.remaps.0.macro", "EXTEN_TIM2_DMA_REMAP_EN"),
          "dma.remaps[0].macro", "EXTEN_TIM2_DMA_REMAP_EN"),

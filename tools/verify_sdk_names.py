@@ -480,6 +480,20 @@ def check_params(doc: dict, idx: Index, r: Report) -> None:
             if isinstance(p, dict):
                 one(f"peripherals.{pid}.params[{i}] ({p.get('key', i)})", p)
 
+        # Per-channel init structs (TIM_OCInitTypeDef): one struct, and a DIFFERENT
+        # apply function per channel, so the call table is checked entry by entry.
+        cp = (P or {}).get("channel_params")
+        if isinstance(cp, dict):
+            where0 = f"peripherals.{pid}.channel_params"
+            want(r, idx, f"{where0}.struct", cp.get("struct"), idx.types,
+                 "a type the SDK defines")
+            for ch, fn in (cp.get("sdk_calls") or {}).items():
+                want(r, idx, f"{where0}.sdk_calls.{ch}", fn, idx.functions,
+                     "a declared function")
+            for i, p in enumerate(cp.get("params") or []):
+                if isinstance(p, dict):
+                    one(f"{where0}.params[{i}] ({p.get('key', i)})", p, cp.get("struct"))
+
 
 def check_nvic(doc: dict, idx: Index, r: Report) -> None:
     """`irqn` is either an IRQn_Type member or a startup handler symbol.
