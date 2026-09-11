@@ -27,6 +27,9 @@ What it checks
                      hse_signals) still names a real setting whose choice claims
                      those signals - the round-2 "picking HSE enables the crystal"
                      path has nothing else holding it together
+  dma                every request names a peripheral that exists, every request has
+                     starting values, and every value names a real channel parameter
+                     and one of its options
   codegen            every NAME in `codegen:` still points at something in this file:
                      remap fields wide enough for their remap list, analog signals
                      the peripheral really routes, and value maps keyed by choice
@@ -506,6 +509,115 @@ def check_hse_coupling(doc: dict, clock: dict, sources: dict, r: Report) -> None
         r.error("clock.hse_signals", f"`{sig}` is not routed to a pin by any `{pid}` remap")
 
 
+def check_param_list(defs, where, r: Report) -> dict:
+    """Shared by `peripherals.*.params` and `dma.channel_params` - they are the same
+    schema on purpose, so the UI renders both with one set of editors. Returns the
+    parameters by key so the caller can check values against them."""
+    by_key = {}
+    for i, d in enumerate(defs or []):
+        at = f"{where}[{i}]"
+        if not isinstance(d, dict):
+            r.error(at, "must be a mapping")
+            continue
+        key = d.get("key")
+        if not key:
+            r.error(at, "no `key`, so the app drops it silently")
+            continue
+        if key in by_key:
+            r.error(at, f"duplicate key `{key}`")
+        by_key[key] = d
+        at = f"{where}.{key}"
+        opts = d.get("options")
+        names = [o.get("name") if isinstance(o, dict) else o for o in opts or []]
+        default = d.get("default")
+        if default is None:
+            r.error(at, "no `default`")
+        elif opts and default not in names:
+            r.error(at, f"default `{default}` is not one of its options ({', '.join(map(str, names))})")
+        lo, hi = d.get("min"), d.get("max")
+        if isinstance(default, (int, float)) and not isinstance(default, bool):
+            if lo is not None and default < lo:
+                r.error(at, f"default {default} is below min {lo}")
+            if hi is not None and default > hi:
+                r.error(at, f"default {default} is above max {hi}")
+        if lo is not None and hi is not None and lo > hi:
+            r.error(at, f"min {lo} is above max {hi}")
+    return by_key
+
+
+def check_dma(doc: dict, r: Report) -> None:
+    """`dma:` has to carry enough to build a DMA Settings tab: which channels serve which
+    request, what a fresh request starts as, and what the user may change. A request with
+    no starting values is the failure that matters - the tab would add a row of blanks."""
+    dma = doc.get("dma")
+    if dma is None:
+        return
+    if not isinstance(dma, dict):
+        r.error("dma", "must be a mapping")
+        return
+    periphs = doc.get("peripherals") or {}
+    channels = dma.get("channels")
+    requests = dma.get("requests") or {}
+
+    signals = set()
+    for ch, sigs in requests.items():
+        where = f"dma.requests.{ch}"
+        try:
+            n = int(ch)
+        except (TypeError, ValueError):
+            r.error(where, "channel must be a number")
+            continue
+        if channels and not (1 <= n <= int(channels)):
+            r.error(where, f"channel {n} is outside 1..{channels}")
+        for sig in sigs or []:
+            signals.add(sig)
+            # `TIM1_UP` is peripheral TIM1 plus an event name; `ADC1` is the whole
+            # peripheral. Only the peripheral half can be checked - UP/TRIG/COM are
+            # events with no pin, so they are not in any remap table.
+            owner = str(sig).split("_")[0]
+            if owner not in periphs:
+                r.error(where, f"`{sig}` belongs to `{owner}`, which is not a peripheral "
+                               "in this file")
+
+    params = check_param_list(dma.get("channel_params"), "dma.channel_params", r)
+    if requests and not params:
+        r.warn("dma.channel_params",
+               "no per-request parameters, so the DMA Settings tab can only pick a "
+               "channel - no direction, priority, width or mode")
+
+    defaults = dma.get("request_defaults") or {}
+    for sig in sorted(signals - set(defaults)):
+        r.warn("dma.request_defaults",
+               f"`{sig}` has no starting values, so adding it gives the user a row of "
+               "generic defaults to fix by hand")
+    for sig in sorted(set(defaults) - signals):
+        r.error("dma.request_defaults", f"`{sig}` is not served by any channel")
+    for sig, vals in defaults.items():
+        where = f"dma.request_defaults.{sig}"
+        if not isinstance(vals, dict):
+            r.error(where, "must be a mapping of parameter key to value")
+            continue
+        for key, val in vals.items():
+            if key not in params:
+                r.error(where, f"`{key}` is not a dma.channel_params key")
+                continue
+            opts = params[key].get("options")
+            names = [o.get("name") if isinstance(o, dict) else o for o in opts or []]
+            if opts and val not in names:
+                r.error(where, f"{key}: `{val}` is not one of {', '.join(map(str, names))}")
+
+    fields = (dma.get("register") or {}).get("fields") or {}
+    seen = {}
+    for name, f in fields.items():
+        if not isinstance(f, dict):
+            continue
+        for bit in range(int(f.get("lsb", 0)), int(f.get("lsb", 0)) + int(f.get("bits", 1))):
+            if bit > 31:
+                r.error(f"dma.register.fields.{name}", f"bit {bit} is outside a 32-bit register")
+            if bit in seen:
+                r.error(f"dma.register.fields.{name}", f"bit {bit} is also used by `{seen[bit]}`")
+            seen[bit] = name
+
 def check_codegen(doc: dict, r: Report) -> None:
     """`codegen:` holds the register encodings the C generator cannot derive. The bit
     numbers are the reference manual's word and only a human re-reading it can check
@@ -761,6 +873,7 @@ def validate_file(path: pathlib.Path, geom: dict) -> Report:
     check_peripherals(doc, r)
     check_io_counts(doc, tables, r)
     check_clock(doc, r)
+    check_dma(doc, r)
     check_codegen(doc, r)
     check_exti(doc, r)
     check_flow_mappings(path.read_text(encoding="utf-8"), r)

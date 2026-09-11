@@ -47,12 +47,16 @@ mcu:
     - peripherals.TKEY                      # DS: "CH32V005 no TouchKey,TIM3"
     - peripherals.TIM3                      # same note
     - peripherals.SYS.remap_by_package.QFN32   # the package it pointed at is gone
-    - dma.requests                          # replaced below, minus the TIM3 requests
     # The parent's codegen block mentions both dropped peripherals. Left inherited, the
     # generator would mark TouchKey pins analog and emit a TIM3 clock enable on a part
     # that has neither. Found by validate_mcu.py's codegen name check, round 2.
     - codegen.analog_signals.TKEY
     - codegen.periph_clock.PB1.bits.TIM3
+    # Starting values for two requests this part does not have. Safe to remove here: the
+    # child does not redefine `dma.request_defaults`, it only inherits it (see the note
+    # on `dma:` below about paths that are removed AND redefined).
+    - dma.request_defaults.TIM3_CH3
+    - dma.request_defaults.TIM3_CH4
 
   # DS §1 model table, lines 106-109. Replaces the parent's list outright.
   variants:
@@ -95,6 +99,12 @@ peripherals:
 # -----------------------------------------------------------------------------
 # DMA1 — the parent's map with every TIM3 request dropped (RM Table 8-2 note 2 applies
 # to CH32V006/V007; CH32V005 has no TIM3 at all). Channel numbering is unchanged.
+# `dma.requests` is NOT in `mcu.remove` above, and must not be: `mcu.remove` is applied
+# AFTER the parent is merged, so removing a path the child also redefines deletes the
+# child's own version too. It did exactly that until round 2 - CH32V005 shipped with no
+# DMA request map at all, and the engine's channel-clash warnings were dead on this part.
+# Nothing needs removing here anyway: maps merge key by key and the child wins, so
+# listing all seven channels below replaces the parent's seven outright.
 dma:
   requests:
     1: [ADC1, TIM2_CH3]

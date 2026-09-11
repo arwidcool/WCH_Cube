@@ -945,6 +945,188 @@ dma:
     5: [USART1_RX, TIM2_CH1, TIM1_UP]
     6: [I2C1_TX, TIM1_CH3, USART2_TX]
     7: [I2C1_RX, TIM2_CH2, TIM2_CH4, USART2_RX]
+  # --- Configuration, RM 8.3.3 (DMA_CFGRx) -------------------------------------------
+  # A request is not just "which channel": it is a direction, a priority, two data widths
+  # and two increment flags, and all of them land in one register. The UI builds its DMA
+  # Settings tab from `channel_params`, which is deliberately the SAME schema as a
+  # peripheral's `params:` (key / name / type / default / options with `value`), so the
+  # Parameter Settings editors render it with no new UI code.
+  init_struct: DMA_InitTypeDef
+  register:
+    name: DMA_CFGRx
+    address: 0x40020008          # channel 1; RM 8.3.3 "offset 0x08 + (x-1)*20"
+    stride: 20
+    channel_macro: DMA1_Channel$CH
+    fields:
+      EN:      { lsb: 0,  bits: 1 }
+      TCIE:    { lsb: 1,  bits: 1 }
+      HTIE:    { lsb: 2,  bits: 1 }
+      TEIE:    { lsb: 3,  bits: 1 }
+      DIR:     { lsb: 4,  bits: 1 }
+      CIRC:    { lsb: 5,  bits: 1 }
+      PINC:    { lsb: 6,  bits: 1 }
+      MINC:    { lsb: 7,  bits: 1 }
+      PSIZE:   { lsb: 8,  bits: 2 }
+      MSIZE:   { lsb: 10, bits: 2 }
+      PL:      { lsb: 12, bits: 2 }
+      MEM2MEM: { lsb: 14, bits: 1 }
+
+  # Every field of DMA_InitTypeDef the user chooses. The addresses and the transfer count
+  # are not here on purpose: DMA_PeripheralBaseAddr, DMA_MemoryBaseAddr and
+  # DMA_BufferSize are the application's buffer, not a configuration choice, and CubeMX
+  # does not ask for them either. The generator emits them as named TODOs.
+  #
+  # `value` is the register encoding and comes from RM 8.3.3 - certain. `sdk` is the EVT
+  # SDK macro and follows the standard WCH/SPL spelling; no ch32v00x EVT copy exists in
+  # this repo to confirm it against (same open question as gpio_clock, HUMAN_TODO 5), so
+  # a generator that cannot find the macro should fall back to the register value, which
+  # is never in doubt.
+  channel_params:
+    - key: dir
+      name: Direction
+      type: enum
+      group: Basic
+      field: DIR
+      sdk_field: DMA_DIR
+      default: Peripheral to memory
+      options:
+        - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+        - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+      help: "DMA_CFGRx DIR, bit 4: 0 reads from the peripheral, 1 reads from memory. The SDK names it after what the PERIPHERAL is - PeripheralSRC is peripheral-to-memory."
+    - key: priority
+      name: Priority
+      type: enum
+      group: Basic
+      field: PL
+      sdk_field: DMA_Priority
+      default: Low
+      options:
+        - { name: Low,       value: 0, sdk: DMA_Priority_Low }
+        - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
+        - { name: High,      value: 2, sdk: DMA_Priority_High }
+        - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
+      help: "DMA_CFGRx PL[13:12]. Software priority; ties are broken by channel number, lowest wins (RM 8.2)."
+    - key: mode
+      name: Mode
+      type: enum
+      group: Basic
+      field: CIRC
+      sdk_field: DMA_Mode
+      default: Normal
+      options:
+        - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
+        - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
+      help: "DMA_CFGRx CIRC, bit 5. Circular reloads the transfer count and runs forever - what a continuously sampling ADC or a repeating PWM pattern wants. RM 8.2.4: circular mode is NOT available in memory-to-memory mode."
+    - key: pinc
+      name: Increment peripheral address
+      type: bool
+      group: Basic
+      field: PINC
+      sdk_field: DMA_PeripheralInc
+      default: false
+      sdk_enabled: DMA_PeripheralInc_Enable
+      sdk_disabled: DMA_PeripheralInc_Disable
+      help: "DMA_CFGRx PINC, bit 6. Off for a normal peripheral: its data register is one fixed address."
+    - key: minc
+      name: Increment memory address
+      type: bool
+      group: Basic
+      field: MINC
+      sdk_field: DMA_MemoryInc
+      default: true
+      sdk_enabled: DMA_MemoryInc_Enable
+      sdk_disabled: DMA_MemoryInc_Disable
+      help: "DMA_CFGRx MINC, bit 7. On for a buffer - off would rewrite one variable over and over."
+    - key: psize
+      name: Peripheral data width
+      type: enum
+      group: Basic
+      field: PSIZE
+      sdk_field: DMA_PeripheralDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
+      help: "DMA_CFGRx PSIZE[9:8]: 00 8-bit, 01 16-bit, 10 32-bit. 11 is reserved, which is why there are three options and not four. Match the peripheral's own register width."
+    - key: msize
+      name: Memory data width
+      type: enum
+      group: Basic
+      field: MSIZE
+      sdk_field: DMA_MemoryDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
+      help: "DMA_CFGRx MSIZE[11:10], same encoding as PSIZE. Widths may differ from the peripheral's; the DMA packs or unpacks between them."
+    - key: m2m
+      name: Memory to memory
+      type: bool
+      group: Advanced
+      field: MEM2MEM
+      sdk_field: DMA_M2M
+      default: false
+      sdk_enabled: DMA_M2M_Enable
+      sdk_disabled: DMA_M2M_Disable
+      help: "DMA_CFGRx MEM2MEM, bit 14. A hardware peripheral request must leave this off: the channel would ignore the request line and run from a software trigger instead."
+
+  # Interrupt-enable bits in the same register. They are not user parameters - the app
+  # turns them on when the matching NVIC vector is enabled - but codegen needs the names.
+  interrupt_fields: { transfer_complete: TCIE, half_transfer: HTIE, transfer_error: TEIE }
+
+  # Per-request starting values, applied when the user adds a request. Only the fields
+  # that differ from the `default` above are listed; everything else takes the default.
+  # These are the values the hardware actually needs, not preferences - a USART data
+  # register is 8 bits wide, so a 16-bit transfer to it is a bug, not a choice.
+  request_defaults:
+    ADC1:       { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+    USART1_TX:  { dir: Memory to peripheral }
+    USART1_RX:  { dir: Peripheral to memory }
+    USART2_TX:  { dir: Memory to peripheral }
+    USART2_RX:  { dir: Peripheral to memory }
+    SPI1_TX:    { dir: Memory to peripheral }
+    SPI1_RX:    { dir: Peripheral to memory }
+    I2C1_TX:    { dir: Memory to peripheral }
+    I2C1_RX:    { dir: Peripheral to memory }
+    TIM1_UP:    { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_TRIG:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_COM:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH1:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH2:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH3:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_UP:    { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH1:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH2:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH3:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH3:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+  request_notes:
+    ADC1: >
+      ADC_RDATAR is 12-bit data in a 16-bit field, so both widths are half-word; a byte
+      transfer would silently truncate every sample. Circular is the default because a
+      one-shot ADC rarely needs DMA at all - the reason to wire it up is continuous
+      conversion into a buffer.
+    TIM: >
+      The timer registers this can target (CCRx, ARR, CNT) are 16-bit, hence half-word on
+      both sides. Direction is the interesting one: memory-to-peripheral is the common
+      case (feeding compare values for PWM), but the SAME request serves input capture,
+      which reads CCRx and therefore runs peripheral-to-memory. The default is the
+      common case and the user changes it; nothing in the data can decide it, because
+      TIMx_CHy names an event, not a direction.
+    USART: >
+      USART_DATAR is 8 significant bits in the default 8-bit word length, so byte/byte.
+      A 9-bit word length makes the register half-word; the app does not couple the two
+      automatically, because the buffer layout is the application's call.
+    SPI1: >
+      Byte/byte matches SPI1's default 8-bit data size. If the `datasize` parameter is
+      set to 16 bits, both widths should be half-word - this is the one place where a
+      peripheral parameter and a DMA parameter have to agree, and today nothing enforces
+      it. Worth a warning in the engine rather than a silent mismatch.
+
   notes: >
     RM Table 8-2 note (2): on CH32V006 the TIM3 CH3 event can trigger only DMA channel 1
     and the TIM3 CH4 event only channel 4. The wider TIM3 fan-out in the table
