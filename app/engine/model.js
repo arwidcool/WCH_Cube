@@ -104,7 +104,9 @@ export function initState(m) {
     // params are values (baud, period); settings decide pins. Separate maps on purpose.
     const params = {};
     for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
-    const ps = { settings: {}, remap: 0, params };
+    // channelParams: TIM_OCInitTypeDef is filled once per CHANNEL, so its values are
+    // keyed by the channel number the data uses. Empty until somebody sets one.
+    const ps = { settings: {}, remap: 0, params, channelParams: {} };
     for (const s of P.settings || []) {
       const def = s.choices.find(c => c.default);
       ps.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;

@@ -10,7 +10,7 @@
 //  Every value is validated on the way in, so nothing downstream (codegen, export,
 //  .wchproj) ever has to re-check a range.
 // =============================================================================
-import { M, S } from './model.js';
+import { M, S, neutralChoice } from './model.js';
 import { record } from './history.js';
 
 // export.js already owns the name `num` at top level, and the browser bundle is one scope.
@@ -252,4 +252,171 @@ export function applyParams(pid, obj) {
 export function paramsObject(pid) {
   const store = (S.periph[pid] && S.periph[pid].params) || {};
   return { ...store };
+}
+
+// ---- per-channel parameters ---------------------------------------------------
+//  Most init structs are filled once per peripheral. `TIM_OCInitTypeDef` is not: a
+//  timer has one time base and up to four independent compare units, so the struct
+//  is filled and applied once for EACH configured channel, by one of four different
+//  functions. `peripherals.<TIM>.channel_params` carries all of that:
+//
+//     struct:      TIM_OCInitTypeDef
+//     applies_per: channel
+//     sdk_calls:   { 1: TIM_OC1Init, 2: TIM_OC2Init, ... }   a table, not a pattern
+//     params:      the same entry schema as `dma.channel_params`
+//     channels:    which setting decides each channel, and which of its choices are
+//                  output-compare rather than input-capture
+//
+//  Storage is `S.periph[pid].channelParams[<channel>][<key>]`, keyed by the channel
+//  NUMBER the data uses, so nothing here has to parse a setting's display name.
+
+/** The `channel_params` block for a peripheral, or null. */
+export function channelParamBlock(pid) {
+  const P = (M && M.peripherals && M.peripherals[pid]) || null;
+  const cp = P && P.channel_params;
+  if (!cp || typeof cp !== 'object' || !Array.isArray(cp.params)) return null;
+  return cp;
+}
+
+/** Its parameter definitions, normalised exactly like `params:` and `dma.channel_params`. */
+export function channelParamDefs(pid) {
+  const cp = channelParamBlock(pid);
+  return cp ? normaliseParamDefs(cp.params) : [];
+}
+
+const chanDefOf = (pid, key) => channelParamDefs(pid).find(d => d.key === key);
+
+/** The channel numbers this peripheral's data describes, in order. */
+export function channelNumbers(pid) {
+  const cp = channelParamBlock(pid);
+  if (!cp) return [];
+  const from = cp.channels && typeof cp.channels === 'object' ? cp.channels : cp.sdk_calls;
+  if (!from || typeof from !== 'object') return [];
+  return Object.keys(from).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+}
+
+/**
+ * The channels whose init struct should actually be emitted, and why not when they
+ * should not. `channel_params.channels` states which SETTING decides each channel and
+ * which of that setting's choices are output-compare; without it this returns a reason
+ * rather than a guess, because the only other way to link a channel number to a setting
+ * is to read "Channel1" and take the 1 - deriving structure from a display string.
+ */
+export function activeChannels(pid) {
+  const cp = channelParamBlock(pid);
+  if (!cp) return { channels: [], missing: null };
+  const map = cp.channels;
+  if (!map || typeof map !== 'object') {
+    return {
+      channels: [],
+      missing: `${pid}.channel_params has no channels: map, so which channels are configured `
+        + 'cannot be worked out from the settings',
+    };
+  }
+  const st = (S.periph[pid] || {}).settings || {};
+  const out = [];
+  for (const n of channelNumbers(pid)) {
+    const spec = map[n] || map[String(n)];
+    if (!spec || !spec.setting) continue;
+    const value = st[spec.setting];
+    if (value === undefined) continue;
+    const wanted = spec.output_choices;
+    if (Array.isArray(wanted)) {
+      if (!wanted.map(String).includes(String(value))) continue;
+    } else if (String(value) === String(neutralChoiceName(pid, spec.setting))) {
+      continue;                                  // no list given: anything but the neutral choice
+    }
+    out.push(n);
+  }
+  return { channels: out, missing: null };
+}
+
+function neutralChoiceName(pid, settingName) {
+  const P = M.peripherals[pid] || {};
+  const s = (P.settings || []).find(x => x.name === settingName);
+  return s ? neutralChoice(s).name : null;
+}
+
+/** Defaults for one channel, for initState() and for a channel becoming active. */
+export function channelParamDefaults(pid) {
+  const out = {};
+  for (const d of channelParamDefs(pid)) out[d.key] = d.default;
+  return out;
+}
+
+/** Everything a per-channel editor needs for one channel. */
+export function getChannelParams(pid, channel) {
+  const store = ((S.periph[pid] || {}).channelParams || {})[channel] || {};
+  return channelParamDefs(pid).map(d => ({
+    ...d,
+    value: store[d.key] !== undefined ? store[d.key] : d.default,
+    applicable: paramApplies(pid, d),
+  }));
+}
+
+export function channelParamValue(pid, channel, key) {
+  const store = ((S.periph[pid] || {}).channelParams || {})[channel] || {};
+  if (store[key] !== undefined) return store[key];
+  const d = chanDefOf(pid, key);
+  return d ? d.default : undefined;
+}
+
+/** The register encoding behind the chosen option, for codegen. */
+export function channelParamRegisterValue(pid, channel, key) {
+  const d = chanDefOf(pid, key);
+  if (!d) return undefined;
+  const v = channelParamValue(pid, channel, key);
+  if (!d.options) return v;
+  const hit = d.options.find(o => String(o.name) === String(v));
+  return hit ? hit.value : undefined;
+}
+
+/** Set one per-channel parameter. Validated and undoable exactly like setParam. */
+export function setChannelParam(pid, channel, key, value) {
+  if (!M.peripherals[pid]) throw new Error(`No such peripheral: ${pid}`);
+  const nums = channelNumbers(pid);
+  if (!nums.length) throw new Error(`${pid} has no per-channel parameters`);
+  const ch = Number(channel);
+  if (!nums.includes(ch)) {
+    throw new Error(`${pid} has no channel ${channel} (it has ${nums.join(', ')})`);
+  }
+  const d = chanDefOf(pid, key);
+  if (!d) {
+    const known = channelParamDefs(pid).map(x => x.key).join(', ');
+    throw new Error(`${pid} channel ${ch} has no parameter "${key}"${known ? ` (has: ${known})` : ''}`);
+  }
+  if (d.readonly) throw new Error(`${pid}.${d.name} is fixed by the hardware and cannot be set`);
+  const v = validateParam(d, value, `${pid} CH${ch}.${d.name}`);
+  record(`${pid} CH${ch} ${d.name}`);
+  const st = (S.periph[pid].channelParams ||= {});
+  (st[ch] ||= {})[key] = v;
+  return v;
+}
+
+/** Serialisable copy for .wchproj - only channels somebody touched. */
+export function channelParamsObject(pid) {
+  const store = (S.periph[pid] || {}).channelParams || {};
+  const out = {};
+  for (const [ch, vals] of Object.entries(store)) {
+    if (vals && Object.keys(vals).length) out[ch] = { ...vals };
+  }
+  return out;
+}
+
+/**
+ * Apply a { channel: { key: value } } map from a .wchproj. A channel or a key the part
+ * no longer has is dropped and reported, never applied - the same contract as
+ * applyParams, for the same reason.
+ */
+export function applyChannelParams(pid, obj) {
+  const dropped = [];
+  if (!obj || typeof obj !== 'object' || !S.periph[pid]) return dropped;
+  for (const [ch, vals] of Object.entries(obj)) {
+    if (!vals || typeof vals !== 'object') continue;
+    for (const [key, value] of Object.entries(vals)) {
+      try { setChannelParam(pid, ch, key, value); }
+      catch (e) { dropped.push(e.message); }
+    }
+  }
+  return dropped;
 }

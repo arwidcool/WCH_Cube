@@ -152,3 +152,130 @@ test('claims name the pin they actually use, not just the canonical one', () => 
   const rst = e.E.pins.PD7.claims.find(c => c.who === 'SYS');
   assert.equal(rst.via, 'PD7');
 });
+
+// =============================================================================
+//  The exports added this round, each exercised on its own
+// =============================================================================
+//  The coverage check counts an export as tested when a test names it, and 100% of
+//  app/engine/* was the round-2 exit criterion. These are the round-3 additions:
+//  small functions the bigger tests use indirectly, pinned here so a rename or a
+//  behaviour change has somewhere to fail.
+
+test('the per-channel accessors answer for a peripheral that has the block, and one that does not', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const cp = eng.channelParamBlock('TIM1');
+  assert.ok(cp && cp.struct === 'TIM_OCInitTypeDef' && Array.isArray(cp.params));
+  assert.equal(eng.channelParamBlock('USART1'), null, 'USART1 has no per-channel struct');
+
+  const defaults = eng.channelParamDefaults('TIM1');
+  assert.ok(Object.keys(defaults).length);
+  for (const d of eng.channelParamDefs('TIM1')) {
+    assert.equal(defaults[d.key], d.default, `${d.key} default`);
+  }
+  assert.deepEqual(eng.channelParamDefaults('USART1'), {});
+
+  const rows = eng.getChannelParams('TIM1', 1);
+  assert.equal(rows.length, eng.channelParamDefs('TIM1').length);
+  assert.ok(rows.every(r => 'value' in r && 'applicable' in r), 'the shape an editor renders');
+  e.setChannelParam('TIM1', 1, 'pulse', 42);
+  assert.equal(eng.getChannelParams('TIM1', 1).find(r => r.key === 'pulse').value, 42);
+});
+
+test('channelParamsObject serialises only channels somebody touched', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.deepEqual(eng.channelParamsObject('TIM1'), {}, 'untouched writes nothing');
+  e.setChannelParam('TIM1', 2, 'pulse', 7);
+  assert.deepEqual(eng.channelParamsObject('TIM1'), { 2: { pulse: 7 } });
+
+  // and applyChannelParams is its inverse, dropping what no longer validates
+  const g = fresh('CH32V006', 'TSSOP20');
+  assert.deepEqual(eng.applyChannelParams('TIM1', { 1: { pulse: 11 } }), []);
+  assert.equal(g.channelParamValue('TIM1', 1, 'pulse'), 11);
+  const dropped = eng.applyChannelParams('TIM1', { 1: { pulse: 999999 }, 9: { pulse: 1 } });
+  assert.equal(dropped.length, 2, 'an out-of-range value and a channel that does not exist');
+  assert.equal(g.channelParamValue('TIM1', 1, 'pulse'), 11, 'neither was applied');
+});
+
+test('normaliseParamDefs is the one normaliser, so params: and channel_params: cannot drift', () => {
+  const out = eng.normaliseParamDefs([
+    { key: 'a', name: 'A', type: 'enum', default: 'x', options: [{ name: 'x', value: 1, sdk: 'MACRO_X' }] },
+    { name: 'No key', default: 3 },
+    null,
+  ]);
+  assert.equal(out.length, 2, 'a null entry is dropped, a keyless one takes its name as the key');
+  assert.equal(out[0].options[0].sdk, 'MACRO_X', 'the sdk macro survives normalisation');
+  assert.equal(out[1].key, 'No key');
+  assert.equal(out[1].type, 'number', 'the type is inferred when the data does not say');
+  assert.deepEqual(eng.normaliseParamDefs(undefined), []);
+});
+
+test('gpioSpeedFor answers for a stored value, a stale one and nothing at all', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.equal(eng.gpioSpeedFor('30 MHz'), '30 MHz');
+  assert.equal(eng.gpioSpeedFor('High'), '30 MHz', 'a name this part never had');
+  assert.equal(eng.gpioSpeedFor(undefined), '30 MHz', 'the part has exactly one, so that is the answer');
+});
+
+test('defaultNvicGroup picks the group the data marks default, not the first', () => {
+  assert.equal(eng.defaultNvicGroup({ scheme: { groups: [{ name: 'a' }, { name: 'b', default: true }] } }), 1);
+  assert.equal(eng.defaultNvicGroup({ scheme: { groups: [{ name: 'a' }, { name: 'b' }] } }), 0, 'else the first');
+  assert.equal(eng.defaultNvicGroup(undefined), 0, 'a part with no nvic block has no grouping to choose');
+});
+
+test('nvicScheme and nvicGroup report the PFIC scheme in force', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const s = eng.nvicScheme();
+  assert.equal(s.priority_bits, 2, 'the PFIC implements two, not the Cortex-M four');
+  assert.equal(s.priority_lsb, 6, 'PFIC_IPRIORx [7:6]; [5:0] are write-invalid');
+  assert.equal(s.max_nesting, 2);
+  assert.equal(eng.nvicGroup().name, eng.nvicGroups()[e.S.nvic.group].name);
+  e.setNvicGroup(1);
+  assert.equal(eng.nvicGroup().name, eng.nvicGroups()[1].name, 'it follows the state');
+});
+
+test('dmaRequestDefaults seeds from the data, and says nothing for a request with no seed', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const adc = eng.dmaRequestDefaults('ADC1');
+  assert.equal(adc.psize, 'Half Word', 'an ADC data register is 16 bits wide');
+  assert.equal(adc.mode, 'Circular');
+  const none = eng.dmaRequestDefaults('NOT-A-REQUEST');
+  for (const d of eng.dmaParamDefs()) assert.equal(none[d.key], d.default, `${d.key} falls back`);
+});
+
+test('initPeripherals and clockBitOf are what the peripheral section is built from', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.deepEqual(eng.initPeripherals(), [], 'nothing is switched on at boot');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.compute();
+  assert.deepEqual(eng.initPeripherals(), ['USART1']);
+
+  const bit = eng.clockBitOf('USART1');
+  assert.equal(bit.bus, 'PB2', 'RM 3.4.7');
+  assert.equal(bit.fn, 'RCC_PB2PeriphClockCmd');
+  assert.equal(bit.macro, 'RCC_PB2Periph_USART1');
+  assert.equal(eng.clockBitOf('TKEY'), null,
+    'TouchKey has no enable bit of its own in RM 3.4.6-3.4.8, and none is invented');
+});
+
+test('userSection is the one place a USER CODE block is spelled', () => {
+  assert.deepEqual(eng.userSection('PV'), ['/* USER CODE BEGIN PV */', '/* USER CODE END PV */']);
+  assert.deepEqual(eng.userSection('Init', '    '),
+    ['    /* USER CODE BEGIN Init */', '    /* USER CODE END Init */']);
+  // and what it writes is what userSections() reads back
+  const { sections } = eng.userSections(eng.userSection('X').join('\n'));
+  assert.equal(sections.X, '');
+});
+
+test('hseFeedsSysclk and clockSelectable answer for the clock UI', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.equal(eng.hseFeedsSysclk(), false, 'HSI at boot');
+  e.setClock({ sys: 'HSE' });
+  assert.equal(eng.hseFeedsSysclk(), true);
+  e.setClock({ sys: 'PLLCLK', pllIn: e.M.clock.pll.inputs.findIndex(i => i.source === 'HSE') });
+  assert.equal(eng.hseFeedsSysclk(), true, 'through the PLL counts too');
+
+  // every source the data lists is offered; nothing is filtered by UI state
+  const list = eng.clockSelectable();
+  assert.ok(Array.isArray(list) ? list.length : Object.keys(list).length,
+    'the clock tab has something to offer');
+});

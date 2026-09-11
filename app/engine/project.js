@@ -12,7 +12,7 @@ import {
   setNvicVector, setNvicGroup, nvicGroups,
 } from './resources.js';
 import { generatorOptions, setGeneratorOption } from './export.js';
-import { applyParams, paramsObject } from './params.js';
+import { applyParams, paramsObject, applyChannelParams, channelParamsObject } from './params.js';
 import { clearHistory } from './history.js';
 
 export const PROJECT = { name: 'Untitled', variant: null, dirty: false };
@@ -62,6 +62,8 @@ export function projectObject() {
     periph[pid] = { settings, remap: st.remap };
     const params = paramsObject(pid);
     if (Object.keys(params).length) periph[pid].params = params;
+    const chan = channelParamsObject(pid);
+    if (Object.keys(chan).length) periph[pid].channel_params = chan;
   }
   return {
     wchproj: PROJECT_FORMAT,
@@ -227,6 +229,7 @@ export function projectApply(src) {
     }
     if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
     dropped.push(...applyParams(pid, st.params));
+    dropped.push(...applyChannelParams(pid, st.channel_params));
   }
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};

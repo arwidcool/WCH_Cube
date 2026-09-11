@@ -491,6 +491,27 @@
      floor it can shrink to, this scrolls rather than painting past the edge. */
   .ctreescroll{align-self:stretch;max-width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
 
+  /* ---- Tools: a report over the loaded MCU file, never a control --------------- */
+  #view-tools{grid-template-columns:minmax(0,1fr);overflow:auto}
+  .tools{padding:16px 22px 24px;max-width:100%}
+  .toolshead h3{margin:0 0 4px;font-size:17px;color:var(--ink-strong)}
+  .toolshead p{margin:0 0 16px;color:var(--muted);font-size:12px;max-width:min(820px,100%)}
+  .toolsgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}
+  .toolsgrid section{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px 12px;min-width:0}
+  .toolsgrid h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
+                display:flex;gap:8px;align-items:baseline}
+  .toolsgrid h4 .ro{text-transform:none;letter-spacing:0}
+  table.toolstab{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+  table.toolstab td{padding:3px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;overflow-wrap:anywhere}
+  table.toolstab td:first-child{width:40%;color:var(--muted);padding-right:10px}
+  table.toolstab tr:last-child td{border-bottom:0}
+  /* The gaps panel spans the grid: it is the half that earns the tab. */
+  .toolsgaps{grid-column:1/-1}
+  .toolsgaps td:first-child{width:34%;color:var(--warn-ink)}
+  .toolsgaps .allgood{margin:0;color:var(--ok-ink);font-size:12px}
+  .toolsgaps p.ro{margin:10px 0 0;font-size:11.5px}
+  .tools code{font:11.5px/1.35 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong)}
+
   /* ---- Project Manager --------------------------------------------------------
      Settings on the left, the generated text on the right. Every track is minmax(0,…)
      so a long line of C cannot widen the grid and push the panel off the window -
@@ -510,6 +531,22 @@
   .pmsec label.chk{display:flex;align-items:baseline;gap:7px;padding:2px 0;cursor:pointer}
   .pmsec label.chk input{margin:0;flex:0 0 auto;position:relative;top:1px}
   .pmsec label.chk small{display:block;color:var(--muted);font-size:11px}
+  /* The project layout, listed before the folder exists. */
+  .pmtree{display:flex;flex-direction:column;gap:1px;margin:8px 0}
+  .pmtree code{font:11px/1.5 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);
+               background:var(--bar);padding:1px 6px;border-radius:2px;overflow-wrap:anywhere}
+  /* What main.c will do. Green when it will blink something, muted when the honest
+     answer is "nothing will blink, and here is why". */
+  .pmwill{margin:8px 0 0;color:var(--muted);font-size:11.5px}
+  .pmwill.ok{color:var(--ok-ink)}
+  /* Where it went, and the two commands after it: selectable, and it stays put. */
+  .pmwritten{margin-top:12px;padding:9px 10px;border:1px solid var(--ok-ink);border-radius:3px;background:var(--bar)}
+  .pmwritten b{display:block;font-size:11.5px;margin-bottom:3px}
+  .pmwritten b+.pmpath{margin-bottom:8px}
+  .pmpath{display:block;white-space:pre-wrap;overflow-wrap:anywhere;user-select:all;
+          font:11.5px/1.55 ui-monospace,"Cascadia Mono",Consolas,monospace;
+          background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:5px 7px;color:var(--ink-strong)}
+  .pmwritten p{margin:8px 0 0;font-size:11px}
   .pmgen{padding:12px 14px}
   .pmgen button{width:100%;background:var(--blue-hdr);color:#fff;border:0;padding:9px 14px;font-weight:600;letter-spacing:.3px;border-radius:3px}
   .pmgen button:hover{background:var(--blue)}
@@ -660,6 +697,12 @@
 # pitch : mm, informational
 # body  : [width, height] mm, informational
 # epad  : exposed pad present (drawn as a square in the middle)
+#
+# Round 4: QFN20, QFN28 and QFN32 said pitch 0.5 and QFN32 said body 5*5. Both
+# datasheets contradict that - CH32V006 DS ch.5 "QFN32 4*4mm 0.4mm", "QFN20 3*3mm
+# 0.4mm", "QFN12 2*2mm 0.4mm", and CH32X035 DS ch.4 "QFN28 4*4mm 0.4mm". Corrected.
+# Both fields are informational and neither changes the drawing, but a wrong number
+# here is a number the next part copies.
 
 packages:
   # ---- dual in line -------------------------------------------------------
@@ -673,16 +716,18 @@ packages:
   - { id: SSOP20,   kind: dual, pins: 20,  pitch: 0.65, body: [7.2, 5.3] }
   - { id: SSOP28,   kind: dual, pins: 28,  pitch: 0.65, body: [10.2, 5.3] }
   - { id: QSOP24,   kind: dual, pins: 24,  pitch: 0.635, body: [8.7, 3.9] }
+  # CH32X035 DS v2.2 ch.4: "QSOP28 3.9*9.9mm 0.635mm 25.0mil Quarter-sized Outline Package".
+  - { id: QSOP28,   kind: dual, pins: 28,  pitch: 0.635, body: [9.9, 3.9] }
   - { id: MSOP10,   kind: dual, pins: 10,  pitch: 0.5,  body: [3.0, 3.0] }
   - { id: DIP8,     kind: dual, pins: 8,   pitch: 2.54, body: [9.3, 6.4] }
   - { id: DIP20,    kind: dual, pins: 20,  pitch: 2.54, body: [26.2, 6.4] }
 
   # ---- quad, no leads -----------------------------------------------------
   - { id: QFN12,    kind: quad, pins: 12,  pitch: 0.4,  body: [2, 2],  epad: true }
-  - { id: QFN20,    kind: quad, pins: 20,  pitch: 0.5,  body: [3, 3],  epad: true }
+  - { id: QFN20,    kind: quad, pins: 20,  pitch: 0.4,  body: [3, 3],  epad: true }
   - { id: QFN24,    kind: quad, pins: 24,  pitch: 0.5,  body: [4, 4],  epad: true }
-  - { id: QFN28,    kind: quad, pins: 28,  pitch: 0.5,  body: [4, 4],  epad: true }
-  - { id: QFN32,    kind: quad, pins: 32,  pitch: 0.5,  body: [5, 5],  epad: true }
+  - { id: QFN28,    kind: quad, pins: 28,  pitch: 0.4,  body: [4, 4],  epad: true }
+  - { id: QFN32,    kind: quad, pins: 32,  pitch: 0.4,  body: [4, 4],  epad: true }
   - { id: QFN40,    kind: quad, pins: 40,  pitch: 0.5,  body: [6, 6],  epad: true }
   - { id: QFN48,    kind: quad, pins: 48,  pitch: 0.5,  body: [7, 7],  epad: true }
   - { id: QFN56,    kind: quad, pins: 56,  pitch: 0.5,  body: [8, 8],  epad: true }
@@ -694,6 +739,11 @@ packages:
   - { id: LQFP44,   kind: quad, pins: 44,  pitch: 0.8,  body: [10, 10] }
   - { id: LQFP48,   kind: quad, pins: 48,  pitch: 0.5,  body: [7, 7] }
   - { id: LQFP64,   kind: quad, pins: 64,  pitch: 0.5,  body: [10, 10] }
+  # CH32X035 DS v2.2 ch.4: "LQFP64M 10*10mm 0.5mm" - DIMENSIONALLY IDENTICAL to LQFP64
+  # above. Kept as its own id because that is what the part's model table calls it and a
+  # package id that does not match the datasheet is its own source of doubt; recorded here
+  # so nobody re-measures it. WCH's M suffix is a mould/body-option marker, not a size.
+  - { id: LQFP64M,  kind: quad, pins: 64,  pitch: 0.5,  body: [10, 10] }
   - { id: LQFP100,  kind: quad, pins: 100, pitch: 0.5,  body: [14, 14] }
   - { id: LQFP128,  kind: quad, pins: 128, pitch: 0.4,  body: [14, 14] }
   - { id: LQFP144,  kind: quad, pins: 144, pitch: 0.5,  body: [20, 20] }
@@ -3229,6 +3279,752 @@ clock:
     IWDG runs from LSI. MCO on PC4 can output SYSCLK, HSI, HSE or PLLCLK.
 
 </script>
+<script type="text/x-yaml" id="yaml-mcu-CH32X035" data-file="data/mcus/CH32X035.yaml">
+# =============================================================================
+#  CH32X035 — a 48 MHz QingKe RISC-V4C with USB-FS and USB PD.
+#
+#  Sources, in the precedence order data/sources/README.md sets out:
+#    EVT   data/sources/X035/Evt/EXAM/SRC/Peripheral/inc/*.h   (highest, for NAMES)
+#    RM    data/sources/X035/Datasheets/CH32X035RM.md
+#    DS    data/sources/X035/Datasheets/CH32X035DS0.md  v2.2
+#  Every fact cites one of them here or in CH32X035.notes.md.
+#
+#  THIS IS NOT A CH32V006 WITH DIFFERENT NUMBERS. Read CH32X035.notes.md before
+#  editing: the ports are 24 bits wide, port C is not a contiguous range, there is no
+#  HSE at all, remaps are named SDK macros rather than register field values, and the
+#  clock domains are AHB/APB1/APB2 rather than HB/PB1/PB2.
+#
+#  The package tables below were re-derived from DS Table 2-1 by
+#  tools/extract_pins.py and diff to 0 differences against the DS model table's own
+#  I/O column on all seven packages. Two rows the PDF conversion destroyed are
+#  declared in data/sources/X035/Datasheets/CH32X035_pin_corrections.yaml.
+# =============================================================================
+
+mcu:
+  name: CH32X035
+  vendor: WCH
+  family: CH32X035
+  core: QingKe RISC-V4C (RV32IMAC)
+  flash_kb: 62
+  sram_kb: 20
+  vdd_v: [2.0, 5.5]
+  max_sysclk_mhz: 48
+  default_package: QFN28        # the only variant with a data/firmware environment
+
+  # DS v2.2 ch.1 model table (lines 113-120). io_count is the DS's own I/O column and
+  # validate_mcu.py cross-checks it against the package table below, which is what
+  # catches a dropped or duplicated row.
+  #
+  # pio_board / pio_env: see data/FORMAT.md. Six of the seven packages have a board in
+  # the installed ch32v platform; **QFN12 (D8U6) has none**, so it says nothing rather
+  # than borrowing a neighbour's - the same position CH32V006F4U6 and D8U7 are in, and
+  # the reason a generated project must refuse that variant by name.
+  #
+  # CH32X033F8P6 is in the same DS model table and is NOT here. It has its own pin
+  # table (DS Table 2-2), so it is a different pinout rather than a variant of this
+  # part, and it belongs in its own file. Reason recorded in CH32X035.notes.md.
+  variants:
+    CH32X035R8T6: { package: LQFP64M, flash_kb: 62, sram_kb: 20, temp: 85, io_count: 60, pio_board: genericCH32X035R8T6 }
+    CH32X035C8T6: { package: LQFP48,  flash_kb: 62, sram_kb: 20, temp: 85, io_count: 46, pio_board: genericCH32X035C8T6 }
+    CH32X035G8U6: { package: QFN28,   flash_kb: 62, sram_kb: 20, temp: 85, io_count: 27, pio_board: genericCH32X035G8U6, pio_env: CH32X035G8U6 }
+    CH32X035G8R6: { package: QSOP28,  flash_kb: 62, sram_kb: 20, temp: 85, io_count: 26, pio_board: genericCH32X035G8R6 }
+    CH32X035F8U6: { package: QFN20,   flash_kb: 62, sram_kb: 20, temp: 85, io_count: 19, pio_board: genericCH32X035F8U6 }
+    CH32X035F7P6: { package: TSSOP20, flash_kb: 62, sram_kb: 20, temp: 85, io_count: 18, pio_board: genericCH32X035F7P6, notes: "DS calls this F7P6, not F8P6 - the 7 is not a typo" }
+    CH32X035D8U6: { package: QFN12,   flash_kb: 62, sram_kb: 20, temp: 85, io_count: 11, notes: "No PlatformIO board ships for a D8U6 part, so no project can be generated for it." }
+
+# -----------------------------------------------------------------------------
+# Pin number -> pin name, one table per package. Re-derived from DS Table 2-1 by
+# tools/extract_pins.py; every package matches the DS model table's I/O count exactly.
+# A number carrying TWO names is a pair shorted inside the package (DS notes 4-7) -
+# the conflict engine treats those as one physical pin, as it already does on CH32V006.
+# Pin 0 is the exposed pad.
+packages:
+  LQFP64M:
+    1: PA15
+    2: PA16
+    3: PA17
+    4: PA18
+    5: PA19
+    6: PA20
+    7: PA21
+    8: PC0
+    9: PC1
+    10: PC2
+    11: PC3
+    12: PA22
+    13: PA23
+    14: PA0
+    15: PA1
+    16: PA2
+    17: PA3
+    18: PC4
+    19: PC5
+    20: PA4
+    21: PA5
+    22: PA6
+    23: PA7
+    24: PC6
+    25: PC7
+    26: PB0
+    27: PB1
+    28: PB2
+    29: PB3
+    30: PB4
+    31: GND
+    32: VDD
+    33: PB5
+    34: PB6
+    35: PB7
+    36: PB8
+    37: PB16
+    38: PB17
+    39: PB18
+    40: PB19
+    41: PB9
+    42: PB10
+    43: PB11
+    44: [PC16, PC11]
+    45: [PC17, PC10]
+    46: PC18
+    47: PB12
+    48: PB13
+    49: PC19
+    50: PB14
+    51: PB20
+    52: PB21
+    53: PB15
+    54: PC14
+    55: PC15
+    56: PA8
+    57: PA9
+    58: PA10
+    59: PA11
+    60: PA12
+    61: PA13
+    62: PA14
+    63: GND
+    64: VDD
+
+  LQFP48:
+    1: PA15
+    2: PA16
+    3: PA17
+    4: PA18
+    5: PA19
+    6: PA20
+    7: PA21
+    8: PA22
+    9: PA23
+    10: PA0
+    11: PA1
+    12: PA2
+    13: PA3
+    14: PA4
+    15: PA5
+    16: PA6
+    17: PA7
+    18: PC6
+    19: PC7
+    20: PB0
+    21: PB1
+    22: PB2
+    23: PB3
+    24: PB4
+    25: PB5
+    26: PB6
+    27: PB7
+    28: PB8
+    29: PB9
+    30: PB10
+    31: PB11
+    32: [PC16, PC11]
+    33: [PC17, PC10]
+    34: PC18
+    35: PB12
+    36: PB13
+    37: PC19
+    38: PC14
+    39: PC15
+    40: PA8
+    41: PA9
+    42: PA10
+    43: PA11
+    44: PA12
+    45: PA13
+    46: PA14
+    47: GND
+    48: VDD
+
+  QFN28:
+    0: GND
+    1: PC15
+    2: VDD
+    3: PC0
+    4: PC3
+    5: PA0
+    6: PA1
+    7: PA2
+    8: PA3
+    9: PA4
+    10: PA5
+    11: PA6
+    12: PA7
+    13: PB0
+    14: PB3
+    15: PB4
+    16: [PB1, PB5]
+    17: PB6
+    18: PB7
+    19: PB8
+    20: PB9
+    21: PB10
+    22: PB11
+    23: PB12
+    24: PC19
+    25: PC18
+    26: [PC16, PC11]
+    27: [PC17, PC10]
+    28: PC14
+
+  QSOP28:
+    1: PC19
+    2: [PC16, PC11]
+    3: [PC17, PC10]
+    4: [PA12, PC14]
+    5: [PA13, PC15]
+    6: VDD
+    7: GND
+    8: PC3
+    9: PA0
+    10: PA1
+    11: PA2
+    12: PA3
+    13: PA6
+    14: PB0
+    15: PA4
+    16: PA5
+    17: PA7
+    18: PB3
+    19: PB4
+    20: [PB1, PB5]
+    21: PB6
+    22: PB7
+    23: PB8
+    24: PB9
+    25: PB10
+    26: PB11
+    27: PB12
+    28: PC18
+
+  QFN20:
+    0: GND
+    1: VDD
+    2: PA0
+    3: PA1
+    4: PA2
+    5: PA3
+    6: PA4
+    7: PA5
+    8: PA6
+    9: PA7
+    10: PB0
+    11: PB1
+    12: PB3
+    13: PB11
+    14: PC18
+    15: PB12
+    16: PC19
+    17: PC16
+    18: PC17
+    19: PC14
+    20: PC15
+
+  TSSOP20:
+    1: PB12
+    2: PC14
+    3: PC15
+    4: PC3
+    5: PC1
+    6: PA0
+    7: PA1
+    8: PA2
+    9: PA3
+    10: PA4
+    11: PA5
+    12: PA6
+    13: PA7
+    14: PB1
+    15: GND
+    16: VDD
+    17: [PC16, PC11]
+    18: [PC17, PC10]
+    19: PC18
+    20: PC19
+
+  QFN12:
+    0: GND
+    1: VDD
+    2: PA2
+    3: PA3
+    4: PA5
+    5: PA6
+    6: [PA7, PC7]
+    7: PC16
+    8: PC17
+    9: PC18
+    10: PC19
+    11: PC14
+    12: PC15
+
+# -----------------------------------------------------------------------------
+# Every pin name that exists on the die. Type comes from DS Table 2-1's "Pin type"
+# column (note 1: I = Schmitt input, O = tri-state output, A = analog, P = power).
+#
+# THE SHAPE OF THESE PORTS IS THE POINT. Port A is PA0-PA23 and port B is PB0-PB21,
+# both contiguous and both TWENTY-FOUR AND TWENTY-TWO pins wide rather than sixteen -
+# `GPIO_Pin_0 .. GPIO_Pin_23` are all defined and the mask type is uint32_t
+# (ch32x035_gpio.h:76-83). Port C is NOT a contiguous range: PC0-PC7, PC10-PC11,
+# PC14-PC19, with holes at PC8-PC9 and PC12-PC13. Those four names appear in no row of
+# DS Table 2-1 and nowhere in the RM. Anything iterating 0..max over a port invents them.
+pins:
+  VDD:   { type: power }
+  GND:   { type: ground }
+  # Port A: 24 pins, PA0-PA23, contiguous
+  PA0:   { type: io, analog: true }
+  PA1:   { type: io, analog: true }
+  PA2:   { type: io, analog: true }
+  PA3:   { type: io, analog: true }
+  PA4:   { type: io, analog: true }
+  PA5:   { type: io, analog: true }
+  PA6:   { type: io, analog: true }
+  PA7:   { type: io, analog: true }
+  PA8:   { type: io }
+  PA9:   { type: io }
+  PA10:  { type: io }
+  PA11:  { type: io, analog: true }
+  PA12:  { type: io, analog: true }
+  PA13:  { type: io, analog: true }
+  PA14:  { type: io, analog: true }
+  PA15:  { type: io }
+  PA16:  { type: io }
+  PA17:  { type: io }
+  PA18:  { type: io }
+  PA19:  { type: io }
+  PA20:  { type: io }
+  PA21:  { type: io }
+  PA22:  { type: io, analog: true }
+  PA23:  { type: io, analog: true }
+
+  # Port B: 22 pins, PB0-PB21, contiguous
+  PB0:   { type: io, analog: true }
+  PB1:   { type: io, analog: true }
+  PB2:   { type: io, analog: true }
+  PB3:   { type: io, analog: true }
+  PB4:   { type: io, analog: true }
+  PB5:   { type: io, analog: true }
+  PB6:   { type: io, analog: true }
+  PB7:   { type: io, analog: true }
+  PB8:   { type: io, analog: true }
+  PB9:   { type: io }
+  PB10:  { type: io }
+  PB11:  { type: io }
+  PB12:  { type: io }
+  PB13:  { type: io }
+  PB14:  { type: io }
+  PB15:  { type: io }
+  PB16:  { type: io }
+  PB17:  { type: io }
+  PB18:  { type: io }
+  PB19:  { type: io }
+  PB20:  { type: io }
+  PB21:  { type: io }
+
+  # Port C: 16 pins, PC0-PC19, HOLES at PC8, PC9, PC12, PC13
+  PC0:   { type: io, analog: true }
+  PC1:   { type: io, analog: true }
+  PC2:   { type: io, analog: true }
+  PC3:   { type: io, analog: true }
+  PC4:   { type: io }
+  PC5:   { type: io }
+  PC6:   { type: io }
+  PC7:   { type: io }
+  PC10:  { type: io, notes: "Shorted to PC17 inside every package except QFN20 and QFN12 (DS note 4); has no column of its own in Table 2-1. In USB applications it must be left a floating input." }
+  PC11:  { type: io, notes: "Shorted to PC16 inside every package except QFN20 and QFN12 (DS note 4); has no column of its own in Table 2-1. In USB applications it must be left a floating input." }
+  PC14:  { type: io, analog: true }
+  PC15:  { type: io, analog: true }
+  PC16:  { type: io, analog: true }
+  PC17:  { type: io, analog: true }
+  PC18:  { type: io }
+  PC19:  { type: io, analog: true }
+
+# -----------------------------------------------------------------------------
+# Peripherals. THIS IS A PARTIAL SET AND SAYS SO: the pin-bearing peripherals whose
+# remap tables still need deriving from DS Table 2-3 are absent rather than stubbed,
+# per the round rule that a partial part beats a fake one. What is missing and why is
+# tracked in CH32X035.notes.md under "Not modelled yet".
+peripherals:
+
+  # ---------------- System Core ----------------
+  SYS:
+    category: System Core
+    notes: >
+      The two-wire serial debug interface. PC18 is DIO and PC19 is DCK (DS Table 2-1
+      main-function column). Both also carry PIOC_IO0/PIOC_IO1, so switching SDI off
+      is what frees them - which is why this is a choice and not a fixed claim.
+      `GPIO_Remap_SWJ_Disable` (ch32x035_gpio.h:125) is the macro that does it.
+    settings:
+      - name: Debug interface
+        choices:
+          - { name: Serial Wire (SDI), signals: [DIO, DCK] }
+          - { name: Disable }
+    remaps:
+      - name: Default
+        pins: { DIO: PC18, DCK: PC19 }
+
+  RCC:
+    category: System Core
+    notes: >
+      **There is no HSE on this part.** `grep -c HSE ch32x035_rcc.h` is 0: the only
+      oscillator is the internal 48 MHz RC. So this peripheral offers no crystal, no
+      bypass and no oscillator pins, and the clock tree below has no HSE source. That
+      is also why MCO offers only two real sources rather than four.
+    settings:
+      - name: Master Clock Output (MCO)
+        choices:
+          - { name: Disable }
+          - { name: SYSCLK, signals: [MCO] }
+          - { name: HSI,    signals: [MCO] }
+    remaps:
+      - name: Default
+        pins: { MCO: PB9 }
+
+  DMA1:
+    category: System Core
+    notes: "EIGHT channels (DMA1_Channel1_BASE..DMA1_Channel8_BASE, ch32x035.h), against CH32V006's seven."
+    settings:
+      - name: Mode
+        choices: [ { name: Disable }, { name: Activated } ]
+
+  IWDG:
+    category: System Core
+    # Same API as CH32V006 - free functions taking scalars, no init struct and no
+    # handle (ch32x035_iwdg.h). ORDER IS LOAD-BEARING: write_access first, because
+    # IWDG_PSCR and IWDG_RLDR are write-protected until 0x5555 reaches IWDG_CTLR and a
+    # value written while locked is discarded silently. Same finding as CH32V006, and
+    # the reason it is stated again here rather than assumed to carry across.
+    settings:
+      - name: Mode
+        choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: write_access
+        name: Register write access
+        sdk_call: IWDG_WriteAccessCmd
+        sdk_args: [$VALUE]
+        type: enum
+        group: Advanced
+        default: Enable before writing
+        options:
+          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
+          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
+        help: "Unlocks IWDG_PSCR and IWDG_RLDR and must be written BEFORE either of them."
+      - key: prescaler
+        name: Prescaler
+        sdk_call: IWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: "64"
+        options:
+          - { name: "4",   value: 0, sdk: IWDG_Prescaler_4 }
+          - { name: "8",   value: 1, sdk: IWDG_Prescaler_8 }
+          - { name: "16",  value: 2, sdk: IWDG_Prescaler_16 }
+          - { name: "32",  value: 3, sdk: IWDG_Prescaler_32 }
+          - { name: "64",  value: 4, sdk: IWDG_Prescaler_64 }
+          - { name: "128", value: 5, sdk: IWDG_Prescaler_128 }
+          - { name: "256", value: 6, sdk: IWDG_Prescaler_256 }
+        help: "Divides the LSI. The header stops at 256 on this part too."
+      - key: reload
+        name: Reload value
+        sdk_call: IWDG_SetReload
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 4095
+        min: 0
+        max: 4095
+        help: "12-bit down-counter, so 4095 is the ceiling."
+
+  WWDG:
+    category: System Core
+    # WWDG_Enable(uint8_t Counter) TAKES the counter, so switching it on and setting the
+    # counter are one call - hence `counter` names WWDG_Enable, not WWDG_SetCounter.
+    settings:
+      - name: Mode
+        choices: [ { name: Disable }, { name: Activated } ]
+    params:
+      - key: prescaler
+        name: Prescaler
+        sdk_call: WWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: WWDG_Prescaler_1 }
+          - { name: "2", value: 1, sdk: WWDG_Prescaler_2 }
+          - { name: "4", value: 2, sdk: WWDG_Prescaler_4 }
+          - { name: "8", value: 3, sdk: WWDG_Prescaler_8 }
+        help: "Divides HCLK/4096. Four options - the header stops at 8."
+      - key: window
+        name: Window value
+        sdk_call: WWDG_SetWindowValue
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 127
+        min: 64
+        max: 127
+        help: "Refreshing EARLIER than this resets the part. Bit 6 must stay set, so the range starts at 64."
+      - key: counter
+        name: Counter start value
+        sdk_call: WWDG_Enable
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 127
+        min: 64
+        max: 127
+        help: "WWDG_Enable takes the counter, so this value and switching the watchdog on are one call."
+
+  # ---------------- Connectivity ----------------
+  USBFS:
+    category: Connectivity
+    notes: >
+      Full-speed USB, host AND device (ch32x035_usb.h; the vector is USBFS_IRQn with a
+      separate USBFSWakeUp_IRQn). UDM is PC16 and UDP is PC17 in DS Table 2-1's
+      main-function column. Its clock bit is on AHB - `RCC_AHBPeriph_USBFS`
+      (ch32x035_rcc.h) - not APB, which is a domain no CH32V006 peripheral uses.
+      NOTE DS note 4: PC16 and PC17 are shorted to PC11 and PC10 inside every package
+      except QFN20 and QFN12, and in USB applications PC10/PC11 must be left as
+      floating inputs. That coupling is real and is recorded in the notes; it is not
+      expressible in `settings:` yet.
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Device (FS), signals: [UDM, UDP] }
+          - { name: Host (FS),   signals: [UDM, UDP] }
+    remaps:
+      - name: Default
+        pins: { UDM: PC16, UDP: PC17 }
+
+  USBPD:
+    category: Connectivity
+    notes: >
+      USB Power Delivery over Type-C. CC1 is PC14 and CC2 is PC15 (DS Table 2-1). The
+      DS model table advertises source, sink and DRP for every variant. Clock bit
+      `RCC_AHBPeriph_USBPD` on AHB; vectors USBPD_IRQn and USBPDWakeUp_IRQn.
+      This is the part's headline feature and the CC pins are ordinary pins as far as
+      the conflict engine is concerned.
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Sink,   signals: [CC1, CC2] }
+          - { name: Source, signals: [CC1, CC2] }
+          - { name: DRP (dual role), signals: [CC1, CC2] }
+    remaps:
+      - name: Default
+        pins: { CC1: PC14, CC2: PC15 }
+
+# -----------------------------------------------------------------------------
+# Clock tree.
+#
+# **NO HSE, AND NO PLL.** The only source is the internal 48 MHz RC oscillator.
+# `grep -c HSE data/sources/X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035_rcc.h` returns 0,
+# and EVT's system_ch32x035.c offers exactly five SYSCLK settings, every one of them
+# HSI: SYSCLK_FREQ_8MHz_HSI / 12 / 16 / 24 / 48, with 48 the default (lines 19-23).
+#
+# So there is no `hse_peripheral`, no `hse_setting`, no `hse_signals` and no crystal
+# pins on this part, and there must be no HSE box in the clock tab. Round 2's rule was
+# that a control is justified by the MCU data or it does not exist; this is the first
+# part that tests the rule from the other direction.
+#
+# HCLK comes from RCC_HCLKConfig(RCC_SYSCLK_DivN) with N in 1..8, 16, 32, 64, 128, 256
+# (ch32x035_rcc.h:31-43). There is no separate APB1/APB2 prescaler function and no
+# ADCCLK prescaler function in the header, and `RCC_ClocksTypeDef` has only SYSCLK,
+# HCLK, PCLK1 and PCLK2 - no ADCCLK_Frequency, unlike CH32V00x.
+clock:
+  sources:
+    HSI: { mhz: 48, fixed: true }
+  sysclk:
+    sources: [HSI]
+    max_mhz: 48
+  buses:
+    HB: [DMA1, USBFS, USBPD, SYS, RCC, IWDG, WWDG]
+  prescalers:
+    HB: { options: [1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64, 128, 256], max_mhz: 48,
+          label: "HB prescaler (HPRE) -> HCLK" }
+
+# -----------------------------------------------------------------------------
+# Interrupt vectors. FORTY-FIVE of them, and both EVT sources agree on every one:
+# `IRQn_Type` in ch32x035.h and the `.word` table in EXAM/SRC/Startup/startup_ch32x035.S
+# give the same number, the same name and a handler for every enum entry, with nothing
+# on one side only. CH32V006 has 29.
+#
+# Two things worth reading before assuming this is CH32V006 with more rows:
+#
+#   * **There is no RCC vector.** Number 19 is a gap in the enum and a `.word 0` in the
+#     table, where CH32V006 has RCC_IRQn = 19. "Every family has an RCC interrupt" is
+#     exactly the sort of assumption this part exists to break.
+#   * **The EXTI vectors are GROUPED.** Three vectors cover twenty-six EXTI lines, so
+#     each carries a `lines: [first, last]` range, inclusive. The NVIC tab lists three
+#     rows, not twenty-six, and the EXTI tab finds a line's vector by looking for the
+#     range containing it. ch32x035_exti.h defines THIRTY lines: 26-29 are internal
+#     events (PVD, auto-wake-up, USBFS wake-up, USBPD wake-up) and have their own
+#     vectors, so they are not covered by the grouped three.
+nvic:
+  controller: PFIC
+  vectors:
+    - { name: NonMaskableInt, vector: 2 , irqn: NonMaskableInt_IRQn, handler: NMI_Handler             , system: true, fixed: true }
+    - { name: EXC           , vector: 3 , irqn: EXC_IRQn           , handler: HardFault_Handler       , system: true, fixed: true }
+    - { name: Ecall_M_Mode  , vector: 5 , irqn: Ecall_M_Mode_IRQn  , handler: Ecall_M_Mode_Handler    , system: true }
+    - { name: Ecall_U_Mode  , vector: 8 , irqn: Ecall_U_Mode_IRQn  , handler: Ecall_U_Mode_Handler    , system: true }
+    - { name: Break_Point   , vector: 9 , irqn: Break_Point_IRQn   , handler: Break_Point_Handler     , system: true }
+    - { name: SysTick       , vector: 12, irqn: SysTick_IRQn       , handler: SysTick_Handler         , system: true }
+    - { name: Software      , vector: 14, irqn: Software_IRQn      , handler: SW_Handler              , system: true }
+    - { name: WWDG          , vector: 16, irqn: WWDG_IRQn          , handler: WWDG_IRQHandler         , peripheral: WWDG }
+    - { name: DMA1_CH1      , vector: 22, irqn: DMA1_Channel1_IRQn , handler: DMA1_Channel1_IRQHandler, peripheral: DMA1, channel: 1 }
+    - { name: DMA1_CH2      , vector: 23, irqn: DMA1_Channel2_IRQn , handler: DMA1_Channel2_IRQHandler, peripheral: DMA1, channel: 2 }
+    - { name: DMA1_CH3      , vector: 24, irqn: DMA1_Channel3_IRQn , handler: DMA1_Channel3_IRQHandler, peripheral: DMA1, channel: 3 }
+    - { name: DMA1_CH4      , vector: 25, irqn: DMA1_Channel4_IRQn , handler: DMA1_Channel4_IRQHandler, peripheral: DMA1, channel: 4 }
+    - { name: DMA1_CH5      , vector: 26, irqn: DMA1_Channel5_IRQn , handler: DMA1_Channel5_IRQHandler, peripheral: DMA1, channel: 5 }
+    - { name: DMA1_CH6      , vector: 27, irqn: DMA1_Channel6_IRQn , handler: DMA1_Channel6_IRQHandler, peripheral: DMA1, channel: 6 }
+    - { name: DMA1_CH7      , vector: 28, irqn: DMA1_Channel7_IRQn , handler: DMA1_Channel7_IRQHandler, peripheral: DMA1, channel: 7 }
+    - { name: DMA1_CH8      , vector: 44, irqn: DMA1_Channel8_IRQn , handler: DMA1_Channel8_IRQHandler, peripheral: DMA1, channel: 8 }
+    - { name: USBFS         , vector: 45, irqn: USBFS_IRQn         , handler: USBFS_IRQHandler        , peripheral: USBFS }
+    - { name: USBFSWakeUp   , vector: 46, irqn: USBFSWakeUp_IRQn   , handler: USBFSWakeUp_IRQHandler  , peripheral: USBFS }
+    - { name: USBPD         , vector: 49, irqn: USBPD_IRQn         , handler: USBPD_IRQHandler        , peripheral: USBPD }
+    - { name: USBPDWakeUp   , vector: 50, irqn: USBPDWakeUp_IRQn   , handler: USBPDWakeUp_IRQHandler  , peripheral: USBPD }
+
+# -----------------------------------------------------------------------------
+# Code generation - the family-level names, every one checked against the X035 EVT
+# headers by tools/verify_sdk_names.py.
+codegen:
+  header: ch32x035.h
+
+  sdk:
+    evt: X035            # data/sources/X035/Evt
+    series: ch32x035     # framework-wch-noneos-sdk/Peripheral/<series>/inc
+
+  # APB2, not the PB2 that CH32V00x uses (ch32x035_rcc.h). Two live spellings in the
+  # repo is the point: neither can be hardcoded in the generator.
+  gpio_clock: { fn: RCC_APB2PeriphClockCmd, port: RCC_APB2Periph_GPIO$PORT, afio: RCC_APB2Periph_AFIO }
+
+  init_structs:
+    GPIO_InitTypeDef: { fn: GPIO_Init }
+
+  # USBFS has TWO handles at the SAME base address - `USBFSD` for device mode and
+  # `USBFSH` for host (ch32x035.h:676-677, both at USBFS_BASE). Which one a call takes
+  # depends on the mode the user picked, so a single `periph_handle` entry cannot be
+  # right for both; the device handle is named here because Device is the common case,
+  # and the host case is an open question in CH32X035.notes.md rather than a guess.
+  periph_handle:
+    DMA1:  DMA1
+    USBFS: USBFSD
+
+  # RCC_CFGR0 - RM v1.9 3.4.2, offset 0x04, reset 0x00000050.
+  #
+  # **THERE IS NO `sw` FIELD.** CH32V006's block has SW[1:0] to pick between HSI, HSE
+  # and PLLCLK; this register has none, because this part has exactly one clock source
+  # and nothing to switch between. The absence is the fact - a generator that assumes
+  # every RCC has a source mux has nothing to write here, and correctly writes nothing.
+  # Bits [23:8] and [3:0] are Reserved; only MCO and HPRE are user fields.
+  rcc:
+    register: "RCC->CFGR0"
+    # MCO[2:0], RM 3.4.2: "100: System clock (SYSCLK) output; 101: HIS clock output;
+    # Other: No clock output." Only two real sources, which is the no-HSE shape showing
+    # up a second time. Keys are the choice names of peripherals.RCC's MCO setting.
+    mco:
+      peripheral: RCC
+      setting: Master Clock Output (MCO)
+      lsb: 24
+      bits: 3
+      values: { Disable: 0, SYSCLK: 4, HSI: 5 }
+    prescalers:
+      # HPRE[3:0]. The RM gives TWO encodings for /2, /4 and /8 (0001/1000, 0011/1001,
+      # 0111/1010); these are the ones from the 0000..0111 run, plus 1011..1111 for the
+      # larger dividers - the same choice CH32V006 made, for the same reason.
+      #
+      # Worth knowing and not guessable: the RESET value of this field is 0101b, so HCLK
+      # comes out of reset at SYSCLK/6 = 8 MHz, not 48. The register's reset value
+      # 0x00000050 says the same thing.
+      HB: { lsb: 4, bits: 4,
+            values: { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7,
+                      16: 11, 32: 12, 64: 13, 128: 14, 256: 15 } }
+
+  # ONE speed, and it is 50 MHz here where CH32V006's one speed is 30
+  # (ch32x035_gpio.h:25 - GPIOSpeed_TypeDef has the single member GPIO_Speed_50MHz).
+  # That CH32V006's fix was data-driven rather than a special case is proved by this
+  # part needing a different macro and no code change.
+  speeds:
+    "50 MHz": GPIO_Speed_50MHz
+
+  periph_clock:
+    AHB:
+      register: RCC_AHBPCENR
+      fn: RCC_AHBPeriphClockCmd
+      prefix: RCC_AHBPeriph_
+      bits: { DMA1: 0, USBFS: 12, USBPD: 17 }
+    APB2:
+      register: RCC_APB2PCENR
+      fn: RCC_APB2PeriphClockCmd
+      prefix: RCC_APB2Periph_
+      bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4 }
+    APB1:
+      register: RCC_APB1PCENR
+      fn: RCC_APB1PeriphClockCmd
+      prefix: RCC_APB1Periph_
+      bits: { WWDG: 11 }
+    notes: >
+      Only the peripherals this file actually models are listed. The header also
+      defines RCC_AHBPeriph_SRAM/IO2W and RCC_APB2Periph_ADC1/TIM1/SPI1/USART1 and
+      RCC_APB1Periph_TIM2/TIM3/USART2/USART3/USART4/I2C1/PWR - they go in with their
+      peripherals, not before them, so that a clock enable can never name hardware the
+      tree does not offer.
+
+# What this part offers, so no renderer has to know a part name.
+gpio:
+  speeds:
+    - { name: "50 MHz", macro: GPIO_Speed_50MHz }
+
+  # SIX modes, not eight. **This part has NO OPEN-DRAIN AT ALL** - GPIOMode_TypeDef
+  # (ch32x035_gpio.h) has exactly AIN, IN_FLOATING, IPD, IPU, Out_PP and AF_PP. There
+  # is no GPIO_Mode_Out_OD and no GPIO_Mode_AF_OD on this silicon, so the GPIO table
+  # must not offer "Output Open Drain" or "Alternate Function Open Drain" here.
+  # I wrote both in from CH32V006 out of habit and verify_sdk_names.py rejected them,
+  # which is the whole argument for the gate: they are real, correctly spelled SPL
+  # names that belong to a different chip.
+  modes:
+    - { name: Output Push Pull,             macro: GPIO_Mode_Out_PP }
+    - { name: Alternate Function Push Pull, macro: GPIO_Mode_AF_PP }
+    - { name: Analog,                       macro: GPIO_Mode_AIN }
+
+  # Mode `Input` folds the PULL setting into the macro, so these are keyed by pull name.
+  #
+  # **Pull-down is NOT available on every pin.** The header says so in a comment on the
+  # member itself: "Only PA0--PA15 and PC16--PC17 support input pull-down"
+  # (ch32x035_gpio.h, GPIO_Mode_IPD). That is a per-PIN capability, which nothing in
+  # data/mcus/ has ever had to express - no part here has had a pull that works on some
+  # pins and not others. `pins_note` records the constraint until the schema can carry
+  # it properly; see CH32X035.notes.md, and AGENT-2/AGENT-3 have it on the board.
+  input_modes:
+    - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
+    - { name: Pull-up,   macro: GPIO_Mode_IPU }
+    - { name: Pull-down, macro: GPIO_Mode_IPD,
+        pins_note: "Only PA0-PA15 and PC16-PC17 support input pull-down (ch32x035_gpio.h)" }
+
+</script>
 <script type="text/x-yaml" id="yaml-mcu-WCH-DUMMY32-C8" data-file="data/mcus/WCH-DUMMY32-C8.yaml">
 # =============================================================================
 #  WCH-DUMMY32-C8 — a DUMMY part used to develop the UI.
@@ -5036,7 +5832,9 @@ function initState(m) {
     // params are values (baud, period); settings decide pins. Separate maps on purpose.
     const params = {};
     for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
-    const ps = { settings: {}, remap: 0, params };
+    // channelParams: TIM_OCInitTypeDef is filled once per CHANNEL, so its values are
+    // keyed by the channel number the data uses. Empty until somebody sets one.
+    const ps = { settings: {}, remap: 0, params, channelParams: {} };
     for (const s of P.settings || []) {
       const def = s.choices.find(c => c.default);
       ps.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;
@@ -5451,6 +6249,173 @@ function applyParams(pid, obj) {
 function paramsObject(pid) {
   const store = (S.periph[pid] && S.periph[pid].params) || {};
   return { ...store };
+}
+
+// ---- per-channel parameters ---------------------------------------------------
+//  Most init structs are filled once per peripheral. `TIM_OCInitTypeDef` is not: a
+//  timer has one time base and up to four independent compare units, so the struct
+//  is filled and applied once for EACH configured channel, by one of four different
+//  functions. `peripherals.<TIM>.channel_params` carries all of that:
+//
+//     struct:      TIM_OCInitTypeDef
+//     applies_per: channel
+//     sdk_calls:   { 1: TIM_OC1Init, 2: TIM_OC2Init, ... }   a table, not a pattern
+//     params:      the same entry schema as `dma.channel_params`
+//     channels:    which setting decides each channel, and which of its choices are
+//                  output-compare rather than input-capture
+//
+//  Storage is `S.periph[pid].channelParams[<channel>][<key>]`, keyed by the channel
+//  NUMBER the data uses, so nothing here has to parse a setting's display name.
+
+/** The `channel_params` block for a peripheral, or null. */
+function channelParamBlock(pid) {
+  const P = (M && M.peripherals && M.peripherals[pid]) || null;
+  const cp = P && P.channel_params;
+  if (!cp || typeof cp !== 'object' || !Array.isArray(cp.params)) return null;
+  return cp;
+}
+
+/** Its parameter definitions, normalised exactly like `params:` and `dma.channel_params`. */
+function channelParamDefs(pid) {
+  const cp = channelParamBlock(pid);
+  return cp ? normaliseParamDefs(cp.params) : [];
+}
+
+const chanDefOf = (pid, key) => channelParamDefs(pid).find(d => d.key === key);
+
+/** The channel numbers this peripheral's data describes, in order. */
+function channelNumbers(pid) {
+  const cp = channelParamBlock(pid);
+  if (!cp) return [];
+  const from = cp.channels && typeof cp.channels === 'object' ? cp.channels : cp.sdk_calls;
+  if (!from || typeof from !== 'object') return [];
+  return Object.keys(from).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+}
+
+/**
+ * The channels whose init struct should actually be emitted, and why not when they
+ * should not. `channel_params.channels` states which SETTING decides each channel and
+ * which of that setting's choices are output-compare; without it this returns a reason
+ * rather than a guess, because the only other way to link a channel number to a setting
+ * is to read "Channel1" and take the 1 - deriving structure from a display string.
+ */
+function activeChannels(pid) {
+  const cp = channelParamBlock(pid);
+  if (!cp) return { channels: [], missing: null };
+  const map = cp.channels;
+  if (!map || typeof map !== 'object') {
+    return {
+      channels: [],
+      missing: `${pid}.channel_params has no channels: map, so which channels are configured `
+        + 'cannot be worked out from the settings',
+    };
+  }
+  const st = (S.periph[pid] || {}).settings || {};
+  const out = [];
+  for (const n of channelNumbers(pid)) {
+    const spec = map[n] || map[String(n)];
+    if (!spec || !spec.setting) continue;
+    const value = st[spec.setting];
+    if (value === undefined) continue;
+    const wanted = spec.output_choices;
+    if (Array.isArray(wanted)) {
+      if (!wanted.map(String).includes(String(value))) continue;
+    } else if (String(value) === String(neutralChoiceName(pid, spec.setting))) {
+      continue;                                  // no list given: anything but the neutral choice
+    }
+    out.push(n);
+  }
+  return { channels: out, missing: null };
+}
+
+function neutralChoiceName(pid, settingName) {
+  const P = M.peripherals[pid] || {};
+  const s = (P.settings || []).find(x => x.name === settingName);
+  return s ? neutralChoice(s).name : null;
+}
+
+/** Defaults for one channel, for initState() and for a channel becoming active. */
+function channelParamDefaults(pid) {
+  const out = {};
+  for (const d of channelParamDefs(pid)) out[d.key] = d.default;
+  return out;
+}
+
+/** Everything a per-channel editor needs for one channel. */
+function getChannelParams(pid, channel) {
+  const store = ((S.periph[pid] || {}).channelParams || {})[channel] || {};
+  return channelParamDefs(pid).map(d => ({
+    ...d,
+    value: store[d.key] !== undefined ? store[d.key] : d.default,
+    applicable: paramApplies(pid, d),
+  }));
+}
+
+function channelParamValue(pid, channel, key) {
+  const store = ((S.periph[pid] || {}).channelParams || {})[channel] || {};
+  if (store[key] !== undefined) return store[key];
+  const d = chanDefOf(pid, key);
+  return d ? d.default : undefined;
+}
+
+/** The register encoding behind the chosen option, for codegen. */
+function channelParamRegisterValue(pid, channel, key) {
+  const d = chanDefOf(pid, key);
+  if (!d) return undefined;
+  const v = channelParamValue(pid, channel, key);
+  if (!d.options) return v;
+  const hit = d.options.find(o => String(o.name) === String(v));
+  return hit ? hit.value : undefined;
+}
+
+/** Set one per-channel parameter. Validated and undoable exactly like setParam. */
+function setChannelParam(pid, channel, key, value) {
+  if (!M.peripherals[pid]) throw new Error(`No such peripheral: ${pid}`);
+  const nums = channelNumbers(pid);
+  if (!nums.length) throw new Error(`${pid} has no per-channel parameters`);
+  const ch = Number(channel);
+  if (!nums.includes(ch)) {
+    throw new Error(`${pid} has no channel ${channel} (it has ${nums.join(', ')})`);
+  }
+  const d = chanDefOf(pid, key);
+  if (!d) {
+    const known = channelParamDefs(pid).map(x => x.key).join(', ');
+    throw new Error(`${pid} channel ${ch} has no parameter "${key}"${known ? ` (has: ${known})` : ''}`);
+  }
+  if (d.readonly) throw new Error(`${pid}.${d.name} is fixed by the hardware and cannot be set`);
+  const v = validateParam(d, value, `${pid} CH${ch}.${d.name}`);
+  record(`${pid} CH${ch} ${d.name}`);
+  const st = (S.periph[pid].channelParams ||= {});
+  (st[ch] ||= {})[key] = v;
+  return v;
+}
+
+/** Serialisable copy for .wchproj - only channels somebody touched. */
+function channelParamsObject(pid) {
+  const store = (S.periph[pid] || {}).channelParams || {};
+  const out = {};
+  for (const [ch, vals] of Object.entries(store)) {
+    if (vals && Object.keys(vals).length) out[ch] = { ...vals };
+  }
+  return out;
+}
+
+/**
+ * Apply a { channel: { key: value } } map from a .wchproj. A channel or a key the part
+ * no longer has is dropped and reported, never applied - the same contract as
+ * applyParams, for the same reason.
+ */
+function applyChannelParams(pid, obj) {
+  const dropped = [];
+  if (!obj || typeof obj !== 'object' || !S.periph[pid]) return dropped;
+  for (const [ch, vals] of Object.entries(obj)) {
+    if (!vals || typeof vals !== 'object') continue;
+    for (const [key, value] of Object.entries(vals)) {
+      try { setChannelParam(pid, ch, key, value); }
+      catch (e) { dropped.push(e.message); }
+    }
+  }
+  return dropped;
 }
 
 // ===== app/engine/clock.js ====================================================
@@ -6549,6 +7514,8 @@ function projectObject() {
     periph[pid] = { settings, remap: st.remap };
     const params = paramsObject(pid);
     if (Object.keys(params).length) periph[pid].params = params;
+    const chan = channelParamsObject(pid);
+    if (Object.keys(chan).length) periph[pid].channel_params = chan;
   }
   return {
     wchproj: PROJECT_FORMAT,
@@ -6714,6 +7681,7 @@ function projectApply(src) {
     }
     if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
     dropped.push(...applyParams(pid, st.params));
+    dropped.push(...applyChannelParams(pid, st.channel_params));
   }
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
@@ -8039,7 +9007,7 @@ function generateAll() {
     <button class="tab active" data-view="pinout" role="tab" aria-selected="true">Pinout &amp; Configuration</button>
     <button class="tab" data-view="clock" role="tab" aria-selected="false">Clock Configuration</button>
     <button class="tab" data-view="pm" role="tab" aria-selected="false">Project Manager</button>
-    <button class="tab" disabled title="Future">Tools</button>
+    <button class="tab" data-view="tools" role="tab" aria-selected="false">Tools</button>
   </div>
 
   <!-- ================= PINOUT VIEW ================= -->
@@ -8098,6 +9066,16 @@ function generateAll() {
   <!-- ================= CLOCK VIEW ================= -->
   <div class="view" id="view-clock">
     <div class="clock" id="clock"></div>
+  </div>
+
+  <!-- ================= TOOLS VIEW =================
+       D4. "Implement it or remove it", and this is implement. Everything in it is READ
+       from the loaded MCU file - it adds no capability and invents no hardware. The half
+       that earns the tab is the right-hand column: what the file does NOT say. With a
+       second family arriving, "is this part fully described?" was a question you could
+       only answer by grepping YAML. -->
+  <div class="view" id="view-tools">
+    <div class="tools" id="tools"></div>
   </div>
 
   <!-- ================= PROJECT MANAGER VIEW =================
@@ -9777,8 +10755,35 @@ document.getElementById('cbody').addEventListener('change', e => {
   renderAll();
 });
 
-const MODES = ['Input', 'Output Push Pull', 'Output Open Drain', 'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
-const PULLS = ['No pull', 'Pull-up', 'Pull-down'];
+/**
+ * The GPIO table's mode and pull lists, from the MCU file.
+ *
+ * These were two hardcoded arrays, and AGENT-4 was right that the comment above them made
+ * it worse rather than better: round 3 made the SPEED column data-driven and wrote the
+ * reasoning out directly above the mode list it left behind. `GPIOMode_TypeDef` is per
+ * family exactly as `GPIOSpeed_TypeDef` is - CH32X035's has six members and **neither
+ * open-drain mode among them** (`ch32x035_gpio.h:29-37`) - so a hardcoded list offers two
+ * modes that part cannot express and generates macros that compile nowhere.
+ *
+ * `Input` is prepended rather than listed in `gpio.modes` because the SPL folds the pull
+ * setting into the mode: there is no single "input" macro, and which of
+ * `GPIO_Mode_IN_FLOATING` / `_IPU` / `_IPD` applies is decided by the PULL column. That is
+ * why `gpio.input_modes` is keyed by pull name, and why the pull list comes from it.
+ *
+ * A part whose file says nothing keeps the old lists, so no part regresses while its data
+ * is being written - and the Tools tab names that fallback as a gap.
+ */
+const LEGACY_MODES = ['Input', 'Output Push Pull', 'Output Open Drain',
+  'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
+const LEGACY_PULLS = ['No pull', 'Pull-up', 'Pull-down'];
+function gpioModeNames() {
+  const m = typeof gpioModes === 'function' ? gpioModes() : [];
+  return m.length ? ['Input', ...m.map(x => x.name)] : LEGACY_MODES;
+}
+function gpioPullNames() {
+  const p = typeof gpioInputModes === 'function' ? gpioInputModes() : [];
+  return p.length ? p.map(x => x.name) : LEGACY_PULLS;
+}
 /**
  * The GPIO table.
  *
@@ -9798,6 +10803,7 @@ function gpioTable(pinsList) {
   const speeds = typeof gpioSpeeds === 'function' ? gpioSpeeds() : [];
   const speedIsChoice = typeof gpioSpeedIsChoice === 'function' ? gpioSpeedIsChoice() : speeds.length > 1;
   const speedOf = g => (typeof gpioSpeedFor === 'function' ? gpioSpeedFor(g.speed) : g.speed) || (speeds[0] || {}).name || '';
+  const MODES = gpioModeNames(), PULLS = gpioPullNames();
   const rows = pinsList.slice().sort(pinSort).map(pin => {
     const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
     const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
@@ -9806,7 +10812,7 @@ function gpioTable(pinsList) {
       : speedIsChoice ? `<td>${sel(speeds.map(s => s.name), speedOf(g), 'speed')}</td>`
         : `<td class="fixedval" title="${attr(`${M.mcu.name} has one output speed${speeds[0].macro ? ` (${speeds[0].macro})` : ''}, so there is nothing to choose`)}">${esc(speedOf(g))}</td>`;
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
-      <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td>${speedCell}
+      <td>${sel(MODES, MODES.includes(g.mode || defMode) ? (g.mode || defMode) : MODES[0], 'mode')}</td><td>${sel(PULLS, PULLS.includes(g.pull) ? g.pull : PULLS[0], 'pull')}</td>${speedCell}
       <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';
@@ -9857,7 +10863,26 @@ function renderClock() {
       .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
   const TITLE = { HSI: 'HSI RC oscillator', HSE: 'HSE crystal / clock in', LSI: 'LSI RC oscillator', LSE: 'LSE crystal' };
 
-  for (const s of ['HSI', 'HSE', 'LSI', 'LSE']) {
+  /**
+   * Every oscillator the MCU file declares, in a stable order.
+   *
+   * This loop used to BE the list `['HSI','HSE','LSI','LSE']`, which is the CH32V006
+   * family's set written into the renderer. A part that names its oscillator anything else
+   * had no box drawn for it at all - not greyed, not empty, absent - while the SYSCLK mux
+   * still offered it, so the tree showed a system clock fed by nothing, with no console
+   * error and no gap to notice. Found by reshaping a loaded model to CH32X035's shape
+   * (one 48 MHz RC, no HSE) before that part's YAML exists.
+   *
+   * The four familiar names lead so the tree reads the same on parts that have them; every
+   * other source follows in the order the file declares it. A part with no HSE simply has
+   * no HSE entry here, which is all "no HSE box, no placeholder, no gap" requires.
+   */
+  const KNOWN_SOURCES = ['HSI', 'HSE', 'LSI', 'LSE'];
+  const sourceNames = [
+    ...KNOWN_SOURCES.filter(n => c.sources[n]),
+    ...Object.keys(c.sources || {}).filter(n => !KNOWN_SOURCES.includes(n)),
+  ];
+  for (const s of sourceNames) {
     const d = c.sources[s]; if (!d) continue;
     const khz = d.khz !== undefined;
     const rs = (r.sources || {})[s] || {};
@@ -10110,6 +11135,111 @@ function saveProject() {
   const name = downloadText(`${PROJECT.name.replace(/[^\w.-]+/g, '_')}.wchproj`, projectSerialize(), 'application/x-yaml');
   PROJECT.dirty = false; updateCrumb(); toast(`Saved ${name}`);
 }
+// ---------- 7b2. Tools: what this MCU file says, and what it does not -----------
+//
+// D4, decided rather than deferred: the tab was a `disabled` placeholder through two
+// rounds, which is a dead control, and the two ways out were remove it or implement it.
+// Removing it fails `tests/layout.test.js`, which asserts the four tab names and belongs
+// to AGENT-4; implementing it costs nobody a cross-area edit. So: implemented, and
+// deliberately as a REPORT rather than a feature - every number below is read from the
+// loaded model, nothing here can change a configuration, and no capability is invented.
+//
+// The column that earns the tab is "not stated". A part is added when its MCU file is
+// complete, and until now "is this part fully described?" was a question you answered by
+// grepping YAML. With a second family landing this round it is worth one panel.
+function renderTools() {
+  const el = document.getElementById('tools');
+  if (!el || !el.closest('.view').classList.contains('active')) return;
+  if (!M || !M.mcu) { el.innerHTML = '<div class="empty">No MCU file is loaded.</div>'; return; }
+
+  const gaps = [];                       // every "the file does not say" line, with why it matters
+  const note = (what, why) => gaps.push({ what, why });
+
+  // --- packages and part numbers
+  const vs = Object.entries(M.mcu.variants || {});
+  const noBoard = vs.filter(([, i]) => !i.pio_board).map(([v]) => v);
+  const pkgs = Object.keys(M.packages || {});
+  const noGeometry = pkgs.filter(p => !PACKAGES[p]);
+  if (noBoard.length) {
+    note(`${noBoard.length} part number${noBoard.length === 1 ? '' : 's'} with no PlatformIO board`,
+      `${noBoard.join(', ')} — no project can be generated for ${noBoard.length === 1 ? 'it' : 'them'}`);
+  }
+  if (noGeometry.length) {
+    note(`${noGeometry.length} package${noGeometry.length === 1 ? '' : 's'} with no drawing`,
+      `${noGeometry.join(', ')} — the chip view cannot draw ${noGeometry.length === 1 ? 'it' : 'them'}`);
+  }
+
+  // --- peripherals
+  const periphs = Object.entries(M.peripherals || {});
+  const noParams = periphs.filter(([, P]) => !(P.params || []).length).map(([p]) => p);
+  if (noParams.length) {
+    note(`${noParams.length} peripheral${noParams.length === 1 ? '' : 's'} with no parameters`,
+      `${noParams.join(', ')} — their Parameter Settings tab does not appear`);
+  }
+
+  // --- interrupts
+  const vectors = (M.nvic || {}).vectors || [];
+  const noHandler = vectors.filter(v => !v.handler).map(v => v.name);
+  const orphan = vectors.filter(v => v.peripheral && !M.peripherals[v.peripheral]).map(v => v.name);
+  if (vectors.length && noHandler.length) {
+    note(`${noHandler.length} vector${noHandler.length === 1 ? '' : 's'} with no handler symbol`,
+      `${noHandler.slice(0, 6).join(', ')}${noHandler.length > 6 ? ', …' : ''} — an ISR cannot be linked without it`);
+  }
+  if (orphan.length) note(`${orphan.length} vector${orphan.length === 1 ? '' : 's'} owned by a peripheral this file does not define`, orphan.join(', '));
+  if (!vectors.length) note('no interrupt vectors', 'the NVIC entry and every NVIC Settings tab are absent');
+
+  // --- DMA, clocks, codegen
+  const dma = M.dma || {};
+  if (!dma.requests) note('no DMA request map', 'the DMA1 channel table and every DMA Settings tab are absent');
+  if (!(M.gpio || {}).speeds) note('no gpio.speeds', 'the output-speed column falls back to codegen.speeds');
+  if (!M.codegen) note('no codegen: block', 'generated C will carry TODOs instead of register writes');
+  else if (!M.codegen.header) note('codegen.header is missing', 'generated C will not know which SDK header to include');
+
+  const cat = {};
+  for (const [p, P] of periphs) (cat[P.category || 'Other'] ||= []).push(p);
+
+  const row = (k, v) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`;
+  const list = a => a.length ? esc(a.join(', ')) : '<span class="ro">none</span>';
+
+  el.innerHTML = `<div class="toolshead"><h3>${esc(M.mcu.name)}</h3>`
+    + `<p>Everything below is read from <code>${esc(M.mcu.name)}</code>'s MCU file. Nothing on this tab`
+    + ` changes a configuration — it answers "what does this part have, and what has nobody written down yet".</p></div>`
+    + `<div class="toolsgrid">`
+    + `<section><h4>Part</h4><table class="toolstab">`
+    + row('Core', esc(M.mcu.core || '—'))
+    + row('Memory', `${esc(String(M.mcu.flash_kb ?? '?'))} KB flash · ${esc(String(M.mcu.sram_kb ?? '?'))} KB SRAM`)
+    + row('Max SYSCLK', M.mcu.max_sysclk_mhz ? `${esc(String(M.mcu.max_sysclk_mhz))} MHz` : '<span class="ro">not stated</span>')
+    + row('Packages', `${pkgs.length} — ${list(pkgs)}`)
+    + row('Part numbers', `${vs.length} — ${list(vs.map(([v]) => v))}`)
+    + `</table></section>`
+    + `<section><h4>Clock</h4><table class="toolstab">`
+    + row('Oscillators', list(Object.keys((M.clock || {}).sources || {})))
+    + row('SYSCLK sources', list([...(((M.clock || {}).sysclk || {}).sources || [])]))
+    + row('PLL', (M.clock || {}).pll ? `×${esc(((M.clock.pll.multipliers || []).join(', ')))}` : '<span class="ro">this part has none</span>')
+    + row('Prescalers', list(Object.keys((M.clock || {}).prescalers || {})))
+    + row('GPIO speeds', list((typeof gpioSpeeds === 'function' ? gpioSpeeds() : []).map(s => s.name)))
+    + `</table></section>`
+    + `<section><h4>Peripherals <span class="ro">${periphs.length}</span></h4><table class="toolstab">`
+    + Object.entries(cat).map(([c, ps]) => row(c, `${ps.length} — ${list(ps)}`)).join('')
+    + `</table></section>`
+    + `<section><h4>Interrupts and DMA</h4><table class="toolstab">`
+    + row('Vectors', vectors.length ? String(vectors.length) : '<span class="ro">none</span>')
+    + row('Priority bits', ((M.nvic || {}).scheme || {}).priority_bits !== undefined
+      ? String(M.nvic.scheme.priority_bits) : '<span class="ro">not stated</span>')
+    + row('DMA controller', dma.controller ? esc(dma.controller) : '<span class="ro">none</span>')
+    + row('DMA channels', dma.requests ? String(dma.channels || Object.keys(dma.requests).length) : '<span class="ro">none</span>')
+    + row('DMA requests', dma.requests ? String(Object.values(dma.requests).reduce((n, l) => n + (l || []).length, 0)) : '<span class="ro">none</span>')
+    + row('EXTI lines', ((M.exti || {}).lines) ? String(Object.keys(M.exti.lines).length) : '<span class="ro">none</span>')
+    + `</table></section>`
+    + `<section class="toolsgaps"><h4>Not stated by this file <span class="ro">${gaps.length}</span></h4>`
+    + (gaps.length
+      ? `<table class="toolstab">${gaps.map(g => row(g.what, `<span class="ro">${esc(g.why)}</span>`)).join('')}</table>`
+      : `<p class="allgood">Everything this app reads is present. Nothing is falling back to a default.</p>`)
+    + `<p class="ro">A gap here is not a defect — it is a fact nobody has written down yet, and it says which`
+    + ` part of the app goes quiet because of it.</p></section>`
+    + `</div>`;
+}
+
 // ---------- 7c. Project Manager ------------------------------------------------
 /**
  * Everything the generator produces, normalised to [{ name, language, text }].
@@ -10137,7 +11267,7 @@ const mimeFor = name => name.endsWith('.csv') ? 'text/csv'
 // UI-only, and deliberately not in S: which of the generated files Generate writes, and
 // which one the preview is showing. Neither is a property of the hardware configuration,
 // so neither belongs in a .wchproj.
-const PM = { pick: null, skip: new Set() };
+const PM = { pick: null, skip: new Set(), written: null };
 
 /**
  * The generator's own complaints, by file and line. `cComplaints()` reads back what
@@ -10194,23 +11324,36 @@ function renderPmConfig(files) {
 
   // Toolchain. PlatformIO is the only one that exists, so it is stated rather than
   // offered as a one-item menu, and no toolchain we do not support is listed greyed.
+  const board = pmBoard(variant);
   h += `<div class="pmsec"><h4>Toolchain / IDE</h4><dl>`
     + dd('Toolchain', 'PlatformIO')
     + dd('Platform', '<code>ch32v</code> · framework <code>noneos-sdk</code>')
+    + dd('Board', board.ok ? `<code>${esc(board.id)}</code>`
+      : `<span class="ro">${esc(board.why)}</span>`)
     + dd('Environment', pmEnvName(variant))
-    + dd('Output folder', '<code>data/firmware/lib/wchcube_generated/</code>')
-    + `</dl><p>The header goes to <code>include/</code> and the source to <code>src/</code>; that project picks them up automatically.`
-    + ` No other toolchain is supported — there is nothing hidden behind this, it is the only one implemented.</p></div>`;
+    + `</dl><p>No other toolchain is supported — there is nothing hidden behind this, it is the only one implemented.</p></div>`;
 
-  // Code generator. Only choices the engine can actually honour: which of the files it
-  // produced are written. The structural options in the round brief - one file or a pair
-  // per peripheral, keeping user-code sections across a regeneration - are NOT SHOWN,
-  // because codegen cannot do either yet and a checkbox that changes nothing is a lie.
+  // ---- the generated PlatformIO project ---------------------------------------
+  h += pmProjectSection(board, files);
+
+  // Code generator. The list comes from `generatorOptions()` - the options THIS BUILD can
+  // honour - and is never a set of checkboxes typed here: an option the engine cannot
+  // honour then cannot be offered, and one it gains appears without a UI change. That is
+  // AGENT-2's D2 contract (board, round 3, 16:41Z), and it is why the panel grew the file
+  // split and the user-code switch on its own when they landed.
+  const opts = typeof generatorOptions === 'function' ? generatorOptions() : [];
   h += `<div class="pmsec"><h4>Code generator</h4>`
+    + (opts.length ? opts.map(o => {
+      const v = generatorOption(o.key);
+      return `<label class="chk" title="${attr(o.help || o.name)}">`
+        + `<input type="checkbox" data-pmopt="${attr(o.key)}"${v ? ' checked' : ''}>`
+        + `<span>${esc(o.name)}${o.help ? `<small>${esc(o.help)}</small>` : ''}</span></label>`;
+    }).join('') : '<p>This build offers no generator options.</p>')
+    + `<h4 style="margin-top:12px">Files</h4>`
     + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.name)}"${PM.skip.has(f.name) ? '' : ' checked'}>`
       + `<span><code>${esc(f.name)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
       : '<p>This configuration generates nothing.</p>')
-    + `<p>Options the generator cannot honour yet are not listed here rather than shown greyed: it writes one header and one source, and does not preserve user-code sections across a regeneration.</p></div>`;
+    + `</div>`;
 
   h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE CODE</button>`
     + `<p>${chosen.length ? `Downloads ${chosen.length} file${chosen.length === 1 ? '' : 's'}.` : 'Nothing selected.'}`
@@ -10224,10 +11367,164 @@ function renderPmConfig(files) {
     cb.checked ? PM.skip.delete(cb.dataset.pmfile) : PM.skip.add(cb.dataset.pmfile);
     renderProjectManager();
   });
+  // A generator option changes what the generator PRODUCES, so it is engine state: it
+  // goes through setGeneratorOption (validated, one undo step, saved in the .wchproj),
+  // and the whole app re-renders because the file list and the preview both move.
+  box.querySelectorAll('input[data-pmopt]').forEach(cb => cb.onchange = () => {
+    try { setGeneratorOption(cb.dataset.pmopt, cb.checked); } catch (err) { toast(err.message); }
+    renderAll();
+  });
   // The desktop bridge (src-tauri/desktop.js) replaces this handler with a native folder
   // picker. app/template.html contains no Tauri code, by design; it only has to leave a
   // button with a stable id and a working browser behaviour behind it.
   box.querySelector('#pm-generate').onclick = pmGenerate;
+  const gp = box.querySelector('#pm-genproject');
+  if (gp) gp.onclick = pmGenerateProject;
+}
+
+/**
+ * The generated PlatformIO project: a folder the user opens in VS Code and flashes.
+ *
+ * The split with the desktop shell, which is also what lets browser mode work: **the page
+ * owns the layout** - which files, what they are called, where in the tree they go - and
+ * hands over a flat `[{ path, text }]` with every path relative to the project root. The
+ * shell owns only where the root goes (`write_project`, AGENT-4's D5). The browser ships
+ * the identical list as a .zip, and neither side knows about the other.
+ *
+ * The FILE CONTENTS are the generator's, not this panel's: `projectFiles()` in the engine
+ * writes platformio.ini, src/main.c and the README (requested from AGENT-2 on the board).
+ * Until that lands this section shows the layout, the board, and what main.c will do - all
+ * of which are true today - and the button is absent rather than present and broken.
+ */
+function pmProjectSection(board, files) {
+  const willDo = pmMainWillDo();
+  const engineHasProject = typeof projectFiles === 'function';
+  const layout = engineHasProject ? pmProjectFiles().map(f => f.path) : PM_LAYOUT;
+  const canGenerate = board.ok && engineHasProject && layout.length > 0;
+
+  let h = `<div class="pmsec"><h4>PlatformIO project</h4>`
+    + `<p>A complete folder: open it in VS Code, press Upload, and the chip runs this configuration.`
+    + ` Nothing to copy and no template to edit.</p>`;
+
+  // What you get, listed before it exists.
+  h += `<div class="pmtree">${layout.map(p => `<code>${esc(p)}</code>`).join('')}</div>`;
+
+  // What main.c will do - the one line that is driven by the configuration.
+  h += `<p class="pmwill${willDo.blink ? ' ok' : ''}">${esc(willDo.text)}</p>`;
+
+  // The refusal, when the part has no board. Visible reason, and the parts that do work.
+  if (!board.ok) {
+    h += `<div class="pmnote bad" style="position:static">${esc(board.why)}.`
+      + (board.detail ? ` <span class="ro">${esc(board.detail)}</span>` : '')
+      + (board.usable && board.usable.length
+        ? ` These part numbers can be generated: ${board.usable.map(v => `<code>${esc(v)}</code>`).join(', ')}.`
+        : '')
+      + `</div>`;
+  } else if (!engineHasProject) {
+    h += `<div class="pmnote warn" style="position:static">This build generates the init code but not yet the`
+      + ` project around it. The layout above is what it will write.</div>`;
+  }
+
+  if (canGenerate) {
+    h += `<div class="pmgen" style="padding:10px 0 0"><button id="pm-genproject">GENERATE PROJECT</button>`
+      + `<p>${pmIsDesktop() ? 'Choose a folder; the project is written into it.'
+        : 'Downloads one .zip with the folder inside it.'}</p></div>`;
+  }
+  return h + pmWrittenHtml() + `</div>`;
+}
+
+/** The layout the generator writes, for the "what you get" list before it exists. */
+const PM_LAYOUT = [
+  'platformio.ini', 'README.md', '.gitignore', 'src/main.c',
+  'lib/wchcube_generated/include/wchcube_init.h',
+  'lib/wchcube_generated/src/wchcube_init.c',
+];
+
+/** Is a desktop shell attached? The bridge defines this; the page never calls Tauri. */
+const pmIsDesktop = () => typeof window.desktopWriteProject === 'function';
+
+/**
+ * The project as a flat [{ path, text }], paths relative to the project root.
+ *
+ * The engine produces every file's TEXT; this decides where each one goes. Generated C
+ * lands in `lib/wchcube_generated/` split by extension the way `data/firmware` expects -
+ * headers in `include/`, sources in `src/` - which is the one piece of layout knowledge
+ * that has to live on this side of the seam.
+ */
+function pmProjectFiles() {
+  if (typeof projectFiles !== 'function') return [];
+  let list;
+  try { list = projectFiles() || []; } catch (e) { console.error('projectFiles', e); return []; }
+  return list.map(f => ({ path: String(f.path || f.name), text: String(f.text ?? '') }));
+}
+
+/**
+ * The PlatformIO board id for a part number, or why there is not one.
+ *
+ * `pio_board` is a per-variant fact in the MCU file and it is never derived. Two CH32V006
+ * variants have none deliberately: the platform ships no board for CH32V006F4U6 or
+ * CH32V006D8U7, and the nearest board would lie about the flash size - F4U6 is 16 KB
+ * against F8U6's 62. So the answer for those is "there is no board", with the variants
+ * that do have one named, and the Generate button disabled WITH THAT REASON VISIBLE. That
+ * is the one kind of disabled control round 2 always allowed: justified by the MCU data,
+ * and saying so.
+ */
+function pmBoard(variant) {
+  const vs = M.mcu.variants || {};
+  const info = variant ? vs[variant] : null;
+  if (info && info.pio_board) return { ok: true, id: info.pio_board, variant };
+  const usable = Object.entries(vs).filter(([, i]) => i.pio_board).map(([v]) => v);
+  if (!variant) {
+    return {
+      ok: false,
+      why: Object.keys(vs).length
+        ? 'no part number chosen — pick one in New project'
+        : 'this MCU file lists no part numbers',
+      usable,
+    };
+  }
+  return {
+    ok: false,
+    variant,
+    why: `no PlatformIO board for ${variant}`,
+    detail: (info && info.notes) || '',
+    usable,
+  };
+}
+
+/**
+ * What the generated `main.c` will do, in one sentence, before it exists.
+ *
+ * Driven entirely by the configuration. printf over the WCH-Link SDI channel claims no
+ * pin, so it is always true; a blink is only true when the USER has configured an output,
+ * and when they have not the honest sentence is the one that teaches. There is deliberately
+ * no "blink an LED" option that would pick a pin for them - inventing a pin the board may
+ * not have wired is exactly the class of guess this project bans.
+ */
+function pmMainWillDo() {
+  const outs = pmOutputPins();
+  if (!outs.length) {
+    return {
+      blink: null,
+      text: 'Prints over the WCH-Link debug channel. No output GPIO is configured, so nothing '
+        + 'will blink — assign one in Pinout & Configuration to get a visible result.',
+    };
+  }
+  const p = outs[0];
+  const label = (S.gpio[p] || {}).label || '';
+  return {
+    blink: p,
+    text: `Blinks ${p}${label ? ` (${label})` : ''} and prints over the WCH-Link debug channel.`
+      + (outs.length > 1 ? ` ${outs.length - 1} other output${outs.length > 2 ? 's are' : ' is'} configured and left alone.` : ''),
+  };
+}
+
+/** Pins the user configured as an output, in pin order. Their configuration, not ours. */
+function pmOutputPins() {
+  return Object.keys(S.gpio)
+    .filter(p => pinExists(p) && /^Output/.test(String((S.gpio[p] || {}).mode || '')))
+    .filter(p => (S.manual[p] || (E.pins[p] && E.pins[p].claims.some(c => c.who === 'GPIO'))))
+    .sort(pinSort);
 }
 
 /**
@@ -10238,7 +11535,7 @@ function renderPmConfig(files) {
  * environment `CH32V006F8P6` (the 85 °C board file the platform ships) - same die, same
  * pinout, different trailing digit. Guessing "the env is the part number" would print a
  * name that does not exist, which is exactly the class of bug this round is about. The
- * mapping is a per-variant fact and belongs in the MCU file; requested from AGENT-1.
+ * mapping is a per-variant fact and belongs in the MCU file; AGENT-1 landed it.
  */
 function pmEnvName(variant) {
   const info = variant ? (M.mcu.variants || {})[variant] : null;
@@ -10324,6 +11621,113 @@ function pmCopyFallback(file, done) {
   try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
   ta.remove();
   ok ? done() : toast('Could not copy — select the text and copy it yourself');
+}
+
+// ---- a ZIP writer, because the app is one offline file ------------------------
+//
+// Browser mode has to deliver a FOLDER, and the app is a single offline HTML file with no
+// CDN and no bundler - so a library is not available at any price. A stored-entry ZIP
+// (compression method 0) is the whole format we need: local header, data, central
+// directory, end record. Sixty lines and a CRC-32 table, which is what the round brief
+// costed it at, and it means the browser and the desktop ship the identical file list.
+const CRC32 = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC32[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+/** One stored-entry ZIP from [{ path, text }]. Returns a Blob. */
+function zipOf(entries) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const u16 = n => [n & 0xFF, (n >>> 8) & 0xFF];
+  const u32 = n => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
+  for (const e of entries) {
+    // Paths are stored with forward slashes and no leading slash - the ZIP spec's rule
+    // and, conveniently, the same one write_project enforces on the desktop side.
+    const name = enc.encode(String(e.path).replace(/\\/g, '/').replace(/^\/+/, ''));
+    const data = enc.encode(String(e.text ?? ''));
+    const crc = crc32(data);
+    // Local file header. No data descriptor: sizes are known before writing.
+    const local = [...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),                    // mtime/mdate: zero, deliberately
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), ...u16(0)];
+    parts.push(new Uint8Array(local), name, data);
+    central.push([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(0), ...u32(offset), name]);
+    offset += local.length + name.length + data.length;
+  }
+  let cdSize = 0;
+  for (const c of central) {
+    const name = c.pop();
+    const head = new Uint8Array(c);
+    parts.push(head, name);
+    cdSize += head.length + name.length;
+  }
+  parts.push(new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0),
+    ...u16(entries.length), ...u16(entries.length), ...u32(cdSize), ...u32(offset), ...u16(0)]));
+  return new Blob(parts, { type: 'application/zip' });
+}
+
+/**
+ * Generate the project. Desktop: the bridge's native folder picker. Browser: one .zip.
+ *
+ * `window.generateProjectFiles` is the name src-tauri/desktop.js looks for, so defining it
+ * here is what switches the desktop path on; the page still contains no Tauri code.
+ */
+window.generateProjectFiles = () => pmProjectFiles();
+async function pmGenerateProject() {
+  const files = pmProjectFiles();
+  if (!files.length) { toast('This build does not generate a project yet'); return; }
+  const name = (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
+  if (pmIsDesktop()) {
+    try {
+      const res = await window.desktopWriteProject(name, files);
+      if (!res) return;                                  // the user cancelled the picker
+      pmShowWritten(res.root, res.written);
+    } catch (e) { toast(String(e && e.message ? e.message : e)); }
+    return;
+  }
+  const blob = zipOf(files.map(f => ({ path: `${name}/${f.path}`, text: f.text })));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}.zip`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(`Generated ${name}.zip — ${files.length} files`);
+}
+
+/**
+ * Say where it went, and the two commands that follow it.
+ *
+ * A toast is the wrong shape for a path the user has to act on - it disappears, and it
+ * cannot be selected. This is kept in PM.written and re-rendered with the section, so it
+ * stays on screen until the next generate.
+ */
+function pmShowWritten(root, written) {
+  PM.written = { root, count: written.length };
+  renderProjectManager();
+}
+function pmWrittenHtml() {
+  const w = PM.written;
+  if (!w) return '';
+  return `<div class="pmwritten"><b>Wrote ${w.count} file${w.count === 1 ? '' : 's'} to</b>`
+    + `<code class="pmpath">${esc(w.root)}</code>`
+    + `<b>Then, in a terminal:</b><code class="pmpath">cd "${esc(w.root)}"\npio run\npio run -t upload</code>`
+    + `<p class="ro">The first build downloads the toolchain if PlatformIO has not seen this platform before.</p></div>`;
 }
 
 /** Write the selected files. In a browser that means download; the desktop bridge
@@ -10455,7 +11859,7 @@ function renderAll(fit) {
   firstRender = false; updateCrumb();
   compute();
   syncShellSelectors();
-  renderTree(); renderCentre(); renderChip(); renderClock(); renderProjectManager();
+  renderTree(); renderCentre(); renderChip(); renderClock(); renderProjectManager(); renderTools();
   if (fit) fitChip();
   const key = E.conflicts.join('|');
   if (key && key !== lastConflicts) toast('⚠ Pin conflict: ' + E.conflicts.join(' · '));
@@ -10486,6 +11890,7 @@ document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   // The preview regenerates from the CURRENT configuration every time the tab is
   // entered, so it can never show C for a configuration the user has since changed.
   if (b.dataset.view === 'pm') renderProjectManager();
+  if (b.dataset.view === 'tools') renderTools();
 });
 document.getElementById('pkgsel').onchange = e => {
   closePicker();

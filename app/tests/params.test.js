@@ -389,3 +389,142 @@ test('equality stays the default, so files written before this keep their meanin
   assert.deepEqual(baud.deps, [{ kind: 'setting', name: 'Mode', op: 'equals', value: 'Asynchronous' }]);
   assert.equal(e.paramApplies('USART1', baud), true);
 });
+
+// =============================================================================
+//  Per-channel parameters — TIM_OCInitTypeDef is filled once per CHANNEL
+// =============================================================================
+
+test('a peripheral with channel_params exposes its definitions like any other params', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const defs = e.channelParamDefs('TIM1');
+  assert.ok(defs.length, 'TIM1 has a per-channel struct');
+  assert.deepEqual(e.channelNumbers('TIM1'), [1, 2, 3, 4]);
+  assert.ok(defs.every(d => d.key && d.name), 'the same normalised shape as params:');
+  const oc = defs.find(d => d.key === 'ocmode');
+  assert.ok(oc && oc.options.some(o => o.sdk === 'TIM_OCMode_PWM1'), 'options carry their sdk macro');
+  // TIM2 has six members, TIM1 eight: the Idle-state members are TIM1-only in the header
+  assert.ok(e.channelParamDefs('TIM1').length > e.channelParamDefs('TIM2').length,
+    'a member the peripheral does not have is absent, not offered');
+  assert.deepEqual(e.channelParamDefs('USART1'), [], 'a peripheral without the block has none');
+});
+
+test('per-channel values are stored per channel, validated and undoable', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.setChannelParam('TIM1', 1, 'pulse', 1000);
+  e.setChannelParam('TIM1', 2, 'pulse', 2000);
+  assert.equal(e.channelParamValue('TIM1', 1, 'pulse'), 1000);
+  assert.equal(e.channelParamValue('TIM1', 2, 'pulse'), 2000, 'channels do not share a value');
+  assert.equal(e.channelParamValue('TIM1', 3, 'pulse'), 0, 'and an untouched one is the default');
+
+  e.setChannelParam('TIM1', 1, 'ocmode', 'PWM mode 2');
+  assert.equal(e.channelParamRegisterValue('TIM1', 1, 'ocmode'), 7, 'TIMx_CHCTLRn OCxM');
+  e.undo();
+  assert.equal(e.channelParamValue('TIM1', 1, 'ocmode'), 'PWM mode 1', 'one undo step');
+});
+
+test('a channel or a parameter the part does not have is refused by name', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.throws(() => e.setChannelParam('TIM1', 5, 'pulse', 1), /has no channel 5 \(it has 1, 2, 3, 4\)/);
+  assert.throws(() => e.setChannelParam('TIM1', 1, 'nope', 1), /channel 1 has no parameter "nope"/);
+  assert.throws(() => e.setChannelParam('TIM1', 1, 'pulse', 70000), /above the maximum 65535/);
+  assert.throws(() => e.setChannelParam('USART1', 1, 'pulse', 1), /USART1 has no per-channel parameters/);
+  assert.throws(() => e.setChannelParam('NOPE1', 1, 'pulse', 1), /No such peripheral: NOPE1/);
+  assert.equal(e.channelParamValue('TIM1', 1, 'pulse'), 0, 'no rejected write stuck');
+});
+
+test('per-channel values round-trip through .wchproj', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.setChannelParam('TIM1', 1, 'pulse', 1234);
+  e.setChannelParam('TIM1', 1, 'ocmode', 'Toggle');
+  e.setChannelParam('TIM1', 3, 'pulse', 99);
+  const text = e.projectSerialize();
+  assert.match(text, /channel_params:/);
+
+  e.loadMcu(e.MCU_FILES.CH32V006);
+  assert.equal(e.channelParamValue('TIM1', 1, 'pulse'), 0, 'setup: wiped');
+  e.projectApply(text);
+  assert.deepEqual(e.PROJECT.warnings, []);
+  assert.equal(e.channelParamValue('TIM1', 1, 'pulse'), 1234);
+  assert.equal(e.channelParamValue('TIM1', 1, 'ocmode'), 'Toggle');
+  assert.equal(e.channelParamValue('TIM1', 3, 'pulse'), 99);
+});
+
+test('a saved channel value the part no longer has is dropped and reported', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setChannelParam('TIM1', 1, 'pulse', 5);
+  const text = e.projectSerialize().replace('pulse: 5', 'pulse: 5\n        gone_key: 7');
+  e.projectApply(text);
+  assert.equal(e.channelParamValue('TIM1', 1, 'pulse'), 5, 'what still exists still applies');
+  assert.ok(e.PROJECT.warnings.some(w => /gone_key/.test(w)),
+    'and the rest is said out loud: ' + JSON.stringify(e.PROJECT.warnings));
+});
+
+test('the channels a peripheral actually has configured, or why that is not knowable', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.compute();
+  const { channels, missing } = e.activeChannels('TIM1');
+  if (missing) {
+    // No `channels:` map in the data yet (requested on the board 16:44Z). The only other
+    // way to link channel 1 to the setting called "Channel1" is to read the display name
+    // and take the digit, which is deriving structure from a label.
+    assert.deepEqual(channels, []);
+    assert.match(missing, /channel_params has no channels: map/);
+  } else {
+    assert.ok(channels.includes(1), 'the map landed, so channel 1 is live');
+  }
+  assert.deepEqual(e.activeChannels('USART1'), { channels: [], missing: null },
+    'a peripheral with no per-channel struct has nothing to say either way');
+});
+
+// The shape proposed to AGENT-1 on the board at 16:44Z, proved before they commit to it.
+const TIM_WITH_CHANNELS = `
+mcu:
+  name: CH32V006-TIMCHAN
+  inherits: CH32V006
+peripherals:
+  TIM1:
+    channel_params:
+      struct: TIM_OCInitTypeDef
+      applies_per: channel
+      sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+      channels:
+        1: { setting: Channel1, output_choices: [PWM Generation CH1, PWM Generation CH1 CH1N] }
+        2: { setting: Channel2, output_choices: [PWM Generation CH2] }
+        3: { setting: Channel3, output_choices: [PWM Generation CH3] }
+        4: { setting: Channel4, output_choices: [PWM Generation CH4] }
+      params:
+        - key: ocmode
+          name: Output compare mode
+          sdk_field: TIM_OCMode
+          type: enum
+          default: PWM mode 1
+          options:
+            - { name: PWM mode 1, value: 6, sdk: TIM_OCMode_PWM1 }
+            - { name: Toggle,     value: 3, sdk: TIM_OCMode_Toggle }
+`;
+
+test('with a channels: map, only the configured output-compare channels are live', () => {
+  const e = fresh();
+  e.registerMcuFile(TIM_WITH_CHANNELS);
+  e.loadMcu('CH32V006-TIMCHAN');
+  e.setPackage('TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.setSetting('TIM1', 'Channel3', 'PWM Generation CH3');
+  e.compute();
+  assert.deepEqual(e.activeChannels('TIM1'), { channels: [1, 3], missing: null });
+});
+
+test('input capture is not an output compare, so its channel is not live', () => {
+  const e = fresh();
+  e.registerMcuFile(TIM_WITH_CHANNELS);
+  e.loadMcu('CH32V006-TIMCHAN');
+  e.setPackage('TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'Input Capture');
+  e.compute();
+  assert.deepEqual(e.activeChannels('TIM1').channels, [],
+    'Input Capture fills TIM_ICInitTypeDef, a different struct, so treating it as an '
+    + 'output compare would configure the wrong unit');
+});
