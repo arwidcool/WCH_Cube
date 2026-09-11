@@ -487,6 +487,27 @@
      floor it can shrink to, this scrolls rather than painting past the edge. */
   .ctreescroll{align-self:stretch;max-width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
 
+  /* ---- Tools: a report over the loaded MCU file, never a control --------------- */
+  #view-tools{grid-template-columns:minmax(0,1fr);overflow:auto}
+  .tools{padding:16px 22px 24px;max-width:100%}
+  .toolshead h3{margin:0 0 4px;font-size:17px;color:var(--ink-strong)}
+  .toolshead p{margin:0 0 16px;color:var(--muted);font-size:12px;max-width:min(820px,100%)}
+  .toolsgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}
+  .toolsgrid section{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px 12px;min-width:0}
+  .toolsgrid h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;
+                display:flex;gap:8px;align-items:baseline}
+  .toolsgrid h4 .ro{text-transform:none;letter-spacing:0}
+  table.toolstab{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+  table.toolstab td{padding:3px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;overflow-wrap:anywhere}
+  table.toolstab td:first-child{width:40%;color:var(--muted);padding-right:10px}
+  table.toolstab tr:last-child td{border-bottom:0}
+  /* The gaps panel spans the grid: it is the half that earns the tab. */
+  .toolsgaps{grid-column:1/-1}
+  .toolsgaps td:first-child{width:34%;color:var(--warn-ink)}
+  .toolsgaps .allgood{margin:0;color:var(--ok-ink);font-size:12px}
+  .toolsgaps p.ro{margin:10px 0 0;font-size:11.5px}
+  .tools code{font:11.5px/1.35 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong)}
+
   /* ---- Project Manager --------------------------------------------------------
      Settings on the left, the generated text on the right. Every track is minmax(0,…)
      so a long line of C cannot widen the grid and push the panel off the window -
@@ -693,7 +714,7 @@
     <button class="tab active" data-view="pinout" role="tab" aria-selected="true">Pinout &amp; Configuration</button>
     <button class="tab" data-view="clock" role="tab" aria-selected="false">Clock Configuration</button>
     <button class="tab" data-view="pm" role="tab" aria-selected="false">Project Manager</button>
-    <button class="tab" disabled title="Future">Tools</button>
+    <button class="tab" data-view="tools" role="tab" aria-selected="false">Tools</button>
   </div>
 
   <!-- ================= PINOUT VIEW ================= -->
@@ -752,6 +773,16 @@
   <!-- ================= CLOCK VIEW ================= -->
   <div class="view" id="view-clock">
     <div class="clock" id="clock"></div>
+  </div>
+
+  <!-- ================= TOOLS VIEW =================
+       D4. "Implement it or remove it", and this is implement. Everything in it is READ
+       from the loaded MCU file - it adds no capability and invents no hardware. The half
+       that earns the tab is the right-hand column: what the file does NOT say. With a
+       second family arriving, "is this part fully described?" was a question you could
+       only answer by grepping YAML. -->
+  <div class="view" id="view-tools">
+    <div class="tools" id="tools"></div>
   </div>
 
   <!-- ================= PROJECT MANAGER VIEW =================
@@ -2783,6 +2814,111 @@ function saveProject() {
   const name = downloadText(`${PROJECT.name.replace(/[^\w.-]+/g, '_')}.wchproj`, projectSerialize(), 'application/x-yaml');
   PROJECT.dirty = false; updateCrumb(); toast(`Saved ${name}`);
 }
+// ---------- 7b2. Tools: what this MCU file says, and what it does not -----------
+//
+// D4, decided rather than deferred: the tab was a `disabled` placeholder through two
+// rounds, which is a dead control, and the two ways out were remove it or implement it.
+// Removing it fails `tests/layout.test.js`, which asserts the four tab names and belongs
+// to AGENT-4; implementing it costs nobody a cross-area edit. So: implemented, and
+// deliberately as a REPORT rather than a feature - every number below is read from the
+// loaded model, nothing here can change a configuration, and no capability is invented.
+//
+// The column that earns the tab is "not stated". A part is added when its MCU file is
+// complete, and until now "is this part fully described?" was a question you answered by
+// grepping YAML. With a second family landing this round it is worth one panel.
+function renderTools() {
+  const el = document.getElementById('tools');
+  if (!el || !el.closest('.view').classList.contains('active')) return;
+  if (!M || !M.mcu) { el.innerHTML = '<div class="empty">No MCU file is loaded.</div>'; return; }
+
+  const gaps = [];                       // every "the file does not say" line, with why it matters
+  const note = (what, why) => gaps.push({ what, why });
+
+  // --- packages and part numbers
+  const vs = Object.entries(M.mcu.variants || {});
+  const noBoard = vs.filter(([, i]) => !i.pio_board).map(([v]) => v);
+  const pkgs = Object.keys(M.packages || {});
+  const noGeometry = pkgs.filter(p => !PACKAGES[p]);
+  if (noBoard.length) {
+    note(`${noBoard.length} part number${noBoard.length === 1 ? '' : 's'} with no PlatformIO board`,
+      `${noBoard.join(', ')} — no project can be generated for ${noBoard.length === 1 ? 'it' : 'them'}`);
+  }
+  if (noGeometry.length) {
+    note(`${noGeometry.length} package${noGeometry.length === 1 ? '' : 's'} with no drawing`,
+      `${noGeometry.join(', ')} — the chip view cannot draw ${noGeometry.length === 1 ? 'it' : 'them'}`);
+  }
+
+  // --- peripherals
+  const periphs = Object.entries(M.peripherals || {});
+  const noParams = periphs.filter(([, P]) => !(P.params || []).length).map(([p]) => p);
+  if (noParams.length) {
+    note(`${noParams.length} peripheral${noParams.length === 1 ? '' : 's'} with no parameters`,
+      `${noParams.join(', ')} — their Parameter Settings tab does not appear`);
+  }
+
+  // --- interrupts
+  const vectors = (M.nvic || {}).vectors || [];
+  const noHandler = vectors.filter(v => !v.handler).map(v => v.name);
+  const orphan = vectors.filter(v => v.peripheral && !M.peripherals[v.peripheral]).map(v => v.name);
+  if (vectors.length && noHandler.length) {
+    note(`${noHandler.length} vector${noHandler.length === 1 ? '' : 's'} with no handler symbol`,
+      `${noHandler.slice(0, 6).join(', ')}${noHandler.length > 6 ? ', …' : ''} — an ISR cannot be linked without it`);
+  }
+  if (orphan.length) note(`${orphan.length} vector${orphan.length === 1 ? '' : 's'} owned by a peripheral this file does not define`, orphan.join(', '));
+  if (!vectors.length) note('no interrupt vectors', 'the NVIC entry and every NVIC Settings tab are absent');
+
+  // --- DMA, clocks, codegen
+  const dma = M.dma || {};
+  if (!dma.requests) note('no DMA request map', 'the DMA1 channel table and every DMA Settings tab are absent');
+  if (!(M.gpio || {}).speeds) note('no gpio.speeds', 'the output-speed column falls back to codegen.speeds');
+  if (!M.codegen) note('no codegen: block', 'generated C will carry TODOs instead of register writes');
+  else if (!M.codegen.header) note('codegen.header is missing', 'generated C will not know which SDK header to include');
+
+  const cat = {};
+  for (const [p, P] of periphs) (cat[P.category || 'Other'] ||= []).push(p);
+
+  const row = (k, v) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`;
+  const list = a => a.length ? esc(a.join(', ')) : '<span class="ro">none</span>';
+
+  el.innerHTML = `<div class="toolshead"><h3>${esc(M.mcu.name)}</h3>`
+    + `<p>Everything below is read from <code>${esc(M.mcu.name)}</code>'s MCU file. Nothing on this tab`
+    + ` changes a configuration — it answers "what does this part have, and what has nobody written down yet".</p></div>`
+    + `<div class="toolsgrid">`
+    + `<section><h4>Part</h4><table class="toolstab">`
+    + row('Core', esc(M.mcu.core || '—'))
+    + row('Memory', `${esc(String(M.mcu.flash_kb ?? '?'))} KB flash · ${esc(String(M.mcu.sram_kb ?? '?'))} KB SRAM`)
+    + row('Max SYSCLK', M.mcu.max_sysclk_mhz ? `${esc(String(M.mcu.max_sysclk_mhz))} MHz` : '<span class="ro">not stated</span>')
+    + row('Packages', `${pkgs.length} — ${list(pkgs)}`)
+    + row('Part numbers', `${vs.length} — ${list(vs.map(([v]) => v))}`)
+    + `</table></section>`
+    + `<section><h4>Clock</h4><table class="toolstab">`
+    + row('Oscillators', list(Object.keys((M.clock || {}).sources || {})))
+    + row('SYSCLK sources', list([...(((M.clock || {}).sysclk || {}).sources || [])]))
+    + row('PLL', (M.clock || {}).pll ? `×${esc(((M.clock.pll.multipliers || []).join(', ')))}` : '<span class="ro">this part has none</span>')
+    + row('Prescalers', list(Object.keys((M.clock || {}).prescalers || {})))
+    + row('GPIO speeds', list((typeof gpioSpeeds === 'function' ? gpioSpeeds() : []).map(s => s.name)))
+    + `</table></section>`
+    + `<section><h4>Peripherals <span class="ro">${periphs.length}</span></h4><table class="toolstab">`
+    + Object.entries(cat).map(([c, ps]) => row(c, `${ps.length} — ${list(ps)}`)).join('')
+    + `</table></section>`
+    + `<section><h4>Interrupts and DMA</h4><table class="toolstab">`
+    + row('Vectors', vectors.length ? String(vectors.length) : '<span class="ro">none</span>')
+    + row('Priority bits', ((M.nvic || {}).scheme || {}).priority_bits !== undefined
+      ? String(M.nvic.scheme.priority_bits) : '<span class="ro">not stated</span>')
+    + row('DMA controller', dma.controller ? esc(dma.controller) : '<span class="ro">none</span>')
+    + row('DMA channels', dma.requests ? String(dma.channels || Object.keys(dma.requests).length) : '<span class="ro">none</span>')
+    + row('DMA requests', dma.requests ? String(Object.values(dma.requests).reduce((n, l) => n + (l || []).length, 0)) : '<span class="ro">none</span>')
+    + row('EXTI lines', ((M.exti || {}).lines) ? String(Object.keys(M.exti.lines).length) : '<span class="ro">none</span>')
+    + `</table></section>`
+    + `<section class="toolsgaps"><h4>Not stated by this file <span class="ro">${gaps.length}</span></h4>`
+    + (gaps.length
+      ? `<table class="toolstab">${gaps.map(g => row(g.what, `<span class="ro">${esc(g.why)}</span>`)).join('')}</table>`
+      : `<p class="allgood">Everything this app reads is present. Nothing is falling back to a default.</p>`)
+    + `<p class="ro">A gap here is not a defect — it is a fact nobody has written down yet, and it says which`
+    + ` part of the app goes quiet because of it.</p></section>`
+    + `</div>`;
+}
+
 // ---------- 7c. Project Manager ------------------------------------------------
 /**
  * Everything the generator produces, normalised to [{ name, language, text }].
@@ -3402,7 +3538,7 @@ function renderAll(fit) {
   firstRender = false; updateCrumb();
   compute();
   syncShellSelectors();
-  renderTree(); renderCentre(); renderChip(); renderClock(); renderProjectManager();
+  renderTree(); renderCentre(); renderChip(); renderClock(); renderProjectManager(); renderTools();
   if (fit) fitChip();
   const key = E.conflicts.join('|');
   if (key && key !== lastConflicts) toast('⚠ Pin conflict: ' + E.conflicts.join(' · '));
@@ -3433,6 +3569,7 @@ document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   // The preview regenerates from the CURRENT configuration every time the tab is
   // entered, so it can never show C for a configuration the user has since changed.
   if (b.dataset.view === 'pm') renderProjectManager();
+  if (b.dataset.view === 'tools') renderTools();
 });
 document.getElementById('pkgsel').onchange = e => {
   closePicker();
