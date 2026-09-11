@@ -7,7 +7,8 @@
 // a Tauri runtime. "Browser mode must keep working" is a requirement, so it is a test.
 import fs from 'node:fs';
 import path from 'node:path';
-import { suite, test, assert } from './lib/harness.js';
+import { spawnSync } from 'node:child_process';
+import { suite, test, assert, skip } from './lib/harness.js';
 import { boot, readDist, ROOT } from './lib/app.js';
 
 suite('desktop shell');
@@ -199,4 +200,96 @@ test('a broken YAML on disk does not take the app down', async () => {
     await settle();
     assert.equal(a.pinEls().length, drawnBefore, 'the app lost its render over a bad file');
   } finally { a.close(); }
+});
+
+// ---------------------------------------------------------------- D5: write_project
+//
+// The round-4 command: the app hands over a whole project TREE and the shell
+// decides only where the root goes. These drive the bridge against the fake
+// runtime; the refusals themselves (paths that escape the root, a non-empty
+// folder) are unit-tested in Rust, in `src-tauri/src/main.rs`, because that is
+// where the decision is made and the page can never be the thing enforcing it.
+
+test('write_project is declared in Rust, registered, and reachable from the bridge', () => {
+  const rs = mainRs();
+  assert.match(rs, /fn write_project\s*\(/, 'write_project is not declared in main.rs');
+  // Declaring a #[tauri::command] and forgetting to register it is a runtime
+  // "command not found" the page only discovers when a user clicks Generate.
+  const handlers = /generate_handler!\[([^\]]*)\]/s.exec(rs);
+  assert.ok(handlers, 'no generate_handler! block in main.rs');
+  assert.includes(handlers[1], 'write_project', 'write_project is not in generate_handler!');
+  assert.includes(bridge(), "invoke('write_project'", 'the bridge never invokes write_project');
+});
+
+test('the bridge hands write_project a relative-path file list and a folder name', async () => {
+  const seen = [];
+  const t = fakeTauri({
+    list_mcus: [],
+    write_project: args => { seen.push(args); return { root: '/home/u/Demo', written: args.files.map(f => f.path) }; },
+  });
+  const a = bootWithBridge(t);
+  try {
+    await settle();
+    const res = await a.window.desktopWriteProject('Demo', [
+      { path: 'platformio.ini', text: '[env:CH32V006F8P6]\n' },
+      { path: 'src/main.c', text: 'int main(void){return 0;}\n' },
+      { path: 'lib/wchcube_generated/src/wchcube_init.c', text: '/* generated */\n' },
+    ]);
+    assert.equal(seen.length, 1, 'desktopWriteProject did not reach write_project');
+    assert.equal(seen[0].name, 'Demo', 'the folder name was not passed');
+    assert.equal(seen[0].overwrite, false, 'overwrite must default to false — it is a destructive flag');
+    // Every path relative, so the shell can refuse anything that leaves the root.
+    for (const f of seen[0].files) {
+      assert.notOk(/^([a-zA-Z]:)?[\/]/.test(f.path), `${f.path} is not relative`);
+      assert.notOk(f.path.includes('..'), `${f.path} contains ..`);
+      assert.ok(typeof f.text === 'string', `${f.path} carries no text`);
+    }
+    assert.equal(res.written.length, 3, 'the result did not come back to the caller');
+    assert.empty(a.problems(), 'writing a project logged problems');
+  } finally { a.close(); }
+});
+
+test('a cancelled folder picker is not an error', async () => {
+  // Rust returns Ok(None) when the user closes the dialog. The bridge must treat
+  // that as "nothing happened", not as a failure to report.
+  const t = fakeTauri({ list_mcus: [], write_project: () => null });
+  const a = bootWithBridge(t);
+  try {
+    await settle();
+    const res = await a.window.desktopWriteProject('Demo', [{ path: 'src/main.c', text: 'x' }]);
+    assert.equal(res, null, 'a cancelled picker should come back as null');
+    assert.empty(a.problems(), 'cancelling logged problems');
+  } finally { a.close(); }
+});
+
+test('the refusals live in Rust, where the page cannot talk past them', () => {
+  // A test that the SHAPE is right, not the behaviour: the behaviour is covered
+  // by `cargo test` in main.rs. What this guards is that the checks do not drift
+  // into desktop.js, where a page bug would be able to skip them.
+  const rs = mainRs();
+  assert.match(rs, /fn safe_relative\s*\(/, 'no safe_relative() in main.rs');
+  assert.includes(rs, 'may not contain `..`', 'safe_relative does not refuse ..');
+  assert.includes(rs, 'must be relative to the project folder', 'safe_relative does not refuse absolute paths');
+  assert.includes(rs, 'already exists and is not empty', 'write_project does not refuse a non-empty folder');
+  // And the validation must happen before anything is created, or a bad entry
+  // halfway down the list leaves a half-written tree behind.
+  const body = /fn write_project\([\s\S]*?\n}/.exec(rs)[0];
+  const validateAt = body.indexOf('safe_relative');
+  const writeAt = body.indexOf('fs::write');
+  assert.ok(validateAt > -1 && writeAt > -1 && validateAt < writeAt,
+    'write_project must validate every path BEFORE it creates the first file, '
+    + 'or a bad entry leaves a half-written project on disk');
+});
+
+test('the Rust unit tests in src-tauri pass', () => {
+  // `cargo test` is the only thing that actually runs safe_relative(). Round 3
+  // found that src-tauri had NEVER been compiled; the fix for that is not to
+  // compile it once by hand, it is to put it in the suite everyone runs.
+  const r = spawnSync('cargo', ['test', '--quiet'], { cwd: SRC, encoding: 'utf8' });
+  if (r.error) skip(`cargo is not on PATH (${r.error.code}) — the Rust half of the shell was not run`);
+  const out = ((r.stdout || '') + (r.stderr || '')).trim();
+  assert.equal(r.status, 0, `cargo test failed:\n${out}`);
+  // "0 tests run" exits 0 and proves nothing.
+  const m = /test result: ok\. (\d+) passed/.exec(out);
+  assert.ok(m && Number(m[1]) > 0, `cargo test ran no tests, so this proves nothing:\n${out}`);
 });

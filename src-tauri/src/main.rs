@@ -192,6 +192,118 @@ fn open_project(app: AppHandle) -> Result<Option<String>, String> {
         .map_err(|e| format!("{}: {e}", path.display()))
 }
 
+/// One file of a generated project: a path RELATIVE to the project root, and its text.
+///
+/// The page decides the layout (`src/main.c`, `lib/wchcube_generated/src/…`); the
+/// shell only decides where the root goes and refuses to write outside it.
+#[derive(serde::Deserialize, Clone, Debug)]
+struct GeneratedFile {
+    path: String,
+    text: String,
+}
+
+/// What `write_project` did, so the page can report it rather than guess.
+#[derive(Serialize, Clone, Debug)]
+struct WriteResult {
+    root: String,
+    written: Vec<String>,
+}
+
+/// Reject a relative path that could escape the project root, or is not relative.
+///
+/// The page is trusted, but "the page is trusted" is exactly the assumption that
+/// makes a path-traversal bug possible later, and this command writes whole trees
+/// to a folder the user picked. Belt and braces: no absolute paths, no `..`, no
+/// Windows drive prefixes or UNC, no leading separator.
+fn safe_relative(rel: &str) -> Result<PathBuf, String> {
+    if rel.trim().is_empty() {
+        return Err("a generated file has an empty path".into());
+    }
+    let normalised = rel.replace('\\', "/");
+    if normalised.starts_with('/') || normalised.contains(':') {
+        return Err(format!("{rel}: generated paths must be relative to the project folder"));
+    }
+    let mut out = PathBuf::new();
+    for part in normalised.split('/') {
+        match part {
+            "" | "." => continue,
+            ".." => return Err(format!("{rel}: generated paths may not contain `..`")),
+            p => out.push(p),
+        }
+    }
+    if out.as_os_str().is_empty() {
+        return Err(format!("{rel}: not a usable file path"));
+    }
+    Ok(out)
+}
+
+/// Native "Generate PlatformIO project" — pick a folder, write a whole project tree.
+///
+/// `files` are paths relative to the project root plus their text; `name` is the
+/// suggested folder name. The user picks a PARENT directory and the project is
+/// written to `<parent>/<name>`.
+///
+/// Three refusals, all deliberate and all reported by name rather than silently
+/// worked around:
+///   * a path that is not relative, or contains `..` — nothing is written at all,
+///     and the check runs over EVERY file before the first one is created, so a
+///     bad entry cannot leave a half-written tree;
+///   * an existing non-empty target directory, unless `overwrite` is true;
+///   * an existing file that is not one this generator is about to write — the
+///     caller's file list is the whitelist, so a user's own `notes.md` beside the
+///     generated code survives regeneration.
+///
+/// Returns the root and the relative paths written, or None if the user cancelled.
+#[tauri::command]
+fn write_project(
+    app: AppHandle,
+    name: String,
+    files: Vec<GeneratedFile>,
+    overwrite: bool,
+) -> Result<Option<WriteResult>, String> {
+    if files.is_empty() {
+        return Err("nothing to write: the generator produced no files".into());
+    }
+    // Validate every path BEFORE creating anything.
+    let mut planned: Vec<(PathBuf, &GeneratedFile)> = Vec::with_capacity(files.len());
+    for f in &files {
+        planned.push((safe_relative(&f.path)?, f));
+    }
+
+    let folder = if name.trim().is_empty() { "WCHCubeProject".to_string() } else { name.trim().to_string() };
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Generate PlatformIO project into...")
+        .blocking_pick_folder();
+
+    let Some(parent) = picked else { return Ok(None) };
+    let parent = parent.into_path().map_err(|e| e.to_string())?;
+    let root = parent.join(&folder);
+
+    if root.exists() {
+        let mut entries = fs::read_dir(&root).map_err(|e| format!("{}: {e}", root.display()))?;
+        if entries.next().is_some() && !overwrite {
+            return Err(format!(
+                "{} already exists and is not empty. Generating would overwrite files in it; \
+                 choose another folder, or confirm the overwrite.",
+                root.display()
+            ));
+        }
+    }
+
+    let mut written = Vec::with_capacity(planned.len());
+    for (rel, f) in &planned {
+        let dest = root.join(rel);
+        if let Some(dir) = dest.parent() {
+            fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        }
+        fs::write(&dest, &f.text).map_err(|e| format!("{}: {e}", dest.display()))?;
+        written.push(rel.to_string_lossy().replace('\\', "/"));
+    }
+    Ok(Some(WriteResult { root: root.to_string_lossy().into(), written }))
+}
+
 /// Where the user's own MCU files go. Created on demand so the folder exists
 /// the first time someone looks for it.
 #[tauri::command]
@@ -266,6 +378,7 @@ fn main() {
             open_mcu,
             save_project,
             open_project,
+            write_project,
             user_mcu_folder,
         ])
         .setup(|app| {
@@ -303,5 +416,57 @@ mod tests {
     fn ignores_a_name_outside_the_mcu_block() {
         let yaml = "packages:\n  name: wrong\nmcu:\n  name: RIGHT\n";
         assert_eq!(mcu_name_of(yaml, "fallback"), "RIGHT");
+    }
+
+    // ---- safe_relative: the one function here that decides where bytes land.
+    //
+    // write_project takes a list of paths from the page and writes them under a
+    // folder the user picked. The page is ours, so none of the escapes below can
+    // happen today — which is exactly why they are tested now, rather than after
+    // someone routes a user-supplied project name into a file path.
+    use super::safe_relative;
+    use std::path::Path;
+
+    #[test]
+    fn accepts_the_paths_a_generated_project_actually_uses() {
+        for p in [
+            "platformio.ini",
+            "src/main.c",
+            "README.md",
+            ".gitignore",
+            "lib/wchcube_generated/include/wchcube_init.h",
+            "lib/wchcube_generated/src/wchcube_init.c",
+        ] {
+            assert!(safe_relative(p).is_ok(), "{p} should be accepted");
+        }
+    }
+
+    #[test]
+    fn normalises_windows_separators_and_redundant_parts() {
+        let got = safe_relative(r"lib\wchcube_generated\src/./wchcube_init.c").unwrap();
+        assert_eq!(got, Path::new("lib").join("wchcube_generated").join("src").join("wchcube_init.c"));
+    }
+
+    #[test]
+    fn refuses_anything_that_could_escape_the_project_folder() {
+        for p in [
+            "../outside.c",                            // straight up
+            "src/../../outside.c",                     // up after going down
+            r"src\..\..\outside.c",                    // the same, Windows-spelled
+            "/etc/passwd",                             // absolute, unix
+            "C:/Windows/System32/drivers/etc/hosts",   // absolute, Windows
+            r"\\server\share\file.c",                  // UNC
+            "",                                        // nothing
+            "   ",                                     // nothing, with whitespace
+            "./",                                      // resolves to no file at all
+        ] {
+            assert!(safe_relative(p).is_err(), "{p:?} should have been refused");
+        }
+    }
+
+    #[test]
+    fn a_refusal_names_the_path_so_the_user_can_see_which_file() {
+        let err = safe_relative("../outside.c").unwrap_err();
+        assert!(err.contains("../outside.c"), "unhelpful message: {err}");
     }
 }

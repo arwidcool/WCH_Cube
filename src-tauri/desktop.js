@@ -90,6 +90,40 @@
       if (saveBtn) saveBtn.onclick = () => window.saveProject();
     }
 
+    // ---- 2b. Generate PlatformIO project: a folder, not a download ---------------
+    //
+    // The page owns the LAYOUT (which files, what they are called, what is in them)
+    // and hands over a flat list of { path, text } with paths relative to the
+    // project root. The shell owns only WHERE the root goes. That split is why
+    // browser mode can ship the identical list as a .zip without either side
+    // knowing about the other.
+    //
+    // Browser mode defines window.generateProjectFiles(); if the page has not
+    // built it yet this whole block is inert, which is how the bridge has always
+    // behaved for a feature that is not there.
+    window.desktopWriteProject = async (name, files, { overwrite = false } = {}) => {
+      const res = await invoke('write_project', { name, files, overwrite });
+      return res;                                     // null when the user cancelled
+    };
+
+    if (typeof window.generateProjectFiles === 'function') {
+      window.generateProject = async () => {
+        try {
+          const project = G('PROJECT') || { name: 'Untitled' };
+          const files = await window.generateProjectFiles();
+          if (!files || !files.length) { alert('Nothing to generate.'); return; }
+          const res = await window.desktopWriteProject(project.name || 'WCHCubeProject', files);
+          if (!res) return;                           // cancelled
+          say(`Wrote ${res.written.length} file(s) to ${res.root}`);
+        } catch (e) {
+          // The Rust side refuses a non-empty folder and a path that could escape
+          // the root, and it names which. Show that rather than a generic failure:
+          // "it did not write, and here is the file" is the useful half.
+          alert('Could not generate the project:\n\n' + e);
+        }
+      };
+    }
+
     const openProjBtn = document.getElementById('m-openproj');
     if (openProjBtn && typeof window.projectApply === 'function') openProjBtn.onclick = async () => {
       try {
