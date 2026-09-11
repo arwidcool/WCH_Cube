@@ -1,0 +1,36 @@
+# Rows of CH32X035 DS v2.2 Table 2-1 that the PDF-to-markdown conversion destroyed.
+#
+# Read `tools/extract_pins.py --corrections` before adding to this file. Everything here
+# is a fact the datasheet states that no parser can recover from the converted text, and
+# every entry is printed on every run so it can never become an invisible assumption.
+#
+# This file is NOT a place to put a value you could not read. A row you cannot determine
+# from the surrounding text goes in `data/mcus/CH32X035.notes.md` as an open question and,
+# if it blocks a package, on the board as BLOCKED. Two entries is the whole list, and both
+# are recoverable with certainty from the rows immediately around them.
+
+PB19:
+  reason: >
+    DS line 1809 reads "40 - - - -  - PB19 I/O PB19  RTS3_3/T2C4_4" - SIX cells where the
+    table has seven columns, with a double space where the missing dash was. Its three
+    immediate neighbours PB16, PB17 and PB18 (lines 1806-1808) each read
+    "<n> - - - - - -", i.e. LQFP64M only, and PB19 sits between PB18 (LQFP64M 39) and PB9
+    (LQFP64M 41) in an unbroken run of LQFP64M pin numbers. So the surviving "40" is the
+    LQFP64M column and every other package is absent. The DS model table agrees: only
+    CH32X035R8T6 (LQFP64M) reaches 60 I/O.
+  cells: { LQFP64M: 40 }
+
+PC3:
+  reason: >
+    DS Table 2-1 gives PC3 TWO rows because its main function differs by package. The
+    first (line 1698, "11 - 4 - - - -") parses cleanly and is already counted. The second
+    (line 1706, "- - - 8 - 4 -", main function "RST/C1N0/C2N1/C3N1/A13") LOST ITS NAME
+    LINE in the conversion - the row is a bare run of cells followed straight by the
+    main-function text, with no "PC3" anywhere on it. It belongs to PC3: it is inside
+    PC3's block, before the next named row (PA22, line 1708), and its main function is
+    PC3's own function list with RST prefixed. The two rows use disjoint columns, so
+    merging them cannot collide. Only the QSOP28 and TSSOP20 cells are new here.
+    Consequence worth carrying into the YAML: on QSOP28 and TSSOP20, PC3 IS the reset
+    pin, which is a per-package fact the conflict engine has to see - the same shape as
+    CH32V006's per-package RST.
+  cells: { QSOP28: 8, TSSOP20: 4 }

@@ -53,7 +53,13 @@ def compile_pin_res(pat=DEFAULT_PIN_PAT, max_cols=8):
     global PIN_RE, ROW_RE, NAME_ONLY_RE
     PIN_RE = re.compile(rf"^{pat}$")
     ROW_RE = re.compile(rf"^((?:(?:\d+|-)\s+){{1,{max_cols}}})({pat})\b")
-    NAME_ONLY_RE = re.compile(rf"^({pat})\s*(?:\(\d+\))?\s*$")
+    # The name on its own line, optionally with a footnote marker, and optionally with
+    # the pin-TYPE cell that the conversion sometimes leaves attached: CH32X035's PC3
+    # arrives as "PC3 I/O/A" after its cells. The type alphabet is closed (DS Table 2-1
+    # note 1: I, O, A, P) so this cannot swallow a remap-function continuation line,
+    # which is what a looser "name followed by anything" pattern would have done.
+    NAME_ONLY_RE = re.compile(
+        rf"^({pat})\s*(?:\(\d+\))?(?:\s+[IOAP](?:/[IOAP])*)?\s*(?:\(\d+\))?\s*$")
 
 
 compile_pin_res()
@@ -104,7 +110,15 @@ def read_table(ds_path, table_title, columns):
         # number gets swept up, the count stops matching and the row is reported as
         # ambiguous instead of landing a pin on the wrong package.
         if CELLS_ONLY_RE.match(s):
-            pending.extend(s.split())
+            # A cell block only STARTS on a line carrying more than one cell. A lone
+            # number on its own line is far more often the tail of the PREVIOUS row's
+            # wrapped remap text - CH32X035's PB11 ends "…/T2C1N_" then "6" on its own
+            # line - and letting that open a block poisoned the next row's cell count.
+            # Once a block is open, single-cell lines legitimately extend it, which is
+            # how "44 32 26 2 / 17 / 17 / 7 PC16" is read back as seven cells.
+            bits = s.split()
+            if pending or len(bits) > 1:
+                pending.extend(bits)
             continue
         bare = NAME_ONLY_RE.match(s)
         if bare and pending:
@@ -124,9 +138,21 @@ def read_table(ds_path, table_title, columns):
             if s and not FOOTNOTE_RE.match(s):
                 pending = []      # any other content breaks the association
             continue
-        pending = []
         cells = m.group(1).split()
         name = m.group(2)
+        # A row the conversion split with the NAME on the final fragment:
+        #     44 32 26 2
+        #     17
+        #     17
+        #     7 PC16
+        # The leading cells arrive as their own lines and the last one carries both a
+        # cell and the pin name. Joining them is only safe when the two halves add up to
+        # exactly the column count - if they do not, the row stays ambiguous rather than
+        # being padded into a plausible shape. CH32X035 needs this; CH32V006 never hits
+        # it, which is why the regression run matters more than the new count.
+        if pending and len(cells) < len(columns) and len(pending) + len(cells) == len(columns):
+            cells = pending + cells
+        pending = []
         if len(cells) != len(columns):
             # Most rows spell an absent package as "-", but some drop the placeholder
             # entirely, and then the cells cannot be tied to columns by position:
@@ -191,6 +217,52 @@ def remove_path(obj, path):
     return False
 
 
+def apply_corrections(ds, columns, path):
+    """Rows the PDF conversion destroyed, supplied explicitly and printed every run.
+
+    This exists because "0 differences" has to stay an honest claim. Two rows of
+    CH32X035's Table 2-1 cannot be recovered by any parser: PB19 lost one of its seven
+    placeholder dashes, and PC3's second row lost its name line entirely. Silently
+    patching either into the YAML would turn a known gap into an invisible assumption,
+    which is the failure this project keeps finding. So they live in a file, each with a
+    `reason:` naming the DS line, and every run prints them before the diff.
+
+    Format:
+        PB19:
+          reason: "DS line 1809 ... the conversion dropped one dash"
+          cells: { LQFP64M: 40 }
+    """
+    import yaml
+    try:
+        doc = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    except Exception as exc:                       # noqa: BLE001
+        print(f"CORRECTIONS: cannot read {path}: {exc}")
+        return None
+    print(f"CORRECTIONS: {path}")
+    for name, spec in sorted(doc.items()):
+        if not isinstance(spec, dict) or not spec.get("reason"):
+            print(f"  REFUSED  {name}: every correction needs a `reason:` citing the DS")
+            return None
+        cells = spec.get("cells") or {}
+        bad = [c for c in cells if c not in columns]
+        if bad:
+            print(f"  REFUSED  {name}: not a column of this table: {', '.join(bad)}")
+            return None
+        for col, num in cells.items():
+            ds[col].setdefault(int(num), set()).add(name)
+        where = ", ".join(f"{c} {n}" for c, n in sorted(cells.items())) or "(no pins)"
+        print(f"  {name:<6} {where}")
+        print(f"         {Report_safe(spec['reason'])}")
+    if not doc:
+        print("  (none)")
+    return doc
+
+
+def Report_safe(text):
+    enc = getattr(sys.stdout, "encoding", None) or "ascii"
+    return str(text).encode(enc, "replace").decode(enc, "replace")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Diff a datasheet pin table against an MCU YAML.")
     ap.add_argument("--ds", default=str(DEFAULT_DS))
@@ -200,6 +272,9 @@ def main():
     ap.add_argument("--yaml", dest="yml", required=True)
     ap.add_argument("--pin-re", default=DEFAULT_PIN_PAT,
                     help=f"regex for a pin name (default: {DEFAULT_PIN_PAT})")
+    ap.add_argument("--corrections",
+                    help="YAML of rows the PDF conversion destroyed; every entry needs a "
+                         "`reason:` citing the DS line. Printed in full on every run.")
     args = ap.parse_args()
 
     columns = [c.strip() for c in args.columns.split(",") if c.strip()]
@@ -211,6 +286,11 @@ def main():
     except LookupError as e:
         print("DS PARSE FAILURE: " + str(e))
         return 2
+
+    if args.corrections:
+        applied = apply_corrections(ds, columns, args.corrections)
+        if applied is None:
+            return 2
 
     print("DS   : " + args.ds)
     print("Table: " + args.table)
