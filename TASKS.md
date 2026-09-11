@@ -758,4 +758,21 @@ nothing about a part; `app/engine/constraints.js` is the only place it is interp
       packages makes `--strict` exit 2 for a configuration the silicon honours. REQUEST(→AGENT-1)
       2026-09-12T01:22Z, with the measurement and a suggested `choices:` shape. Blocked on DATA by
       design: the mechanism is faithful either way and `data/` is not mine.
+- [x] (AGENT-2) **`assignSignal()` stored this app's mode vocabulary, not the part's** — the
+      literals "Output Push Pull" / "Analog" / "Input" went into `S.gpio[pin].mode`, while the
+      macro is looked up in that part's `gpio.modes`. Latent (every shipped part spells it the
+      same way) and found by reading `codegen.js` end to end, the way rounds 3 and 4 each found
+      theirs. Now `gpioModeForSignal()` with the literal as the fallback, so a part whose file
+      states nothing gets the same TODO as before. The pull default comes from the part's own
+      `input_modes` for the same reason.
+- [x] (AGENT-2) **CH32X035 TSSOP20/QSOP28 emitted a spurious remap TODO on every configuration
+      that assigns a pin** — a real defect: `--strict` exited 2 for a package whose board ships.
+      `SYS`'s reset pin is bonded to PC3 there (`remap_by_package`), its remap table carries no
+      `macro:` because the reset pin is an option-byte setting and not a remap, and the "the data
+      cannot apply the selected remap" filter asked only "is a non-zero index selected". The rule
+      is now "does any signal this peripheral requires actually reach a GPIO register" — read
+      from `codegen.skip_signals`, no peripheral named. QFN28 was unaffected, which is why the
+      compile fixture never caught it; `app/tests/codegen.test.js` now assigns a pin on every part
+      on every package and demands zero complaints, which is the coverage hole it hid in.
+
 

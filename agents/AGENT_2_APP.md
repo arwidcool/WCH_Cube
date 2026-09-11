@@ -132,3 +132,32 @@ being consumed without an engine change — and if one needs one, that is a find
 own state making another pin illegal) is where a part with a different coupling would prove the
 mechanism was not built for one chip.
 
+### The audit that followed, and it paid twice
+
+Same cycle, after the three consumers were green: read `app/engine/codegen.js` end to end for an
+assumption that only holds for the parts that exist today — the exercise that found
+`ch32v00x.h` in round 3 and `GPIO_Speed_50MHz` in round 4. Then a machine pass: on every part ×
+every package, switch each peripheral on **one at a time** and list any complaint that is not a
+pin conflict. Two real findings, both fixed in this cycle:
+
+1. **`assignSignal()` stored this app's mode vocabulary, not the part's.** The literals
+   `"Output Push Pull"` / `"Analog"` / `"Input"` went into `S.gpio[pin].mode`, while the macro is
+   looked up in that part's `gpio.modes` — so a part that spells its plain output mode
+   differently would store a name its own file does not carry and emit a TODO for a mode the
+   silicon does have. Latent, because every shipped part spells it the same way. Now
+   `gpioModeForSignal()`, with the literal kept as the **fallback**.
+2. **CH32X035 TSSOP20 and QSOP28 emitted a spurious remap TODO on every configuration with a pin
+   assigned** — a live defect: `--strict` exited 2 for `genericCH32X035F7P6`. `SYS`'s reset pin
+   is bonded to PC3 on those packages (`remap_by_package`), its table carries no `macro:` because
+   the reset pin is an option-byte setting and not a remap, and the "the data cannot apply the
+   selected remap" filter asked only "is a non-zero index selected". QFN28 was unaffected, which
+   is why the compile fixture never caught it. My first fix was too broad and broke two existing
+   tests; the right rule came out of that, and it is data-driven: **does any signal this
+   peripheral requires actually reach a GPIO register** (`codegen.skip_signals`). A check now
+   assigns a pin on every part × every package and demands zero complaints.
+
+Lessons worth keeping: a **default** configuration never reaches the remap section (no GPIOs
+means an early return), so "the fixtures are green" is not evidence about that code path — the
+package you did not put in the fixture is the one that is broken. And when a fix breaks two
+existing tests, the tests are usually telling you the rule you actually want.
+
