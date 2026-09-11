@@ -506,6 +506,22 @@
   .pmsec label.chk{display:flex;align-items:baseline;gap:7px;padding:2px 0;cursor:pointer}
   .pmsec label.chk input{margin:0;flex:0 0 auto;position:relative;top:1px}
   .pmsec label.chk small{display:block;color:var(--muted);font-size:11px}
+  /* The project layout, listed before the folder exists. */
+  .pmtree{display:flex;flex-direction:column;gap:1px;margin:8px 0}
+  .pmtree code{font:11px/1.5 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);
+               background:var(--bar);padding:1px 6px;border-radius:2px;overflow-wrap:anywhere}
+  /* What main.c will do. Green when it will blink something, muted when the honest
+     answer is "nothing will blink, and here is why". */
+  .pmwill{margin:8px 0 0;color:var(--muted);font-size:11.5px}
+  .pmwill.ok{color:var(--ok-ink)}
+  /* Where it went, and the two commands after it: selectable, and it stays put. */
+  .pmwritten{margin-top:12px;padding:9px 10px;border:1px solid var(--ok-ink);border-radius:3px;background:var(--bar)}
+  .pmwritten b{display:block;font-size:11.5px;margin-bottom:3px}
+  .pmwritten b+.pmpath{margin-bottom:8px}
+  .pmpath{display:block;white-space:pre-wrap;overflow-wrap:anywhere;user-select:all;
+          font:11.5px/1.55 ui-monospace,"Cascadia Mono",Consolas,monospace;
+          background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:5px 7px;color:var(--ink-strong)}
+  .pmwritten p{margin:8px 0 0;font-size:11px}
   .pmgen{padding:12px 14px}
   .pmgen button{width:100%;background:var(--blue-hdr);color:#fff;border:0;padding:9px 14px;font-weight:600;letter-spacing:.3px;border-radius:3px}
   .pmgen button:hover{background:var(--blue)}
@@ -2794,7 +2810,7 @@ const mimeFor = name => name.endsWith('.csv') ? 'text/csv'
 // UI-only, and deliberately not in S: which of the generated files Generate writes, and
 // which one the preview is showing. Neither is a property of the hardware configuration,
 // so neither belongs in a .wchproj.
-const PM = { pick: null, skip: new Set() };
+const PM = { pick: null, skip: new Set(), written: null };
 
 /**
  * The generator's own complaints, by file and line. `cComplaints()` reads back what
@@ -2851,13 +2867,17 @@ function renderPmConfig(files) {
 
   // Toolchain. PlatformIO is the only one that exists, so it is stated rather than
   // offered as a one-item menu, and no toolchain we do not support is listed greyed.
+  const board = pmBoard(variant);
   h += `<div class="pmsec"><h4>Toolchain / IDE</h4><dl>`
     + dd('Toolchain', 'PlatformIO')
     + dd('Platform', '<code>ch32v</code> · framework <code>noneos-sdk</code>')
+    + dd('Board', board.ok ? `<code>${esc(board.id)}</code>`
+      : `<span class="ro">${esc(board.why)}</span>`)
     + dd('Environment', pmEnvName(variant))
-    + dd('Output folder', '<code>data/firmware/lib/wchcube_generated/</code>')
-    + `</dl><p>The header goes to <code>include/</code> and the source to <code>src/</code>; that project picks them up automatically.`
-    + ` No other toolchain is supported — there is nothing hidden behind this, it is the only one implemented.</p></div>`;
+    + `</dl><p>No other toolchain is supported — there is nothing hidden behind this, it is the only one implemented.</p></div>`;
+
+  // ---- the generated PlatformIO project ---------------------------------------
+  h += pmProjectSection(board, files);
 
   // Code generator. The list comes from `generatorOptions()` - the options THIS BUILD can
   // honour - and is never a set of checkboxes typed here: an option the engine cannot
@@ -2901,6 +2921,153 @@ function renderPmConfig(files) {
   // picker. app/template.html contains no Tauri code, by design; it only has to leave a
   // button with a stable id and a working browser behaviour behind it.
   box.querySelector('#pm-generate').onclick = pmGenerate;
+  const gp = box.querySelector('#pm-genproject');
+  if (gp) gp.onclick = pmGenerateProject;
+}
+
+/**
+ * The generated PlatformIO project: a folder the user opens in VS Code and flashes.
+ *
+ * The split with the desktop shell, which is also what lets browser mode work: **the page
+ * owns the layout** - which files, what they are called, where in the tree they go - and
+ * hands over a flat `[{ path, text }]` with every path relative to the project root. The
+ * shell owns only where the root goes (`write_project`, AGENT-4's D5). The browser ships
+ * the identical list as a .zip, and neither side knows about the other.
+ *
+ * The FILE CONTENTS are the generator's, not this panel's: `projectFiles()` in the engine
+ * writes platformio.ini, src/main.c and the README (requested from AGENT-2 on the board).
+ * Until that lands this section shows the layout, the board, and what main.c will do - all
+ * of which are true today - and the button is absent rather than present and broken.
+ */
+function pmProjectSection(board, files) {
+  const willDo = pmMainWillDo();
+  const engineHasProject = typeof projectFiles === 'function';
+  const layout = engineHasProject ? pmProjectFiles().map(f => f.path) : PM_LAYOUT;
+  const canGenerate = board.ok && engineHasProject && layout.length > 0;
+
+  let h = `<div class="pmsec"><h4>PlatformIO project</h4>`
+    + `<p>A complete folder: open it in VS Code, press Upload, and the chip runs this configuration.`
+    + ` Nothing to copy and no template to edit.</p>`;
+
+  // What you get, listed before it exists.
+  h += `<div class="pmtree">${layout.map(p => `<code>${esc(p)}</code>`).join('')}</div>`;
+
+  // What main.c will do - the one line that is driven by the configuration.
+  h += `<p class="pmwill${willDo.blink ? ' ok' : ''}">${esc(willDo.text)}</p>`;
+
+  // The refusal, when the part has no board. Visible reason, and the parts that do work.
+  if (!board.ok) {
+    h += `<div class="pmnote bad" style="position:static">${esc(board.why)}.`
+      + (board.detail ? ` <span class="ro">${esc(board.detail)}</span>` : '')
+      + (board.usable && board.usable.length
+        ? ` These part numbers can be generated: ${board.usable.map(v => `<code>${esc(v)}</code>`).join(', ')}.`
+        : '')
+      + `</div>`;
+  } else if (!engineHasProject) {
+    h += `<div class="pmnote warn" style="position:static">This build generates the init code but not yet the`
+      + ` project around it. The layout above is what it will write.</div>`;
+  }
+
+  if (canGenerate) {
+    h += `<div class="pmgen" style="padding:10px 0 0"><button id="pm-genproject">GENERATE PROJECT</button>`
+      + `<p>${pmIsDesktop() ? 'Choose a folder; the project is written into it.'
+        : 'Downloads one .zip with the folder inside it.'}</p></div>`;
+  }
+  return h + pmWrittenHtml() + `</div>`;
+}
+
+/** The layout the generator writes, for the "what you get" list before it exists. */
+const PM_LAYOUT = [
+  'platformio.ini', 'README.md', '.gitignore', 'src/main.c',
+  'lib/wchcube_generated/include/wchcube_init.h',
+  'lib/wchcube_generated/src/wchcube_init.c',
+];
+
+/** Is a desktop shell attached? The bridge defines this; the page never calls Tauri. */
+const pmIsDesktop = () => typeof window.desktopWriteProject === 'function';
+
+/**
+ * The project as a flat [{ path, text }], paths relative to the project root.
+ *
+ * The engine produces every file's TEXT; this decides where each one goes. Generated C
+ * lands in `lib/wchcube_generated/` split by extension the way `data/firmware` expects -
+ * headers in `include/`, sources in `src/` - which is the one piece of layout knowledge
+ * that has to live on this side of the seam.
+ */
+function pmProjectFiles() {
+  if (typeof projectFiles !== 'function') return [];
+  let list;
+  try { list = projectFiles() || []; } catch (e) { console.error('projectFiles', e); return []; }
+  return list.map(f => ({ path: String(f.path || f.name), text: String(f.text ?? '') }));
+}
+
+/**
+ * The PlatformIO board id for a part number, or why there is not one.
+ *
+ * `pio_board` is a per-variant fact in the MCU file and it is never derived. Two CH32V006
+ * variants have none deliberately: the platform ships no board for CH32V006F4U6 or
+ * CH32V006D8U7, and the nearest board would lie about the flash size - F4U6 is 16 KB
+ * against F8U6's 62. So the answer for those is "there is no board", with the variants
+ * that do have one named, and the Generate button disabled WITH THAT REASON VISIBLE. That
+ * is the one kind of disabled control round 2 always allowed: justified by the MCU data,
+ * and saying so.
+ */
+function pmBoard(variant) {
+  const vs = M.mcu.variants || {};
+  const info = variant ? vs[variant] : null;
+  if (info && info.pio_board) return { ok: true, id: info.pio_board, variant };
+  const usable = Object.entries(vs).filter(([, i]) => i.pio_board).map(([v]) => v);
+  if (!variant) {
+    return {
+      ok: false,
+      why: Object.keys(vs).length
+        ? 'no part number chosen — pick one in New project'
+        : 'this MCU file lists no part numbers',
+      usable,
+    };
+  }
+  return {
+    ok: false,
+    variant,
+    why: `no PlatformIO board for ${variant}`,
+    detail: (info && info.notes) || '',
+    usable,
+  };
+}
+
+/**
+ * What the generated `main.c` will do, in one sentence, before it exists.
+ *
+ * Driven entirely by the configuration. printf over the WCH-Link SDI channel claims no
+ * pin, so it is always true; a blink is only true when the USER has configured an output,
+ * and when they have not the honest sentence is the one that teaches. There is deliberately
+ * no "blink an LED" option that would pick a pin for them - inventing a pin the board may
+ * not have wired is exactly the class of guess this project bans.
+ */
+function pmMainWillDo() {
+  const outs = pmOutputPins();
+  if (!outs.length) {
+    return {
+      blink: null,
+      text: 'Prints over the WCH-Link debug channel. No output GPIO is configured, so nothing '
+        + 'will blink — assign one in Pinout & Configuration to get a visible result.',
+    };
+  }
+  const p = outs[0];
+  const label = (S.gpio[p] || {}).label || '';
+  return {
+    blink: p,
+    text: `Blinks ${p}${label ? ` (${label})` : ''} and prints over the WCH-Link debug channel.`
+      + (outs.length > 1 ? ` ${outs.length - 1} other output${outs.length > 2 ? 's are' : ' is'} configured and left alone.` : ''),
+  };
+}
+
+/** Pins the user configured as an output, in pin order. Their configuration, not ours. */
+function pmOutputPins() {
+  return Object.keys(S.gpio)
+    .filter(p => pinExists(p) && /^Output/.test(String((S.gpio[p] || {}).mode || '')))
+    .filter(p => (S.manual[p] || (E.pins[p] && E.pins[p].claims.some(c => c.who === 'GPIO'))))
+    .sort(pinSort);
 }
 
 /**
@@ -2911,7 +3078,7 @@ function renderPmConfig(files) {
  * environment `CH32V006F8P6` (the 85 °C board file the platform ships) - same die, same
  * pinout, different trailing digit. Guessing "the env is the part number" would print a
  * name that does not exist, which is exactly the class of bug this round is about. The
- * mapping is a per-variant fact and belongs in the MCU file; requested from AGENT-1.
+ * mapping is a per-variant fact and belongs in the MCU file; AGENT-1 landed it.
  */
 function pmEnvName(variant) {
   const info = variant ? (M.mcu.variants || {})[variant] : null;
@@ -2997,6 +3164,113 @@ function pmCopyFallback(file, done) {
   try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
   ta.remove();
   ok ? done() : toast('Could not copy — select the text and copy it yourself');
+}
+
+// ---- a ZIP writer, because the app is one offline file ------------------------
+//
+// Browser mode has to deliver a FOLDER, and the app is a single offline HTML file with no
+// CDN and no bundler - so a library is not available at any price. A stored-entry ZIP
+// (compression method 0) is the whole format we need: local header, data, central
+// directory, end record. Sixty lines and a CRC-32 table, which is what the round brief
+// costed it at, and it means the browser and the desktop ship the identical file list.
+const CRC32 = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC32[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+/** One stored-entry ZIP from [{ path, text }]. Returns a Blob. */
+function zipOf(entries) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  const u16 = n => [n & 0xFF, (n >>> 8) & 0xFF];
+  const u32 = n => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
+  for (const e of entries) {
+    // Paths are stored with forward slashes and no leading slash - the ZIP spec's rule
+    // and, conveniently, the same one write_project enforces on the desktop side.
+    const name = enc.encode(String(e.path).replace(/\\/g, '/').replace(/^\/+/, ''));
+    const data = enc.encode(String(e.text ?? ''));
+    const crc = crc32(data);
+    // Local file header. No data descriptor: sizes are known before writing.
+    const local = [...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),                    // mtime/mdate: zero, deliberately
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), ...u16(0)];
+    parts.push(new Uint8Array(local), name, data);
+    central.push([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(0), ...u32(offset), name]);
+    offset += local.length + name.length + data.length;
+  }
+  let cdSize = 0;
+  for (const c of central) {
+    const name = c.pop();
+    const head = new Uint8Array(c);
+    parts.push(head, name);
+    cdSize += head.length + name.length;
+  }
+  parts.push(new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0),
+    ...u16(entries.length), ...u16(entries.length), ...u32(cdSize), ...u32(offset), ...u16(0)]));
+  return new Blob(parts, { type: 'application/zip' });
+}
+
+/**
+ * Generate the project. Desktop: the bridge's native folder picker. Browser: one .zip.
+ *
+ * `window.generateProjectFiles` is the name src-tauri/desktop.js looks for, so defining it
+ * here is what switches the desktop path on; the page still contains no Tauri code.
+ */
+window.generateProjectFiles = () => pmProjectFiles();
+async function pmGenerateProject() {
+  const files = pmProjectFiles();
+  if (!files.length) { toast('This build does not generate a project yet'); return; }
+  const name = (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
+  if (pmIsDesktop()) {
+    try {
+      const res = await window.desktopWriteProject(name, files);
+      if (!res) return;                                  // the user cancelled the picker
+      pmShowWritten(res.root, res.written);
+    } catch (e) { toast(String(e && e.message ? e.message : e)); }
+    return;
+  }
+  const blob = zipOf(files.map(f => ({ path: `${name}/${f.path}`, text: f.text })));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}.zip`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(`Generated ${name}.zip — ${files.length} files`);
+}
+
+/**
+ * Say where it went, and the two commands that follow it.
+ *
+ * A toast is the wrong shape for a path the user has to act on - it disappears, and it
+ * cannot be selected. This is kept in PM.written and re-rendered with the section, so it
+ * stays on screen until the next generate.
+ */
+function pmShowWritten(root, written) {
+  PM.written = { root, count: written.length };
+  renderProjectManager();
+}
+function pmWrittenHtml() {
+  const w = PM.written;
+  if (!w) return '';
+  return `<div class="pmwritten"><b>Wrote ${w.count} file${w.count === 1 ? '' : 's'} to</b>`
+    + `<code class="pmpath">${esc(w.root)}</code>`
+    + `<b>Then, in a terminal:</b><code class="pmpath">cd "${esc(w.root)}"\npio run\npio run -t upload</code>`
+    + `<p class="ro">The first build downloads the toolchain if PlatformIO has not seen this platform before.</p></div>`;
 }
 
 /** Write the selected files. In a browser that means download; the desktop bridge
