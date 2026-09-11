@@ -105,6 +105,54 @@ no pin was assigned. Keep writing them that way.
 
 ---
 
-## Current — round 3, cycle 0
+## Current — round 3, cycle 1 (2026-09-11T14:37Z)
 
-Not started. Round 2's current section was empty for a whole round — do not repeat that.
+**Done this cycle.**
+
+- **P0.1 the compile gate — `tests/codegen_compile.test.js`.** Three fixtures in
+  `tests/fixtures/`, built by `make_fixtures.js` driving the real engine, each one
+  assigning pins: CH32V006 TSSOP20 → `CH32V006F8P6`, CH32V006 QFN32 →
+  `CH32V006K8U6`, CH32V005 TSSOP20 → `CH32V005F6P6`. All three compile and link.
+  Flash 7 796 → 7 972 B against the old default-config build, so `WCHCube_GPIO_Init()`
+  is genuinely not empty. The generator refuses to write a fixture with a pin
+  conflict or under 8 assigned pins; `--check` fails when the data moves under them.
+- **P0.2 both defects have regression tests, and one result matters more than the
+  test.** Planted-break tested, three breaks, three caught. The wrong-case header
+  break **still compiles** on Windows — NTFS resolves it — so only the name check
+  sees it. Compiling is necessary and not sufficient; that is why the two checks
+  sit side by side. Name checks read `data/sources/<PART>/Evt/` first and fall back
+  to the PlatformIO package.
+- **Skips are first class** (`skip()` / `SkipError` in the harness, counted and
+  listed above the verdict by the runner, on green runs too). Verified with
+  PlatformIO off PATH.
+- **P1b.8 `src-tauri` compiled** — and it never had. The floating `open_project`
+  change was required to compile at all; proved by reverting the one line and
+  running `cargo check`. Fix and `Cargo.lock` committed.
+- **P1b.10 `agents/README.md` environment facts** corrected and committed.
+- **P2.12 `PROGRESS.md`** — four false statements fixed, §7 rewritten with an
+  explicit "what this does and does not support saying".
+- **Round 3 put under git.** `data/firmware/`, `PROGRESS.md`, the pack and the
+  reorganised `data/sources/` were all untracked, with the two original datasheets
+  showing as deleted and their replacements untracked. Committed. DECISION:
+  `data/Pio Source/` gitignored — a 45 MB copy of an installed PlatformIO platform,
+  and the brief forbids vendoring the SDK.
+
+**Found, and handed off.** The **EVT packages have landed** for V006 and X035 —
+`PROGRESS.md` and `data/sources/README.md` both still said they were empty. They
+are **not** the same as the copy PlatformIO installs and the drop is newer
+(StdPeriph 0x05 vs 0x04): `GPIO_Remap_LSI_CAL` `0x00200080` → **`0x001A3000`** and
+`FLASH_FLAG_OPTERR` `0x00000001` → **`0x80000001`**. The first is the TIM1
+CH1-from-LSI remap the MCU file models. On the board for AGENT-1 and AGENT-2.
+
+**Next, in order.** C8 `tests/completeness.test.js` · `tests/legibility.test.js` ·
+the round-2 walkthrough re-run with evidence to `tests/evidence/round3/` · the
+round-3 walkthrough section · the Round 3 block in `agents/DONE.md` · `Taskfile.yml`
+decided either way · the dead-control sweep finished · `lib/util` host tests under
+`[env:native]`.
+
+**Not claimed, deliberately.** The gate compiles GPIO, AFIO and RCC. `params:` ride
+in the fixtures but codegen does not emit `*_InitTypeDef` yet, and DMA/NVIC are not
+in the `.wchproj` format at all — they join the gate the day AGENT-2's P2 lands, and
+until then the gate does **not** cover them. Nothing has been flashed. Nothing has
+ever been built on Linux, which is the one place the wrong-case header would have
+failed loudly.
