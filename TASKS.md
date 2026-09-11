@@ -204,9 +204,11 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       identifiers in generated C — this is the panel that shows them to a human. Marks come
       from the engine's own `cComplaints()`, not a scanner of the UI's; verified end to end on
       a real defect (a GPIO on the shorted PD7/PA4 pair → `#error` on line 15)
-- [~] (AGENT-3) `Tools` tab: implement it or remove it. A dead tab is a dead control.
-      Blocked on `tests/layout.test.js`, which asserts the four tab names and is AGENT-4's
-      file — requested on the board 15:47Z. It is the last `disabled` control in the app.
+- [x] (AGENT-3) `Tools` tab: implement it or remove it. A dead tab is a dead control.
+      → **implemented** (round 4, D4). Removing it needed an edit to `tests/layout.test.js`,
+      which is AGENT-4's and went unanswered for two cycles; implementing costs no
+      cross-area edit. It is a REPORT over the loaded MCU file — nothing on it changes a
+      configuration — whose last panel names what the file does not say.
 - [x] (AGENT-2) `generateAll()` returns `{ name, language, text }` per file so the UI can list and
       preview without knowing what codegen produces
 - [x] (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
@@ -298,7 +300,9 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [ ] D1 (AGENT-2) `generateAll()` returns `{ name, language, text }` per file — AGENT-3 waits on it
 - [ ] D2 (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
 - [ ] D3 (AGENT-2) User code sections preserved across regeneration — or the option is not offered
-- [ ] D4 (AGENT-3) `Tools` tab: implement it or remove it
+- [x] D4 (AGENT-3) `Tools` tab: implement it or remove it — implemented as a data report.
+      The app now has exactly one `disabled` control (`#m-redo`, justified by the undo
+      history), so round 3's "no disabled control not justified by the MCU data" is true.
 - [x] D5 (AGENT-4) `write_project` — takes `{ path, text }` relative to a project root plus a
       folder name, validates EVERY path before creating anything, and refuses a non-relative
       path, a `..`, or an existing non-empty folder unless `overwrite`. `safe_relative()` unit
@@ -367,7 +371,7 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [ ] (AGENT-2) Emit `GPIO_PinRemapConfig(<macro>, ENABLE)` where the data gives a macro, the
       `AFIO->PCFR1` word where it does not — both families, no special case
 - [ ] (AGENT-2) Grouped NVIC vectors: many EXTI lines → one vector, enabled exactly once
-- [ ] (AGENT-3) Clock tab on a part with no HSE: no box, no mux entry, no RCC row, **no greyed
+- [~] (AGENT-3) Clock tab on a part with no HSE: no box, no mux entry, no RCC row, **no greyed
       placeholder**, no layout gap, silent console — and CH32V006 unchanged
 - [ ] (AGENT-3) 24-bit ports and PC's hole in the GPIO table, tree, picker and chip labels
 - [ ] (AGENT-3) Seven packages draw, incl. **LQFP64 with 60 I/O** and long names (`USBPD_CC1`,
@@ -397,9 +401,9 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [ ] (AGENT-2) CLI: write a whole standalone project, refusing a non-empty directory unless forced
 - [ ] (AGENT-2) Browser delivery: a stored-entry `.zip` written in `app/engine/` (no external
       library — the app is one offline file), or the alternative argued on the board
-- [ ] (AGENT-3) Project Manager: **Generate PlatformIO project** with name + destination; preview
+- [~] (AGENT-3) Project Manager: **Generate PlatformIO project** with name + destination; preview
       shows **every** file incl. `main.c` and `platformio.ini`
-- [ ] (AGENT-3) Says what `main.c` will do before generating, driven by the configuration; refusal
+- [x] (AGENT-3) Says what `main.c` will do before generating, driven by the configuration; refusal
       shows its reason; after a desktop generate, the path and the next two commands in copyable text
 - [ ] (AGENT-4) `tests/generated_project.test.js` **(gate)**: generate to a scratch dir, `pio run`,
       exit 0, self-containment asserted, cleaned up; skips with a printed reason when `pio` is absent
