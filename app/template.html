@@ -58,7 +58,12 @@
   /* Short labels are the narrow-window spelling; one of the pair is always hidden. */
   .menu .lbl-short{display:none}
   .menubar .spacer{flex:1 1 0;min-width:4px}
+  /* This has to FIT, not ellipsise: an ellipsis is still a value the user cannot read,
+     and AGENT-4's legibility suite counts it as one. The core name is the long half and
+     the memory sizes are the half people actually scan, so the core drops out when the
+     bar gets tight and the full string stays in title=. */
   .menubar .mcu-name{color:var(--muted);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  @media (max-width:1600px){ .menubar .meta-core{display:none} }
   .menubar .mcusel-wrap{display:flex;align-items:center;gap:5px;flex:0 1 auto;min-width:0}
   .menubar .mcusel-wrap>span{color:var(--muted);white-space:nowrap}
   #mcusel{max-width:190px;min-width:96px}
@@ -305,7 +310,11 @@
   .canvas{flex:1;overflow:hidden;position:relative;cursor:grab;background:var(--panel)}
   .canvas.grabbing{cursor:grabbing}
   .canvas svg{width:100%;height:100%;display:block}
-  .chipbar{display:flex;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line);background:var(--bar)}
+  /* flex-wrap is unconditional. It used to arrive only below 1460 px, so at 1536 CSS
+     px (1920 at 125 % zoom) the bar did not wrap and "Only modified" and the unused-GPIO
+     counter were painted past the right edge of the window - AGENT-4's legibility suite
+     caught it at a width my own sweep never measured. A toolbar wraps; that is what it is. */
+  .chipbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line);background:var(--bar)}
   .chipbar .ic{border:0;background:none;color:var(--link);font-size:17px;padding:2px 6px;border-radius:3px}
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
@@ -434,6 +443,79 @@
      floor it can shrink to, this scrolls rather than painting past the edge. */
   .ctreescroll{align-self:stretch;max-width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
 
+  /* ---- Project Manager --------------------------------------------------------
+     Settings on the left, the generated text on the right. Every track is minmax(0,…)
+     so a long line of C cannot widen the grid and push the panel off the window -
+     round-2 finding L2 was exactly that mistake on the clock tab. */
+  #view-pm{grid-template-columns:minmax(0,1fr);overflow:hidden}
+  .pm{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);min-height:0;overflow:hidden}
+  .pmcfg{overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:0 0 14px}
+  .pmsec{padding:10px 14px 14px;border-bottom:1px solid var(--line-soft)}
+  .pmsec h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .pmsec dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:5px 12px;margin:0;align-items:baseline}
+  .pmsec dt{color:var(--muted);white-space:nowrap}
+  .pmsec dd{margin:0;overflow-wrap:anywhere}
+  .pmsec dd code,.pmsec p code{font:11.5px/1.35 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);overflow-wrap:anywhere}
+  .pmsec p{margin:8px 0 0;color:var(--muted);font-size:11.5px}
+  .pmsec label.row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .pmsec label.row input[type=text]{flex:1;min-width:0;padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  .pmsec label.chk{display:flex;align-items:baseline;gap:7px;padding:2px 0;cursor:pointer}
+  .pmsec label.chk input{margin:0;flex:0 0 auto;position:relative;top:1px}
+  .pmsec label.chk small{display:block;color:var(--muted);font-size:11px}
+  .pmgen{padding:12px 14px}
+  .pmgen button{width:100%;background:var(--blue-hdr);color:#fff;border:0;padding:9px 14px;font-weight:600;letter-spacing:.3px;border-radius:3px}
+  .pmgen button:hover{background:var(--blue)}
+  .pmgen button:active{background:#0f5c8a}
+  .pmgen button:focus-visible{outline:2px solid var(--ink-strong);outline-offset:2px}
+  .pmgen button[disabled]{opacity:.45;cursor:not-allowed}
+  .pmgen p{margin:8px 0 0;color:var(--muted);font-size:11.5px}
+  .pmprev{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
+  .pmprevbody{flex:1;display:grid;grid-template-columns:196px minmax(0,1fr);min-height:0}
+  .pmfiles{overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:6px 0}
+  .pmfile{display:block;width:100%;text-align:left;border:0;background:none;color:var(--text);padding:5px 10px;font:inherit;cursor:pointer;border-left:3px solid transparent}
+  .pmfile:hover{background:var(--blue-pale)}
+  .pmfile.on{background:var(--blue-pale);border-left-color:var(--blue);font-weight:600}
+  /* Generated names are long and full of underscores; wrapping them keeps every
+     character readable where an ellipsis would hide which package a file is for. */
+  .pmfile .nm{display:block;overflow-wrap:anywhere;line-height:1.25}
+  .pmfile small{display:block;color:var(--muted);font-size:10.5px;font-weight:400}
+  /* A file the generator complained in is flagged in the LIST as well as in the text:
+     an #error 400 lines down a file nobody scrolled is how a wrong identifier ships. */
+  .pmfile .flag{float:right;color:var(--bad);font-weight:700}
+  .pmfile .flag.todo{color:var(--warn-ink)}
+  .pmtext{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .pmtexthead{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid var(--line);background:var(--bar);font-size:11.5px;color:var(--muted)}
+  .pmtexthead .spacer{flex:1}
+  .pmtexthead button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:3px;padding:2px 9px;font-size:11.5px}
+  .pmtexthead button:hover{background:var(--blue-pale)}
+  .pmtexthead b{color:var(--text);font-weight:600}
+  .pmcode{flex:1;overflow:auto;background:var(--panel);font:11.5px/1.5 ui-monospace,"Cascadia Mono",Consolas,monospace}
+  .pmcode table{border-collapse:collapse;width:100%}
+  .pmcode td{padding:0 8px;white-space:pre;vertical-align:top}
+  .pmcode td.ln{width:1%;text-align:right;color:var(--muted);background:var(--bar);position:sticky;left:0;
+                user-select:none;border-right:1px solid var(--line-soft);padding:0 7px}
+  /* The generator says "I could not work this out" in exactly two spellings and the
+     engine hands them back by line number (cComplaints). They are marked here so they
+     cannot scroll past: an explanation of what is missing is not generated code. */
+  .pmcode tr.error td{background:var(--bad-bg)} .pmcode tr.error td:not(.ln){color:var(--bad);font-weight:600}
+  .pmcode tr.todo td{background:var(--warn-bg)} .pmcode tr.todo td:not(.ln){color:var(--warn-ink)}
+  .pmcode tr.error td.ln,.pmcode tr.todo td.ln{font-weight:700;color:var(--bad)}
+  .pmcode tr.todo td.ln{color:var(--warn-ink)}
+  /* Sticky, and in the UI font rather than the code font: it is a statement about the
+     file, not a line of it, and it has to stay visible while the user scrolls the file. */
+  .pmnote{position:sticky;top:0;z-index:2;padding:6px 10px;font:12px/1.4 var(--font);border-bottom:1px solid var(--line)}
+  .pmnote.bad{background:var(--bad-bg);color:var(--bad)}
+  .pmnote.warn{background:var(--warn-bg);color:var(--warn-ink)}
+  /* Side by side for as long as both halves are usable; below that the settings stack
+     above the preview and the whole view scrolls, rather than either half being crushed. */
+  @media (max-width:1180px){ .pm{grid-template-columns:minmax(258px,320px) minmax(0,1fr)} .pmprevbody{grid-template-columns:158px minmax(0,1fr)} }
+  @media (max-width:900px){
+    #view-pm{overflow:auto}
+    .pm{grid-template-columns:minmax(0,1fr);overflow:visible}
+    .pmcfg{overflow:visible;border-right:0;border-bottom:1px solid var(--line)}
+    .pmprev{min-height:460px}
+  }
+
   /* Dark theme. Off by default; the toggle in the menu bar sets data-theme on <html>. */
   :root[data-theme="dark"]{
     --navy:#0f1923; --blue:#3aa3dd; --blue-lt:#2f8fc4; --blue-pale:#1d3345;
@@ -489,7 +571,6 @@
   @media (max-width:1460px){
     #view-pinout{grid-template-columns:266px minmax(360px,1fr) minmax(450px,1.3fr)}
     .subbar{gap:60px}
-    .chipbar{flex-wrap:wrap}
     /* 152, not 120: the placeholder "🔍 find pin or signal" measures 132 px in this
        font, and a 120 px box clipped it to "find pin or sigr" (round-2 finding L5). */
     #pin-search{width:152px!important}
@@ -547,7 +628,7 @@
   <div class="tabs" role="tablist" aria-label="Views">
     <button class="tab active" data-view="pinout" role="tab" aria-selected="true">Pinout &amp; Configuration</button>
     <button class="tab" data-view="clock" role="tab" aria-selected="false">Clock Configuration</button>
-    <button class="tab" disabled title="Future">Project Manager</button>
+    <button class="tab" data-view="pm" role="tab" aria-selected="false">Project Manager</button>
     <button class="tab" disabled title="Future">Tools</button>
   </div>
 
@@ -608,6 +689,27 @@
   <div class="view" id="view-clock">
     <div class="clock" id="clock"></div>
   </div>
+
+  <!-- ================= PROJECT MANAGER VIEW =================
+       Left: what is generated and where. Right: the actual text of it, before the user
+       takes it. Two of round 3's P0 bugs were single wrong identifiers in generated C;
+       the right-hand panel is what puts those in front of a human. Both halves are
+       painted by renderProjectManager(). -->
+  <div class="view" id="view-pm">
+    <div class="pm">
+      <div class="pmcfg" id="pm-config"></div>
+      <div class="pmprev">
+        <div class="section-h">Preview — this is exactly what Generate writes</div>
+        <div class="pmprevbody">
+          <div class="pmfiles" id="pm-files" role="listbox" aria-label="Generated files"></div>
+          <div class="pmtext">
+            <div class="pmtexthead" id="pm-texthead"></div>
+            <div class="pmcode" id="pm-code" tabindex="0" role="document" aria-label="Generated file contents"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -651,7 +753,11 @@ document.querySelectorAll('script[id^="yaml-mcu-"]').forEach(s => {
 function openMcu(source) { loadMcu(source); syncMcuUi(); renderAll(true); }
 function syncMcuUi() {
   document.getElementById('crumb-mcu').textContent = M.mcu.name;
-  document.getElementById('mcu-meta').textContent = `${M.mcu.core || ''}  ·  ${M.mcu.flash_kb || '?'} KB flash  ·  ${M.mcu.sram_kb || '?'} KB SRAM`;
+  const meta = document.getElementById('mcu-meta');
+  const core = M.mcu.core || '';
+  const mem = `${M.mcu.flash_kb || '?'} KB flash · ${M.mcu.sram_kb || '?'} KB SRAM`;
+  meta.innerHTML = (core ? `<span class="meta-core">${esc(core)} · </span>` : '') + `<span>${esc(mem)}</span>`;
+  meta.title = [core, mem].filter(Boolean).join(' · ');
   const ps = document.getElementById('pkgsel');
   ps.innerHTML = '';
   for (const k of Object.keys(M.packages)) {
@@ -2340,16 +2446,240 @@ function saveProject() {
   const name = downloadText(`${PROJECT.name.replace(/[^\w.-]+/g, '_')}.wchproj`, projectSerialize(), 'application/x-yaml');
   PROJECT.dirty = false; updateCrumb(); toast(`Saved ${name}`);
 }
-// GENERATE CODE — Phase 3 step one: the pin table (Markdown + CSV) and the clock
-// summary (Markdown). C code generation joins generateAll() later.
+// ---------- 7c. Project Manager ------------------------------------------------
+/**
+ * Everything the generator produces, normalised to [{ name, language, text }].
+ *
+ * `generateAll()` returns a `{ name: text }` map today and AGENT-2 is reshaping it to
+ * return the list form (board, 14:30Z). Both are read here so the reshape can land
+ * whenever suits them without this panel changing. `language` is a hint for the preview
+ * and nothing else.
+ */
+const PM_LANG = { '.c': 'c', '.h': 'c', '.md': 'markdown', '.csv': 'csv' };
+function generatedFiles() {
+  let raw;
+  try { raw = generateAll(); } catch (e) { console.error('generateAll', e); return []; }
+  const list = Array.isArray(raw) ? raw
+    : Object.entries(raw || {}).map(([name, text]) => ({ name, text }));
+  return list.map(f => {
+    const dot = String(f.name).lastIndexOf('.');
+    return { name: f.name, text: String(f.text ?? ''), language: f.language || PM_LANG[String(f.name).slice(dot)] || 'text' };
+  });
+}
+const mimeFor = name => name.endsWith('.csv') ? 'text/csv'
+  : name.endsWith('.md') ? 'text/markdown'
+    : /\.[ch]$/.test(name) ? 'text/x-c' : 'text/plain';
+
+// UI-only, and deliberately not in S: which of the generated files Generate writes, and
+// which one the preview is showing. Neither is a property of the hardware configuration,
+// so neither belongs in a .wchproj.
+const PM = { pick: null, skip: new Set() };
+
+/**
+ * The generator's own complaints, by file and line. `cComplaints()` reads back what
+ * codegen just wrote and reports `#error` and `/* TODO:` with a line number; the preview
+ * paints those lines so they cannot scroll past unnoticed. If the engine in this bundle
+ * has no cComplaints, the preview marks nothing rather than inventing a scanner.
+ */
+function complaintsByFile(files) {
+  const out = {};
+  if (typeof cComplaints !== 'function') return out;
+  let list = [];
+  try {
+    const map = {};
+    for (const f of files) map[f.name] = f.text;
+    list = cComplaints(map) || [];
+  } catch (e) { console.error('cComplaints', e); return out; }
+  for (const c of list) ((out[c.file] ||= {})[c.line] = c.kind);
+  return out;
+}
+
+function renderProjectManager() {
+  const view = document.getElementById('view-pm');
+  if (!view || !view.classList.contains('active')) return;   // hidden: nothing to measure, nothing to paint
+  const files = generatedFiles();
+  const flags = complaintsByFile(files);
+  if (!files.some(f => f.name === PM.pick)) PM.pick = files.length ? files[0].name : null;
+  renderPmConfig(files);
+  renderPmFiles(files, flags);
+  renderPmCode(files.find(f => f.name === PM.pick) || null, flags);
+}
+
+function renderPmConfig(files) {
+  const pkgVariants = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === S.pkg).map(([v]) => v);
+  // The project's part number if one was chosen; otherwise, when the MCU file lists
+  // exactly one part in this package, that IS the part - say so rather than "not chosen".
+  const variant = PROJECT.variant || (pkgVariants.length === 1 ? pkgVariants[0] : null);
+  const partCell = PROJECT.variant ? esc(PROJECT.variant)
+    : pkgVariants.length === 1 ? `${esc(pkgVariants[0])} <span class="ro">— the only part this MCU file lists for ${esc(S.pkg)}</span>`
+      : pkgVariants.length ? `<span class="ro">not chosen. ${esc(pkgVariants.join(', '))} all use ${esc(S.pkg)} — pick one in New project</span>`
+        : '<span class="ro">this MCU file lists no part numbers</span>';
+  const dd = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  const chosen = files.filter(f => !PM.skip.has(f.name));
+
+  let h = `<div class="pmsec"><h4>Project</h4>`
+    + `<label class="row"><span>Name</span><input type="text" id="pm-name" value="${attr(PROJECT.name)}" maxlength="64" aria-label="Project name"></label>`
+    + `<dl>`
+    + dd('MCU', esc(M.mcu.name))
+    + dd('Part number', partCell)
+    + dd('Package', esc(S.pkg))
+    + dd('Core', esc(M.mcu.core || '—'))
+    + dd('Memory', `${esc(String(M.mcu.flash_kb ?? '?'))} KB flash · ${esc(String(M.mcu.sram_kb ?? '?'))} KB SRAM`)
+    + `</dl>`
+    + `<p>Everything but the name comes from the project. Change the part or the package with <b>New project</b> or the package selector on the Pinout tab.</p></div>`;
+
+  // Toolchain. PlatformIO is the only one that exists, so it is stated rather than
+  // offered as a one-item menu, and no toolchain we do not support is listed greyed.
+  h += `<div class="pmsec"><h4>Toolchain / IDE</h4><dl>`
+    + dd('Toolchain', 'PlatformIO')
+    + dd('Platform', '<code>ch32v</code> · framework <code>noneos-sdk</code>')
+    + dd('Environment', pmEnvName(variant))
+    + dd('Output folder', '<code>data/firmware/lib/wchcube_generated/</code>')
+    + `</dl><p>The header goes to <code>include/</code> and the source to <code>src/</code>; that project picks them up automatically.`
+    + ` No other toolchain is supported — there is nothing hidden behind this, it is the only one implemented.</p></div>`;
+
+  // Code generator. Only choices the engine can actually honour: which of the files it
+  // produced are written. The structural options in the round brief - one file or a pair
+  // per peripheral, keeping user-code sections across a regeneration - are NOT SHOWN,
+  // because codegen cannot do either yet and a checkbox that changes nothing is a lie.
+  h += `<div class="pmsec"><h4>Code generator</h4>`
+    + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.name)}"${PM.skip.has(f.name) ? '' : ' checked'}>`
+      + `<span><code>${esc(f.name)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
+      : '<p>This configuration generates nothing.</p>')
+    + `<p>Options the generator cannot honour yet are not listed here rather than shown greyed: it writes one header and one source, and does not preserve user-code sections across a regeneration.</p></div>`;
+
+  h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE CODE</button>`
+    + `<p>${chosen.length ? `Downloads ${chosen.length} file${chosen.length === 1 ? '' : 's'}.` : 'Nothing selected.'}`
+    + ` In a browser these arrive in your downloads folder; the desktop build writes them straight to the output folder above.</p></div>`;
+
+  const box = document.getElementById('pm-config');
+  box.innerHTML = h;
+  const name = box.querySelector('#pm-name');
+  name.onchange = () => { setProject({ name: name.value.trim() || 'Untitled' }); updateCrumb(); renderProjectManager(); };
+  box.querySelectorAll('input[data-pmfile]').forEach(cb => cb.onchange = () => {
+    cb.checked ? PM.skip.delete(cb.dataset.pmfile) : PM.skip.add(cb.dataset.pmfile);
+    renderProjectManager();
+  });
+  // The desktop bridge (src-tauri/desktop.js) replaces this handler with a native folder
+  // picker. app/template.html contains no Tauri code, by design; it only has to leave a
+  // button with a stable id and a working browser behaviour behind it.
+  box.querySelector('#pm-generate').onclick = pmGenerate;
+}
+
+/**
+ * Which PlatformIO environment this part builds in.
+ *
+ * NOT derived from the part number. `data/firmware/platformio.ini` maps the configurator
+ * part `CH32V006F8P7` (the 105 °C grade `data/mcus/CH32V006.yaml` lists) to the
+ * environment `CH32V006F8P6` (the 85 °C board file the platform ships) - same die, same
+ * pinout, different trailing digit. Guessing "the env is the part number" would print a
+ * name that does not exist, which is exactly the class of bug this round is about. The
+ * mapping is a per-variant fact and belongs in the MCU file; requested from AGENT-1.
+ */
+function pmEnvName(variant) {
+  const info = variant ? (M.mcu.variants || {})[variant] : null;
+  const env = info && (info.pio_env || info.env);
+  if (env) return `<code>${esc(env)}</code>`;
+  return `<span class="ro">not stated by this MCU file — see <code>data/firmware/platformio.ini</code>.`
+    + ` It is not always the part number, so this panel will not guess it.</span>`;
+}
+
+function pmDescribe(f) {
+  if (/\.h$/.test(f.name)) return 'C header — the init entry points';
+  if (/\.c$/.test(f.name)) return 'C source — GPIO, AFIO and clock initialisation';
+  if (/pinout\.md$/.test(f.name)) return 'pin table, Markdown';
+  if (/pinout\.csv$/.test(f.name)) return 'pin table, CSV';
+  if (/clocks\.md$/.test(f.name)) return 'clock summary, Markdown';
+  return `${f.language} · ${f.text.split('\n').length} lines`;
+}
+
+function renderPmFiles(files, flags) {
+  const box = document.getElementById('pm-files');
+  box.innerHTML = files.map(f => {
+    const kinds = Object.values(flags[f.name] || {});
+    const flag = kinds.includes('error') ? `<span class="flag" title="this file contains #error">#error</span>`
+      : kinds.length ? `<span class="flag todo" title="${kinds.length} TODO section${kinds.length === 1 ? '' : 's'}">TODO</span>` : '';
+    return `<button class="pmfile${f.name === PM.pick ? ' on' : ''}" data-pmpick="${attr(f.name)}" role="option"`
+      + ` title="${attr(f.name)}" aria-selected="${f.name === PM.pick}">${flag}<span class="nm">${esc(f.name)}</span>`
+      + `<small>${f.text.split('\n').length} lines${PM.skip.has(f.name) ? ' · not generated' : ''}</small></button>`;
+  }).join('') || '<div class="treenone">Nothing to preview.</div>';
+  box.querySelectorAll('[data-pmpick]').forEach(b => b.onclick = () => { PM.pick = b.dataset.pmpick; renderProjectManager(); });
+}
+
+function renderPmCode(file, flags) {
+  const head = document.getElementById('pm-texthead'), code = document.getElementById('pm-code');
+  if (!file) { head.innerHTML = ''; code.innerHTML = '<div class="empty">Nothing to preview.</div>'; return; }
+  const marks = flags[file.name] || {};
+  const errs = Object.values(marks).filter(k => k === 'error').length;
+  const todos = Object.values(marks).filter(k => k === 'todo').length;
+  const lines = file.text.split('\n');
+  head.innerHTML = `<b>${esc(file.name)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
+    + `<div class="spacer"></div><button id="pm-copy">Copy</button>`;
+  head.querySelector('#pm-copy').onclick = () => pmCopy(file);
+  const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — <b>this file will not compile as it stands.</b>`
+    + ` The generator says so rather than emitting code for a configuration it cannot express. The line${errs === 1 ? ' is' : 's are'} marked below.</div>`
+    : todos ? `<div class="pmnote warn">${todos} TODO section${todos === 1 ? '' : 's'} — the generator could not work something out and said so instead of emitting plausible-looking bits.`
+      + ` It compiles; it just does less than the configuration asks for. Marked below.</div>` : '';
+  // `kind` is cComplaints' own vocabulary ('error' / 'todo') and is used as the class
+  // verbatim, so a new kind cannot silently stop being highlighted the way a hand-written
+  // mapping would. (It did: the class said `error` and the stylesheet said `err`, and the
+  // banner counted a line the table was not marking.)
+  code.innerHTML = note + '<table><tbody>' + lines.map((l, i) => {
+    const k = marks[i + 1];
+    return `<tr${k ? ` class="${attr(k)}"` : ''}${k ? ` id="pm-l${i + 1}"` : ''}>`
+      + `<td class="ln">${i + 1}</td><td>${esc(l) || '&nbsp;'}</td></tr>`;
+  }).join('') + '</tbody></table>';
+  // Land on the first complaint if it is below the fold - an #error 400 lines down a
+  // file nobody scrolled is how a wrong identifier ships. Only if it is below the fold:
+  // scrolling when it is already visible would push the banner above it out of view.
+  const firstBad = Object.keys(marks).map(Number).sort((a, b) => a - b)[0];
+  code.scrollTop = 0;
+  if (firstBad) {
+    const row = code.querySelector('#pm-l' + firstBad);
+    if (row) {
+      const rr = row.getBoundingClientRect(), cr = code.getBoundingClientRect();
+      if (rr.bottom > cr.bottom) code.scrollTop += (rr.top - cr.top) - code.clientHeight / 3;
+    }
+  }
+}
+
+function pmCopy(file) {
+  const done = () => toast(`Copied ${file.name}`);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(file.text).then(done, () => pmCopyFallback(file, done));
+  } else pmCopyFallback(file, done);
+}
+function pmCopyFallback(file, done) {
+  // file:// pages and older engines refuse the async clipboard; a selected textarea and
+  // execCommand still work there, and failing silently would be worse than either.
+  const ta = document.createElement('textarea');
+  ta.value = file.text;
+  ta.style.cssText = 'position:fixed;top:-1000px;left:0;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  ok ? done() : toast('Could not copy — select the text and copy it yourself');
+}
+
+/** Write the selected files. In a browser that means download; the desktop bridge
+ *  replaces this handler with a native folder picker. */
+function pmGenerate() {
+  const files = generatedFiles().filter(f => !PM.skip.has(f.name));
+  if (!files.length) { toast('Nothing selected to generate'); return; }
+  for (const f of files) downloadText(f.name, f.text, mimeFor(f.name));
+  const bad = complaintsByFile(files);
+  const errs = Object.values(bad).reduce((n, m) => n + Object.values(m).filter(k => k === 'error').length, 0);
+  toast(errs ? `Generated ${files.length} file(s) — ${errs} #error line(s), see the preview`
+    : `Generated ${files.map(f => f.name).join(', ')}`);
+}
+
+// GENERATE CODE in the breadcrumb: the same thing the Project Manager's button does, so
+// there is one behaviour rather than two that can drift apart.
 (() => {
   const btn = document.querySelector('.gen');
-  btn.title = 'Export the pin table (Markdown + CSV) and the clock summary (Markdown)';
-  btn.onclick = () => {
-    const files = generateAll();
-    for (const [name, text] of Object.entries(files)) downloadText(name, text, name.endsWith('.csv') ? 'text/csv' : 'text/markdown');
-    toast(`Generated ${Object.keys(files).join(', ')}`);
-  };
+  btn.title = 'Generate the init code, the pin table and the clock summary — see them first on the Project Manager tab';
+  btn.onclick = pmGenerate;
 })();
 // New-project dialog
 function openNewProject() {
@@ -2461,7 +2791,7 @@ function renderAll(fit) {
   firstRender = false; updateCrumb();
   compute();
   syncShellSelectors();
-  renderTree(); renderCentre(); renderChip(); renderClock();
+  renderTree(); renderCentre(); renderChip(); renderClock(); renderProjectManager();
   if (fit) fitChip();
   const key = E.conflicts.join('|');
   if (key && key !== lastConflicts) toast('⚠ Pin conflict: ' + E.conflicts.join(' · '));
@@ -2485,9 +2815,13 @@ window.addEventListener('keydown', e => {
 document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + b.dataset.view));
+  document.querySelectorAll('.tab[data-view]').forEach(x => x.setAttribute('aria-selected', String(x === b)));
   // Text measured while the view was hidden comes back 0, so a repaint made from
   // another tab leaves the chip unfitted. Re-fit on the way in; it is idempotent.
   if (b.dataset.view === 'pinout') { fitSvgTexts(svg); fitChip(); }
+  // The preview regenerates from the CURRENT configuration every time the tab is
+  // entered, so it can never show C for a configuration the user has since changed.
+  if (b.dataset.view === 'pm') renderProjectManager();
 });
 document.getElementById('pkgsel').onchange = e => {
   closePicker();
