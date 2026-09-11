@@ -162,6 +162,11 @@
   .pin.conflict rect{fill:var(--pin-conflict)}
   .pin.io,.pin.set,.pin.conflict{cursor:pointer}
   .pin.hover rect{stroke:var(--pin-hover);stroke-width:2}
+  .pin.found rect{stroke:var(--pin-hover);stroke-width:2.5}
+  .pin.found text{font-weight:700}
+  .pin.faded{opacity:.35}
+  .hits{color:var(--muted);font-size:11.5px;white-space:nowrap;min-width:54px}
+  .hits.none{color:var(--bad)}
   .pin.selected rect{stroke:#0033cc;stroke-width:2.5}
   .siglabel{font-family:var(--font);font-size:10.5px;fill:var(--text)}
   .siglabel.conflict{fill:var(--bad);font-weight:600}
@@ -363,7 +368,7 @@
         <button class="ic" id="z-fit" title="Fit">⛶</button>
         <button class="ic" id="z-out" title="Zoom out">⊖</button>
         <label class="sr" for="pkgsel">Package</label><select id="pkgsel" title="Package"></select>
-        <label class="sr" for="pin-search">Find a pin or signal</label><input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px">
+        <label class="sr" for="pin-search">Find a pin or signal</label><input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px"><span class="hits" id="pin-hits" role="status" aria-live="polite"></span>
         <label class="flt" title="Hide pins that have no signal and no user label"><input type="checkbox" id="only-mod">Only modified</label>
         <div class="spacer"></div>
         <div class="unused">Unused GPIOs:<b id="unused">0 / 0</b></div>
@@ -550,6 +555,7 @@ function renderChip() {
   document.getElementById('unused').textContent = `${io.length - used} / ${io.length}`;
   decoratePkgSel();
   syncHistoryButtons();
+  if (document.getElementById('pin-search').value.trim()) applyPinSearch();
   // The drawing changes size as signals and labels come and go. Re-fit automatically
   // until the user pans or zooms themselves.
   if (U.cview === 'system') renderSystem();
@@ -936,9 +942,57 @@ document.getElementById('m-theme').onclick = () =>
   setTheme(saved === 'dark');
 })();
 
+// Pin search. Matches the pin name, the signal on it, its user label and any
+// alternate function it could carry. Non-matching pins fade so the hits stand out.
+function pinMatches(name, q) {
+  if (!q) return false;
+  const info = E.pins[name];
+  return name.toLowerCase().includes(q)
+    || groupOf(name).some(n => n.toLowerCase().includes(q))
+    || (info && info.label.toLowerCase().includes(q))
+    || userLabel(name).toLowerCase().includes(q)
+    || (M._pinSignals[name] || []).some(s => sigName(s.periph, s.signal).toLowerCase().includes(q));
+}
+function applyPinSearch() {
+  const box = document.getElementById('pin-search'), out = document.getElementById('pin-hits');
+  const q = box.value.trim().toLowerCase();
+  const hits = [];
+  svg.querySelectorAll('.pin').forEach(p => {
+    const hit = pinMatches(p.dataset.pin, q);
+    p.classList.toggle('found', hit);
+    p.classList.toggle('faded', !!q && !hit);
+    if (hit) hits.push(p.dataset.pin);
+  });
+  U.hits = hits;
+  out.textContent = !q ? '' : hits.length ? `${hits.length} pin${hits.length > 1 ? 's' : ''}` : 'no match';
+  out.classList.toggle('none', !!q && !hits.length);
+  return hits;
+}
+document.getElementById('pin-search').addEventListener('input', applyPinSearch);
+document.getElementById('pin-search').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { e.stopPropagation(); e.target.value = ''; applyPinSearch(); return; }
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const hits = U.hits && U.hits.length ? U.hits : applyPinSearch();
+  if (!hits.length) return;
+  // Enter walks the matches: focus the next one and say what it is
+  const at = hits.indexOf(U.focus);
+  U.focus = hits[(at + 1) % hits.length];
+  renderChip();
+  applyPinSearch();
+  const i = E.pins[canon(U.focus)];
+  toast(`${groupOf(U.focus).join('/')} (pin ${pinNum(U.focus)})${i ? ' \u2014 ' + i.label : ''}`);
+});
+
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
 const collapsed = new Set();
+// "MOSI" should find SPI1, not nothing.
+function periphHasSignal(pid, q) {
+  const P = M.peripherals[pid];
+  if (!P) return false;
+  return (P.remaps || []).some(r => Object.keys(r.pins || {}).some(sig => sigName(pid, sig).toLowerCase().includes(q)));
+}
 function renderTree() {
   const q = document.getElementById('tree-search').value.trim().toLowerCase();
   const conf = {};                    // pid -> how many physical pins it fights over
@@ -950,7 +1004,7 @@ function renderTree() {
   const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
   let h = '';
   for (const c of order) {
-    const items = cats[c].filter(p => !q || p.toLowerCase().includes(q));
+    const items = cats[c].filter(p => !q || p.toLowerCase().includes(q) || periphHasSignal(p, q));
     if (!items.length) continue;
     const ccnt = items.reduce((n, p) => n + (conf[p] || 0), 0);
     h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${ccnt ? ` <span class="cnt">${ccnt}</span>` : ''}</span></button><div class="items">`;
@@ -1350,12 +1404,6 @@ document.getElementById('pkgsel').onchange = e => {
   const warn = Object.keys(E.issues).length; if (warn) msgs.push(`${warn} peripheral${warn > 1 ? 's' : ''} with issues`);
   if (msgs.length) toast(msgs.join(' — '));
 };
-document.getElementById('pin-search').addEventListener('input', e => {
-  const q = e.target.value.trim().toLowerCase(); svg.querySelectorAll('.pin').forEach(p => {
-    const name = p.dataset.pin, info = E.pins[name], hit = q && (name.toLowerCase().includes(q) || (info && info.label.toLowerCase().includes(q)) || (M._pinSignals[name] || []).some(s => sigName(s.periph, s.signal).toLowerCase().includes(q)));
-    p.classList.toggle('hover', !!hit);
-  });
-});
 document.getElementById('m-open').onclick = () => document.getElementById('fileinput').click();
 document.getElementById('fileinput').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
