@@ -45,6 +45,25 @@ const withCodegen = () => {
   return e;
 };
 
+// Parts that deliberately state LESS than CH32V006, defined here rather than pointing at
+// WCH-DUMMY32-C8 so these tests keep testing the generator while AGENT-1 fills that part
+// in (round-3 C7). `mcu.remove` runs against the parent, so each of these is exactly the
+// reference part minus one thing.
+const NO_CODEGEN = `
+mcu:
+  name: WCH-DUMMY32-NOCODEGEN
+  inherits: CH32V006
+  fixture: true
+  remove: [codegen, gpio]
+`;
+const NO_SPEEDS = `
+mcu:
+  name: CH32V006-NOSPEEDS
+  inherits: CH32V006
+  remove: [gpio.speeds, codegen.speeds]
+`;
+const withFile = (text, name) => { const e = fresh(); e.registerMcuFile(text); e.loadMcu(name); return e; };
+
 test('the plan names the pin the signal really uses, even on a shorted pair', () => {
   const e = fresh();
   e.assignSignal('PA4', { gpio: 'GPIO_Output' });   // PA4 and PD7 are one pin
@@ -84,9 +103,67 @@ test('the generated GPIO code is grouped by port, mode and speed', () => {
   assert.ok(c.includes('RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOC | RCC_PB2Periph_AFIO, ENABLE);'));
   assert.ok(c.includes('GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 | GPIO_Pin_1;'), 'same mode and speed share one call');
   assert.ok(c.includes('GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;'));
-  assert.ok(c.includes('GPIO_InitStructure.GPIO_Speed = GPIO_Speed_2MHz;'));
+  // The part's one speed, from `gpio.speeds` on CH32V006, which this fixture inherits.
+  // NOT the legacy Low/Medium/High map in codegen.speeds above: that map exists only to
+  // translate a name a .wchproj saved earlier, and it never decides what is emitted.
+  assert.ok(c.includes('GPIO_InitStructure.GPIO_Speed = GPIO_Speed_30MHz;'));
+  assert.equal(/GPIO_Speed_(2|10|50)MHz/.test(c), false, 'no macro this part does not have');
   assert.ok(c.includes('GPIO_Init(GPIOC, &GPIO_InitStructure);'));
   assert.ok(c.includes('/* PC0 "LED" — GPIO_Output */'), 'user labels reach the code');
+});
+
+// Round-3 P0b. The defect the round opened with: codegen emitted GPIO_Speed_50MHz on a
+// part whose GPIOSpeed_TypeDef has exactly one member, GPIO_Speed_30MHz
+// (data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 22-26).
+test('a one-speed part emits its one macro, whatever the GPIO table stored', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.deepEqual(e.gpioSpeeds(), [{ name: '30 MHz', macro: 'GPIO_Speed_30MHz' }]);
+  assert.equal(e.gpioSpeedIsChoice(), false, 'one speed means the control is not shown');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  // a stored speed from before the fix, and one that never existed anywhere
+  for (const stored of ['High', 'Low', 'GPIO_Speed_50MHz', undefined]) {
+    e.S.gpio.PC0 = Object.assign(e.S.gpio.PC0 || {}, { speed: stored });
+    e.compute();
+    const c = e.cSource();
+    assert.ok(c.includes('GPIO_Speed = GPIO_Speed_30MHz;'), `stored ${stored}`);
+    assert.equal(/GPIO_Speed_(2|10|50)MHz/.test(c), false, `stored ${stored}: no invented macro`);
+    assert.equal(e.gpioPlan().find(p => p.pin === 'PC0').speed, '30 MHz', 'the plan normalises it too');
+  }
+});
+
+test('a part with a real choice still maps each name to its own macro', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-TWOSPEED
+  inherits: CH32V006
+gpio:
+  speeds:
+    - { name: "10 MHz", macro: GPIO_Speed_10MHz }
+    - { name: "30 MHz", macro: GPIO_Speed_30MHz }
+`);
+  e.loadMcu('CH32V006-TWOSPEED');
+  assert.equal(e.gpioSpeedIsChoice(), true, 'two entries means a real selector');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.assignSignal('PC1', { gpio: 'GPIO_Output' });
+  e.setGpioField('PC0', 'speed', '10 MHz');
+  e.setGpioField('PC1', 'speed', '30 MHz');
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('GPIO_Speed = GPIO_Speed_10MHz;'), 'the slow pin');
+  assert.ok(c.includes('GPIO_Speed = GPIO_Speed_30MHz;'), 'the fast pin');
+  assert.ok(!c.includes('GPIO_Pin_0 | GPIO_Pin_1'), 'and two speeds are two GPIO_Init calls');
+});
+
+test('a part that states no speed at all gets a TODO, not a guessed macro', () => {
+  const e = withFile(NO_SPEEDS, 'CH32V006-NOSPEEDS');
+  assert.deepEqual(e.gpioSpeeds(), [], 'this part states neither gpio.speeds nor codegen.speeds');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.compute();
+  const c = e.cSource();
+  assert.equal(/GPIO_InitStructure.GPIO_Speed =/.test(c), false, 'nothing is invented');
+  assert.match(c, /TODO: no SPL macro for output speed/);
+  assert.ok(e.cComplaints().some(x => x.kind === 'todo' && /output speed/.test(x.text)));
 });
 
 test('the AFIO word is built from the remap indices', () => {
@@ -183,13 +260,14 @@ test('a real part with no codegen: block refuses to compile, and says what is mi
 });
 
 test('a fixture part with no codegen: block explains itself without refusing to compile', () => {
-  const e = fresh('WCH-DUMMY32-C8');
+  const e = withFile(NO_CODEGEN, 'WCH-DUMMY32-NOCODEGEN');
   e.compute();
-  assert.equal(e.isFixture(), true, 'the dummy part is a fixture');
+  assert.equal(e.isFixture(), true, 'mcu.fixture marks it, and so does the name');
   const c = e.cSource();
   assert.ok(c.includes('TODO'), 'it should still say what a real part would need');
   assert.equal(c.includes('has no codegen: block'), false,
     'a fixture exists to exercise the tool; #error would just break its own tests');
+  assert.equal(fresh('WCH-DUMMY32-C8').isFixture(), true, 'and the bundled dummy part is one too');
 });
 
 test('the header declares exactly what the source defines', () => {

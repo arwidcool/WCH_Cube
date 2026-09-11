@@ -130,6 +130,47 @@ export const groupOf  = name => { const num = pinNum(name); return num === undef
 export const sigName  = (pid, sig) => `${pid}_${sig}`;
 export const GPIO_SIGS = ['GPIO_Input', 'GPIO_Output', 'GPIO_Analog', 'GPIO_EXTI'];
 
+// ---- GPIO output speed -------------------------------------------------------
+// The speeds this part HAS, in the data's order: [{ name, macro }]. `gpio.speeds`
+// in the MCU file is the authority; `name` is what the GPIO table shows and what a
+// .wchproj stores, `macro` is the SPL enum member.
+//
+// **A one-entry list means the control is not shown** (data/FORMAT.md): CH32V006 and
+// CH32V005 have exactly one, `GPIO_Speed_30MHz`, because `GPIOx_CFGLR.MODEy` is a
+// single bit (RM v1.4 7.3.1.1) and `GPIOSpeed_TypeDef` in the EVT header
+// data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 22-26 has one
+// member. Offering Low/Medium/High there offered a choice the silicon does not have,
+// and generated three macro names that do not compile.
+//
+// A part with no `gpio.speeds` makes no claim. Rather than invent a list, fall back to
+// the legacy `codegen.speeds` map's keys, which is what such a file used to mean.
+export function gpioSpeeds() {
+  const list = ((M && M.gpio) || {}).speeds;
+  if (Array.isArray(list) && list.length) {
+    return list.filter(s => s && s.name).map(s => ({ name: String(s.name), macro: s.macro || null }));
+  }
+  const legacy = ((M && M.codegen) || {}).speeds;
+  if (legacy && typeof legacy === 'object') {
+    return Object.entries(legacy).map(([name, macro]) => ({ name, macro }));
+  }
+  return [];
+}
+
+// True when the part offers a real choice. False (one speed, or none stated) means the
+// UI shows fixed text and no selector - never a disabled selector.
+export const gpioSpeedIsChoice = () => gpioSpeeds().length > 1;
+
+// The speed name to USE for a pin, given whatever S.gpio[pin].speed holds. A part with
+// one speed always answers with that one, so a .wchproj saved when the app still offered
+// "High" opens as "30 MHz" rather than carrying a name the part cannot express.
+export function gpioSpeedFor(stored) {
+  const list = gpioSpeeds();
+  if (!list.length) return stored || null;
+  if (list.length === 1) return list[0].name;
+  const hit = list.find(s => s.name === stored);
+  return hit ? hit.name : list[0].name;
+}
+
 // Some peripherals sit on different pins depending on the package (bonding, not AFIO).
 export function applyPackageRemaps() {
   for (const [pid, P] of Object.entries(M.peripherals))

@@ -142,13 +142,29 @@ test('the channel table says what each channel can serve and what is live', () =
   assert.equal(Object.keys(ch).length, 7);
 });
 
+// The absence has to be tested on a part built for it, not on whichever bundled part
+// happens to be incomplete this week: WCH-DUMMY32-C8 is getting `dma:` and `nvic:`
+// (round-3 C7), and the engine's "simply has none" path must still be covered after
+// that. `mcu.remove` runs against the parent, so this is CH32V006 minus two blocks.
 test('a part with no exti or dma block simply has none', () => {
-  const e = fresh('WCH-DUMMY32-C8');
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-NO-EXTI-DMA
+  inherits: CH32V006
+  remove: [exti, dma]
+`);
+  e.loadMcu('CH32V006-NO-EXTI-DMA');
   e.compute();
   assert.equal(e.E.resources.exti, null);
   assert.equal(e.E.resources.dma, null);
   assert.deepEqual(e.E.resourceIssues, []);
   assert.equal(e.extiLineOf('PA0'), null);
+  // and the app still works on it: assigning an EXTI pin is not an error, it just
+  // has no line to report
+  e.assignSignal('PC3', { gpio: 'GPIO_EXTI' });
+  e.compute();
+  assert.deepEqual(e.E.resourceIssues, []);
 });
 
 test('resource issues survive a project round-trip', () => {

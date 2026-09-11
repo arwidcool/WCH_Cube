@@ -4,7 +4,7 @@
 //  The browser download and the file dialogs live in the app shell.
 // =============================================================================
 import {
-  M, S, MCU_FILES, loadMcu, applyPackageRemaps, yamlDump, yamlLoad,
+  M, S, MCU_FILES, loadMcu, applyPackageRemaps, yamlDump, yamlLoad, gpioSpeeds, gpioSpeedFor,
 } from './model.js';
 import { applyParams, paramsObject } from './params.js';
 import { clearHistory } from './history.js';
@@ -75,6 +75,25 @@ export function projectSerialize() {
   return yamlDump(projectObject(), { noRefs: true, lineWidth: 120 });
 }
 
+// A .wchproj saved before the one-speed fix stores "Low" / "Medium" / "High" per pin -
+// names this silicon has never had (round-3 P0b). Opening it must not carry them into S,
+// where the GPIO table would show them and the generator would have to translate them
+// forever. Rewrite them to a speed the part actually offers and say so, the same way an
+// out-of-range parameter is reported rather than silently applied.
+function normaliseGpioSpeeds() {
+  const speeds = gpioSpeeds();
+  if (!speeds.length) return [];
+  const out = [];
+  for (const [pin, g] of Object.entries(S.gpio)) {
+    if (!g || g.speed === undefined || g.speed === '') continue;
+    const fixed = gpioSpeedFor(g.speed);
+    if (fixed === g.speed) continue;
+    out.push(`${pin}: output speed "${g.speed}" is not one this part has; using "${fixed}".`);
+    g.speed = fixed;
+  }
+  return out;
+}
+
 // Restore a project. Throws with a human sentence if the MCU file is not loaded.
 export function projectApply(src) {
   const obj = migrateProject(typeof src === 'string' ? yamlLoad(src) : src);
@@ -102,6 +121,7 @@ export function projectApply(src) {
   }
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
+  dropped.push(...normaliseGpioSpeeds());
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;

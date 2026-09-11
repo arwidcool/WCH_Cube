@@ -40,18 +40,32 @@
   button{cursor:pointer}
   .app{display:grid;grid-template-rows:44px 30px 32px 1fr;height:100%}
 
-  /* ---- menu bar ---- */
-  .menubar{display:flex;align-items:center;gap:6px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--line)}
-  .logo{display:flex;align-items:center;gap:8px;margin-right:24px}
-  .logo .cube{width:26px;height:26px;background:linear-gradient(135deg,var(--blue-lt),var(--navy));border-radius:4px}
-  .logo b{color:var(--ink-strong);font-size:15px}
-  .logo small{display:block;color:var(--muted);font-size:10px;margin-top:-2px}
-  .menu{padding:6px 14px;border:0;background:none;color:var(--text);border-radius:3px}
+  /* ---- menu bar ----
+     Everything in this bar is nowrap and flex:0 0 auto on purpose. It used to be
+     shrinkable, so at 1280 the buttons were squeezed narrower than their labels and
+     "New project" / "Open MCU file…" wrapped to two and three lines inside a 44 px
+     row — the row clipped them, and the brand block's third line ("clocks") with
+     them (round-2 finding L1). Nothing here may wrap; what does not fit is dropped
+     to a short label by the media queries at the end of this stylesheet, with the
+     full wording kept in title= and aria-label=. Only #mcu-meta may shrink, and it
+     ellipsises rather than wrapping. */
+  .menubar{display:flex;align-items:center;gap:4px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow:hidden}
+  .menubar>*{flex:0 0 auto}
+  .logo{display:flex;align-items:center;gap:8px;margin-right:16px}
+  .logo .cube{width:26px;height:26px;background:linear-gradient(135deg,var(--blue-lt),var(--navy));border-radius:4px;flex:0 0 auto}
+  .logo b{color:var(--ink-strong);font-size:15px;display:block;line-height:1.15;white-space:nowrap}
+  .logo small{display:block;color:var(--muted);font-size:10px;line-height:1.2;white-space:nowrap}
+  .menu{padding:6px 12px;border:0;background:none;color:var(--text);border-radius:3px;white-space:nowrap;line-height:1.35}
   .menu:hover{background:var(--blue-pale)}
   .menu[disabled]{opacity:.38;cursor:default;background:none}
   .menu.icon{padding:6px 9px;font-size:15px;line-height:1}
-  .menubar .spacer{flex:1}
-  .menubar .mcu-name{color:var(--muted)}
+  /* Short labels are the narrow-window spelling; one of the pair is always hidden. */
+  .menu .lbl-short{display:none}
+  .menubar .spacer{flex:1 1 0;min-width:4px}
+  .menubar .mcu-name{color:var(--muted);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .menubar .mcusel-wrap{display:flex;align-items:center;gap:5px;flex:0 1 auto;min-width:0}
+  .menubar .mcusel-wrap>span{color:var(--muted);white-space:nowrap}
+  #mcusel{max-width:190px;min-width:96px}
 
   /* ---- breadcrumb ---- */
   .crumbs{display:flex;align-items:center;background:var(--navy);color:#fff;padding:0 8px;gap:0}
@@ -152,11 +166,47 @@
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
   .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text)}
   .ctab.active{background:var(--blue-hdr);color:#fff;border-color:var(--blue-hdr)}
-  .cbody{flex:1;overflow:auto;border-top:3px solid var(--blue-lt);padding:8px}
-  table.gpio{border-collapse:collapse;width:100%;font-size:12.5px}
-  table.gpio th{background:var(--blue-hdr);color:#fff;font-weight:500;text-align:left;padding:3px 6px;border-right:1px solid #fff;position:sticky;top:0}
+  /* Six columns of real GPIO values need 694 px and the centre column is ~440 px at 1280,
+     so this scrolls sideways. A cut edge with no affordance reads as a broken layout, so
+     the classic scroll-shadow pair rides the local background: the shadow on an edge is
+     visible exactly while there is content to scroll toward, and disappears at the end. */
+  .cbody{flex:1;overflow:auto;border-top:3px solid var(--blue-lt);padding:8px;
+         background:
+           linear-gradient(to right,var(--panel) 30%,rgba(0,0,0,0)) left center,
+           linear-gradient(to left,var(--panel) 30%,rgba(0,0,0,0)) right center,
+           radial-gradient(farthest-side at 0 50%,var(--shadow),rgba(0,0,0,0)) left center,
+           radial-gradient(farthest-side at 100% 50%,var(--shadow),rgba(0,0,0,0)) right center;
+         background-repeat:no-repeat;
+         background-size:34px 100%,34px 100%,11px 100%,11px 100%;
+         background-attachment:local,local,scroll,scroll}
+  /* The GPIO table carries six columns of real values — "Alternate Function Push Pull"
+     is 160 px of text. Squeezed into the centre column at 1280 every <select> was about
+     60 px wide and showed "No pu" (round-2 finding L4). It has a min-width per column
+     now and #cbody scrolls sideways when the panel is narrower than the values, which
+     is what CubeMX does too: a value is either fully readable or it is not shown. */
+  table.gpio{border-collapse:collapse;width:100%;min-width:694px;font-size:12.5px;table-layout:fixed}
+  /* The header keeps CubeMX's wording and WRAPS; the columns are sized for the VALUES.
+     A header that wraps costs one row of height once, a value that is clipped costs the
+     user the fact. "Alternate Function Push Pull" is 155 px of text plus a select's
+     arrow, which is where the 196 px comes from - it is measured, not guessed. */
+  table.gpio th{background:var(--blue-hdr);color:#fff;font-weight:500;text-align:left;padding:3px 6px;border-right:1px solid #fff;position:sticky;top:0;white-space:normal;line-height:1.15;vertical-align:bottom}
   table.gpio td{padding:2px 6px;border-bottom:1px solid var(--line-soft)}
   table.gpio tr:hover td{background:var(--blue-pale)}
+  table.gpio th:nth-child(1),table.gpio td:nth-child(1){width:90px}
+  table.gpio th:nth-child(2),table.gpio td:nth-child(2){width:112px}
+  table.gpio th:nth-child(3),table.gpio td:nth-child(3){width:196px}
+  table.gpio th:nth-child(4),table.gpio td:nth-child(4){width:98px}
+  table.gpio th:nth-child(5),table.gpio td:nth-child(5){width:88px}
+  table.gpio th:nth-child(6),table.gpio td:nth-child(6){width:110px}
+  table.gpio td:nth-child(1),table.gpio td:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* A part with ONE output speed states it instead of offering a selector, and a part
+     that states no speeds at all loses the column. Both give the width back to the table,
+     which is the difference between scrolling and not at 1280. */
+  table.gpio.fixedspeed th:nth-child(5),table.gpio.fixedspeed td:nth-child(5){width:80px}
+  table.gpio.fixedspeed{min-width:686px}
+  table.gpio.nospeed{min-width:606px}
+  table.gpio.nospeed th:nth-child(5),table.gpio.nospeed td:nth-child(5){width:110px}
+  td.fixedval{color:var(--text);white-space:nowrap}
   /* Parameter Settings: CubeMX puts a grey band per group and one editor per row */
   table.params{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
   table.params th{background:var(--head);color:var(--on-accent);text-align:left;padding:5px 8px;font-weight:600}
@@ -177,6 +227,47 @@
   table.params .pnote{display:block;color:var(--muted);font-size:11px;margin-top:1px}
   table.params .ro{color:var(--muted)}
   .paramhead{padding:5px 8px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line-soft)}
+  .paramhead code,.mode code{font:11.5px/1.3 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong)}
+  /* DMA channel overview and NVIC vector table (System Core). Both are read-only: what
+     the silicon offers and which of it is live. Sizing follows table.gpio - columns wide
+     enough for the values, header wrapping rather than clipping, #cbody scrolls. */
+  table.dmach,table.nvictab{border-collapse:collapse;width:100%;font-size:12px;table-layout:fixed}
+  table.dmach th,table.nvictab th{background:var(--head);color:var(--on-accent);text-align:left;padding:4px 8px;
+                                  font-weight:600;position:sticky;top:0;white-space:normal;line-height:1.15}
+  table.dmach td,table.nvictab td{padding:3px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  table.dmach tr:hover td,table.nvictab tr:hover td{background:var(--blue-pale)}
+  table.dmach{min-width:430px}
+  table.dmach th:nth-child(1),table.dmach td:nth-child(1){width:66px}
+  table.dmach th:nth-child(3),table.dmach td:nth-child(3){width:110px}
+  /* A request whose peripheral is switched OFF is drawn recessed, not faded: this is a
+     display of what is live, and dimming reads as "you may not have this". */
+  .dreq{display:inline-block;margin:1px 8px 1px 0;padding:1px 5px;border:1px dashed var(--line);border-radius:3px;color:var(--muted)}
+  .dreq.on{border-style:solid;border-color:var(--blue);background:var(--blue-pale);color:var(--text)}
+  .dreq a{color:inherit;text-decoration:underline;cursor:pointer}
+  .dreq small{display:block;font-size:10px;color:var(--muted)}
+  table.dmach tr.clash td{background:var(--res-bg);box-shadow:inset 3px 0 0 var(--res)}
+  table.dmach tr.clash:hover td{background:var(--res-bg)}
+  table.nvictab{min-width:640px}
+  table.nvictab th:nth-child(1),table.nvictab td:nth-child(1){width:44px}
+  table.nvictab th:nth-child(2),table.nvictab td:nth-child(2){width:90px}
+  table.nvictab th:nth-child(3),table.nvictab td:nth-child(3){width:158px}
+  table.nvictab th:nth-child(4),table.nvictab td:nth-child(4){width:176px}
+  table.nvictab th:nth-child(5),table.nvictab td:nth-child(5){width:74px}
+  table.nvictab th:nth-child(6),table.nvictab td:nth-child(6){width:98px}
+  table.nvictab td code{font:11px/1.3 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);
+                        display:block;overflow:hidden;text-overflow:ellipsis}
+  table.nvictab tr.off td{color:var(--muted)}
+  table.nvictab tr.off td code{color:var(--muted)}
+  table.nvictab a{color:var(--link);text-decoration:underline;cursor:pointer}
+  .ro{color:var(--muted)}
+  .mode code{white-space:nowrap}
+  /* NVIC's Mode panel states facts about the silicon, so it does not wear the yellow
+     setting labels the editable rows use. */
+  .nvicfacts{grid-column:1/-1}
+  .nvicfacts p{margin:0 0 8px}
+  .nvicfacts dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0;align-items:baseline}
+  .nvicfacts dt{color:var(--muted);white-space:nowrap}
+  .nvicfacts dd{margin:0}
   /* keyboard shortcut overlay — "?" anywhere outside a text field */
   .keyshelp{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
   .keyshelp .sheet{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;
@@ -303,9 +394,14 @@
   .picker .opt.cur small{color:#1a1a1a}
   .picker .grp{padding:4px 10px 2px;color:var(--muted);font-size:11px;border-top:1px solid var(--line-soft)}
 
-  /* ---- clock view: boxes positioned over an SVG connector layer ---- */
-  #view-clock{grid-template-columns:1fr;overflow:auto}
-  .clock{padding:16px 22px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+  /* ---- clock view: boxes positioned over an SVG connector layer ----
+     `minmax(0,1fr)`, not `1fr`: a 1fr track takes its min-content from the child, so the
+     1282 px tree made #clock 1326 px wide inside a 1280 px window and everything from the
+     ADC prescaler rightwards was painted past the viewport edge (round-2 finding L2), and
+     the notes below it wrapped to that 1326 px instead of the window (finding L3). The
+     track is capped at the panel now and renderClock() sizes the tree to fit it. */
+  #view-clock{grid-template-columns:minmax(0,1fr);overflow:auto}
+  .clock{padding:16px 22px;display:flex;flex-direction:column;gap:12px;align-items:flex-start;max-width:100%}
   .ctreewrap{position:relative}
   #ctree-svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
   .cedge{fill:none;stroke:var(--line);stroke-width:1.4;stroke-dasharray:4 3}
@@ -334,8 +430,80 @@
   .clegend i{display:inline-block;width:22px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:5px}
   .clegend i.dim{border-top:1.5px dashed var(--line)}
   .clegend em{display:inline-block;width:12px;height:12px;border:1px solid var(--bad);background:var(--bad-bg);vertical-align:-2px;margin-right:5px}
-  .cnote{color:var(--muted);font-size:12px;max-width:1100px}
-  .clock .issues{color:var(--bad);font-weight:500}
+  /* max-width was a flat 1100px, which is wider than the window at 125 % zoom (1024 CSS
+     px) — the sentence ran off the right edge. It wraps to the panel now, never past it. */
+  .cnote{color:var(--muted);font-size:12px;max-width:min(1100px,100%);align-self:stretch}
+  .clock .issues{color:var(--bad);font-weight:500;max-width:100%}
+  /* The tree is sized to the panel by renderClock(); if a window is narrower than the
+     floor it can shrink to, this scrolls rather than painting past the edge. */
+  .ctreescroll{align-self:stretch;max-width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
+
+  /* ---- Project Manager --------------------------------------------------------
+     Settings on the left, the generated text on the right. Every track is minmax(0,…)
+     so a long line of C cannot widen the grid and push the panel off the window -
+     round-2 finding L2 was exactly that mistake on the clock tab. */
+  #view-pm{grid-template-columns:minmax(0,1fr);overflow:hidden}
+  .pm{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);min-height:0;overflow:hidden}
+  .pmcfg{overflow:auto;background:var(--panel);border-right:1px solid var(--line);padding:0 0 14px}
+  .pmsec{padding:10px 14px 14px;border-bottom:1px solid var(--line-soft)}
+  .pmsec h4{margin:0 0 8px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .pmsec dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:5px 12px;margin:0;align-items:baseline}
+  .pmsec dt{color:var(--muted);white-space:nowrap}
+  .pmsec dd{margin:0;overflow-wrap:anywhere}
+  .pmsec dd code,.pmsec p code{font:11.5px/1.35 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);overflow-wrap:anywhere}
+  .pmsec p{margin:8px 0 0;color:var(--muted);font-size:11.5px}
+  .pmsec label.row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .pmsec label.row input[type=text]{flex:1;min-width:0;padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  .pmsec label.chk{display:flex;align-items:baseline;gap:7px;padding:2px 0;cursor:pointer}
+  .pmsec label.chk input{margin:0;flex:0 0 auto;position:relative;top:1px}
+  .pmsec label.chk small{display:block;color:var(--muted);font-size:11px}
+  .pmgen{padding:12px 14px}
+  .pmgen button{width:100%;background:var(--blue-hdr);color:#fff;border:0;padding:9px 14px;font-weight:600;letter-spacing:.3px;border-radius:3px}
+  .pmgen button:hover{background:var(--blue)}
+  .pmgen button:active{background:#0f5c8a}
+  .pmgen button:focus-visible{outline:2px solid var(--ink-strong);outline-offset:2px}
+  .pmgen button[disabled]{opacity:.45;cursor:not-allowed}
+  .pmgen p{margin:8px 0 0;color:var(--muted);font-size:11.5px}
+  .pmprev{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
+  .pmprevbody{flex:1;display:grid;grid-template-columns:196px minmax(0,1fr);min-height:0}
+  .pmfiles{overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:6px 0}
+  .pmfile{display:block;width:100%;text-align:left;border:0;background:none;color:var(--text);padding:5px 10px;font:inherit;cursor:pointer;border-left:3px solid transparent}
+  .pmfile:hover{background:var(--blue-pale)}
+  .pmfile.on{background:var(--blue-pale);border-left-color:var(--blue);font-weight:600}
+  .pmfile small{display:block;color:var(--muted);font-size:10.5px;font-weight:400}
+  /* A file the generator complained in is flagged in the LIST as well as in the text:
+     an #error 400 lines down a file nobody scrolled is how a wrong identifier ships. */
+  .pmfile .flag{float:right;color:var(--bad);font-weight:700}
+  .pmfile .flag.todo{color:var(--warn-ink)}
+  .pmtext{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .pmtexthead{display:flex;align-items:center;gap:10px;padding:5px 10px;border-bottom:1px solid var(--line);background:var(--bar);font-size:11.5px;color:var(--muted)}
+  .pmtexthead .spacer{flex:1}
+  .pmtexthead button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:3px;padding:2px 9px;font-size:11.5px}
+  .pmtexthead button:hover{background:var(--blue-pale)}
+  .pmtexthead b{color:var(--text);font-weight:600}
+  .pmcode{flex:1;overflow:auto;background:var(--panel);font:11.5px/1.5 ui-monospace,"Cascadia Mono",Consolas,monospace}
+  .pmcode table{border-collapse:collapse;width:100%}
+  .pmcode td{padding:0 8px;white-space:pre;vertical-align:top}
+  .pmcode td.ln{width:1%;text-align:right;color:var(--muted);background:var(--bar);position:sticky;left:0;
+                user-select:none;border-right:1px solid var(--line-soft);padding:0 7px}
+  /* The generator says "I could not work this out" in exactly two spellings and the
+     engine hands them back by line number (cComplaints). They are marked here so they
+     cannot scroll past: an explanation of what is missing is not generated code. */
+  .pmcode tr.err td{background:var(--bad-bg)} .pmcode tr.err td:not(.ln){color:var(--bad);font-weight:600}
+  .pmcode tr.todo td{background:var(--warn-bg)} .pmcode tr.todo td:not(.ln){color:var(--warn-ink)}
+  .pmcode tr.err td.ln,.pmcode tr.todo td.ln{font-weight:700}
+  .pmnote{padding:6px 10px;font-size:11.5px;border-bottom:1px solid var(--line)}
+  .pmnote.bad{background:var(--bad-bg);color:var(--bad)}
+  .pmnote.warn{background:var(--warn-bg);color:var(--warn-ink)}
+  /* Side by side for as long as both halves are usable; below that the settings stack
+     above the preview and the whole view scrolls, rather than either half being crushed. */
+  @media (max-width:1180px){ .pm{grid-template-columns:minmax(258px,320px) minmax(0,1fr)} .pmprevbody{grid-template-columns:158px minmax(0,1fr)} }
+  @media (max-width:900px){
+    #view-pm{overflow:auto}
+    .pm{grid-template-columns:minmax(0,1fr);overflow:visible}
+    .pmcfg{overflow:visible;border-right:0;border-bottom:1px solid var(--line)}
+    .pmprev{min-height:460px}
+  }
 
   /* Dark theme. Off by default; the toggle in the menu bar sets data-theme on <html>. */
   :root[data-theme="dark"]{
@@ -393,7 +561,14 @@
     #view-pinout{grid-template-columns:266px minmax(360px,1fr) minmax(450px,1.3fr)}
     .subbar{gap:60px}
     .chipbar{flex-wrap:wrap}
-    #pin-search{width:120px!important}
+    /* 152, not 120: the placeholder "🔍 find pin or signal" measures 132 px in this
+       font, and a 120 px box clipped it to "find pin or sigr" (round-2 finding L5). */
+    #pin-search{width:152px!important}
+    /* The menu bar stops fitting its full wording here. Swap to the short spelling
+       rather than let a label wrap and be clipped by the 44 px row — title= and
+       aria-label= still carry the full phrase for hover and for screen readers. */
+    .menu .lbl-full{display:none}
+    .menu .lbl-short{display:inline}
   }
   @media (max-width:1180px){
     #view-pinout{grid-template-columns:212px minmax(296px,1fr) minmax(356px,1.25fr)}
@@ -401,6 +576,8 @@
     table.gpio{font-size:11.5px}
     .mode{padding:8px 10px}
     .menubar .menu{padding:6px 8px}
+    .menubar{gap:2px}
+    .logo{margin-right:10px}
   }
   @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
 </style>
@@ -506,8 +683,11 @@ mcu:
   sram_kb: 6
   default_package: TSSOP20
 
-  # Dotted paths into the MERGED document. Each must match something or the load fails,
-  # so a parent rename cannot leave a stale removal silently doing nothing.
+  # Dotted paths into the PARENT document, applied BEFORE the child is merged onto it
+  # (AGENT-2, round-3 C4). Each must match something in the parent or the load fails, so
+  # a parent rename cannot leave a stale removal silently doing nothing. Because removal
+  # now precedes the merge, a path that is removed AND redefined below keeps the child's
+  # version — which is the way anyone reads it, and was not true before round 3.
   remove:
     - packages.QFN32                        # no QFN32 orderable part exists for V005
     - peripherals.TKEY                      # DS: "CH32V005 no TouchKey,TIM3"
@@ -518,9 +698,8 @@ mcu:
     # that has neither. Found by validate_mcu.py's codegen name check, round 2.
     - codegen.analog_signals.TKEY
     - codegen.periph_clock.PB1.bits.TIM3
-    # Starting values for two requests this part does not have. Safe to remove here: the
-    # child does not redefine `dma.request_defaults`, it only inherits it (see the note
-    # on `dma:` below about paths that are removed AND redefined).
+    # Starting values for two requests this part does not have. The child does not
+    # redefine `dma.request_defaults`, it only inherits it, so this is a plain removal.
     - dma.request_defaults.TIM3_CH3
     - dma.request_defaults.TIM3_CH4
 
@@ -565,12 +744,19 @@ peripherals:
 # -----------------------------------------------------------------------------
 # DMA1 — the parent's map with every TIM3 request dropped (RM Table 8-2 note 2 applies
 # to CH32V006/V007; CH32V005 has no TIM3 at all). Channel numbering is unchanged.
-# `dma.requests` is NOT in `mcu.remove` above, and must not be: `mcu.remove` is applied
-# AFTER the parent is merged, so removing a path the child also redefines deletes the
-# child's own version too. It did exactly that until round 2 - CH32V005 shipped with no
-# DMA request map at all, and the engine's channel-clash warnings were dead on this part.
-# Nothing needs removing here anyway: maps merge key by key and the child wins, so
-# listing all seven channels below replaces the parent's seven outright.
+#
+# `dma.requests` is deliberately NOT in `mcu.remove` above, and the reason has changed.
+# It used to be a hazard: `mcu.remove` ran AFTER the parent merge, so removing a path the
+# child also redefined deleted the child's own version, and this part shipped for a while
+# with no DMA request map at all and dead channel-clash warnings. AGENT-2 closed that in
+# round 3 (C4, BOARD 14:21Z) — `mcu.remove` now runs BEFORE the merge, so remove-and-
+# redefine keeps the CHILD's version and either spelling would work.
+#
+# It stays out because it is still the clearer of the two. Maps merge key by key and the
+# child wins, so the seven channels listed below already replace the parent's seven
+# outright; adding a removal would say the same thing twice and give the next reader a
+# reason to wonder which one is load-bearing. Note the second half of C4: a `remove:`
+# path the PARENT does not define is now a hard error, which is what catches a rename.
 dma:
   requests:
     1: [ADC1, TIM2_CH3]
@@ -1957,38 +2143,55 @@ nvic:
       claimed for the switch itself. Do not invent one.
   vectors:
     # `vector` is the No. column of RM Table 6-1 - the index into the vector table,
-    # which is also what the SDK's IRQn enum uses. `irqn` follows the usual WCH EVT
-    # spelling; like the DMA macros it is convention, not something this repo can
-    # confirm against a ch32v00x SDK copy (HUMAN_TODO 5).
-    - { name: NMI,        vector: 2,  irqn: NMI_Handler,          system: true,  fixed: true,  description: Non-maskable interrupt }
-    - { name: HardFault,  vector: 3,  irqn: HardFault_Handler,    system: true,  fixed: true,  description: Abnormal interrupt (exception) }
-    - { name: SysTick,    vector: 12, irqn: SysTick_IRQn,         system: true,  description: System timer interrupt }
-    - { name: SW,         vector: 14, irqn: Software_IRQn,        system: true,  description: Software interrupt }
-    - { name: WWDG,       vector: 16, irqn: WWDG_IRQn,            peripheral: WWDG,   description: Window watchdog timer interrupt }
-    - { name: PVD,        vector: 17, irqn: PVD_IRQn,             peripheral: PWR,    description: Supply voltage detection interrupt (through EXTI line 8) }
-    - { name: FLASH,      vector: 18, irqn: FLASH_IRQn,           peripheral: FLASH,  description: Flash global interrupt }
-    - { name: RCC,        vector: 19, irqn: RCC_IRQn,             peripheral: RCC,    description: Reset and clock control interrupt }
-    - { name: EXTI7_0,    vector: 20, irqn: EXTI7_0_IRQn,         peripheral: EXTI,   description: EXTI line 0-7 interrupt (one vector for all eight lines) }
-    - { name: AWU,        vector: 21, irqn: AWU_IRQn,             peripheral: PWR,    description: Automatic wake-up interrupt (through EXTI line 9) }
-    - { name: DMA1_CH1,   vector: 22, irqn: DMA1_Channel1_IRQn,   peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
-    - { name: DMA1_CH2,   vector: 23, irqn: DMA1_Channel2_IRQn,   peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
-    - { name: DMA1_CH3,   vector: 24, irqn: DMA1_Channel3_IRQn,   peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
-    - { name: DMA1_CH4,   vector: 25, irqn: DMA1_Channel4_IRQn,   peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
-    - { name: DMA1_CH5,   vector: 26, irqn: DMA1_Channel5_IRQn,   peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
-    - { name: DMA1_CH6,   vector: 27, irqn: DMA1_Channel6_IRQn,   peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
-    - { name: DMA1_CH7,   vector: 28, irqn: DMA1_Channel7_IRQn,   peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
-    - { name: ADC,        vector: 29, irqn: ADC1_IRQn,            peripheral: ADC1,   description: ADC global interrupt }
-    - { name: I2C1_EV,    vector: 30, irqn: I2C1_EV_IRQn,         peripheral: I2C1,   description: I2C1 event interrupt }
-    - { name: I2C1_ER,    vector: 31, irqn: I2C1_ER_IRQn,         peripheral: I2C1,   description: I2C1 error interrupt }
-    - { name: USART1,     vector: 32, irqn: USART1_IRQn,          peripheral: USART1, description: USART1 global interrupt }
-    - { name: SPI1,       vector: 33, irqn: SPI1_IRQn,            peripheral: SPI1,   description: SPI1 global interrupt }
-    - { name: TIM1BRK,    vector: 34, irqn: TIM1_BRK_IRQn,        peripheral: TIM1,   description: TIM1 break interrupt }
-    - { name: TIM1UP,     vector: 35, irqn: TIM1_UP_IRQn,         peripheral: TIM1,   description: TIM1 update interrupt }
-    - { name: TIM1TRG,    vector: 36, irqn: TIM1_TRG_COM_IRQn,    peripheral: TIM1,   description: TIM1 trigger and commutation interrupt }
-    - { name: TIM1CC,     vector: 37, irqn: TIM1_CC_IRQn,         peripheral: TIM1,   description: TIM1 capture/compare interrupt }
-    - { name: TIM2,       vector: 38, irqn: TIM2_IRQn,            peripheral: TIM2,   description: TIM2 global interrupt }
-    - { name: USART2,     vector: 39, irqn: USART2_IRQn,          peripheral: USART2, description: USART2 global interrupt }
-    - { name: OPCM,       vector: 40, irqn: OPCM_IRQn,            peripheral: OPA1,   description: Operational amplifier and comparator global interrupt }
+    # which is also what the SDK's IRQn enum uses.
+    #
+    # TWO names per vector, because the SDK uses two and they are NOT interchangeable:
+    #   irqn     the IRQn_Type member, what NVIC_InitStructure.NVIC_IRQChannel takes
+    #   handler  the symbol in the startup vector table, what the user's ISR must be
+    #            called to be linked in (it is `.weak` and defaults to an endless loop)
+    #
+    # The vendor is not consistent between the two and neither may we pretend to be:
+    # vector 29 is `ADC_IRQn` in the enum but `ADC1_IRQHandler` in the startup table,
+    # and vector 2 is `NonMaskableInt_IRQn` but `NMI_Handler`. This file claimed
+    # `ADC1_IRQn`, which exists in NEITHER - generated NVIC code naming it would not
+    # have compiled. Found by tools/verify_sdk_names.py, round 3.
+    #
+    # Every pair below is taken mechanically from the EVT package, not transcribed:
+    #   irqn     IRQn_Type in data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X.h:45-82
+    #   handler  the .word table in .../Evt/EXAM/SRC/Startup/startup_ch32v00X.S:19-58
+    # The two sources agree on all 29 vector NUMBERS, which is an independent check on
+    # RM Table 6-1 - and both confirm the contradiction recorded in the notes:
+    # **there is no TIM3 vector**, although this part has a TIM3. The enum ends at
+    # OPCM_IRQn = 40 and the startup table ends at OPCM_IRQHandler. Nothing invented.
+    - { name: NMI,       vector: 2,  irqn: NonMaskableInt_IRQn, handler: NMI_Handler,              system: true, fixed: true, description: Non-maskable interrupt }
+    - { name: HardFault, vector: 3,  irqn: HardFault_IRQn,      handler: HardFault_Handler,        system: true, fixed: true, description: Abnormal interrupt (exception) }
+    - { name: SysTick,   vector: 12, irqn: SysTick_IRQn,        handler: SysTick_Handler,          system: true, description: System timer interrupt }
+    - { name: SW,        vector: 14, irqn: Software_IRQn,       handler: SW_Handler,               system: true, description: Software interrupt }
+    - { name: WWDG,      vector: 16, irqn: WWDG_IRQn,           handler: WWDG_IRQHandler,          peripheral: WWDG, description: Window watchdog timer interrupt }
+    - { name: PVD,       vector: 17, irqn: PVD_IRQn,            handler: PVD_IRQHandler,           peripheral: PWR, description: Supply voltage detection interrupt (through EXTI line 8) }
+    - { name: FLASH,     vector: 18, irqn: FLASH_IRQn,          handler: FLASH_IRQHandler,         peripheral: FLASH, description: Flash global interrupt }
+    - { name: RCC,       vector: 19, irqn: RCC_IRQn,            handler: RCC_IRQHandler,           peripheral: RCC, description: Reset and clock control interrupt }
+    - { name: EXTI7_0,   vector: 20, irqn: EXTI7_0_IRQn,        handler: EXTI7_0_IRQHandler,       peripheral: EXTI, description: EXTI line 0-7 interrupt (one vector for all eight lines) }
+    - { name: AWU,       vector: 21, irqn: AWU_IRQn,            handler: AWU_IRQHandler,           peripheral: PWR, description: Automatic wake-up interrupt (through EXTI line 9) }
+    - { name: DMA1_CH1,  vector: 22, irqn: DMA1_Channel1_IRQn,  handler: DMA1_Channel1_IRQHandler, peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
+    - { name: DMA1_CH2,  vector: 23, irqn: DMA1_Channel2_IRQn,  handler: DMA1_Channel2_IRQHandler, peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
+    - { name: DMA1_CH3,  vector: 24, irqn: DMA1_Channel3_IRQn,  handler: DMA1_Channel3_IRQHandler, peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
+    - { name: DMA1_CH4,  vector: 25, irqn: DMA1_Channel4_IRQn,  handler: DMA1_Channel4_IRQHandler, peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
+    - { name: DMA1_CH5,  vector: 26, irqn: DMA1_Channel5_IRQn,  handler: DMA1_Channel5_IRQHandler, peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
+    - { name: DMA1_CH6,  vector: 27, irqn: DMA1_Channel6_IRQn,  handler: DMA1_Channel6_IRQHandler, peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
+    - { name: DMA1_CH7,  vector: 28, irqn: DMA1_Channel7_IRQn,  handler: DMA1_Channel7_IRQHandler, peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
+    - { name: ADC,       vector: 29, irqn: ADC_IRQn,            handler: ADC1_IRQHandler,          peripheral: ADC1, description: ADC global interrupt }
+    - { name: I2C1_EV,   vector: 30, irqn: I2C1_EV_IRQn,        handler: I2C1_EV_IRQHandler,       peripheral: I2C1, description: I2C1 event interrupt }
+    - { name: I2C1_ER,   vector: 31, irqn: I2C1_ER_IRQn,        handler: I2C1_ER_IRQHandler,       peripheral: I2C1, description: I2C1 error interrupt }
+    - { name: USART1,    vector: 32, irqn: USART1_IRQn,         handler: USART1_IRQHandler,        peripheral: USART1, description: USART1 global interrupt }
+    - { name: SPI1,      vector: 33, irqn: SPI1_IRQn,           handler: SPI1_IRQHandler,          peripheral: SPI1, description: SPI1 global interrupt }
+    - { name: TIM1BRK,   vector: 34, irqn: TIM1_BRK_IRQn,       handler: TIM1_BRK_IRQHandler,      peripheral: TIM1, description: TIM1 break interrupt }
+    - { name: TIM1UP,    vector: 35, irqn: TIM1_UP_IRQn,        handler: TIM1_UP_IRQHandler,       peripheral: TIM1, description: TIM1 update interrupt }
+    - { name: TIM1TRG,   vector: 36, irqn: TIM1_TRG_COM_IRQn,   handler: TIM1_TRG_COM_IRQHandler,  peripheral: TIM1, description: TIM1 trigger and commutation interrupt }
+    - { name: TIM1CC,    vector: 37, irqn: TIM1_CC_IRQn,        handler: TIM1_CC_IRQHandler,       peripheral: TIM1, description: TIM1 capture/compare interrupt }
+    - { name: TIM2,      vector: 38, irqn: TIM2_IRQn,           handler: TIM2_IRQHandler,          peripheral: TIM2, description: TIM2 global interrupt }
+    - { name: USART2,    vector: 39, irqn: USART2_IRQn,         handler: USART2_IRQHandler,        peripheral: USART2, description: USART2 global interrupt }
+    - { name: OPCM,      vector: 40, irqn: OPCM_IRQn,           handler: OPCM_IRQHandler,          peripheral: OPA1, description: Operational amplifier and comparator global interrupt }
   notes: >
     RM Table 6-1 ends at vector 40 and lists NO TIM3 interrupt, while CH32V006 does
     have TIM3 (RM Table 8-2 note 2 describes its DMA requests on this very part).
@@ -1999,20 +2202,62 @@ nvic:
     this is the first thing to check.
 
 # -----------------------------------------------------------------------------
+# GPIO capabilities — what the pin actually offers, so the UI does not offer more.
+#
+# This part has exactly ONE output speed. `GPIOx_CFGLR.MODEy` is a single bit
+# (RM v1.4 7.3.1.1: "1: Output mode, maximum speed 30MHz; 0: Input mode"), and the
+# EVT SDK agrees: `GPIOSpeed_TypeDef` in
+# data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 23-26 has a
+# single member, `GPIO_Speed_30MHz = 1`. There is no 2 MHz, 10 MHz or 50 MHz on this
+# silicon; those are the CH32V10x/20x/30x spellings and they do not compile here.
+#
+# FORMAT.md: a `speeds:` list with ONE entry means the control is NOT SHOWN — the
+# value is displayed as fixed text. It does not mean "shown disabled".
+gpio:
+  speeds:
+    - { name: "30 MHz", macro: GPIO_Speed_30MHz }
+
+# -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.
 # Requested by AGENT-2 (BOARD 05:43Z / 05:44Z). Every number below was read off the
 # reference manual directly, not copied from the request; the one disagreement that
 # found is called out where it occurs.
 codegen:
-  header: ch32v00x.h
+  # ch32v00X.h — CAPITAL X. `ch32v00x.h` is the CH32V003 header, a different part with
+  # a different register map; it resolved here only because NTFS ignores case, and it
+  # fails outright on Linux. Confirmed: EVT
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X.h line 2 "File Name : ch32v00X.h",
+  # guard `__CH32V00X_H` line 12.
+  header: ch32v00X.h
+
+  # Which SDK this part's names must be checked against. NOT guessable from the part
+  # number - CH32V005/CH32V006 are series `ch32v00Xx` while CH32V003 is `ch32v00x`, and
+  # both are installed side by side. `tools/verify_sdk_names.py` reads this, prefers the
+  # EVT drop, and falls back to the PlatformIO package.
+  sdk:
+    evt: V006          # data/sources/<evt>/Evt   - the EVT package covering this part
+    series: ch32v00Xx  # framework-wch-noneos-sdk/Peripheral/<series>/inc
 
   # RM 3.4.7: the GPIO ports and AFIO sit in RCC_PB2PCENR — AFIOEN bit 0, IOPAEN..IOPDEN
   # bits 2..5. The register really is named "PB2" on this family, not "APB2" (RM Table
   # 3-x, R32_RCC_PB2PCENR at 0x40021018), which is why the macro spelling below reads
-  # PB2. Confirming the EVT SDK uses the same spelling for the *function* is HUMAN_TODO
-  # item 5; the register name itself is settled.
+  # PB2. CONFIRMED against EVT, HUMAN_TODO item 5 closed:
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_rcc.h declares
+  # RCC_PB2PeriphClockCmd (line 157), RCC_PB2Periph_AFIO (88) and
+  # RCC_PB2Periph_GPIOA..GPIOD (89-92). The `APB2` spelling belongs to CH32X035.
   gpio_clock: { fn: RCC_PB2PeriphClockCmd, port: RCC_PB2Periph_GPIO$PORT, afio: RCC_PB2Periph_AFIO }
-  speeds: { Low: GPIO_Speed_2MHz, Medium: GPIO_Speed_10MHz, High: GPIO_Speed_50MHz }
+
+  # GPIO-table speed name -> SPL macro. The authoritative list of speeds this part
+  # OFFERS is `gpio.speeds` above; this map only translates a stored name to a macro.
+  # Low/Medium/High are here as ALIASES so a .wchproj saved before the one-speed fix
+  # still generates code that compiles — they are not an offer, and the UI must read
+  # `gpio.speeds`, never these keys. AGENT-2: once emission is driven by gpio.speeds,
+  # this whole map becomes redundant and should go.
+  speeds:
+    "30 MHz": GPIO_Speed_30MHz
+    Low:      GPIO_Speed_30MHz    # legacy alias
+    Medium:   GPIO_Speed_30MHz    # legacy alias
+    High:     GPIO_Speed_30MHz    # legacy alias
 
   # AFIO_PCFR1 — RM 7.3.2.2. Bit layout row, high half then low half:
   #   [31:27] Reserved  [26:24] SWCFG  23 Reserved  [22:20] USART2_RM  19 ADC_ETRGREG_RM
@@ -3225,6 +3470,416 @@ peripherals:
         pins: { DM: PA11, DP: PA12 }
 
 # -----------------------------------------------------------------------------
+# GPIO capabilities.
+#
+# THIS PART DELIBERATELY HAS THREE OUTPUT SPEEDS, and it is the only part in the
+# repo that does. CH32V005 and CH32V006 both have exactly one (GPIOx_CFGLR.MODEy is
+# a single bit on that silicon), so without this the multi-speed branch of the UI and
+# the engine would have no part behind it: the selector would never be rendered, and
+# `setGpioField` rejecting a speed the part does not offer would never be exercised
+# outside an inline test fixture. Same reasoning as this file's OSC_IN/OSC_OUT HSE
+# pins - spell it differently, on purpose, so a hardcoded assumption cannot hide.
+#
+# FORMAT.md: a ONE-entry list means the control is not shown; two or more means a real
+# selector with exactly these entries.
+gpio:
+  speeds:
+    - { name: "2 MHz",  macro: GPIO_Speed_2MHz }
+    - { name: "10 MHz", macro: GPIO_Speed_10MHz }
+    - { name: "50 MHz", macro: GPIO_Speed_50MHz }
+
+# -----------------------------------------------------------------------------
+# DMA1 - seven channels, F1-style.
+#
+# Same schema as CH32V006's `dma:` block, so the DMA Settings tab renders from one
+# set of editors on both parts. The CONTENT is deliberately different: different
+# request names, a different channel layout, and an eighth parameter CH32V006 does
+# not have (`fifo`), so a tab that quietly assumes V006's parameter list shows up.
+dma:
+  controller: DMA1
+  channels: 7
+
+  requests:
+    1: [ADC1, TIM2_CH3, TIM4_CH1]
+    2: [SPI1_RX, USART3_TX, TIM1_CH1, TIM2_UP]
+    3: [SPI1_TX, USART3_RX, TIM1_CH2, TIM3_CH4]
+    4: [SPI2_RX, USART1_TX, I2C2_TX, TIM1_CH4, TIM4_CH2]
+    5: [SPI2_TX, USART1_RX, I2C2_RX, TIM2_CH1, TIM4_CH3]
+    6: [USART2_RX, I2C1_TX, TIM1_CH3, TIM3_CH1, ADC2]
+    7: [USART2_TX, I2C1_RX, TIM2_CH2, TIM4_CH4]
+
+  init_struct: DMA_InitTypeDef
+
+  # DMA_CFGRx, one per channel, 20 bytes apart. Synthetic but self-consistent: the
+  # field layout matches what `channel_params` below claims, which is what
+  # validate_mcu.py cross-checks.
+  register:
+    name: DMA_CFGRx
+    address: 0x40020008
+    stride: 20
+    channel_macro: DMA1_Channel$CH
+    fields:
+      EN:     { lsb: 0,  bits: 1 }
+      TCIE:   { lsb: 1,  bits: 1 }
+      HTIE:   { lsb: 2,  bits: 1 }
+      TEIE:   { lsb: 3,  bits: 1 }
+      DIR:    { lsb: 4,  bits: 1 }
+      CIRC:   { lsb: 5,  bits: 1 }
+      PINC:   { lsb: 6,  bits: 1 }
+      MINC:   { lsb: 7,  bits: 1 }
+      PSIZE:  { lsb: 8,  bits: 2 }
+      MSIZE:  { lsb: 10, bits: 2 }
+      PL:     { lsb: 12, bits: 2 }
+      MEM2MEM: { lsb: 14, bits: 1 }
+
+  interrupt_fields: [TCIE, HTIE, TEIE]
+
+  # Every field of DMA_InitTypeDef the user picks. Identical KEYS to CH32V006 so one
+  # editor renders both, plus `fifo`, which this part has and that one does not.
+  channel_params:
+    - key: dir
+      name: Direction
+      type: enum
+      group: Basic
+      field: DIR
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_DIR
+      default: Peripheral to memory
+      options:
+        - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+        - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+      help: "DMA_CFGRx DIR, bit 4. The SDK names it after what the PERIPHERAL is, so PeripheralSRC is peripheral-to-memory."
+    - key: priority
+      name: Priority
+      type: enum
+      group: Basic
+      field: PL
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_Priority
+      default: Low
+      options:
+        - { name: Low,       value: 0, sdk: DMA_Priority_Low }
+        - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
+        - { name: High,      value: 2, sdk: DMA_Priority_High }
+        - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
+      help: "DMA_CFGRx PL[13:12]. Only decides who wins when two channels want the bus in the same cycle; a lower-numbered channel breaks a tie."
+    - key: mode
+      name: Mode
+      type: enum
+      group: Basic
+      field: CIRC
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_Mode
+      default: Normal
+      options:
+        - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
+        - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
+      help: "DMA_CFGRx CIRC, bit 5. Circular reloads CNTR when it reaches zero and never stops."
+    - key: pinc
+      name: Peripheral increment
+      type: enum
+      group: Advanced
+      field: PINC
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_PeripheralInc
+      default: Disable
+      options:
+        - { name: Disable, value: 0, sdk: DMA_PeripheralInc_Disable }
+        - { name: Enable,  value: 1, sdk: DMA_PeripheralInc_Enable }
+      help: "DMA_CFGRx PINC, bit 6. Almost always Disable: a peripheral data register does not move."
+    - key: minc
+      name: Memory increment
+      type: enum
+      group: Advanced
+      field: MINC
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_MemoryInc
+      default: Enable
+      options:
+        - { name: Disable, value: 0, sdk: DMA_MemoryInc_Disable }
+        - { name: Enable,  value: 1, sdk: DMA_MemoryInc_Enable }
+      help: "DMA_CFGRx MINC, bit 7. Enable for a buffer, Disable to hammer one address."
+    - key: psize
+      name: Peripheral data width
+      type: enum
+      group: Advanced
+      field: PSIZE
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_PeripheralDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
+      help: "DMA_CFGRx PSIZE[9:8]. Must match the peripheral's data register width or every transfer truncates."
+    - key: msize
+      name: Memory data width
+      type: enum
+      group: Advanced
+      field: MSIZE
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_MemoryDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
+      help: "DMA_CFGRx MSIZE[11:10]. May differ from PSIZE; the controller packs or unpacks."
+    - key: m2m
+      name: Memory to memory
+      type: enum
+      group: Advanced
+      field: MEM2MEM
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_M2M
+      default: Disable
+      options:
+        - { name: Disable, value: 0, sdk: DMA_M2M_Disable }
+        - { name: Enable,  value: 1, sdk: DMA_M2M_Enable }
+      help: "DMA_CFGRx MEM2MEM, bit 14. Ignores the peripheral request line and runs flat out."
+    - key: fifo
+      name: FIFO threshold
+      type: enum
+      group: Advanced
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_FIFOThreshold
+      default: Half full
+      options:
+        - { name: Quarter full,       value: 0, sdk: DMA_FIFOThreshold_1QuarterFull }
+        - { name: Half full,          value: 1, sdk: DMA_FIFOThreshold_HalfFull }
+        - { name: Three quarters full, value: 2, sdk: DMA_FIFOThreshold_3QuartersFull }
+        - { name: Full,               value: 3, sdk: DMA_FIFOThreshold_Full }
+      help: >
+        Deliberately has NO `field:` - this part's FIFO threshold lives in a second
+        register, not in DMA_CFGRx. It is here so that a generator or a tab which
+        assumes every channel parameter maps to a bitfield of one register is caught
+        by a part rather than by a user. CH32V006 has no equivalent.
+
+  # Starting values, so a request that is switched on is already configured sensibly.
+  # Same rule as CH32V006: the width follows the peripheral's data register.
+  request_defaults:
+    ADC1:      { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+    ADC2:      { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+    USART1_TX: { dir: Memory to peripheral }
+    USART1_RX: { dir: Peripheral to memory }
+    USART2_TX: { dir: Memory to peripheral }
+    USART2_RX: { dir: Peripheral to memory }
+    USART3_TX: { dir: Memory to peripheral }
+    USART3_RX: { dir: Peripheral to memory }
+    SPI1_TX:   { dir: Memory to peripheral }
+    SPI1_RX:   { dir: Peripheral to memory }
+    SPI2_TX:   { dir: Memory to peripheral }
+    SPI2_RX:   { dir: Peripheral to memory }
+    I2C1_TX:   { dir: Memory to peripheral }
+    I2C1_RX:   { dir: Peripheral to memory }
+    I2C2_TX:   { dir: Memory to peripheral }
+    I2C2_RX:   { dir: Peripheral to memory }
+    TIM1_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_UP:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+
+  request_notes:
+    TIM: >
+      A TIMx_CHy request serves BOTH PWM output (memory to peripheral) and input
+      capture (peripheral to memory) under one name. The default is the common case;
+      change `dir` when you are capturing.
+
+  notes: >
+    Synthetic. Nothing here is from a datasheet - it exists so the DMA Settings tab,
+    the channel-clash detector and the DMA half of code generation are exercised on a
+    SECOND part with a different shape, on packages up to LQFP144.
+
+# -----------------------------------------------------------------------------
+# Interrupt vectors.
+#
+# Deliberately a DIFFERENT priority scheme from CH32V006. That part's PFIC implements
+# TWO priority bits and offers 0-1 / 0-1 or a flat 0-3. This one has FOUR, grouped the
+# Cortex-M way, so ranges run to 0-15. A NVIC tab that hardcodes either part's ranges
+# is wrong on the other, which is the entire point of having this file.
+nvic:
+  controller: NVIC
+  scheme:
+    register: { name: NVIC_IPR, address: 0xE000E400, bits_per_vector: 8 }
+    priority_bits: 4
+    priority_lsb: 4
+    max_nesting: 8
+    groups:
+      - name: 4 bits for pre-emption priority, 0 bits for subpriority
+        preempt: { bits: 4, lsb: 4, min: 0, max: 15 }
+        sub:     { bits: 0, min: 0, max: 0 }
+      - name: 3 bits for pre-emption priority, 1 bit for subpriority
+        default: true
+        preempt: { bits: 3, lsb: 5, min: 0, max: 7 }
+        sub:     { bits: 1, lsb: 4, min: 0, max: 1 }
+      - name: 2 bits for pre-emption priority, 2 bits for subpriority
+        preempt: { bits: 2, lsb: 6, min: 0, max: 3 }
+        sub:     { bits: 2, lsb: 4, min: 0, max: 3 }
+      - name: 0 bits for pre-emption priority, 4 bits for subpriority
+        preempt: { bits: 0, min: 0, max: 0 }
+        sub:     { bits: 4, lsb: 4, min: 0, max: 15 }
+  enable:  { register: NVIC_ISER, address: 0xE000E100 }
+  disable: { register: NVIC_ICER, address: 0xE000E180 }
+  notes: >
+    Synthetic. Four priority bits and four grouping choices, against CH32V006's two
+    bits and two choices, so neither the spinner ranges nor the number of groups can
+    be hardcoded anywhere.
+  vectors:
+    - { name: NMI,       vector: 2,  irqn: NonMaskableInt_IRQn, handler: NMI_Handler,              system: true, fixed: true, description: Non-maskable interrupt }
+    - { name: HardFault, vector: 3,  irqn: HardFault_IRQn,      handler: HardFault_Handler,        system: true, fixed: true, description: Abnormal interrupt (exception) }
+    - { name: SVCall,    vector: 11, irqn: SVCall_IRQn,         handler: SVC_Handler,              system: true, description: Supervisor call }
+    - { name: PendSV,    vector: 14, irqn: PendSV_IRQn,         handler: PendSV_Handler,           system: true, description: Pendable request for system service }
+    - { name: SysTick,   vector: 15, irqn: SysTick_IRQn,        handler: SysTick_Handler,          system: true, description: System timer interrupt }
+    - { name: WWDG,      vector: 16, irqn: WWDG_IRQn,           handler: WWDG_IRQHandler,          peripheral: WWDG, description: Window watchdog timer interrupt }
+    - { name: RCC,       vector: 21, irqn: RCC_IRQn,            handler: RCC_IRQHandler,           peripheral: RCC, description: Reset and clock control interrupt }
+    - { name: DMA1_CH1,  vector: 27, irqn: DMA1_Channel1_IRQn,  handler: DMA1_Channel1_IRQHandler, peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
+    - { name: DMA1_CH2,  vector: 28, irqn: DMA1_Channel2_IRQn,  handler: DMA1_Channel2_IRQHandler, peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
+    - { name: DMA1_CH3,  vector: 29, irqn: DMA1_Channel3_IRQn,  handler: DMA1_Channel3_IRQHandler, peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
+    - { name: DMA1_CH4,  vector: 30, irqn: DMA1_Channel4_IRQn,  handler: DMA1_Channel4_IRQHandler, peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
+    - { name: DMA1_CH5,  vector: 31, irqn: DMA1_Channel5_IRQn,  handler: DMA1_Channel5_IRQHandler, peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
+    - { name: DMA1_CH6,  vector: 32, irqn: DMA1_Channel6_IRQn,  handler: DMA1_Channel6_IRQHandler, peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
+    - { name: DMA1_CH7,  vector: 33, irqn: DMA1_Channel7_IRQn,  handler: DMA1_Channel7_IRQHandler, peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
+    - { name: ADC1_2,    vector: 34, irqn: ADC1_2_IRQn,         handler: ADC1_2_IRQHandler,        peripheral: ADC1, description: ADC1 and ADC2 global interrupt (one vector for both) }
+    - { name: USB_HP,    vector: 35, irqn: USB_HP_IRQn,         handler: USB_HP_IRQHandler,        peripheral: USB, description: USB high priority interrupt }
+    - { name: USB_LP,    vector: 36, irqn: USB_LP_IRQn,         handler: USB_LP_IRQHandler,        peripheral: USB, description: USB low priority interrupt }
+    - { name: CAN1_TX,   vector: 37, irqn: CAN1_TX_IRQn,        handler: CAN1_TX_IRQHandler,       peripheral: CAN1, description: CAN1 TX interrupt }
+    - { name: CAN1_RX0,  vector: 38, irqn: CAN1_RX0_IRQn,       handler: CAN1_RX0_IRQHandler,      peripheral: CAN1, description: CAN1 RX0 interrupt }
+    - { name: TIM1_BRK,  vector: 40, irqn: TIM1_BRK_IRQn,       handler: TIM1_BRK_IRQHandler,      peripheral: TIM1, description: TIM1 break interrupt }
+    - { name: TIM1_UP,   vector: 41, irqn: TIM1_UP_IRQn,        handler: TIM1_UP_IRQHandler,       peripheral: TIM1, description: TIM1 update interrupt }
+    - { name: TIM1_TRG,  vector: 42, irqn: TIM1_TRG_COM_IRQn,   handler: TIM1_TRG_COM_IRQHandler,  peripheral: TIM1, description: TIM1 trigger and commutation interrupt }
+    - { name: TIM1_CC,   vector: 43, irqn: TIM1_CC_IRQn,        handler: TIM1_CC_IRQHandler,       peripheral: TIM1, description: TIM1 capture/compare interrupt }
+    - { name: TIM2,      vector: 44, irqn: TIM2_IRQn,           handler: TIM2_IRQHandler,          peripheral: TIM2, description: TIM2 global interrupt }
+    - { name: TIM3,      vector: 45, irqn: TIM3_IRQn,           handler: TIM3_IRQHandler,          peripheral: TIM3, description: TIM3 global interrupt }
+    - { name: TIM4,      vector: 46, irqn: TIM4_IRQn,           handler: TIM4_IRQHandler,          peripheral: TIM4, description: TIM4 global interrupt }
+    - { name: I2C1_EV,   vector: 47, irqn: I2C1_EV_IRQn,        handler: I2C1_EV_IRQHandler,       peripheral: I2C1, description: I2C1 event interrupt }
+    - { name: I2C1_ER,   vector: 48, irqn: I2C1_ER_IRQn,        handler: I2C1_ER_IRQHandler,       peripheral: I2C1, description: I2C1 error interrupt }
+    - { name: I2C2_EV,   vector: 49, irqn: I2C2_EV_IRQn,        handler: I2C2_EV_IRQHandler,       peripheral: I2C2, description: I2C2 event interrupt }
+    - { name: I2C2_ER,   vector: 50, irqn: I2C2_ER_IRQn,        handler: I2C2_ER_IRQHandler,       peripheral: I2C2, description: I2C2 error interrupt }
+    - { name: SPI1,      vector: 51, irqn: SPI1_IRQn,           handler: SPI1_IRQHandler,          peripheral: SPI1, description: SPI1 global interrupt }
+    - { name: SPI2,      vector: 52, irqn: SPI2_IRQn,           handler: SPI2_IRQHandler,          peripheral: SPI2, description: SPI2 global interrupt }
+    - { name: USART1,    vector: 53, irqn: USART1_IRQn,         handler: USART1_IRQHandler,        peripheral: USART1, description: USART1 global interrupt }
+    - { name: USART2,    vector: 54, irqn: USART2_IRQn,         handler: USART2_IRQHandler,        peripheral: USART2, description: USART2 global interrupt }
+    - { name: USART3,    vector: 55, irqn: USART3_IRQn,         handler: USART3_IRQHandler,        peripheral: USART3, description: USART3 global interrupt }
+    - { name: IWDG,      vector: 57, irqn: IWDG_IRQn,           handler: IWDG_IRQHandler,          peripheral: IWDG, description: Independent watchdog early-wake interrupt }
+    - { name: OPA1,      vector: 58, irqn: OPA1_IRQn,           handler: OPA1_IRQHandler,          peripheral: OPA1, description: Operational amplifier comparator output interrupt }
+
+# -----------------------------------------------------------------------------
+# Code generation.
+#
+# `sdk: { synthetic: true }` is how a part that is NOT real silicon opts out of
+# tools/verify_sdk_names.py. It is a declaration in the data, not a name hardcoded in
+# the checker, so a second fixture part needs no change to the tool. Everything below
+# is F1-shaped and self-consistent, and none of it is checked against any header
+# because there is no header to check it against - that is the point of saying so.
+codegen:
+  header: dummy32.h
+  sdk: { synthetic: true }
+
+  # NOTE the spelling: APB2, not the PB2 that CH32V006 uses. Two live spellings in the
+  # repo means neither can be hardcoded in the generator.
+  gpio_clock: { fn: RCC_APB2PeriphClockCmd, port: RCC_APB2Periph_GPIO$PORT, afio: RCC_APB2Periph_AFIO }
+
+  # Three real speeds here, against CH32V006's one. `gpio.speeds` above is what the
+  # part OFFERS; this maps a stored name to its macro.
+  speeds:
+    "2 MHz":  GPIO_Speed_2MHz
+    "10 MHz": GPIO_Speed_10MHz
+    "50 MHz": GPIO_Speed_50MHz
+
+  # AFIO_MAPR-style remap word. Only peripherals whose `remaps:` INDEX is the field
+  # value belong here - SYS is absent for the same reason as on CH32V006: its remap
+  # list picks a debug-pin arrangement, not an AFIO field.
+  remap:
+    register: "AFIO->MAPR"
+    fields:
+      SPI1:   [{ lsb: 0,  bits: 1 }]
+      I2C1:   [{ lsb: 1,  bits: 1 }]
+      USART1: [{ lsb: 2,  bits: 1 }]
+      USART2: [{ lsb: 3,  bits: 1 }]
+      USART3: [{ lsb: 4,  bits: 2 }]
+      TIM1:   [{ lsb: 6,  bits: 2 }]
+      TIM2:   [{ lsb: 8,  bits: 2 }]
+      TIM3:   [{ lsb: 10, bits: 2 }]
+      TIM4:   [{ lsb: 12, bits: 1 }]
+      CAN1:   [{ lsb: 13, bits: 2 }]
+
+  analog_signals:
+    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9]
+    ADC2: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7]
+    OPA1: [VINP, VINM, VOUT]
+
+  rcc:
+    register: "RCC->CFGR0"
+    sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }
+    pllsrc: { lsb: 16, bits: 1, values: { HSI: 0, HSE: 1 } }
+    # Keys are the choice NAMES of peripherals.RCC "Master Clock Output". On this part
+    # that setting is a plain Disable/Enable pair rather than a source list, so the
+    # encoding is a two-value field - deliberately unlike CH32V006, whose MCO setting
+    # names its four sources. validate_mcu.py checks these keys still line up.
+    mco:
+      peripheral: RCC
+      setting: Master Clock Output
+      lsb: 24
+      bits: 3
+      values: { Disable: 0, Enable: 4 }
+    prescalers:
+      AHB:  { lsb: 4,  bits: 4, values: { 1: 0, 2: 8, 4: 9, 8: 10, 16: 11, 64: 12, 128: 13, 256: 14, 512: 15 } }
+      APB1: { lsb: 8,  bits: 3, values: { 1: 0, 2: 4, 4: 5, 8: 6, 16: 7 } }
+      APB2: { lsb: 11, bits: 3, values: { 1: 0, 2: 4, 4: 5, 8: 6, 16: 7 } }
+      ADC:  { lsb: 14, bits: 2, values: { 2: 0, 4: 1, 6: 2, 8: 3 } }
+
+  ctlr:
+    register: "RCC->CTLR"
+    fields:
+      HSION:  { lsb: 0,  bits: 1 }
+      HSIRDY: { lsb: 1,  bits: 1, access: ro }
+      HSEON:  { lsb: 16, bits: 1 }
+      HSERDY: { lsb: 17, bits: 1, access: ro }
+      HSEBYP: { lsb: 18, bits: 1 }
+      PLLON:  { lsb: 24, bits: 1 }
+      PLLRDY: { lsb: 25, bits: 1, access: ro }
+    # Must cover EVERY choice of peripherals.RCC "High Speed Clock (HSE)", and these
+    # are spelled the way that setting spells them (no spaces around the slash), which
+    # is not how CH32V006 spells its equivalent. validate_mcu.py enforces both halves.
+    hse_choices:
+      Disable:                   { HSEON: 0, HSEBYP: 0 }
+      BYPASS Clock Source:       { HSEON: 1, HSEBYP: 1 }
+      Crystal/Ceramic Resonator: { HSEON: 1, HSEBYP: 0 }
+
+  # Which enable register each peripheral's clock bit lives in. Three domains here
+  # against CH32V006's HB/PB2/PB1, and they are spelled AHB/APB2/APB1.
+  periph_clock:
+    AHB:
+      register: RCC_AHBPCENR
+      fn: RCC_AHBPeriphClockCmd
+      prefix: RCC_AHBPeriph_
+      bits: { DMA1: 0 }   # SRAM/FLITF/CRC have no tree entry here, so no enable is claimed
+    APB2:
+      register: RCC_APB2PCENR
+      fn: RCC_APB2PeriphClockCmd
+      prefix: RCC_APB2Periph_
+      bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4, GPIOD: 5, GPIOE: 6, GPIOF: 7, GPIOG: 8, ADC1: 9, ADC2: 10, TIM1: 11, SPI1: 12, USART1: 14 }
+    APB1:
+      register: RCC_APB1PCENR
+      fn: RCC_APB1PeriphClockCmd
+      prefix: RCC_APB1Periph_
+      bits: { TIM2: 0, TIM3: 1, TIM4: 2, WWDG: 11, SPI2: 14, USART2: 17, USART3: 18, I2C1: 21, I2C2: 22, USB: 23, CAN1: 25 }
+    notes: >
+      GPIOH and GPIOI have pins in the LQFP144 package table but no enable bit here.
+      That is deliberate: it is the shape of a real datasheet gap, and it is what the
+      generator meets when a package exposes a port the clock tree does not document.
+
+# -----------------------------------------------------------------------------
 # Clock tree (F1-style). Everything in MHz unless noted.
 clock:
   sources:
@@ -3290,7 +3945,8 @@ function deepClone(v) {
 //
 //  Rules (agreed with AGENT-1 on the board, 2026-09-11):
 //    mcu.inherits: CH32V006          parent's mcu.name; chains allowed, loops rejected
-//    mcu.remove: [peripherals.TKEY]  dotted paths; a path that matches nothing is an error
+//    mcu.remove: [peripherals.TKEY]  dotted paths into the PARENT, applied BEFORE the
+//            merge; a path that matches nothing in the parent is an error
 //    maps    merge key by key, the child wins
 //    lists   replace wholesale — NEVER concatenate: a remaps[] index IS the
 //            AFIO_PCFR1 field value, so appending would silently mis-map pins
@@ -3299,6 +3955,14 @@ function deepClone(v) {
 //            part numbers with its parent
 //  Resolution runs before validation, so a child may omit packages/pins/
 //  peripherals entirely; nothing downstream ever sees `inherits`.
+//
+//  `remove` is applied to the PARENT, not to the merged document (round-3 C4).
+//  Removing after the merge deleted the child's own redefinition of the same
+//  path: CH32V005 removed `dma.request_defaults.TIM3_CH3` and redefined
+//  `dma.requests`, and shipped for a whole round with no DMA request map at all,
+//  which silently killed channel-clash detection on that part. Applied to the
+//  parent, "remove" means what it says — drop what I inherit — and a child that
+//  removes and redefines keeps its own version.
 // =============================================================================
 
 
@@ -3340,12 +4004,17 @@ function resolveInherits(y, lookup, parse, seen = []) {
   if (!src) throw new Error(`"${me}" inherits from "${parent}", which is not loaded. Load ${parent}'s YAML first, then this file.`);
 
   const base = resolveInherits(parse(src), lookup, parse, [...seen, me]);
+
+  // BEFORE the merge, so a path the child removes AND redefines keeps the child's
+  // version. Matching is against the parent alone: removing something the parent
+  // does not have is a stale removal, and stale removals are how a parent rename
+  // goes unnoticed.
+  for (const path of y.mcu.remove || []) {
+    if (!removePath(base, path)) throw new Error(`"${me}": mcu.remove path "${path}" matched nothing in ${parent}`);
+  }
+
   const merged = deepMerge(base, y);
   if (y.mcu.variants) merged.mcu.variants = deepClone(y.mcu.variants);   // never inherit part numbers
-
-  for (const path of y.mcu.remove || []) {
-    if (!removePath(merged, path)) throw new Error(`"${me}": mcu.remove path "${path}" matched nothing in ${parent}`);
-  }
   merged.mcu.inherited_from = parent;      // metadata; inert everywhere else
   return merged;
 }
@@ -3561,6 +4230,47 @@ const pinLabel = name => { const num = pinNum(name); return num === undefined ? 
 const groupOf  = name => { const num = pinNum(name); return num === undefined ? [name] : pkgPins()[num]; };
 const sigName  = (pid, sig) => `${pid}_${sig}`;
 const GPIO_SIGS = ['GPIO_Input', 'GPIO_Output', 'GPIO_Analog', 'GPIO_EXTI'];
+
+// ---- GPIO output speed -------------------------------------------------------
+// The speeds this part HAS, in the data's order: [{ name, macro }]. `gpio.speeds`
+// in the MCU file is the authority; `name` is what the GPIO table shows and what a
+// .wchproj stores, `macro` is the SPL enum member.
+//
+// **A one-entry list means the control is not shown** (data/FORMAT.md): CH32V006 and
+// CH32V005 have exactly one, `GPIO_Speed_30MHz`, because `GPIOx_CFGLR.MODEy` is a
+// single bit (RM v1.4 7.3.1.1) and `GPIOSpeed_TypeDef` in the EVT header
+// data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 22-26 has one
+// member. Offering Low/Medium/High there offered a choice the silicon does not have,
+// and generated three macro names that do not compile.
+//
+// A part with no `gpio.speeds` makes no claim. Rather than invent a list, fall back to
+// the legacy `codegen.speeds` map's keys, which is what such a file used to mean.
+function gpioSpeeds() {
+  const list = ((M && M.gpio) || {}).speeds;
+  if (Array.isArray(list) && list.length) {
+    return list.filter(s => s && s.name).map(s => ({ name: String(s.name), macro: s.macro || null }));
+  }
+  const legacy = ((M && M.codegen) || {}).speeds;
+  if (legacy && typeof legacy === 'object') {
+    return Object.entries(legacy).map(([name, macro]) => ({ name, macro }));
+  }
+  return [];
+}
+
+// True when the part offers a real choice. False (one speed, or none stated) means the
+// UI shows fixed text and no selector - never a disabled selector.
+const gpioSpeedIsChoice = () => gpioSpeeds().length > 1;
+
+// The speed name to USE for a pin, given whatever S.gpio[pin].speed holds. A part with
+// one speed always answers with that one, so a .wchproj saved when the app still offered
+// "High" opens as "30 MHz" rather than carrying a name the part cannot express.
+function gpioSpeedFor(stored) {
+  const list = gpioSpeeds();
+  if (!list.length) return stored || null;
+  if (list.length === 1) return list[0].name;
+  const hit = list.find(s => s.name === stored);
+  return hit ? hit.name : list[0].name;
+}
 
 // Some peripherals sit on different pins depending on the package (bonding, not AFIO).
 function applyPackageRemaps() {
@@ -4326,7 +5036,8 @@ function assignSignal(pin, opt) {
     S.manual[pin] = opt.gpio;
     S.gpio[pin] ||= {
       mode: opt.gpio === 'GPIO_Output' ? 'Output Push Pull' : opt.gpio === 'GPIO_Analog' ? 'Analog' : 'Input',
-      pull: 'No pull', speed: 'Low', label: '',
+      // the part's own first speed, never a Low/Medium/High name from nowhere
+      pull: 'No pull', speed: gpioSpeedFor(undefined) || '', label: '',
     };
     return;
   }
@@ -4372,10 +5083,25 @@ function resetPin(pin) {
 // works and the UI never has to know how S is shaped. (AGENT-3: route the centre
 // panel and the clock tab here — these replace the thin writers in section 4b.)
 
+// Shared by both setting writers: the peripheral has to exist on this part, and
+// so does the setting. A generic caller — the peripheral tabs drive every setting
+// by name — gets a sentence, not a TypeError from `undefined.settings`.
+function findSetting(pid, setting) {
+  const p = M.peripherals[pid];
+  if (!p) throw new Error(`no peripheral "${pid}" on ${M.mcu.name}`);
+  const s = (p.settings || []).find(x => x.name === setting);
+  if (!s) throw new Error(`${pid} has no setting "${setting}"`);
+  return s;
+}
+
 // A dropdown setting: "Mode" -> "Asynchronous".
 function setSetting(pid, setting, choice) {
-  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
-  if (!s) throw new Error(`${pid} has no setting "${setting}"`);
+  const s = findSetting(pid, setting);
+  // Round-3 C5. Writing a String over the Set left the next compute() calling
+  // `v.has(...)` on a string — a blank app until reload, and no exception at the
+  // call site to say who did it. Reject it here, by name, with the way out.
+  if (s.type === 'checkboxes')
+    throw new Error(`${pid}.${setting} is a checkbox setting — use toggleSetting(pid, setting, choice, on), not setSetting`);
   if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
   record(`${pid} ${setting}`);
   S.periph[pid].settings[setting] = choice;
@@ -4383,8 +5109,9 @@ function setSetting(pid, setting, choice) {
 
 // A checkbox setting: ADC1 "Channels" IN3 on or off.
 function toggleSetting(pid, setting, choice, on) {
-  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
-  if (!s || s.type !== 'checkboxes') throw new Error(`${pid}.${setting} is not a checkbox setting`);
+  const s = findSetting(pid, setting);
+  if (s.type !== 'checkboxes')
+    throw new Error(`${pid}.${setting} is not a checkbox setting — use setSetting(pid, setting, choice)`);
   if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
   record(`${pid} ${choice}`);
   const set = S.periph[pid].settings[setting];
@@ -4401,6 +5128,20 @@ function setRemap(pid, index) {
 
 // One cell of the GPIO settings table (mode, pull, speed, label).
 function setGpioField(pin, key, value) {
+  // Round-3 P0b: S must never carry an output speed the part cannot express.
+  // `gpio.speeds` in the MCU file says what the part HAS. A part with exactly one
+  // speed has no choice to make, so whatever arrives is stored as that one name -
+  // that is how a caller holding a stale Low/Medium/High list (or a .wchproj saved
+  // before the one-speed fix) stops putting a name into S that the silicon, the SDK
+  // and the generator all disagree with. A part with a REAL choice gets no such
+  // courtesy: a value it does not offer is a bug at the call site and throws.
+  if (key === 'speed' && value !== '') {
+    const speeds = gpioSpeeds();
+    if (speeds.length > 1 && !speeds.some(s => s.name === value)) {
+      throw new Error(`${M.mcu.name} has no output speed "${value}". It offers: ${speeds.map(s => s.name).join(', ')}`);
+    }
+    if (speeds.length) value = gpioSpeedFor(value);
+  }
   record(value === '' ? `Clear ${key} on ${pinLabel(pin)}` : `${pinLabel(pin)} ${key}`);
   (S.gpio[pin] ||= {})[key] = value;
 }
@@ -4570,6 +5311,25 @@ function projectSerialize() {
   return yamlDump(projectObject(), { noRefs: true, lineWidth: 120 });
 }
 
+// A .wchproj saved before the one-speed fix stores "Low" / "Medium" / "High" per pin -
+// names this silicon has never had (round-3 P0b). Opening it must not carry them into S,
+// where the GPIO table would show them and the generator would have to translate them
+// forever. Rewrite them to a speed the part actually offers and say so, the same way an
+// out-of-range parameter is reported rather than silently applied.
+function normaliseGpioSpeeds() {
+  const speeds = gpioSpeeds();
+  if (!speeds.length) return [];
+  const out = [];
+  for (const [pin, g] of Object.entries(S.gpio)) {
+    if (!g || g.speed === undefined || g.speed === '') continue;
+    const fixed = gpioSpeedFor(g.speed);
+    if (fixed === g.speed) continue;
+    out.push(`${pin}: output speed "${g.speed}" is not one this part has; using "${fixed}".`);
+    g.speed = fixed;
+  }
+  return out;
+}
+
 // Restore a project. Throws with a human sentence if the MCU file is not loaded.
 function projectApply(src) {
   const obj = migrateProject(typeof src === 'string' ? yamlLoad(src) : src);
@@ -4597,6 +5357,7 @@ function projectApply(src) {
   }
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
+  dropped.push(...normaliseGpioSpeeds());
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
@@ -4612,8 +5373,10 @@ function projectApply(src) {
 //  codegen.js — C initialisation code in WCH EVT SDK style.
 //
 //  What is generated from the model alone (always correct):
-//    the GPIO_InitTypeDef blocks — ports, pin masks, modes, speeds — because
-//    every one of those comes from the pin assignments and the GPIO table.
+//    the GPIO_InitTypeDef blocks — ports, pin masks, modes — because every one of
+//    those comes from the pin assignments and the GPIO table. The speed MACRO is
+//    not derivable and comes from the MCU file's `gpio.speeds`: a part with one
+//    speed gets that one macro, never a Low/Medium/High mapping.
 //
 //  What needs register encodings from the MCU file (`codegen:` block):
 //    the AFIO remap word, the peripheral clock enables and the RCC clock setup.
@@ -4626,7 +5389,8 @@ function projectApply(src) {
 //      header: ch32v00x.h
 //      gpio_clock: { fn: RCC_PB2PeriphClockCmd, port: RCC_PB2Periph_GPIO$PORT,
 //                    afio: RCC_PB2Periph_AFIO }
-//      speeds: { Low: GPIO_Speed_2MHz, Medium: GPIO_Speed_10MHz, High: GPIO_Speed_50MHz }
+//      speeds: { "30 MHz": GPIO_Speed_30MHz }   # legacy-name translation only;
+//                                                the OFFER is mcu `gpio.speeds`
 //      remap:  { register: "AFIO->PCFR1",
 //                fields: { USART1: [{ lsb: 6, bits: 4 }],
 //                          TIM2:   [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }] } }
@@ -4646,9 +5410,23 @@ const PIN_RE = /^P([A-Z])(\d+)$/;
 const hex = (v, digits = 8) => '0x' + (v >>> 0).toString(16).toUpperCase().padStart(digits, '0') + 'U';
 const bin = (v, bits) => (v >>> 0).toString(2).padStart(bits, '0');
 
-// Standard StdPeriph names, the same in the WCH EVT SDK and in the CH32H417
-// example under EVT/EXAM/GPIO. Overridable per family through `codegen:`.
-const DEFAULT_SPEEDS = { Low: 'GPIO_Speed_2MHz', Medium: 'GPIO_Speed_10MHz', High: 'GPIO_Speed_50MHz' };
+// The SPL macro for a stored GPIO-table speed name. `gpio.speeds` in the MCU file
+// is the authority - it lists the speeds the part HAS, with the macro for each - and
+// `codegen.speeds` is consulted only to translate a name that list does not carry, so
+// a .wchproj saved when the app still offered Low/Medium/High still generates code
+// that compiles.
+//
+// Nothing is invented here. A part that states neither gets a TODO naming what is
+// missing, because the wrong speed macro is exactly the defect this round opened
+// with: GPIO_Speed_50MHz does not exist on CH32V006 and never did.
+function speedMacro(stored) {
+  const name = gpioSpeedFor(stored);
+  const hit = gpioSpeeds().find(x => x.name === name);
+  if (hit && hit.macro) return { macro: hit.macro, name };
+  const legacy = (cfg().speeds || {})[name] || (cfg().speeds || {})[stored];
+  if (legacy) return { macro: legacy, name };
+  return { macro: null, name };
+}
 
 const MODE_MACRO = {
   'Output Push Pull': 'GPIO_Mode_Out_PP',
@@ -4719,7 +5497,7 @@ function gpioPlan() {
         pin, port: m[1], bit: +m[2],
         signal: usable.map(c => c.signal).join(' / '),
         label: (g.label || '').trim(),
-        mode, pull, speed: g.speed || 'Low', macro, inferred,
+        mode, pull, speed: gpioSpeedFor(g.speed), macro, inferred,
         conflict: info.state === 'conflict',
       });
     }
@@ -4912,7 +5690,14 @@ function gpioSection() {
       }
       L.push(`    GPIO_InitStructure.GPIO_Pin = ${pins.map(p => `GPIO_Pin_${p.bit}`).join(' | ')};`);
       L.push(`    GPIO_InitStructure.GPIO_Mode = ${macro};`);
-      L.push(`    GPIO_InitStructure.GPIO_Speed = ${(cfg().speeds || DEFAULT_SPEEDS)[speed] || DEFAULT_SPEEDS.Low};`);
+      const sp = speedMacro(speed);
+      if (sp.macro) {
+        L.push(`    GPIO_InitStructure.GPIO_Speed = ${sp.macro};`);
+      } else {
+        L.push(`    /* TODO: no SPL macro for output speed ${sp.name === null ? '(unstated)' : `"${sp.name}"`}.`);
+        L.push('       Add gpio.speeds (name + macro) to the MCU YAML; this generator does not');
+        L.push('       guess a speed macro - the wrong one silently does not exist on the part. */');
+      }
       L.push(`    GPIO_Init(GPIO${port}, &GPIO_InitStructure);`);
       L.push('');
     }
@@ -5019,6 +5804,28 @@ function cFiles() {
   return { 'wchcube_init.h': cHeader(), 'wchcube_init.c': cSource() };
 }
 
+// ---- complaints ---------------------------------------------------------------
+// "Generated successfully" and "generated a complaint" are different outcomes, and
+// only this module knows the difference. A generator that cannot compute something
+// says so in exactly two spellings, both written above: `#error "..."` at the start
+// of a line, and a `/* TODO: ...` comment block. Scanning our own output is
+// therefore not a heuristic - it reads back what these functions just wrote.
+//
+// `--strict` on the CLI turns a non-empty list into exit 2, so CI can tell a build
+// that generated code from one that generated an explanation of what is missing.
+function cComplaints(files = cFiles()) {
+  const out = [];
+  for (const [name, text] of Object.entries(files)) {
+    String(text).split(/\r?\n/).forEach((line, i) => {
+      const e = /^\s*#error\s+"?(.*?)"?\s*$/.exec(line);
+      if (e) { out.push({ file: name, line: i + 1, kind: 'error', text: e[1] }); return; }
+      const t = /\/\*\s*TODO:\s*(.*?)\s*$/.exec(line);
+      if (t) out.push({ file: name, line: i + 1, kind: 'todo', text: t[1] });
+    });
+  }
+  return out;
+}
+
 // ===== app/engine/export.js ===================================================
 // =============================================================================
 //  export.js — text reports. Pure string building; no DOM, no file saving.
@@ -5050,7 +5857,7 @@ function pinRows() {
       signal: info ? info.label : (type === 'io' ? '' : type.toUpperCase()),
       mode: info ? (g.mode || (info.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : 'Input')) : '',
       pull: info ? (g.pull || 'No pull') : '',
-      speed: info ? (g.speed || 'Low') : '',
+      speed: info ? (gpioSpeedFor(g.speed) || '') : '',
       label: g.label || '',
       conflict: !!(info && info.state === 'conflict'),
     });
@@ -5119,18 +5926,21 @@ function generateAll() {
 <div class="app">
   <div class="menubar">
     <div class="logo"><div class="cube"></div><div><b>WCHCube</b><small>pinout · peripherals · clocks</small></div></div>
-    <button class="menu" id="m-new">New project</button>
-    <button class="menu" id="m-openproj">Open project…</button>
-    <button class="menu" id="m-save">Save project</button>
-    <button class="menu" id="m-open">Open MCU file…</button>
-    <button class="menu" id="m-reset">Reset configuration</button>
+    <button class="menu" id="m-new" title="New project (Ctrl+N)" aria-label="New project"><span class="lbl-full">New project</span><span class="lbl-short">New</span></button>
+    <button class="menu" id="m-openproj" title="Open a saved .wchproj project" aria-label="Open project"><span class="lbl-full">Open project…</span><span class="lbl-short">Open…</span></button>
+    <button class="menu" id="m-save" title="Save this project as .wchproj (Ctrl+S)" aria-label="Save project"><span class="lbl-full">Save project</span><span class="lbl-short">Save</span></button>
+    <button class="menu" id="m-open" title="Open an MCU description file (the YAML format in data/mcus/)" aria-label="Open MCU file"><span class="lbl-full">Open MCU file…</span><span class="lbl-short">MCU file…</span></button>
+    <button class="menu" id="m-reset" title="Reset every pin and peripheral setting" aria-label="Reset configuration"><span class="lbl-full">Reset configuration</span><span class="lbl-short">Reset</span></button>
     <button class="menu icon" id="m-undo" disabled>↶</button>
     <button class="menu icon" id="m-redo" disabled>↷</button>
     <button class="menu icon" id="m-theme" title="Dark theme">◑</button>
-    <button class="menu" id="m-keys" title="Keyboard shortcuts (?)">⌨ Shortcuts</button>
+    <button class="menu" id="m-keys" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"><span class="lbl-full">⌨ Shortcuts</span><span class="lbl-short">⌨</span></button>
     <button class="menu" id="m-help">Help</button>
     <div class="spacer"></div>
-    <select id="mcusel" class="menu" style="border:1px solid var(--line)"></select>
+    <!-- Labelled, because an unlabelled part name in a menu bar reads as "the part that
+         is loaded" and it is in fact "load a different part". It is kept in step with
+         M.mcu.name by syncShellSelectors() on every render. -->
+    <span class="mcusel-wrap"><span>Load part:</span><label class="sr" for="mcusel">Load a different MCU</label><select id="mcusel" class="menu" title="Load a different MCU part" style="border:1px solid var(--line)"></select></span>
     <span class="mcu-name" id="mcu-meta"></span>
   </div>
 
@@ -5145,7 +5955,7 @@ function generateAll() {
   <div class="tabs" role="tablist" aria-label="Views">
     <button class="tab active" data-view="pinout" role="tab" aria-selected="true">Pinout &amp; Configuration</button>
     <button class="tab" data-view="clock" role="tab" aria-selected="false">Clock Configuration</button>
-    <button class="tab" disabled title="Future">Project Manager</button>
+    <button class="tab" data-view="pm" role="tab" aria-selected="false">Project Manager</button>
     <button class="tab" disabled title="Future">Tools</button>
   </div>
 
@@ -5172,10 +5982,10 @@ function generateAll() {
       <div class="mode" id="mode"><div class="empty">Pick a peripheral on the left, or click a pin on the chip.</div></div>
       <div class="config">
         <div class="section-h">Configuration</div>
-        <div class="ctabs">
-          <button class="ctab active" data-ctab="gpio">GPIO Settings</button>
-          <button class="ctab" data-ctab="param">Parameter Settings</button>
-        </div>
+        <!-- Filled by renderCtabs(): a peripheral only gets the tabs it can actually
+             use, in CubeMX's order. A tab with nothing to put in it is absent, never
+             disabled - round-2's rule about controls that cannot do anything. -->
+        <div class="ctabs" id="ctabs" role="tablist" aria-label="Configuration"></div>
         <div class="cbody" id="cbody"></div>
         <div class="foot">Click a pin to assign a signal · right-click for label &amp; reset · <span class="kbd">←↑↓→</span> move <span class="kbd">Enter</span> open <span class="kbd">L</span> label <span class="kbd">Del</span> reset · drag to pan, wheel to zoom.</div>
       </div>
@@ -5205,6 +6015,27 @@ function generateAll() {
   <!-- ================= CLOCK VIEW ================= -->
   <div class="view" id="view-clock">
     <div class="clock" id="clock"></div>
+  </div>
+
+  <!-- ================= PROJECT MANAGER VIEW =================
+       Left: what is generated and where. Right: the actual text of it, before the user
+       takes it. Two of round 3's P0 bugs were single wrong identifiers in generated C;
+       the right-hand panel is what puts those in front of a human. Both halves are
+       painted by renderProjectManager(). -->
+  <div class="view" id="view-pm">
+    <div class="pm">
+      <div class="pmcfg" id="pm-config"></div>
+      <div class="pmprev">
+        <div class="section-h">Preview — this is exactly what Generate writes</div>
+        <div class="pmprevbody">
+          <div class="pmfiles" id="pm-files" role="listbox" aria-label="Generated files"></div>
+          <div class="pmtext">
+            <div class="pmtexthead" id="pm-texthead"></div>
+            <div class="pmcode" id="pm-code" tabindex="0" role="document" aria-label="Generated file contents"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5391,17 +6222,24 @@ function renderChip() {
       { t: S.pkg, fs: size(20, 11), w: 600, style: ' font-style="italic"' },
     ];
     if (epad) lines.push({ t: `pad: ${epad.join('/')}`, fs: size(11, 20), w: 400, style: '', fill: 'var(--chip-sub)' });
-    const LEAD = 1.25;
-    const total = lines.reduce((a, l) => a + l.fs * LEAD, 0);
-    let y = b.y + b.h / 2 - total / 2;
+    // Lines are stacked by their real line BOXES, not by a baseline fudge. The old
+    // `y += fs*1.25` then `baseline = y - fs*0.3` put consecutive baselines 23.9 px
+    // apart where the two boxes need 25.2, so "CH32V006" and "TSSOP20" overlapped by
+    // ~2.6 px on TSSOP20 (round-2 finding L8). ASC/DESC are the em fractions that bound
+    // a line in this font stack; GAP is a hair of leading. Because the box heights are
+    // computed from each line's own size, no combination of sizes can collide.
+    const ASC = 1.10, DESC = 0.30, GAP = 0.08;
+    const lineH = l => l.fs * (ASC + DESC + GAP);
+    const total = lines.reduce((a, l) => a + lineH(l), 0);
+    let y = b.y + b.h / 2 - total / 2;      // top of the stack
     for (const l of lines) {
-      y += l.fs * LEAD;
       // The <title> is a sibling, never a child of <text>: a title inside <text> would
       // land in its textContent and the truncation step would abbreviate the wrong string.
       g.push(`<g><title>${esc(l.t)}</title>`
-        + `<text x="${b.x + b.w / 2}" y="${y - l.fs * .3}" text-anchor="middle" style="font-size:${l.fs}px"`
+        + `<text x="${b.x + b.w / 2}" y="${y + l.fs * ASC}" text-anchor="middle" style="font-size:${l.fs}px"`
         + ` font-weight="${l.w}"${l.style} fill="${l.fill || 'var(--chip-text)'}" font-family="var(--font)"`
         + ` data-fitw="${Math.max(10, b.w - 16)}">${esc(l.t)}</text></g>`);
+      y += lineH(l);
     }
   }
   const vert = p => p.side === 1 || p.side === 3;
@@ -5481,18 +6319,62 @@ function pkgIoCount(pk) {
   }
   return n;
 }
+/**
+ * The package selector's option text, and the guarantee that it shows the package the
+ * engine actually has.
+ *
+ * The option used to read "TSSOP20 - 18 I/O - CH32V006F8P7 105C", which needs 390 px in
+ * a 250 px control. A <select> clips its own value, so it read "CH32V006F8P7 105" with
+ * the temperature grade cut mid-value (round-2 finding L6). What is DISPLAYED is now
+ * only what a package selector has to say - the package and its usable I/O count - and
+ * that fits at every window size. The part numbers and temperature grades are not lost:
+ * they are in the option's title=, in the New Project dialog, and in the Project Manager
+ * tab, all of which have room for them.
+ *
+ * Called from renderChip(), so `value` is re-synced on every render whatever changed
+ * S.pkg - projectApply() driven from a script included, which is how opening a project
+ * for another package used to leave this reading the old one (finding S2 / C6).
+ */
 function decoratePkgSel() {
   const ps = document.getElementById('pkgsel');
+  const want = Object.keys(M.packages);
+  // The loaded part can change under us (Open MCU file..., a project for another part).
+  // Rebuild rather than decorate options belonging to a part that is no longer loaded.
+  if (want.length !== ps.options.length || want.some((k, i) => ps.options[i].value !== k)) {
+    ps.innerHTML = '';
+    for (const k of want) { const o = document.createElement('option'); o.value = k; ps.appendChild(o); }
+  }
   for (const o of ps.options) {
     const pk = o.value, bits = [`${pkgIoCount(pk)} I/O`];
     const vs = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === pk)
       .map(([v, i]) => v + (i.temp ? ` ${i.temp}\u00b0C` : ''));
-    if (vs.length) bits.push(vs.slice(0, 2).join(', ') + (vs.length > 2 ? ` +${vs.length - 2}` : ''));
     if (!PACKAGES[pk]) bits.push('no drawing');
     const txt = `${pk} · ${bits.join(' · ')}`;
     if (o.textContent !== txt) o.textContent = txt;
-    o.title = txt;
+    o.title = vs.length ? `${txt} — ${vs.join(', ')}` : txt;
   }
+  if (ps.value !== S.pkg) ps.value = S.pkg;
+  ps.title = (ps.selectedOptions[0] || {}).title || 'Package';
+}
+
+/**
+ * Every selector in the app chrome, re-read from the model, on every render - so a
+ * control cannot sit showing a configuration the engine does not have.
+ *
+ * #mcusel was filled once at start-up and never given a value, so it showed whichever
+ * part sorted first: CH32V005 while CH32V006 was the part that was loaded (round-2
+ * finding S1 / C6). It is keyed by MCU_FILES key; when the loaded part has no key of its
+ * own (a file opened from disk under a name that is not in the bundle) the option is
+ * added, rather than leaving the control pointing at a different part.
+ */
+function syncShellSelectors() {
+  const ms = document.getElementById('mcusel');
+  if (!ms || !M || !M.mcu) return;
+  const name = M.mcu.name;
+  if (![...ms.options].some(o => o.value === name)) {
+    const o = document.createElement('option'); o.value = o.textContent = name; ms.appendChild(o);
+  }
+  if (ms.value !== name) ms.value = name;
 }
 
 // Real extent of the drawing, text included. Estimating from character counts is not
@@ -5598,7 +6480,8 @@ function placeFloat(d, cx, cy) {
   d.style.top = Math.max(4, Math.min(cy + 4, window.innerHeight - H - 8)) + 'px';
 }
 // setGpioField() is the engine's now (app/engine/engine.js) and records an undo step.
-function selectPeripheral(pid) { if (pid === 'GPIO' || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
+const SYNTHETIC = pid => pid === 'GPIO' || (pid === 'NVIC' && (((M.nvic || {}).vectors || []).length > 0));
+function selectPeripheral(pid) { if (SYNTHETIC(pid) || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
 
 function openPinMenu(pin, cx, cy) {
   closePicker(); closeCtx();
@@ -5998,9 +6881,10 @@ const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedi
 const collapsed = new Set();
 // List options, UI-only: never part of S, never saved into a .wchproj.
 const TREE = { sort: 'cat', enabledOnly: false };
-const isEnabledPeriph = pid => pid === 'GPIO'
-  ? Object.keys(S.manual).length > 0
-  : !!(E.status[pid] && E.status[pid] !== 'na');
+const isEnabledPeriph = pid => pid === 'GPIO' ? Object.keys(S.manual).length > 0
+  // NVIC has no on/off of its own: it is "enabled" while something that owns a vector is.
+  : pid === 'NVIC' ? ((M.nvic || {}).vectors || []).some(v => v.peripheral && isEnabledPeriph(v.peripheral))
+    : !!(E.status[pid] && E.status[pid] !== 'na');
 // "MOSI" should find SPI1, not nothing.
 function periphHasSignal(pid, q) {
   const P = M.peripherals[pid];
@@ -6021,7 +6905,8 @@ function renderTree() {
   for (const r of E.resourceIssues || []) for (const who of new Set(r.owners)) res[who] = (res[who] || 0) + 1;
   const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
   const itemHtml = pid => {
-    const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
+    const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '')
+      : pid === 'NVIC' ? (isEnabledPeriph('NVIC') ? 'ok' : '') : E.status[pid];
     const cn = conf[pid] || 0, rn = res[pid] || 0;
     const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
     const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
@@ -6035,13 +6920,18 @@ function renderTree() {
 
   // A→Z: one flat list, no headings. Same items, same badges, different order.
   if (TREE.sort === 'az') {
-    const all = ['GPIO', ...Object.keys(M.peripherals)].filter(shown).sort((a, b) => a.localeCompare(b));
+    const all = ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : []), ...Object.keys(M.peripherals)]
+      .filter(shown).sort((a, b) => a.localeCompare(b));
     paintTree(all.length ? `<div class="azlist">${all.map(itemHtml).join('')}</div>` : emptyTree(q));
     return;
   }
 
   const cats = {};
-  cats['System Core'] = ['GPIO'];
+  // GPIO and NVIC are synthetic System Core entries: neither is a peripheral with pins
+  // and a mode, and both are things CubeMX puts there. NVIC appears only when the MCU
+  // file actually has an `nvic:` block - never because the code assumes every part has
+  // an interrupt controller worth showing.
+  cats['System Core'] = ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : [])];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
   const order = [...CAT_ORDER.filter(c => cats[c]), ...Object.keys(cats).filter(c => !CAT_ORDER.includes(c))];
   let h = '';
@@ -6128,8 +7018,49 @@ document.getElementById('cats').addEventListener('click', e => {
 document.getElementById('tree-search').addEventListener('input', renderTree);
 
 // ---------- 6. centre panel ---------------------------------------------------
+/**
+ * The Configuration tab strip, in CubeMX's order: Parameter Settings, NVIC Settings,
+ * DMA Settings, GPIO Settings.
+ *
+ * Both tabs used to be drawn for every peripheral, so a part with no `params:` got a
+ * Parameter Settings tab reading "no parameters" and a peripheral with no pins got an
+ * empty GPIO table. `has()` decides per peripheral and a tab that would have nothing in
+ * it is NOT DRAWN - round 2's rule that a control has to be justified by the MCU data.
+ *
+ * NVIC Settings and DMA Settings are C3 and C2. Their `has()` asks the engine for the
+ * setter as well as the data, because a tab whose controls cannot write anywhere is the
+ * same dead control by another route; they appear by themselves the moment AGENT-2's
+ * `setNvicVector` / `setDmaParam` land (requested on the board, 14:30Z). Until then the
+ * read-only overviews live on the NVIC and DMA1 entries in System Core, which need no
+ * state and are already useful.
+ */
+// An engine export the bundle may not define at all: `typeof someName` on a bare
+// identifier throws, so ask the global object, which is where build.py puts them.
+const engineHas = n => typeof globalThis[n] === 'function';
+const CTABS = [
+  { id: 'param', name: 'Parameter Settings', has: pid => pid !== 'GPIO' && paramRows(pid).length > 0 },
+  { id: 'nvic', name: 'NVIC Settings', has: pid => engineHas('setNvicVector') && nvicVectorsOf(pid).length > 0 },
+  { id: 'dma', name: 'DMA Settings', has: pid => engineHas('setDmaParam') && dmaRequestNamesOf(pid).length > 0 },
+  { id: 'gpio', name: 'GPIO Settings', has: pid => pid === 'GPIO' || periphPins(pid).length > 0 },
+];
+const tabsFor = pid => (!pid ? [] : CTABS.filter(t => { try { return t.has(pid); } catch (e) { return false; } }));
 let ctab = 'gpio';
-document.querySelector('.ctabs').addEventListener('click', e => { const b = e.target.closest('.ctab'); if (!b) return; ctab = b.dataset.ctab; document.querySelectorAll('.ctab').forEach(x => x.classList.toggle('active', x === b)); renderCentre(); });
+function renderCtabs(pid) {
+  const bar = document.getElementById('ctabs');
+  const tabs = tabsFor(pid);
+  // The selected tab has to survive selecting another peripheral, but only if that
+  // peripheral has it; otherwise fall to the first one it does have.
+  if (!tabs.some(t => t.id === ctab)) ctab = tabs.length ? tabs[0].id : null;
+  bar.innerHTML = tabs.map(t =>
+    `<button class="ctab${t.id === ctab ? ' active' : ''}" data-ctab="${t.id}" role="tab"`
+    + ` aria-selected="${t.id === ctab}">${esc(t.name)}</button>`).join('');
+  bar.hidden = tabs.length === 0;
+  return ctab;
+}
+document.getElementById('ctabs').addEventListener('click', e => {
+  const b = e.target.closest('.ctab'); if (!b) return;
+  ctab = b.dataset.ctab; renderCentre();
+});
 
 // conflict banner: every claimant is a link that jumps to its peripheral
 function conflictBanner() {
@@ -6162,20 +7093,43 @@ document.getElementById('ptitle').addEventListener('click', e => {
   selectPeripheral(a.dataset.goto);
 });
 
+// ---- who owns what, for the tab strip and the System Core overviews ----------
+/** Pins this peripheral currently claims. */
+const periphPins = pid => Object.entries(E.pins)
+  .filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
+/** The vectors `nvic:` gives this peripheral. `system: true` ones belong to NVIC itself. */
+const nvicVectorsOf = pid => ((M.nvic || {}).vectors || [])
+  .filter(v => (pid === 'NVIC' ? v.system : v.peripheral === pid));
+/** The DMA request names owned by this peripheral, with the channels each can use. */
+function dmaRequestNamesOf(pid) {
+  const reqs = (M.dma || {}).requests || {};
+  const out = [];
+  for (const [ch, list] of Object.entries(reqs)) {
+    for (const r of list || []) {
+      if (r !== pid && String(r).split('_')[0] !== pid) continue;
+      const hit = out.find(o => o.request === r);
+      if (hit) hit.channels.push(+ch); else out.push({ request: r, channels: [+ch] });
+    }
+  }
+  return out;
+}
+
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
   document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral')
     + conflictBanner() + resourceBanner();
+  renderCtabs(pid);
   if (!pid) {
     mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>';
     body.innerHTML = gpioTable([...new Set([...Object.keys(E.pins), ...Object.keys(S.gpio).filter(p => userLabel(p) && pinExists(p))])]);
     return;
   }
+  if (pid === 'NVIC') { renderNvicOverview(mode, body); return; }
   if (pid === 'GPIO') {
     const gres = (E.resourceIssues || []).filter(r => (r.owners || []).includes('GPIO'));
     mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`
       + gres.map(r => `<div class="issue res"><b>EXTI line conflict:</b> ${esc(r.text)}</div>`).join('');
-    body.innerHTML = ctab === 'gpio' ? gpioTable(Object.keys(S.manual)) : '<div class="empty">No parameters for GPIO.</div>';
+    body.innerHTML = gpioTable(Object.keys(S.manual));
     return;
   }
   const P = M.peripherals[pid], st = S.periph[pid];
@@ -6212,13 +7166,116 @@ function renderCentre() {
   mode.querySelectorAll('input[data-s]').forEach(el => el.onchange = () => { toggleSetting(pid, el.dataset.s, el.dataset.c, el.checked); renderAll(); });
   const rs = mode.querySelector('select[data-remap]'); if (rs) rs.onchange = () => { setRemap(pid, +rs.value); renderAll(); };
 
-  if (ctab === 'gpio') {
-    const mine = Object.entries(E.pins).filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
-    body.innerHTML = gpioTable(mine);
-  } else {
-    body.innerHTML = paramTable(pid);
-  }
+  // The DMA controller's own entry is the one place that shows all its channels at
+  // once, so the overview hangs off it whatever tabs it happens to have.
+  const isDmaCtl = !!(M.dma && pid === M.dma.controller);
+  // With no tabs there is nothing to put here, and an empty panel under a "Configuration"
+  // heading reads as something failing to load. Say where the peripheral's settings
+  // actually are instead - which for most of these is the Mode panel just above.
+  const nothing = (P.settings || []).length
+    ? `<div class="empty">Everything ${esc(pid)} has to configure on this part is in the <b>Mode</b> panel above.</div>`
+    : `<div class="empty">${esc(pid)} has nothing to configure on this part.</div>`;
+  body.innerHTML = ctab === 'gpio' ? gpioTable(periphPins(pid))
+    : ctab === 'param' ? paramTable(pid)
+      : isDmaCtl ? '' : nothing;
+  if (isDmaCtl) body.innerHTML += dmaChannelTable();
 }
+
+// ---- DMA1 in System Core: every channel, what wants it, and who owns it -------
+// Read-only on purpose. Which requests the user has ADDED, and how each one is
+// configured, is state the engine does not have yet (requested from AGENT-2 on the
+// board, 14:30Z); this shows what the SILICON offers and which of it is live, which is
+// the half `dma:` can answer today. `dmaState()` is the same engine call the shared-
+// resource warnings come from, so this table and the warning cannot disagree.
+function dmaChannelTable() {
+  const d = M.dma;
+  if (!d || !d.requests) return '';
+  const st = typeof dmaState === 'function' ? dmaState() : null;
+  const defs = d.request_defaults || {};
+  const owner = r => (M.peripherals[r] ? r : String(r).split('_')[0]);
+  const contended = new Set(((E.resourceIssues || []).filter(x => x.kind === 'dma')).map(x => String(x.channel)));
+  const rows = [];
+  for (let ch = 1; ch <= (d.channels || Object.keys(d.requests).length); ch++) {
+    const list = d.requests[ch] || d.requests[String(ch)] || [];
+    const live = (st && st.channels[ch]) ? st.channels[ch].live : [];
+    const cells = list.map(r => {
+      const o = owner(r);
+      const on = live.includes(r);
+      const dir = (defs[r] || {}).dir;
+      const link = M.peripherals[o]
+        ? `<a data-goto="${attr(o)}" title="Go to ${attr(o)}">${esc(r)}</a>` : esc(r);
+      return `<span class="dreq${on ? ' on' : ''}" title="${attr(`${r} — owner ${o}${dir ? `, default direction ${dir}` : ''}${on ? ', that peripheral is switched on' : ', that peripheral is off'}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
+    }).join('');
+    rows.push(`<tr class="${contended.has(String(ch)) ? 'clash' : ''}"><td>${ch}</td><td>${cells || '<span class="ro">no request maps here</span>'}</td>`
+      + `<td>${live.length ? live.map(r => esc(owner(r))).filter((v, i, a) => a.indexOf(v) === i).join(', ') : '<span class="ro">—</span>'}</td></tr>`);
+  }
+  const off = st && !st.enabled
+    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing on it is live yet. Switch it on in its Mode panel above.</div>` : '';
+  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and which of those peripherals is switched on.`
+    + ` A channel two switched-on peripherals both want is outlined; only one of them can drive it.</div>${off}`
+    + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Live owner</th></tr></thead>`
+    + `<tbody>${rows.join('')}</tbody></table>`;
+}
+
+// ---- NVIC in System Core: every vector this part has --------------------------
+// Also read-only, for the same reason: enabling a vector and setting its priority is
+// state the engine does not have yet. What it CAN say without inventing anything is
+// which interrupts exist, what the SDK calls each one (two names, and they differ), who
+// owns it, and whether that owner is switched on. The priority scheme is printed as the
+// fact it is rather than as a control that would not write anywhere - and the numbers
+// come from `nvic.scheme`, never from CubeMX muscle memory: this PFIC implements TWO
+// priority bits, not four.
+function renderNvicOverview(mode, body) {
+  const n = M.nvic || {};
+  const sch = n.scheme || {};
+  const groups = sch.groups || [];
+  const active = groups.find(g => g.default) || groups[0];
+  const ownedLive = v => !v.system && M.peripherals[v.peripheral] && isEnabled(v.peripheral);
+  const vectors = (n.vectors || []).slice().sort((a, b) => (a.vector || 0) - (b.vector || 0));
+  const core = vectors.filter(v => v.system).length;
+  const live = vectors.filter(ownedLive).length;
+
+  // These are FACTS about the silicon, not settings, so they are not drawn with the
+  // yellow setting labels the rest of the Mode panel uses - a read-only value wearing an
+  // editable row's clothes is its own kind of lie.
+  const fact = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  let facts = '';
+  if (sch.priority_bits !== undefined) {
+    facts += fact('Priority bits', `${sch.priority_bits} of ${sch.register ? sch.register.bits_per_vector : 8}`
+      + `${sch.register ? ` in <code>${esc(sch.register.name)}</code>` : ''}`
+      + `${sch.priority_lsb !== undefined ? ` — bits [${sch.priority_lsb + sch.priority_bits - 1}:${sch.priority_lsb}]. The rest are reserved and write-invalid.` : ''}`);
+  }
+  if (sch.max_nesting !== undefined) facts += fact('Maximum nesting', sch.max_nesting);
+  if (active) {
+    facts += fact('Priority grouping', esc(active.name)
+      + (groups.length > 1 ? `<br><span class="ro">This part also offers: ${groups.filter(g => g !== active).map(g => esc(g.name)).join('; ')}. Choosing between them arrives with the NVIC Settings tab.</span>` : ''));
+  }
+  mode.innerHTML = `<div class="nvicfacts"><p>${esc(n.controller || 'NVIC')} — ${vectors.length} interrupt vector${vectors.length === 1 ? '' : 's'} on this part:`
+    + ` ${core} belonging to the core itself and ${live} to a peripheral you have switched on.</p>`
+    + (facts ? `<dl>${facts}</dl>` : '') + `</div>`;
+
+  const rows = vectors.map(v => {
+    const on = v.system || ownedLive(v);
+    const who = v.system ? '<span class="ro">core</span>'
+      : M.peripherals[v.peripheral] ? `<a data-goto="${attr(v.peripheral)}" title="Go to ${attr(v.peripheral)}">${esc(v.peripheral)}</a>`
+        : esc(v.peripheral || '—');
+    return `<tr class="${on ? '' : 'off'}"><td>${v.vector}</td><td>${esc(v.name)}</td><td><code>${esc(v.irqn || '')}</code></td>`
+      + `<td><code>${esc(v.handler || '')}</code></td><td>${who}</td>`
+      + `<td>${v.fixed ? '<span class="ro">fixed</span>' : on ? 'available' : '<span class="ro">owner is off</span>'}</td></tr>`;
+  }).join('');
+  body.innerHTML = `<div class="paramhead">Every vector in this part's table. <b>Two names per vector</b>, because the SDK uses two`
+    + ` and they are not interchangeable: <code>IRQn</code> is what <code>NVIC_IRQChannel</code> takes, <code>Handler</code> is the`
+    + ` symbol your ISR must be called to be linked in. Enabling a vector and setting its priority arrives with the NVIC Settings tab.</div>`
+    + `<table class="nvictab"><thead><tr><th>No.</th><th>Interrupt</th><th>IRQn</th><th>Handler</th><th>Owner</th><th>State</th></tr></thead>`
+    + `<tbody>${rows}</tbody></table>`
+    // The MCU file's own note about the scheme. It is here rather than in the Mode panel
+    // because that panel is capped at 42 % of the column and would scroll a paragraph.
+    + (sch.notes ? `<div class="paramhead" style="border:0;border-top:1px solid var(--line-soft);margin-top:6px">${esc(String(sch.notes).trim())}</div>` : '');
+}
+document.getElementById('cbody').addEventListener('click', e => {
+  const a = e.target.closest('a[data-goto]'); if (!a) return;
+  selectPeripheral(a.dataset.goto);
+});
 
 // ---- Parameter Settings ------------------------------------------------------
 // Three shapes are in play while this settles (BOARD 11:20Z): AGENT-2's engine
@@ -6381,18 +7438,43 @@ document.getElementById('cbody').addEventListener('change', e => {
 
 const MODES = ['Input', 'Output Push Pull', 'Output Open Drain', 'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
 const PULLS = ['No pull', 'Pull-up', 'Pull-down'];
-const SPEEDS = ['Low', 'Medium', 'High'];
+/**
+ * The GPIO table.
+ *
+ * The output-speed column is built from the MCU file, never from this file's idea of what
+ * a GPIO has. `gpioSpeeds()` is the part's own list and `gpioSpeedIsChoice()` is false
+ * when it holds one entry, which is the case on CH32V006 and CH32V005: `GPIOx_CFGLR.MODEy`
+ * is a single bit (RM v1.4 7.3.1.1) and `GPIOSpeed_TypeDef` in
+ * data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h has exactly one member.
+ * A hardcoded Low/Medium/High here offered a choice the silicon does not have and
+ * generated three macro names that do not compile (round-3 P0, P2 item 8).
+ *
+ * One speed is shown as FIXED TEXT, not a disabled select: greying is for an option the
+ * part has that is unavailable right now, never for one the part does not have. A part
+ * that states no speeds at all gets no column, rather than an invented one.
+ */
 function gpioTable(pinsList) {
+  const speeds = typeof gpioSpeeds === 'function' ? gpioSpeeds() : [];
+  const speedIsChoice = typeof gpioSpeedIsChoice === 'function' ? gpioSpeedIsChoice() : speeds.length > 1;
+  const speedOf = g => (typeof gpioSpeedFor === 'function' ? gpioSpeedFor(g.speed) : g.speed) || (speeds[0] || {}).name || '';
   const rows = pinsList.slice().sort(pinSort).map(pin => {
     const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
     const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
-    const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${o}</option>`).join('') + '</select>';
+    const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
+    const speedCell = !speeds.length ? ''
+      : speedIsChoice ? `<td>${sel(speeds.map(s => s.name), speedOf(g), 'speed')}</td>`
+        : `<td class="fixedval" title="${attr(`${M.mcu.name} has one output speed${speeds[0].macro ? ` (${speeds[0].macro})` : ''}, so there is nothing to choose`)}">${esc(speedOf(g))}</td>`;
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
-      <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td><td>${sel(SPEEDS, g.speed || 'Low', 'speed')}</td>
+      <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td>${speedCell}
       <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';
-  return `<table class="gpio"><thead><tr><th>Pin Name</th><th>Signal on Pin</th><th>GPIO mode</th><th>GPIO Pull-up/Pull-down</th><th>Maximum output speed</th><th>User Label</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const speedHead = !speeds.length ? ''
+    : speedIsChoice ? '<th>Maximum output speed</th>'
+      : `<th title="${attr('This part has one output speed, so the table states it rather than offering a choice')}">Maximum output speed</th>`;
+  return `<table class="gpio${speeds.length ? '' : ' nospeed'}${speedIsChoice ? '' : ' fixedspeed'}">`
+    + `<thead><tr><th>Pin Name</th><th>Signal on Pin</th><th>GPIO mode</th><th>GPIO Pull-up/Pull-down</th>${speedHead}<th>User Label</th></tr></thead>`
+    + `<tbody>${rows}</tbody></table>`;
 }
 document.getElementById('cbody').addEventListener('change', e => {
   const el = e.target; if (!el.dataset.pin) return;
@@ -6409,6 +7491,12 @@ function renderClock() {
   const c = M.clock, k = S.clock, r = clockCalc();
   const f = v => Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '\u2014';
   const fp = firstPre(c);
+  // Column widths at full size. They are a STARTING point, not a fixed layout: the tree
+  // used to measure a fixed 1282 px, which is wider than a 1280 px window and much wider
+  // than the 1024 CSS px a 1280 window has at 125 % zoom, so the right-hand column was
+  // painted past the viewport edge with the ADC prescaler's <select> sliced through
+  // (round-2 finding L2). The layout pass at the bottom of this function shrinks the gap
+  // and then the columns to the room the panel actually has.
   const COLW = [188, 208, 198, 216, 240];
   // Every option list is clockCalc().selectable \u2014 the MCU file's FULL list, never
   // filtered by the current state. An option is missing from a mux only when the data
@@ -6502,12 +7590,12 @@ function renderClock() {
     + `Change any selector and every frequency recomputes.</div>`
     + `<div class="clegend"><span><i></i>active path</span><span><i class="dim"></i>not feeding SYSCLK</span>`
     + `<span><em></em>out of specification</span></div>`
-    + `<div class="ctreewrap" id="ctreewrap"><svg id="ctree-svg"></svg>`
+    + `<div class="ctreescroll"><div class="ctreewrap" id="ctreewrap"><svg id="ctree-svg"></svg>`
     + nodes.map(n => `<div class="cnode${n.over ? ' over' : ''}${n.off ? ' off' : ''}" data-id="${attr(n.id)}" style="width:${n.w}px">`
       + `<h5>${esc(n.title)}</h5>${n.body || ''}`
       + (n.val !== undefined ? `<div class="val">${f(n.val)}<small>${esc(n.unit || '')}</small></div>` : '')
       + (n.lim ? `<div class="lim">${esc(n.lim)}</div>` : '') + '</div>').join('')
-    + `</div>`;
+    + `</div></div>`;
   if (r.over.length) {
     // `over` is everything out of specification; `under` is the subset that is too SLOW.
     // Saying which way it is wrong is the difference between a warning the user can act
@@ -6540,8 +7628,27 @@ function renderClock() {
   U.clockPending = false;
   const box = {};
   wrap.querySelectorAll('.cnode').forEach(d => box[d.dataset.id] = d);
-  const GAPX = 56, GAPY = 16, PAD = 4;
+  const GAPY = 16, PAD = 4;
   const cols = [...new Set(nodes.map(n => n.col))].sort((a, b) => a - b);
+
+  // Fit the tree to the panel before anything is measured. Room comes from the scroll
+  // container, which is capped at the view by `#view-clock{grid-template-columns:
+  // minmax(0,1fr)}`; give the gap up first (it carries no text), then scale the columns,
+  // and stop at a floor rather than shrink a box past the point where its own <select>
+  // and its "min 16, max 48 MHz" line are readable. Under that floor .ctreescroll
+  // scrolls — which is visible and reversible, unlike painting past the window edge.
+  const GAPX_MAX = 56, GAPX_MIN = 20, SCALE_MIN = 0.78;
+  const scroller = wrap.parentElement;
+  const room = (scroller && scroller.clientWidth ? scroller.clientWidth : el.clientWidth) - 2 * PAD;
+  const baseW = cols.reduce((a, col) => a + Math.max(...nodes.filter(n => n.col === col).map(n => n.w)), 0);
+  const gaps = Math.max(0, cols.length - 1);
+  let GAPX = GAPX_MAX, wscale = 1;
+  if (room > 0 && baseW + gaps * GAPX_MAX > room) {
+    GAPX = gaps ? Math.max(GAPX_MIN, Math.floor((room - baseW) / gaps)) : 0;
+    if (baseW + gaps * GAPX > room) wscale = Math.max(SCALE_MIN, (room - gaps * GAPX) / baseW);
+  }
+  if (wscale < 1) for (const n of nodes) { n.w = Math.max(120, Math.floor(n.w * wscale)); box[n.id].style.width = n.w + 'px'; }
+
   let x = PAD; const colX = {}, colH = {};
   for (const col of cols) {
     const mine = nodes.filter(n => n.col === col);
@@ -6577,6 +7684,22 @@ function renderClock() {
   }).join('');
 
 }
+
+// Nothing used to react to the window changing size: the chip kept the zoom it was fitted
+// at and the clock tree kept the column widths it was laid out with, so dragging a window
+// narrower reproduced finding L2 on a layout that had been measured as fitting. Both are
+// re-fitted here, debounced, and only when the panel is actually visible.
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (!M || !E) return;
+    if (document.getElementById('view-clock').classList.contains('active')) renderClock();
+    else U.clockPending = true;
+    if (U.cview === 'system') renderSystem();
+    else if (U.autoFit) fitChip();
+  }, 120);
+});
 
 // ---- clock interaction ------------------------------------------------------
 // Bound ONCE, by delegation on #clock, and deliberately NOT inside renderClock():
@@ -6646,16 +7769,225 @@ function saveProject() {
   const name = downloadText(`${PROJECT.name.replace(/[^\w.-]+/g, '_')}.wchproj`, projectSerialize(), 'application/x-yaml');
   PROJECT.dirty = false; updateCrumb(); toast(`Saved ${name}`);
 }
-// GENERATE CODE — Phase 3 step one: the pin table (Markdown + CSV) and the clock
-// summary (Markdown). C code generation joins generateAll() later.
+// ---------- 7c. Project Manager ------------------------------------------------
+/**
+ * Everything the generator produces, normalised to [{ name, language, text }].
+ *
+ * `generateAll()` returns a `{ name: text }` map today and AGENT-2 is reshaping it to
+ * return the list form (board, 14:30Z). Both are read here so the reshape can land
+ * whenever suits them without this panel changing. `language` is a hint for the preview
+ * and nothing else.
+ */
+const PM_LANG = { '.c': 'c', '.h': 'c', '.md': 'markdown', '.csv': 'csv' };
+function generatedFiles() {
+  let raw;
+  try { raw = generateAll(); } catch (e) { console.error('generateAll', e); return []; }
+  const list = Array.isArray(raw) ? raw
+    : Object.entries(raw || {}).map(([name, text]) => ({ name, text }));
+  return list.map(f => {
+    const dot = String(f.name).lastIndexOf('.');
+    return { name: f.name, text: String(f.text ?? ''), language: f.language || PM_LANG[String(f.name).slice(dot)] || 'text' };
+  });
+}
+const mimeFor = name => name.endsWith('.csv') ? 'text/csv'
+  : name.endsWith('.md') ? 'text/markdown'
+    : /\.[ch]$/.test(name) ? 'text/x-c' : 'text/plain';
+
+// UI-only, and deliberately not in S: which of the generated files Generate writes, and
+// which one the preview is showing. Neither is a property of the hardware configuration,
+// so neither belongs in a .wchproj.
+const PM = { pick: null, skip: new Set() };
+
+/**
+ * The generator's own complaints, by file and line. `cComplaints()` reads back what
+ * codegen just wrote and reports `#error` and `/* TODO:` with a line number; the preview
+ * paints those lines so they cannot scroll past unnoticed. If the engine in this bundle
+ * has no cComplaints, the preview marks nothing rather than inventing a scanner.
+ */
+function complaintsByFile(files) {
+  const out = {};
+  if (typeof cComplaints !== 'function') return out;
+  let list = [];
+  try {
+    const map = {};
+    for (const f of files) map[f.name] = f.text;
+    list = cComplaints(map) || [];
+  } catch (e) { console.error('cComplaints', e); return out; }
+  for (const c of list) ((out[c.file] ||= {})[c.line] = c.kind);
+  return out;
+}
+
+function renderProjectManager() {
+  const view = document.getElementById('view-pm');
+  if (!view || !view.classList.contains('active')) return;   // hidden: nothing to measure, nothing to paint
+  const files = generatedFiles();
+  const flags = complaintsByFile(files);
+  if (!files.some(f => f.name === PM.pick)) PM.pick = files.length ? files[0].name : null;
+  renderPmConfig(files);
+  renderPmFiles(files, flags);
+  renderPmCode(files.find(f => f.name === PM.pick) || null, flags);
+}
+
+function renderPmConfig(files) {
+  const pkgVariants = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === S.pkg).map(([v]) => v);
+  // The project's part number if one was chosen; otherwise, when the MCU file lists
+  // exactly one part in this package, that IS the part - say so rather than "not chosen".
+  const variant = PROJECT.variant || (pkgVariants.length === 1 ? pkgVariants[0] : null);
+  const partCell = PROJECT.variant ? esc(PROJECT.variant)
+    : pkgVariants.length === 1 ? `${esc(pkgVariants[0])} <span class="ro">— the only part this MCU file lists for ${esc(S.pkg)}</span>`
+      : pkgVariants.length ? `<span class="ro">not chosen. ${esc(pkgVariants.join(', '))} all use ${esc(S.pkg)} — pick one in New project</span>`
+        : '<span class="ro">this MCU file lists no part numbers</span>';
+  const dd = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  const chosen = files.filter(f => !PM.skip.has(f.name));
+
+  let h = `<div class="pmsec"><h4>Project</h4>`
+    + `<label class="row"><span>Name</span><input type="text" id="pm-name" value="${attr(PROJECT.name)}" maxlength="64" aria-label="Project name"></label>`
+    + `<dl>`
+    + dd('MCU', esc(M.mcu.name))
+    + dd('Part number', variant ? esc(variant)
+      : pkgVariants.length ? `<span class="ro">not chosen — ${esc(pkgVariants.join(', '))} use this package</span>`
+        : '<span class="ro">this MCU file lists no part numbers</span>')
+    + dd('Package', esc(S.pkg))
+    + dd('Core', esc(M.mcu.core || '—'))
+    + dd('Memory', `${esc(String(M.mcu.flash_kb ?? '?'))} KB flash · ${esc(String(M.mcu.sram_kb ?? '?'))} KB SRAM`)
+    + `</dl>`
+    + `<p>Everything but the name comes from the project. Change the part or the package with <b>New project</b> or the package selector on the Pinout tab.</p></div>`;
+
+  // Toolchain. PlatformIO is the only one that exists, so it is stated rather than
+  // offered as a one-item menu, and no toolchain we do not support is listed greyed.
+  h += `<div class="pmsec"><h4>Toolchain / IDE</h4><dl>`
+    + dd('Toolchain', 'PlatformIO')
+    + dd('Platform', '<code>ch32v</code> · framework <code>noneos-sdk</code>')
+    + dd('Environment', pmEnvName(variant))
+    + dd('Output folder', '<code>data/firmware/lib/wchcube_generated/</code>')
+    + `</dl><p>The header goes to <code>include/</code> and the source to <code>src/</code>; that project picks them up automatically.`
+    + ` No other toolchain is supported — there is nothing hidden behind this, it is the only one implemented.</p></div>`;
+
+  // Code generator. Only choices the engine can actually honour: which of the files it
+  // produced are written. The structural options in the round brief - one file or a pair
+  // per peripheral, keeping user-code sections across a regeneration - are NOT SHOWN,
+  // because codegen cannot do either yet and a checkbox that changes nothing is a lie.
+  h += `<div class="pmsec"><h4>Code generator</h4>`
+    + (files.length ? files.map(f => `<label class="chk"><input type="checkbox" data-pmfile="${attr(f.name)}"${PM.skip.has(f.name) ? '' : ' checked'}>`
+      + `<span><code>${esc(f.name)}</code><small>${esc(pmDescribe(f))}</small></span></label>`).join('')
+      : '<p>This configuration generates nothing.</p>')
+    + `<p>Options the generator cannot honour yet are not listed here rather than shown greyed: it writes one header and one source, and does not preserve user-code sections across a regeneration.</p></div>`;
+
+  h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE CODE</button>`
+    + `<p>${chosen.length ? `Downloads ${chosen.length} file${chosen.length === 1 ? '' : 's'}.` : 'Nothing selected.'}`
+    + ` In a browser these arrive in your downloads folder; the desktop build writes them straight to the output folder above.</p></div>`;
+
+  const box = document.getElementById('pm-config');
+  box.innerHTML = h;
+  const name = box.querySelector('#pm-name');
+  name.onchange = () => { setProject({ name: name.value.trim() || 'Untitled' }); updateCrumb(); renderProjectManager(); };
+  box.querySelectorAll('input[data-pmfile]').forEach(cb => cb.onchange = () => {
+    cb.checked ? PM.skip.delete(cb.dataset.pmfile) : PM.skip.add(cb.dataset.pmfile);
+    renderProjectManager();
+  });
+  // The desktop bridge (src-tauri/desktop.js) replaces this handler with a native folder
+  // picker. app/template.html contains no Tauri code, by design; it only has to leave a
+  // button with a stable id and a working browser behaviour behind it.
+  box.querySelector('#pm-generate').onclick = pmGenerate;
+}
+
+/**
+ * Which PlatformIO environment this part builds in.
+ *
+ * NOT derived from the part number. `data/firmware/platformio.ini` maps the configurator
+ * part `CH32V006F8P7` (the 105 °C grade `data/mcus/CH32V006.yaml` lists) to the
+ * environment `CH32V006F8P6` (the 85 °C board file the platform ships) - same die, same
+ * pinout, different trailing digit. Guessing "the env is the part number" would print a
+ * name that does not exist, which is exactly the class of bug this round is about. The
+ * mapping is a per-variant fact and belongs in the MCU file; requested from AGENT-1.
+ */
+function pmEnvName(variant) {
+  const info = variant ? (M.mcu.variants || {})[variant] : null;
+  const env = info && (info.pio_env || info.env);
+  if (env) return `<code>${esc(env)}</code>`;
+  return `<span class="ro">not stated by this MCU file. The environments are in `
+    + `<code>data/firmware/platformio.ini</code>; it is not the part number — that file maps`
+    + ` <code>CH32V006F8P7</code> to <code>CH32V006F8P6</code>, so this panel will not guess it.</span>`;
+}
+
+function pmDescribe(f) {
+  if (/\.h$/.test(f.name)) return 'C header — the init entry points';
+  if (/\.c$/.test(f.name)) return 'C source — GPIO, AFIO and clock initialisation';
+  if (/pinout\.md$/.test(f.name)) return 'pin table, Markdown';
+  if (/pinout\.csv$/.test(f.name)) return 'pin table, CSV';
+  if (/clocks\.md$/.test(f.name)) return 'clock summary, Markdown';
+  return `${f.language} · ${f.text.split('\n').length} lines`;
+}
+
+function renderPmFiles(files, flags) {
+  const box = document.getElementById('pm-files');
+  box.innerHTML = files.map(f => {
+    const kinds = Object.values(flags[f.name] || {});
+    const flag = kinds.includes('error') ? `<span class="flag" title="this file contains #error">#error</span>`
+      : kinds.length ? `<span class="flag todo" title="${kinds.length} TODO section${kinds.length === 1 ? '' : 's'}">TODO</span>` : '';
+    return `<button class="pmfile${f.name === PM.pick ? ' on' : ''}" data-pmpick="${attr(f.name)}" role="option"`
+      + ` aria-selected="${f.name === PM.pick}">${flag}${esc(f.name)}`
+      + `<small>${f.text.split('\n').length} lines${PM.skip.has(f.name) ? ' · not generated' : ''}</small></button>`;
+  }).join('') || '<div class="treenone">Nothing to preview.</div>';
+  box.querySelectorAll('[data-pmpick]').forEach(b => b.onclick = () => { PM.pick = b.dataset.pmpick; renderProjectManager(); });
+}
+
+function renderPmCode(file, flags) {
+  const head = document.getElementById('pm-texthead'), code = document.getElementById('pm-code');
+  if (!file) { head.innerHTML = ''; code.innerHTML = '<div class="empty">Nothing to preview.</div>'; return; }
+  const marks = flags[file.name] || {};
+  const errs = Object.values(marks).filter(k => k === 'error').length;
+  const todos = Object.values(marks).filter(k => k === 'todo').length;
+  const lines = file.text.split('\n');
+  head.innerHTML = `<b>${esc(file.name)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
+    + `<div class="spacer"></div><button id="pm-copy">Copy</button>`;
+  head.querySelector('#pm-copy').onclick = () => pmCopy(file);
+  const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — this file will not compile as it stands. The generator refuses to guess a register encoding the MCU file does not give it.</div>`
+    : todos ? `<div class="pmnote warn">${todos} TODO section${todos === 1 ? '' : 's'} — the generator could not work something out and said so instead of emitting plausible bits.</div>` : '';
+  code.innerHTML = note + '<table><tbody>' + lines.map((l, i) => {
+    const k = marks[i + 1];
+    return `<tr${k ? ` class="${k}"` : ''}><td class="ln">${i + 1}</td><td>${esc(l) || '&nbsp;'}</td></tr>`;
+  }).join('') + '</tbody></table>';
+  code.scrollTop = 0;
+}
+
+function pmCopy(file) {
+  const done = () => toast(`Copied ${file.name}`);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(file.text).then(done, () => pmCopyFallback(file, done));
+  } else pmCopyFallback(file, done);
+}
+function pmCopyFallback(file, done) {
+  // file:// pages and older engines refuse the async clipboard; a selected textarea and
+  // execCommand still work there, and failing silently would be worse than either.
+  const ta = document.createElement('textarea');
+  ta.value = file.text;
+  ta.style.cssText = 'position:fixed;top:-1000px;left:0;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  ta.remove();
+  ok ? done() : toast('Could not copy — select the text and copy it yourself');
+}
+
+/** Write the selected files. In a browser that means download; the desktop bridge
+ *  replaces this handler with a native folder picker. */
+function pmGenerate() {
+  const files = generatedFiles().filter(f => !PM.skip.has(f.name));
+  if (!files.length) { toast('Nothing selected to generate'); return; }
+  for (const f of files) downloadText(f.name, f.text, mimeFor(f.name));
+  const bad = complaintsByFile(files);
+  const errs = Object.values(bad).reduce((n, m) => n + Object.values(m).filter(k => k === 'error').length, 0);
+  toast(errs ? `Generated ${files.length} file(s) — ${errs} #error line(s), see the preview`
+    : `Generated ${files.map(f => f.name).join(', ')}`);
+}
+
+// GENERATE CODE in the breadcrumb: the same thing the Project Manager's button does, so
+// there is one behaviour rather than two that can drift apart.
 (() => {
   const btn = document.querySelector('.gen');
-  btn.title = 'Export the pin table (Markdown + CSV) and the clock summary (Markdown)';
-  btn.onclick = () => {
-    const files = generateAll();
-    for (const [name, text] of Object.entries(files)) downloadText(name, text, name.endsWith('.csv') ? 'text/csv' : 'text/markdown');
-    toast(`Generated ${Object.keys(files).join(', ')}`);
-  };
+  btn.title = 'Generate the init code, the pin table and the clock summary — see them first on the Project Manager tab';
+  btn.onclick = pmGenerate;
 })();
 // New-project dialog
 function openNewProject() {
@@ -6766,7 +8098,8 @@ function renderAll(fit) {
   if (!firstRender && !fit) { PROJECT.dirty = true; }
   firstRender = false; updateCrumb();
   compute();
-  renderTree(); renderCentre(); renderChip(); renderClock();
+  syncShellSelectors();
+  renderTree(); renderCentre(); renderChip(); renderClock(); renderProjectManager();
   if (fit) fitChip();
   const key = E.conflicts.join('|');
   if (key && key !== lastConflicts) toast('⚠ Pin conflict: ' + E.conflicts.join(' · '));
@@ -6790,9 +8123,13 @@ window.addEventListener('keydown', e => {
 document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + b.dataset.view));
+  document.querySelectorAll('.tab[data-view]').forEach(x => x.setAttribute('aria-selected', String(x === b)));
   // Text measured while the view was hidden comes back 0, so a repaint made from
   // another tab leaves the chip unfitted. Re-fit on the way in; it is idempotent.
   if (b.dataset.view === 'pinout') { fitSvgTexts(svg); fitChip(); }
+  // The preview regenerates from the CURRENT configuration every time the tab is
+  // entered, so it can never show C for a configuration the user has since changed.
+  if (b.dataset.view === 'pm') renderProjectManager();
 });
 document.getElementById('pkgsel').onchange = e => {
   closePicker();

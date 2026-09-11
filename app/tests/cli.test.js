@@ -190,17 +190,39 @@ test('--out and --pio together is a usage error, not a guess', () => {
 
 // --strict on the generator's own complaints, so CI can tell "generated" from
 // "generated an explanation of what is missing".
+// A part that states nothing the generator needs: CH32V006 with its codegen block
+// removed. Written to a temp file and passed by path so these tests do not depend on
+// what any bundled part happens to contain this week.
+const NO_CODEGEN_YAML = [
+  'mcu:',
+  '  name: CH32V006-NOCODEGEN-CLI',
+  '  inherits: CH32V006',
+  '  fixture: true',
+  '  remove: [codegen, gpio]',
+  '',
+].join('\n');
+
+function withNoCodegenFile(fn) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-nocg-'));
+  const yaml = path.join(dir, 'nocodegen.yaml');
+  fs.writeFileSync(yaml, NO_CODEGEN_YAML, 'utf8');
+  try { return fn(yaml, dir); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
 test('--strict exits 2 when the generated C carries a TODO', () => {
-  const r = run(['WCH-DUMMY32-C8', '--format', 'c', '--strict', '--out', os.tmpdir() + path.sep + 'wchcube-void']);
-  assert.equal(r.code, 2, 'the fixture part has no codegen: block, so codegen emits a TODO');
-  assert.match(r.err, /the generated C is a complaint, not code/);
-  assert.match(r.err, /TODO/);
-  fs.rmSync(os.tmpdir() + path.sep + 'wchcube-void', { recursive: true, force: true });
+  withNoCodegenFile((yaml, dir) => {
+    const r = run([yaml, '--format', 'c', '--strict', '--out', path.join(dir, 'gen')]);
+    assert.equal(r.code, 2, 'this part has no codegen: block, so codegen emits TODOs');
+    assert.match(r.err, /the generated C is a complaint, not code/);
+    assert.match(r.err, /TODO/);
+  });
 });
 
 test('--strict says nothing about codegen when no C was generated', () => {
-  const r = run(['WCH-DUMMY32-C8', '--format', 'pins-csv', '--strict', '--quiet']);
-  assert.equal(r.code, 0, 'a complaint is about the C; it must not fail a pin table');
+  withNoCodegenFile(yaml => {
+    const r = run([yaml, '--format', 'pins-csv', '--strict', '--quiet']);
+    assert.equal(r.code, 0, 'a complaint is about the C; it must not fail a pin table');
+  });
 });
 
 test('a fully assigned CH32V006 generates C with no complaint at all', () => {
@@ -214,10 +236,12 @@ test('a fully assigned CH32V006 generates C with no complaint at all', () => {
 });
 
 test('cComplaints reports the line and the kind of each one', () => {
-  const e = fresh('WCH-DUMMY32-C8');
+  const e = fresh();
+  e.registerMcuFile(NO_CODEGEN_YAML);
+  e.loadMcu('CH32V006-NOCODEGEN-CLI');
   e.compute();
   const c = eng.cComplaints(eng.cFiles());
-  assert.ok(c.length, 'the fixture part has no codegen: block');
+  assert.ok(c.length, 'a part with no codegen: block always has something to say');
   assert.ok(c.every(x => x.file === 'wchcube_init.c' && x.line > 0 && x.text));
   assert.ok(c.every(x => x.kind === 'todo' || x.kind === 'error'));
   // and the line number really points at the complaint

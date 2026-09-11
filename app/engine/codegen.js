@@ -2,8 +2,10 @@
 //  codegen.js — C initialisation code in WCH EVT SDK style.
 //
 //  What is generated from the model alone (always correct):
-//    the GPIO_InitTypeDef blocks — ports, pin masks, modes, speeds — because
-//    every one of those comes from the pin assignments and the GPIO table.
+//    the GPIO_InitTypeDef blocks — ports, pin masks, modes — because every one of
+//    those comes from the pin assignments and the GPIO table. The speed MACRO is
+//    not derivable and comes from the MCU file's `gpio.speeds`: a part with one
+//    speed gets that one macro, never a Low/Medium/High mapping.
 //
 //  What needs register encodings from the MCU file (`codegen:` block):
 //    the AFIO remap word, the peripheral clock enables and the RCC clock setup.
@@ -16,7 +18,8 @@
 //      header: ch32v00x.h
 //      gpio_clock: { fn: RCC_PB2PeriphClockCmd, port: RCC_PB2Periph_GPIO$PORT,
 //                    afio: RCC_PB2Periph_AFIO }
-//      speeds: { Low: GPIO_Speed_2MHz, Medium: GPIO_Speed_10MHz, High: GPIO_Speed_50MHz }
+//      speeds: { "30 MHz": GPIO_Speed_30MHz }   # legacy-name translation only;
+//                                                the OFFER is mcu `gpio.speeds`
 //      remap:  { register: "AFIO->PCFR1",
 //                fields: { USART1: [{ lsb: 6, bits: 4 }],
 //                          TIM2:   [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }] } }
@@ -27,7 +30,7 @@
 //    A field may be split across slices: `from` is the bit of the remap index a
 //    slice starts at (TIM2_RM[2] lives at bit 16, away from TIM2_RM[1:0]).
 // =============================================================================
-import { M, S, pinType, requiredSignals } from './model.js';
+import { M, S, pinType, requiredSignals, gpioSpeeds, gpioSpeedFor } from './model.js';
 import { E, compute } from './engine.js';
 import { clockCalc, firstPre } from './clock.js';
 import { PROJECT } from './project.js';
@@ -36,9 +39,23 @@ const PIN_RE = /^P([A-Z])(\d+)$/;
 const hex = (v, digits = 8) => '0x' + (v >>> 0).toString(16).toUpperCase().padStart(digits, '0') + 'U';
 const bin = (v, bits) => (v >>> 0).toString(2).padStart(bits, '0');
 
-// Standard StdPeriph names, the same in the WCH EVT SDK and in the CH32H417
-// example under EVT/EXAM/GPIO. Overridable per family through `codegen:`.
-const DEFAULT_SPEEDS = { Low: 'GPIO_Speed_2MHz', Medium: 'GPIO_Speed_10MHz', High: 'GPIO_Speed_50MHz' };
+// The SPL macro for a stored GPIO-table speed name. `gpio.speeds` in the MCU file
+// is the authority - it lists the speeds the part HAS, with the macro for each - and
+// `codegen.speeds` is consulted only to translate a name that list does not carry, so
+// a .wchproj saved when the app still offered Low/Medium/High still generates code
+// that compiles.
+//
+// Nothing is invented here. A part that states neither gets a TODO naming what is
+// missing, because the wrong speed macro is exactly the defect this round opened
+// with: GPIO_Speed_50MHz does not exist on CH32V006 and never did.
+function speedMacro(stored) {
+  const name = gpioSpeedFor(stored);
+  const hit = gpioSpeeds().find(x => x.name === name);
+  if (hit && hit.macro) return { macro: hit.macro, name };
+  const legacy = (cfg().speeds || {})[name] || (cfg().speeds || {})[stored];
+  if (legacy) return { macro: legacy, name };
+  return { macro: null, name };
+}
 
 const MODE_MACRO = {
   'Output Push Pull': 'GPIO_Mode_Out_PP',
@@ -109,7 +126,7 @@ export function gpioPlan() {
         pin, port: m[1], bit: +m[2],
         signal: usable.map(c => c.signal).join(' / '),
         label: (g.label || '').trim(),
-        mode, pull, speed: g.speed || 'Low', macro, inferred,
+        mode, pull, speed: gpioSpeedFor(g.speed), macro, inferred,
         conflict: info.state === 'conflict',
       });
     }
@@ -302,7 +319,14 @@ function gpioSection() {
       }
       L.push(`    GPIO_InitStructure.GPIO_Pin = ${pins.map(p => `GPIO_Pin_${p.bit}`).join(' | ')};`);
       L.push(`    GPIO_InitStructure.GPIO_Mode = ${macro};`);
-      L.push(`    GPIO_InitStructure.GPIO_Speed = ${(cfg().speeds || DEFAULT_SPEEDS)[speed] || DEFAULT_SPEEDS.Low};`);
+      const sp = speedMacro(speed);
+      if (sp.macro) {
+        L.push(`    GPIO_InitStructure.GPIO_Speed = ${sp.macro};`);
+      } else {
+        L.push(`    /* TODO: no SPL macro for output speed ${sp.name === null ? '(unstated)' : `"${sp.name}"`}.`);
+        L.push('       Add gpio.speeds (name + macro) to the MCU YAML; this generator does not');
+        L.push('       guess a speed macro - the wrong one silently does not exist on the part. */');
+      }
       L.push(`    GPIO_Init(GPIO${port}, &GPIO_InitStructure);`);
       L.push('');
     }

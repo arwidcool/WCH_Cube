@@ -3,7 +3,7 @@
 //  First real output of the Generate button (Phase 3). C code generation will
 //  join these once the pin table is trusted.
 // =============================================================================
-import { M, S, pinType } from './model.js';
+import { M, S, pinType, gpioSpeedFor } from './model.js';
 import { E, compute } from './engine.js';
 import { clockCalc, firstPre } from './clock.js';
 import { cFiles } from './codegen.js';
@@ -28,7 +28,7 @@ export function pinRows() {
       signal: info ? info.label : (type === 'io' ? '' : type.toUpperCase()),
       mode: info ? (g.mode || (info.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : 'Input')) : '',
       pull: info ? (g.pull || 'No pull') : '',
-      speed: info ? (g.speed || 'Low') : '',
+      speed: info ? (gpioSpeedFor(g.speed) || '') : '',
       label: g.label || '',
       conflict: !!(info && info.state === 'conflict'),
     });

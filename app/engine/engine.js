@@ -17,7 +17,7 @@
 // =============================================================================
 import {
   M, S, canon, pinExists, pinLabel, pinNum, groupOf, sigName,
-  requiredSignals, isEnabled, isAvailable, neutralChoice,
+  requiredSignals, isEnabled, isAvailable, neutralChoice, gpioSpeeds, gpioSpeedFor,
 } from './model.js';
 import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
@@ -121,7 +121,8 @@ export function assignSignal(pin, opt) {
     S.manual[pin] = opt.gpio;
     S.gpio[pin] ||= {
       mode: opt.gpio === 'GPIO_Output' ? 'Output Push Pull' : opt.gpio === 'GPIO_Analog' ? 'Analog' : 'Input',
-      pull: 'No pull', speed: 'Low', label: '',
+      // the part's own first speed, never a Low/Medium/High name from nowhere
+      pull: 'No pull', speed: gpioSpeedFor(undefined) || '', label: '',
     };
     return;
   }
@@ -212,6 +213,20 @@ export function setRemap(pid, index) {
 
 // One cell of the GPIO settings table (mode, pull, speed, label).
 export function setGpioField(pin, key, value) {
+  // Round-3 P0b: S must never carry an output speed the part cannot express.
+  // `gpio.speeds` in the MCU file says what the part HAS. A part with exactly one
+  // speed has no choice to make, so whatever arrives is stored as that one name -
+  // that is how a caller holding a stale Low/Medium/High list (or a .wchproj saved
+  // before the one-speed fix) stops putting a name into S that the silicon, the SDK
+  // and the generator all disagree with. A part with a REAL choice gets no such
+  // courtesy: a value it does not offer is a bug at the call site and throws.
+  if (key === 'speed' && value !== '') {
+    const speeds = gpioSpeeds();
+    if (speeds.length > 1 && !speeds.some(s => s.name === value)) {
+      throw new Error(`${M.mcu.name} has no output speed "${value}". It offers: ${speeds.map(s => s.name).join(', ')}`);
+    }
+    if (speeds.length) value = gpioSpeedFor(value);
+  }
   record(value === '' ? `Clear ${key} on ${pinLabel(pin)}` : `${pinLabel(pin)} ${key}`);
   (S.gpio[pin] ||= {})[key] = value;
 }
