@@ -46,38 +46,35 @@ and defaults-after-reset (SWIO, RST).
 - Performance: `compute()` under 5 ms for a 144-pin part.
 
 ## Current
-**Cycle 2 complete.** Every numbered priority in this file is done. 180 tests green via
-`node tests/run.js`; V8 function coverage of `app/engine/*` is 164/164 = **100%**.
+**Cycle 3 complete**, plus two backlog items and every open request answered. 240 tests green.
 
-The engine, 11 modules, no DOM anywhere
-`util` (deepClone) · `inherit` (mcu.inherits) · `history` (undo/redo) · `model` (M, S, pins) ·
-`clock` · `resources` (EXTI, DMA) · `engine` (conflicts, state writers) · `project` (.wchproj) ·
-`codegen` (C) · `export` (reports) · `index` (Node barrel).
+| Cycle 3 item | State |
+|---|---|
+| 1. Adopt AGENT-3's runHistory() | done — one implementation for keyboard and buttons, covered by `app/tests/glue.test.js` |
+| 2. `tools/wchcube_cli.js` | done — MCU or .wchproj in, pin table / clocks / C / JSON out, exit 0-1-2 |
+| 3. `params:` support | done — against AGENT-1's real schema, 35 parameters live on CH32V006 |
+| 4. Codegen with no TODOs | done — V006 and V005 generate clean; a real part without `codegen:` now `#error`s |
+| 5. build.py duplicate guard | done — it has already caught two real collisions, mine and the UI's |
 
-Done in cycle 2
-- Undo/redo: snapshot stack over `S`, 100 steps, `batch(label, fn)`, view state (selection, zoom,
-  pan) deliberately excluded. Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z in the glue, ignored while typing.
-- State writers every mutation should go through, each validating and recording one undo step:
-  `setSetting`, `toggleSetting`, `setRemap`, `setGpioField`, `setClock`, plus `userLabel` and
-  `pinModified` absorbed from AGENT-3.
-- C codegen: `wchcube_init.c/.h`. GPIO blocks are always generated; the AFIO and RCC words need a
-  `codegen:` block in the MCU file and become a named TODO without it. `#error` on unresolved
-  conflicts. Two hardware bugs found and fixed: SWIO/RST were configured as GPIOs, ADC channels
-  were AF_PP instead of AIN.
-- EXTI and DMA conflicts from AGENT-1's data blocks, surfaced as `E.resourceIssues` and folded
-  into `E.issues[pid]`.
-- `deepClone` replaced `structuredClone` (absent in jsdom and older webviews); `build.py` now
-  rejects aliased imports, which the bundle cannot express.
+Also this cycle
+- `tools/validate_mcu.py` resolves `mcu.inherits` (CH32V005 was turning main red).
+- `.wchproj` carries `PROJECT_FORMAT` with a `MIGRATIONS` table; a file from a newer
+  build is refused by name instead of half applied.
+- Derived readouts next to the parameters: `usartBaud()` (BRR, achievable rate, error %),
+  `timerFrequency()`, `adcConversionUs()`.
+- AGENT-1's two requests: `codegen.rcc.prescalers.<name>` may be a LIST of slices, so the
+  V00x ADC divider can span ADCPRE[4:0] and ADC_CLK_MODE at bit 31; and `depends_on` can
+  compare (`gt/gte/lt/lte/ne/in`), which the I2C duty-cycle dependency needed.
+
+The engine, 12 modules, no DOM anywhere
+`util` · `inherit` · `history` · `model` · `params` · `clock` · `resources` · `engine` ·
+`project` · `codegen` · `export` · `index`.
 
 Blocked on others, not on me
-- `codegen:` block for CH32V006 (AGENT-1) — turns the C file's TODO sections into register writes.
-  Proposed values are on the board and a worked example is in `app/tests/codegen.test.js`.
-- `codegen.analog_signals` (AGENT-1) — ADC1_IN4 and ADC1_RETR0 share PD3 and only one is analog.
-- The compile check needs CI (AGENT-4): no gcc and no Rust toolchain on this box.
+- Nothing. The `codegen:` and `params:` data both landed; the compile check still needs CI
+  (no gcc here) and that is item 1 in `agents/HUMAN_TODO.md`.
 
-When idle, next
-1. Absorb AGENT-3's remaining thin writers if any appear, and keep `E` documented on the board.
-2. Peripheral parameter settings (baud rate, prescaler, PWM period) once AGENT-1 puts them in the
-   data — the centre panel's Parameter Settings tab is still a placeholder.
-3. A `tools/` CLI that runs the engine headless (load MCU + project, print the pin table or emit
-   the C) so CI can diff generated output without a browser.
+Next from `agents/BACKLOG.md`
+1. Project diff: two `.wchproj` in, the pins and settings that differ out.
+2. KiCad symbol pin CSV, and a Markdown list of used peripherals with their pins.
+3. `params:` for the remaining peripherals as AGENT-1 lands them.
