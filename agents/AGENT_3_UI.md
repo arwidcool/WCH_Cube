@@ -40,48 +40,58 @@ pins, labels outside the chip, ✔/⚠/⊘ in the tree. Conflicts must be imposs
 - Dark theme toggle (CubeMX has none; keep it off by default).
 
 ## Current
-**Cycle 3 complete — all five priorities shipped.** 203 tests green via `node tests/run.js`.
+**Round 2, cycle 1 — P0 (clock) closed, P0b (legibility) swept clean.** 267 tests green.
+Commits e6a4df8, e1c6202. Everything below was verified in a REAL browser (headless Edge,
+Blink layout), not jsdom — the round-1 bug proved jsdom cannot see this class of defect.
 
-| # | Cycle-3 item | State |
-|---|---|---|
-| 1 | Parameter Settings tab | built against `app/assets/params.stub.yaml`; read-only until `setParam()` exists |
-| 2 | Tree Categories / A→Z toggle + gear menu | done |
-| 3 | Chip rotate, mirror, export SVG, search dropdown | done |
-| 4 | `E.resourceIssues` styled apart from pin conflicts | done |
-| 5 | Package selector shows temp grade | done |
+| Round-2 item | State |
+|---|---|
+| P0 clock source selection (UI half) | done — AGENT-4's defects 2 and 3, plus walkthrough 1.1 |
+| P0b text legibility | swept clean: 2 themes x 2 MCUs x 12 packages x 3 viewports |
+| P0 item 4 dead-control audit | done except the two `disabled title="Future"` tabs (AGENT-4's call) |
+| P1 5 Parameter Settings | editable — AGENT-2's setParam() landed, writing `baud` reaches the engine |
+| P1 5b DMA Settings + DMA1 panel | data ready, engine setters not — REQUEST(->AGENT-2) posted 15:10Z |
+| P1 5c NVIC Settings + NVIC panel | same |
+| P1 6/7/8 tree, toolbar, resourceIssues | shipped in round 1 |
 
-Notes worth keeping
+### What the P0 actually was
+The muxes were never greyed and `setClock` never refused anything. `renderClock()` bound
+its handlers AFTER the early return it takes while the tab has never been laid out, so the
+clock tree was drawn and **dead**: selects moved on screen and nothing reached the engine.
+Interaction is one delegated listener on `#clock` now, installed at parse time, so the
+geometry pass can still be deferred without taking the controls with it. Two things made
+it read as "not allowed" rather than "not working": `.cnode.off` was `opacity:.45`, which
+is exactly how a disabled control looks, and the CH32V006 crystal defaults to 24 MHz —
+the same as HSI — so picking HSE changed no number on screen either.
 
-- **Rotate and mirror transform the geometry, not the canvas.** Every label, pin number and
-  text anchor is chosen from the pin's `side`, so remapping the side is the whole job and
-  nothing needs a counter-rotation to stay upright. A dual package rotates into a vertical
-  one and still draws every pin. Orientation is UI-only state, never in a `.wchproj`.
-- **The SVG export embeds the page stylesheet** rather than keeping a second copy of the
-  colours, so the file cannot drift from the app, and it carries `data-theme` so a dark
-  export looks like the dark screen.
-- **The Parameter Settings tab reads `getParams(pid)` if the engine has it and otherwise
-  falls back to `M.peripherals[pid].params`**, which is the same shape. Either half landing
-  is enough to make it useful; writes always go through `setParam()`, so until that exists
-  the editors are disabled with a line saying why rather than faking an editable table.
-- **QFN12→LQFP144 is now genuinely covered**: AGENT-1's big dummy packages plus a sweep of
-  every part × package × 4 rotations × mirrored at 1280/1920/2560 — 384 combinations, no
-  overflow, no label collisions, no console output. Handed to AGENT-4 as
-  `agents/proposals/layout-orientation.test.js`, green in their harness.
+### Two CSS rules that had never applied
+Only a real browser could show these, and both had been wrong since they were written.
+- `.pin text` (0,1,1) outranks a bare `.pinnum` (0,1,0), so pin NUMBERS took the pin-box
+  ink instead of the muted grey the rule intended.
+- A `font-size` presentation ATTRIBUTE loses to any stylesheet rule, and
+  `.pin text{font-size:9.5px}` is one — so the per-pin shrink for long names did nothing
+  at all. Sizing is an inline style now, floored at 7.5px, with `fitSvgTexts()` measuring
+  after insertion: shrink, then abbreviate ("PD7/PA4" -> "PD7+"), then ellipsise, full
+  text always in the `<title>`.
 
-Both landed mid-cycle, so the tab was rebuilt against them
-- AGENT-1's real `params:` blocks and AGENT-2's `params.js` arrived in three different
-  shapes (engine: `key`/`help`/`when`, file: `name`/`notes`/`group`/`readonly`/`register`
-  with `options: [{name, value}]`, stub: a third). The table normalises all three, so the
-  real parameters are on screen today instead of an empty panel.
-- Editors are still disabled, for one reason reported to AGENT-2: `paramDefs()` filters on
-  `d.key` and the real definitions carry `name`, so `getParams()` returns `[]` and
-  `setParam()` throws. One line in params.js turns the whole table editable.
-- Calculated rows now come from AGENT-2's `usartBaud()` and `timerFrequency()` — actual
-  baud, BRR, error %, update frequency and period — in their own read-only band.
+### Colour rule worth keeping
+The pin fills are CubeMX's and do NOT flip with the theme, so text drawn on them cannot
+come from `--text`, which does. One `--on-pin` ink covers every pin state and the picker's
+current row; `--on-badge`, `--warn-ink` and `--ok-ink` do the same for the badges and the
+tree glyphs. The badge colours themselves are unchanged wherever they are a fill. The
+worst single find was `.chipbar label.flt{color:#333}` — 1.24:1 in the dark theme, i.e.
+"Only modified" was effectively invisible.
 
-Also shipped from `agents/BACKLOG.md`: the keyboard shortcut overlay. `?` outside a text
-box, or the ⌨ Shortcuts menu button, lists every key the app binds, read off the handlers
-so it cannot describe a shortcut that no longer exists.
+### Method, reusable
+`scratchpad/probe.sh <scenario.js> [w,h]` appends a scenario to `dist/index.html` and runs
+it under headless Edge with `--dump-dom`, so a scenario gets real layout, real
+`getComputedTextLength()` and real computed colours. The legibility sweep measures four
+things at once: text clipped by a container, SVG text outside its pin box, overlapping or
+off-canvas labels and anything under 7.5px, and every text/background pair against 4.5:1.
+Handed to AGENT-4 as the basis for `tests/legibility.test.js` if they want it.
 
-Next, from `agents/BACKLOG.md`: the NVIC tab once the data carries an interrupt vector
-table, then a print view, then the Project Manager tab.
+### Next
+1. DMA Settings tab + DMA1 channel table, NVIC Settings tab + NVIC panel, built from the
+   data with writes routed through the engine when the setters appear (15:10Z DECISION).
+2. Re-sweep legibility once those panels exist — they are new text.
+3. The two "Future" tabs, once AGENT-4 rules on the layout test.
