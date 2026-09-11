@@ -43,6 +43,8 @@ Options
                        directory with no platformio.ini. Implies --format c
                        unless --format says otherwise.
   --mcu-dir <dir>      where to look for MCU yaml  [default: data/mcus]
+  --option <k>=<v>     set a generator option; repeatable. --option list prints the
+                       ones this build honours, with their defaults, and exits
   --list               list the MCUs found, with their packages, and exit
   --strict             exit 2 if the configuration has conflicts or issues, or
                        if the generated C carries a TODO or an #error
@@ -77,6 +79,7 @@ function parseArgs(argv) {
     else if (a === '--out') o.out = need('a directory');
     else if (a === '--pio') o.pio = need('a PlatformIO project directory');
     else if (a === '--mcu-dir') o.mcuDir = need('a directory');
+    else if (a === '--option') (o.options ||= []).push(need('key=value, or "list"'));
     else if (a === '--format') { o.formats = need('a format list').split(',').map(s => s.trim()).filter(Boolean); o.formatGiven = true; }
     else if (a.startsWith('-')) fail(`unknown option ${a}`);
     else rest.push(a);
@@ -194,6 +197,16 @@ function main() {
   loadYamlEngine();
   const known = registerAll(o.mcuDir);
 
+  // Generator options are applied AFTER the project, so a flag overrides what the
+  // .wchproj saved - which is what lets one fixture be built both ways.
+  if (o.options && o.options.includes('list')) {
+    for (const d of eng.generatorOptions()) {
+      process.stdout.write(`${d.key}=${d.default}   ${d.name}\n`);
+      if (d.help) process.stdout.write(`    ${d.help}\n`);
+    }
+    return 0;
+  }
+
   if (o.list) {
     for (const { name, file } of known) {
       const m = eng.mcuModel(eng.MCU_FILES[name]);
@@ -214,6 +227,14 @@ function main() {
       fail(`"${o.pkg}" is not a package of ${eng.M.mcu.name}. Try: ${Object.keys(eng.M.packages).join(', ')}`);
     }
     eng.setPackage(o.pkg);
+  }
+
+  for (const pair of o.options || []) {
+    const at = String(pair).indexOf('=');
+    if (at < 0) fail(`--option wants key=value, got "${pair}". Try --option list.`);
+    const key = pair.slice(0, at), value = pair.slice(at + 1);
+    try { eng.setGeneratorOption(key, value); }
+    catch (e) { fail(`${e.message}`); }
   }
 
   const E = eng.compute();

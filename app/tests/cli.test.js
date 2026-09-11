@@ -275,3 +275,49 @@ test('--help prints usage and exits 0', () => {
   assert.match(r.out, /--strict/);
   assert.match(r.out, /--pio/);
 });
+
+// --option, so the compile gate can build one fixture both ways rather than keeping two
+// that can drift apart (AGENT-4, board 17:09Z).
+test('--option list prints what this build honours, and nothing it does not', () => {
+  const r = run(['--option', 'list']);
+  assert.equal(r.code, 0, r.err);
+  // the help lines are indented; the option lines are not
+  const keys = r.out.split(/\r?\n/)
+    .filter(l => l && !/^\s/.test(l))
+    .map(l => l.split('=')[0]);
+  assert.deepEqual(keys, eng.generatorOptions().map(o => o.key),
+    'the same list the UI renders - one source, so the two cannot disagree');
+  assert.match(r.out, /split_peripherals=false/, 'with its default');
+});
+
+test('--option overrides what the project saved, so one fixture builds both ways', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-opt-'));
+  try {
+    const proj = path.join(ROOT, 'tests', 'fixtures', 'CH32V006_TSSOP20_full.wchproj');
+    const one = run(['--project', proj, '--format', 'c', '--out', path.join(dir, 'one'), '--quiet']);
+    assert.equal(one.code, 0, one.err);
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'one')).sort(), ['wchcube_init.c', 'wchcube_init.h']);
+
+    const many = run(['--project', proj, '--option', 'split_peripherals=true',
+      '--format', 'c', '--out', path.join(dir, 'many'), '--quiet']);
+    assert.equal(many.code, 0, many.err);
+    const files = fs.readdirSync(path.join(dir, 'many'));
+    assert.ok(files.length > 2, 'the same project, split: ' + files.join(', '));
+    assert.ok(files.includes('wchcube_usart1.c'));
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--option refuses a key this build does not have, and says which it does', () => {
+  const bad = run(['CH32V006', '--option', 'nope=1', '--quiet']);
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /No generator option "nope"/);
+  assert.match(bad.err, /split_peripherals/, 'it should say what is available');
+
+  const noEq = run(['CH32V006', '--option', 'split_peripherals', '--quiet']);
+  assert.equal(noEq.code, 1);
+  assert.match(noEq.err, /wants key=value/);
+
+  const badValue = run(['CH32V006', '--option', 'reports=perhaps', '--quiet']);
+  assert.equal(badValue.code, 1);
+  assert.match(badValue.err, /expected true or false/);
+});
