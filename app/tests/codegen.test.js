@@ -998,3 +998,104 @@ test('complaints in a split file are reported against that file', () => {
     assert.ok(c.line > 0);
   }
 });
+
+// =============================================================================
+//  Parts whose shape is not CH32V006's
+// =============================================================================
+//  AGENT-1, board 16:10Z: "a 24-bit port breaks anything assuming 16 pins - a pin-name
+//  regex, a bit mask, a package table - and a port that is not a contiguous range
+//  breaks anything that iterates one." Both are true of CH32X035 and of no part that
+//  existed before it, so both get a test rather than a hope.
+
+test('a port wider than 16 bits generates the pin macros it really has', () => {
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;            // the part is not bundled in this build
+  e.loadMcu('CH32X035');
+  e.setPackage('LQFP64M');
+  e.compute();
+
+  const wide = Object.keys(e.M.pins).filter(p => /^P[A-Z](1[6-9]|2[0-3])$/.test(p) && e.pinExists(p));
+  assert.ok(wide.length, 'CH32X035 ports are 24 bits wide (ch32x035.h GPIO_Pin_16..23)');
+
+  for (const pin of wide.slice(0, 3)) {
+    e.compute();
+    if (e.E.pins[e.canon(pin)]) continue;         // already claimed by a reset-default signal
+    e.assignSignal(pin, { gpio: 'GPIO_Output' });
+  }
+  e.compute();
+  const rows = e.gpioPlan().filter(r => r.bit > 15);
+  assert.ok(rows.length, 'the plan reaches pins above 15');
+  const c = e.cSource();
+  for (const r of rows) {
+    assert.ok(c.includes(`GPIO_Pin_${r.bit}`), `GPIO_Pin_${r.bit} is emitted for ${r.pin}`);
+  }
+  assert.deepEqual(e.cComplaints(), [], 'and nothing about this part is missing from the data');
+});
+
+test('a port with a hole in it is not iterated as a range', () => {
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  const bits = Object.keys(e.M.pins)
+    .filter(p => /^PC\d+$/.test(p)).map(p => +p.slice(2)).sort((a, b) => a - b);
+  assert.ok(bits.length, 'PC exists');
+  // DS Fig 1-1: PC0-PC7 then PC14-PC19. If anything treated a port as 0..n-1 it would
+  // invent the pins in the gap, so assert the gap is really there and really absent.
+  const gap = [8, 9, 12, 13].filter(n => bits.includes(n));
+  assert.deepEqual(gap, [], 'the pins the datasheet does not give PC must not exist');
+  for (const n of bits) assert.ok(e.M.pins[`PC${n}`], `PC${n} is in the model`);
+});
+
+test('every bundled part generates only names its own MCU file carries', () => {
+  for (const name of Object.keys(eng.MCU_FILES)) {
+    const e = fresh();
+    e.loadMcu(name);
+    e.compute();
+    // switch on whatever this part has, without naming a peripheral
+    for (const [pid, P] of Object.entries(e.M.peripherals)) {
+      const s = (P.settings || [])[0];
+      if (!s) continue;
+      const c = (s.choices || []).find(x => x.signals && x.signals.length);
+      if (!c) continue;
+      try {
+        if (s.type === 'checkboxes') e.toggleSetting(pid, s.name, c.name, true);
+        else e.setSetting(pid, s.name, c.name);
+      } catch (err) { /* a conflict with an earlier one is fine; this is a sweep */ }
+    }
+    e.compute();
+    const c = e.cSource();
+    const data = JSON.stringify(e.M);
+    // Every identifier assigned into an init struct has to come from the data. The GPIO
+    // ones have their own tests; these are the SPL names the MCU file is responsible for.
+    const from = c.indexOf(' * Peripherals');
+    if (from < 0) continue;
+    for (const line of c.slice(from).split(/\r?\n/)) {
+      const m = /^\s+\w+Structure\.(\w+) = ([^;]+);/.exec(line);
+      if (!m) continue;
+      const [, member, value] = m;
+      if (/^-?\d+$/.test(value)) continue;
+      assert.ok(data.includes(member), `${name}: member ${member} is not in the MCU file`);
+      assert.ok(data.includes(value), `${name}: value ${value} is not in the MCU file`);
+    }
+  }
+});
+
+test('a part the engine has never seen needs no engine change to generate', () => {
+  // The claim the architecture makes: DATA adds a part, ENGINE adds nothing. CH32X035
+  // is the first part since the engine was written whose ports, clock-enable spelling
+  // and GPIO speed all differ from CH32V006's, so it is the test of that claim.
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  e.setPackage('LQFP64M');
+  e.compute();
+  const c = e.cSource();
+  // every one of these is a per-series fact, and every one comes from the data
+  assert.ok(/RCC_APB2PeriphClockCmd/.test(c) || !/PeriphClockCmd/.test(c),
+    'X035 uses the APB2 spelling, not the V00x PB2 spelling');
+  assert.equal(/RCC_PB2PeriphClockCmd/.test(c), false, 'and never the other family\'s');
+  assert.deepEqual(e.gpioSpeeds().map(s => s.macro), ['GPIO_Speed_50MHz'],
+    'one speed, and it is 50 MHz here rather than 30');
+  assert.ok(e.cHeader().includes(`#include "${e.M.codegen.header}"`),
+    'its own SPL header, from its own file - and in the .h, where the application sees it too');
+});

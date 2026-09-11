@@ -3885,6 +3885,41 @@ clock:
 #     vectors, so they are not covered by the grouped three.
 nvic:
   controller: PFIC
+
+  # THE PRIORITY SCHEME IS NOT CH32V006'S, and the round brief was right to say so.
+  # CH32X035 is a QingKe V4C; CH32V006 is a V2A. Read from THIS manual's PFIC chapter
+  # (RM v1.9 7.5.2.37, PFIC_IPRIORx) rather than carried across:
+  #
+  #   CH32V006 (V2A): bits [7:6] are the priority control bits - TWO - and [5:0] are
+  #                   "reserved, fixed to 0, write invalid".
+  #   CH32X035 (V4C): bits **[7:5]** are the priority control bits - **THREE** - and
+  #                   [4:0] are "Reserved, fixed to 0, write invalid".
+  #
+  # So this part has EIGHT priority levels where CH32V006 has four, and a spinner that
+  # hardcodes either part's range is wrong on the other.
+  #
+  # Nesting, same section plus RM 7.1 ("maximum nesting depth 2 levels"): with no
+  # nesting configured there are no preemption bits at all and all three are plain
+  # priority; with 2-level nesting "bit 7 is the preemption bit", leaving [6:5] as
+  # sub-priority. "The smaller the priority value, the higher the priority."
+  #
+  # As on CH32V006, WHERE the nesting depth is selected is not in this register and no
+  # register write is claimed for the switch itself - it is offered as a labelled choice
+  # and nothing more. Do not invent one.
+  scheme:
+    register: { name: PFIC_IPRIORx, address: 0xE000E400, bits_per_vector: 8 }
+    priority_bits: 3
+    priority_lsb: 5
+    max_nesting: 2
+    groups:
+      - name: No nesting (3 priority bits, no preemption)
+        default: true
+        preempt: { bits: 0, min: 0, max: 0 }
+        sub:     { bits: 3, lsb: 5, min: 0, max: 7 }
+      - name: 2 levels of nesting (1 preemption bit, 2 sub-priority bits)
+        preempt: { bits: 1, lsb: 7, min: 0, max: 1 }
+        sub:     { bits: 2, lsb: 5, min: 0, max: 3 }
+
   vectors:
     - { name: NonMaskableInt, vector: 2 , irqn: NonMaskableInt_IRQn, handler: NMI_Handler             , system: true, fixed: true }
     - { name: EXC           , vector: 3 , irqn: EXC_IRQn           , handler: HardFault_Handler       , system: true, fixed: true }
