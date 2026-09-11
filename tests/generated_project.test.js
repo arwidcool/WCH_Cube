@@ -232,9 +232,14 @@ test('main.c blinks a pin only when the user configured an output', () => {
     const files = filesFor(fixture);
     const main = files.find(f => f.path.replace(/\\/g, '/') === 'src/main.c');
     if (!main) { problems.push(`${fixture.mcu}: no src/main.c`); continue; }
-    const outputs = eng.pinRows().filter(r => (eng.S.manual || {})[r.pin] === 'GPIO_Output');
+    // pinRows() rows carry `name` (the pin, or "PD7/PA4" for a shorted pair), not `pin`.
+    // With `r.pin` this filter was always empty and the test blamed main.c for toggling
+    // a pin the user really had configured — AGENT-2's 18:05Z finding.
+    const outputs = eng.pinRows().filter(r => (eng.S.manual || {})[r.name] === 'GPIO_Output');
     if (outputs.length) {
-      const named = outputs.some(o => main.text.includes(o.pin));
+      // A shorted pair's row is named "PD7/PA4"; main.c toggles ONE of the two, so either
+      // half counts. Match on a word boundary so PA1 does not pass on the strength of PA10.
+      const named = outputs.some(o => o.name.split('/').some(n => new RegExp(`\\b${n}\\b`).test(main.text)));
       if (!named) problems.push(`${fixture.mcu}: ${outputs.length} output pin(s) configured but main.c names none of them`);
     } else if (/GPIO_WriteBit|GPIO_SetBits|GPIO_ResetBits/.test(main.text)) {
       problems.push(`${fixture.mcu}: no output GPIO is configured, but main.c toggles one anyway`);

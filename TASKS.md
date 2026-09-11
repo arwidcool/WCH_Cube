@@ -313,7 +313,7 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       over the ring buffer's wrap-around and full/empty cases, run by `node tests/run.js` via
       `tests/firmware_native.test.js`. Found a host compiler nobody knew was here: MinGW 9.2.0
       at C:\MinGW, not on PATH.
-- [ ] D7 (AGENT-4) `agents/README.md` "Environment facts"; round-3 section in `agents/DONE.md`
+- [x] D7 (AGENT-4) `agents/README.md` "Environment facts"; round-3 section in `agents/DONE.md`
 - [x] D8 (AGENT-1) RM chapter 20 "Extended Configuration" (EXTEN) on V006 — MODELLED, plus a new
       `dma.remaps` key: TIM2_DMA_REMAP moves TIM2_CH4's request from channel 7 to channel 2.
       AGENT-4: two ABSENT entries and a chapter-map line still needed in completeness.test.js
@@ -395,13 +395,16 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       `USART4_CTS`, `TIM2_CH3N`) — the legibility work's first real stress
 - [ ] (AGENT-3) DMA panel sizes itself from `dma.requests` (**8** channels); NVIC tab lists the EXTI
       vectors as **three rows, not twenty-six**
-- [ ] (AGENT-4) CH32X035 fixture in `tests/fixtures/`; `CH32X035G8U6` in the compile matrix
-- [ ] (AGENT-4) `smoke`, `layout`, `legibility`, `completeness`, `codegen_compile`, `data` all cover
-      CH32X035 × every package — and CH32V006/CH32V005 still pass
-- [ ] (AGENT-4) `tests/no_part_names.test.js` — `grep -ri "x035|ch32v006|ch32v005" app/engine/
-      app/template.html` empty outside comments
-- [ ] (AGENT-4) `data/firmware/README.md`'s "the configurator has no CH32X035 data yet" becomes
-      false the day the part lands — fix it then
+- [x] (AGENT-4) CH32X035 fixture in `tests/fixtures/`; `CH32X035G8U6` in the compile matrix —
+      `CH32X035_QFN28_full.wchproj`, in both `codegen_compile` and `generated_project`
+- [x] (AGENT-4) `smoke`, `layout`, `legibility`, `completeness`, `codegen_compile`, `data` all cover
+      CH32X035 × every package — and CH32V006/CH32V005 still pass. `smoke`, `layout`, `legibility`,
+      `completeness` and `data` iterate every registered part (`a.mcuNames` / `readdirSync`), so the
+      seven packages were covered the moment the file landed; `codegen_compile` names the fixture.
+- [x] (AGENT-4) `tests/no_part_names.test.js` — `grep -ri "x035|ch32v006|ch32v005" app/engine/
+      app/template.html` empty outside comments — self-tested with a planted break
+- [x] (AGENT-4) `data/firmware/README.md`'s "the configurator has no CH32X035 data yet" becomes
+      false the day the part lands — fixed; the row now points at the compile gate
 
 ### B — Generate PlatformIO project
 
@@ -422,21 +425,24 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       shows **every** file incl. `main.c` and `platformio.ini`
 - [x] (AGENT-3) Says what `main.c` will do before generating, driven by the configuration; refusal
       shows its reason; after a desktop generate, the path and the next two commands in copyable text
-- [ ] (AGENT-4) `tests/generated_project.test.js` **(gate)**: generate to a scratch dir, `pio run`,
+- [x] (AGENT-4) `tests/generated_project.test.js` **(gate)**: generate to a scratch dir, `pio run`,
       exit 0, self-containment asserted, cleaned up; skips with a printed reason when `pio` is absent
-- [ ] (AGENT-4) A specific one-paragraph request in `HUMAN_TODO.md` for someone with a board and a
-      WCH-Link to flash one, with the exact commands
+      — 9 checks GREEN on all four fixtures once `projectFiles()` landed; the one red was two
+      `r.pin`/`o.pin` reads of a row that carries `name` (AGENT-2's 18:05Z finding), now fixed
+- [x] (AGENT-4) A specific one-paragraph request in `HUMAN_TODO.md` for someone with a board and a
+      WCH-Link to flash one, with the exact commands — item 6
 - [ ] (AGENT-4) The flash result in `tests/evidence/round4/` — **or the DONE line says "builds, not
       flashed", in those words**
 
 ### Housekeeping
 
-- [ ] (AGENT-4) The stale "until the EVT package arrives" language: `PROGRESS.md`,
-      `data/firmware/ARCHITECTURE.md`, the round-3 pack. Post the list.
+- [x] (AGENT-4) The stale "until the EVT package arrives" language: `PROGRESS.md`,
+      `data/firmware/ARCHITECTURE.md` — both corrected (ARCHITECTURE still said "empty today" two
+      paragraphs above "both have landed"). The round-3 pack is left as written: it is history.
 - [ ] (AGENT-1) `data/sources/README.md` — which parts have EVT and where its headers live
 - [x] (AGENT-1) `data/FORMAT.md` — the remap `macro:` form, grouped NVIC vectors, a part with no
       HSE, 24-bit and non-contiguous ports, `pio_board`/`pio_env`
-- [ ] (AGENT-4) `PROGRESS.md` §5/§6/§7/§9 rewritten for a second family and a flashable artefact
+- [x] (AGENT-4) `PROGRESS.md` §5/§6/§7/§9 rewritten for a second family and a flashable artefact
 
 ## Phase 3 — Code / report generation  (FUTURE — keep hooks, do not build yet)
 

@@ -94,9 +94,8 @@ and prescaler fields — starting HSE or the PLL and waiting for lock stays with
 
 WCH ships an **EVT** package per part: the Standard Peripheral Library sources,
 headers, startup files, linker scripts and examples that define what the silicon
-actually offers. EVT sources **will be provided for each MCU** in this
-repository, under `../sources/<PART>/Evt/`. The folders exist and are empty
-today (`../sources/V006/Evt/`, `../sources/X035/Evt/`).
+actually offers. EVT sources are provided per MCU in this repository under
+`../sources/<PART>/Evt/`, and both have landed — see below.
 
 When they land they are **authoritative** for anything the code has to name:
 

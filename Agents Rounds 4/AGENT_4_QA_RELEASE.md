@@ -101,47 +101,42 @@ because no pin was assigned. That paragraph is why the gate exists.
 
 ---
 
-## Current — round 4, cycle 1 (2026-09-11T17:12Z)
+## Current — round 4, cycle 2 (2026-09-11T20:25Z)
 
-**Answered first, because it was addressed to me.** AGENT-1's QA-FAIL: both
-`completeness.test.js` reds were my tables, not their data. Verified both against
-the EVT headers rather than taking them, and one came out stronger than offered —
-`ch32v00X.h:438` puts EXTEN at `HBPERIPH_BASE + 0x3800`, so the HB membership is
-provable from the header rather than inferred from a macro's absence.
+**Read all four Current sections and the board first; nobody had committed for 97 minutes,
+so the tree was quiet. Then cleaned up, then took the highest open BLOCKED I could
+legitimately help with.**
 
-**Done.**
-- **D5** `write_project(name, files, overwrite)`. Validates every path BEFORE
-  creating anything — there is a test on that *ordering*, because a bad entry
-  halfway down a list must not leave a half-written tree. `safe_relative()` unit
-  tested over 5 real paths and 9 escapes. **`cargo test` runs in the suite now.**
-- **D6** 10 host-side Unity tests for `lib/util`, in the suite via
-  `tests/firmware_native.test.js`.
-- **D7** environment facts and the stale round pointer.
-- **D9 half** `Taskfile.yml` ADOPTED, not half-adopted.
-- **CH32X035 through the compile gate** — `pio run -e CH32X035G8U6` exits 0 from a
-  fixture whose `build()` contains no part-specific code.
-- **`tests/no_part_names.test.js`**, **`tests/generated_project.test.js`** (nine
-  checks, skipping loudly on `projectFiles()`), the GPIO enum check generalised
-  from speeds to modes, per-part exemption keys, `PROGRESS.md`, the Round 4 DONE
-  section, and `HUMAN_TODO` 6.
+**Cleaned up.**
+- The suite's one red was mine: `generated_project.test.js` read `r.pin` and `o.pin` off
+  rows that carry `name`. AGENT-2's 18:05Z diagnosis was right and there was a second one
+  on the next line. A shorted row is "PD7/PA4", so either half counts now, on a word
+  boundary. **9/9 GREEN on all four fixtures** — deliverable B's gate is a feature now,
+  not nine skipping checks.
+- `codegen_compile.test.js` had a literal NUL byte inside a string; `grep` called it binary.
+  Same string at runtime; replaced with the escape.
+- `data/firmware/ARCHITECTURE.md` contradicted itself about the EVT folders. Fixed.
+- `pio check -e CH32X035G8U6` — no defects. Eight tracker lines ticked with evidence.
 
-**Found, all verified against EVT before reporting.** X035 has **no open-drain
-GPIO modes** and `gpio.modes` gives it two (round 3's speed defect, one field
-over) · `USBFS_DEVICE` does not exist · the UI's `MODES` list is hardcoded, so
-fixing the data alone would not stop the table offering them · `GPIO_Mode_IPD` is
-per-pin on this part · a third variant with no `pio_board`.
+**Unblocked AGENT-1's hardest item — the DMA request map RM Table 9-2 lost in
+conversion.** The RM was in Downloads as a PDF. `agents/proposals/x035_dma_requests.py`
+reads §9.2.3 by word x-position under the eight "Channel N" headers and refuses to print
+unless three readings agree: positional, AGENT-1's row-order observation, and their nine
+EVT-example anchors. **All three agree on all 27 requests.** The paste is
+`agents/proposals/CH32X035_dma_requests.yaml`; both original PDFs (RM V1.9, DS V2.2 — the
+one matching the md, not the V2.0 also lying there) are now beside their conversions.
 
-**Three numbers of MINE in the round-4 brief were wrong** — 47 vectors (45), 40
-remap macros (38), and the EXTI framing. AGENT-1 caught the first two by applying
-the round's rule to the round's own pack. Corrected, and worth remembering: I
-wrote a table telling everyone to check rather than assume.
+**One thing the script caught that reading would not.** TIM2_TRIG and TIM2_COM sit on
+channel **8**. Blank-counting the extracted text puts them on 7 — the cells are
+irregular — and I had them on 7 in my head before the x-coordinates said otherwise.
+Figure 9-1's channel-8 box lists them beside USART4_RX. Positional wins, and that is
+exactly why the script has three readings rather than one careful one.
 
-**Next.** The X035 packages into `layout`/`legibility` (LQFP64M with `USBPD_CC1`
-is the first real stress that test has had) · the walkthrough §13 onward ·
-confirm AGENT-3's dead-control result and close D9 · `pio check` for X035 ·
-the CI job when a remote appears.
+**Open, mine.** `codegen_compile.test.js`'s "header exists in the SPL for that part" went
+RED once in a full run and GREEN in isolation and in the run before — an order-dependent
+flake in my own file, not yet explained. D9's two file-chooser buttons. The walkthrough
+§13 onward in a real browser. **Nothing has been flashed**; `HUMAN_TODO` 6 stands.
 
-**Not claimed.** `projectFiles()` does not exist, so deliverable B is nine
-skipping checks and not a feature. Nothing has been **flashed** — every green
-result here is a compile, the DONE line says "builds, not flashed" in those
-words, and `HUMAN_TODO` 6 is the specific ask.
+**Waiting on others.** AGENT-2 is blocked on two data keys (`codegen.nvic`,
+`channel_params.channels`), AGENT-3 on nothing any more — `projectFiles()` and
+`CH32X035.yaml` both landed after their last cycle.

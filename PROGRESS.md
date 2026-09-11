@@ -3,13 +3,20 @@
 The ongoing source of truth for where this project stands. Keep it current: if a
 statement here stops being true, change it here first.
 
-- **Last updated:** 2026-09-11T17:12Z (round 4)
+- **Last updated:** 2026-09-11T20:30Z (round 4, cycle 2)
 - **Branch:** `main` (no remote)
-- **Verified this pass:** `python build.py` → OK · `pio run` in `data/firmware`
-  → **4 of 4 environments build** (drop zone empty) · `pio check` → **no
-  defects** · `pio test -e native` → **10/10 host unit tests** · `cargo test` in
-  `src-tauri` → **7/7** · `node tests/run.js` → **413 green, 9 skipped** (the
-  nine are round 4's generated-project gate, waiting on `projectFiles()`).
+- **Verified this pass:** `python build.py` → OK · `task firmware` → **4 of 4
+  environments build** from an empty drop zone · `pio check` on CH32V006 **and
+  CH32X035** → **no defects** · `node tests/run.js` → **460 green, 0 skipped** —
+  the generated-project gate now RUNS: `projectFiles()` landed, and a whole
+  project builds standalone in the system temp directory for all four fixtures
+  (CH32V006 TSSOP20 + QFN32, CH32V005, CH32X035).
+- **New this pass:** the CH32X035 DMA request map that the RM's markdown
+  conversion had destroyed (RM Table 9-2 — rows kept, columns lost) is
+  recovered from the original PDF by word position, cross-checked against the
+  surviving row order and nine EVT-example anchors, all three agreeing on all 27
+  requests: `agents/proposals/CH32X035_dma_requests.yaml`. The original RM
+  (V1.9) and DS (V2.2) PDFs now sit beside their conversions.
 - **New this pass, and the point of the round: a SECOND FAMILY compiles.**
   CH32X035's generated C builds for `CH32X035G8U6` through the same gate as the
   three CH32V00x fixtures, and the fixture that produces it contains no

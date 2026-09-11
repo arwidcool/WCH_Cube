@@ -212,7 +212,7 @@ function dropZoneState() {
   for (const p of [path.join(DROP, 'src', 'wchcube_init.c'), path.join(DROP, 'include', 'wchcube_init.h')]) {
     try { parts.push(fs.readFileSync(p, 'utf8')); } catch { parts.push('(absent)'); }
   }
-  return parts.join(' ');
+  return parts.join('\x00');
 }
 
 for (const fixture of FIXTURES) {
