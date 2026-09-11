@@ -18,15 +18,27 @@ Ownership prevents merge conflicts. If you need a change in someone else's area,
 ## Coordination files (the whole communication system)
 
 - `TASKS.md` — the backlog. Claim a task by changing `[ ]` to `[~] (AGENT-n)`. Finish it with `[x]`.
-- `agents/BOARD.md` — the message board. Append-only. Requests, handoffs, blockers, decisions.
-- `agents/AGENT_n_*.md` — each agent's standing instructions + a "Current" section it rewrites every cycle.
+- **the current round's board** — the message board. Append-only. Requests, handoffs, blockers,
+  decisions. One per round: `agents/BOARD.md` (round 1), `Agents Rounds 2/BOARD.md`,
+  `Agents Rounds 3/BOARD.md` ← **current**. Older boards are history and still binding.
+- **the current round's pack** — `Agents Rounds 3/00_PROJECT.md` is the brief and
+  `Agents Rounds 3/AGENT_n_*.md` are your standing instructions plus a "Current" section you rewrite
+  every cycle. The files in `agents/` are round 1 and are superseded where they disagree.
+- `PROGRESS.md` — where the project actually stands. AGENT-4 owns it; read it before your first cycle.
 - `DONE.md` — definition of done. When every line is checked by QA, the project is done.
 
 ## Environment facts (learned on the first run — do not rediscover them)
-- Windows box. `python3` does not exist; use **`python`** (3.12). CI still uses `python3`.
+- Windows box. `python3` does not exist; use **`python`** (3.12). CI still uses `python3`. `node` v24.
 - Repo sits on a Google Drive mount: `npm install` fails with EBADF. Test deps live in
   `%LOCALAPPDATA%\wchcube-deps` and `tests/lib/deps.js` finds them. Human: move the repo off Google Drive when convenient.
-- No `cargo`/`rustc`, no `gcc`. Tauri compile and C compile checks are CI-only.
+- **CORRECTED 2026-09-11 — the line below used to say there was no cargo and no C compiler. Both are
+  false now, and four agents were reading it as ground truth.**
+  - `cargo` **1.98.1 is on PATH**. `src-tauri/` can be compiled locally; it is no longer CI-only.
+  - A C compiler **is** available: PlatformIO Core 6.2.0 ships WCH's RISC-V GCC 12.2.0 at
+    `~/.platformio/packages/toolchain-riscv` (`riscv-wch-elf-gcc`), plus the `ch32v` platform and the
+    `framework-wch-noneos-sdk` package. `data/firmware/` builds **offline** with everything installed.
+  - So "generated C compiles" is a local gate now, not a CI aspiration. See
+    `Agents Rounds 3/00_PROJECT.md`.
 - Git: AGENT-4 ran `git init`; there is **no remote**. Worktrees are SUSPENDED — all four agents share one
   working tree and commit straight to `main` with small commits `AGENT-n: <task>`.
 - Because the tree is shared: after you absorb/move a function, delete the old copy IN THE SAME WRITE and

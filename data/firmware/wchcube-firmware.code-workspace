@@ -1,0 +1,25 @@
+{
+  // Two-root workspace: the configurator repo and the firmware project.
+  // PlatformIO needs a folder whose root holds platformio.ini, which is why the
+  // firmware is a root of its own rather than a subfolder of the repo root.
+  "folders": [
+    {
+      "name": "WCHCube (repo)",
+      "path": "../.."
+    },
+    {
+      "name": "firmware (PlatformIO)",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "files.associations": {
+      "*.wchproj": "yaml"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "platformio.platformio-ide"
+    ]
+  }
+}

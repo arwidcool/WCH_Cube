@@ -165,9 +165,11 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       tested like `validate_mcu.py` was.  **EVT has landed** — headers are at
       `data/sources/<PART>/Evt/EXAM/SRC/Peripheral/inc/`, so EVT first, PlatformIO as fallback.
 - [ ] (AGENT-4) Wire `verify_sdk_names.py` into `node tests/run.js`
-- [ ] (AGENT-4) **The compile gate**: `tests/codegen_compile.test.js` — generate from fixtures
-      that assign pins, params, DMA and NVIC, then `pio run` for CH32V006 TSSOP20 + QFN32 and
-      CH32V005 TSSOP20. Skips with a printed reason when `pio` is absent; never silently.
+- [x] (AGENT-4) **The compile gate**: `tests/codegen_compile.test.js` — generates from fixtures
+      that assign pins and params, then `pio run` for CH32V006 TSSOP20 + QFN32 and CH32V005
+      TSSOP20; all three compile and link. Skips loudly with a printed reason and a count in the
+      summary when `pio` is absent. Three planted breaks, three caught. DMA and NVIC join the
+      fixtures the moment `.wchproj` carries them (AGENT-2's P2).
 - [x] (AGENT-1) Mark the port-clock spelling in `CH32V006.notes.md` confirmed — `RCC_PB2PeriphClockCmd`,
       `RCC_PB2Periph_GPIOx`, `RCC_PB2Periph_AFIO` and `AFIO->PCFR1` all verified in the SDK headers
       — re-cited to EVT `ch32v00X_rcc.h`:157/:88/:89-92 and `ch32v00X.h`:197
@@ -218,8 +220,9 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 - [ ] (AGENT-4) Correct `agents/README.md` "Environment facts" — `cargo` 1.98.1 and a C compiler
       both exist now; four agents read that file as ground truth
-- [ ] (AGENT-4) Compile `src-tauri/` locally; resolve the uncommitted `open_project` fix and the
-      untracked `Cargo.lock` deliberately
+- [x] (AGENT-4) Compile `src-tauri/` locally — `cargo build` clean. The `open_project` fix was
+      REQUIRED (`Result<Option<String>>` vs `Result<String>`, proved with `cargo check`), so the
+      shell had never compiled; fix and `Cargo.lock` committed.
 - [ ] (AGENT-4) Finish the dead-control sweep; `#m-open` / `#m-openproj` need a human or a stub
 - [ ] (AGENT-4) Round-3 section in `agents/DONE.md`; re-audit the round-1 and round-2 lines
 - [~] (AGENT-1) Stale source paths in `data/FORMAT.md`, `CH32V006.notes.md` and

@@ -1,0 +1,11 @@
+{
+  "name": "util",
+  "version": "0.1.0",
+  "description": "Shared utilities with no hardware dependency. Buildable and testable on the host.",
+  "keywords": ["util"],
+  "license": "MIT",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  }
+}

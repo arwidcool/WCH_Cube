@@ -15,11 +15,14 @@ WCH_CubeMX/
 │   └── vendor/js-yaml.js    bundled YAML parser (MIT), so the app works offline
 ├── data/
 │   ├── mcus/*.yaml          one file per MCU - the whole part definition
-│   └── packages/packages.yaml   package geometries (SOP, TSSOP, QFN, LQFP...)
+│   ├── packages/packages.yaml   package geometries (SOP, TSSOP, QFN, LQFP...)
+│   ├── sources/<PART>/      the DS, the RM and (when provided) the EVT package
+│   └── firmware/            PlatformIO project - compiles the generated C for real silicon
 ├── build.py                 inlines the engine and the YAML into dist/index.html
 ├── tests/                   QA suites + the runner (npm test)
 ├── tools/validate_mcu.py    checks an MCU file before you trust it
 ├── src-tauri/               desktop shell (Tauri 2)
+├── PROGRESS.md              where the project stands - read this first
 ├── TASKS.md                 what is done, in progress and next
 └── agents/                  the four-agent working agreement (see "How this repo is built")
 ```
@@ -130,6 +133,33 @@ npm install --prefix "%LOCALAPPDATA%\wchcube-deps" jsdom@25 js-yaml@4
 
 Set `WCHCUBE_DEPS` to point somewhere else. The Rust in `src-tauri/` is compiled by CI;
 `tests/desktop.test.js` covers everything about the shell that does not need a toolchain.
+
+## Build the firmware
+
+`data/firmware/` is a PlatformIO project that compiles for real CH32V006 / CH32V005 /
+CH32X035 silicon with the WCH EVT NoneOS SDK. It is where the configurator's generated
+`wchcube_init.c/.h` becomes an ELF — and the only place the claim "the generated C
+compiles" can be checked instead of asserted.
+
+```bash
+cd data/firmware
+pio run                     # default environment: CH32V006F8P6 (TSSOP20)
+pio run -t upload           # over WCH-Link
+```
+
+In VS Code, open `data/firmware` as the folder (PlatformIO needs `platformio.ini` at the
+workspace root), or open `data/firmware/wchcube-firmware.code-workspace` to get the repo
+and the firmware side by side.
+
+Feed it a configuration from the repo root:
+
+```bash
+node tools/wchcube_cli.js CH32V006 --package TSSOP20 --format c      --out data/firmware/lib/wchcube_generated/src
+```
+
+`src/main.c` picks it up through `__has_include` and calls `WCHCube_Init()`; with the drop
+zone empty the firmware still builds and says so at startup. `data/firmware/README.md` has
+the details and `data/firmware/ARCHITECTURE.md` has the layering and ownership rules.
 
 ## How this repo is built
 

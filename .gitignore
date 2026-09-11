@@ -1,2 +1,11 @@
 node_modules/
 src-tauri/target/
+
+# A reference copy of the INSTALLED PlatformIO platform `ch32v`, dropped here by
+# the human to read. `Agents Rounds 3/00_PROJECT.md`: do not vendor the SDK into
+# this repo - it is a PlatformIO package. Keeping a second 45 MB copy in git is
+# how the two get to disagree. Read it on disk; cite the package, not this.
+data/Pio Source/
+
+__pycache__/
+*.pyc

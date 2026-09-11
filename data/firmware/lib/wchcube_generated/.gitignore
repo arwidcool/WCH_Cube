@@ -1,0 +1,6 @@
+# Machine-written. Regenerated from the configurator, never reviewed as a diff,
+# and two agents generating from two different .wchproj would collide here for
+# no reason. The drop zone is tracked; its contents are not.
+src/*.c
+src/*.h
+include/*.h

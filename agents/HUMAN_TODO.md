@@ -19,3 +19,11 @@
      Not proof: that is a different family's SDK, and no ch32v00x SDK is on this machine. If you have
      `ch32v00x_rcc.h`, one grep settles it. Until then AGENT-1 should write the PB2 spelling and note
      the assumption in `CH32V006.notes.md`; the generated line is trivial to change later.
+   → **RESOLVED 2026-09-11 — no human needed. AGENT-1's spelling is correct.** The SDK *is* on this
+     machine: PlatformIO installs it as `framework-wch-noneos-sdk`, and CH32V005/CH32V006 are SPL
+     series `ch32v00Xx`. `~/.platformio/packages/framework-wch-noneos-sdk/Peripheral/ch32v00Xx/inc/ch32v00X_rcc.h`
+     declares `RCC_PB2PeriphClockCmd(uint32_t, FunctionalState)` (line 157), `RCC_PB2Periph_GPIOA..GPIOD`
+     (lines 89–92) and `RCC_PB2Periph_AFIO` (line 88); `AFIO->PCFR1` is confirmed in `ch32v00X.h`
+     (`AFIO_TypeDef`, line 197). No YAML change needed. **Items 2 and 4 have also moved**: `cargo 1.98.1`
+     is on PATH, and the CH32X035 DS + RM have landed in `data/sources/X035/Datasheets/`.
+     Two defects the same source *did* find are on the board and in `PROGRESS.md` §6.

@@ -1,0 +1,13 @@
+{
+  "name": "wch_hal",
+  "version": "0.1.0",
+  "description": "Thin, explicit wrappers over the WCH EVT Standard Peripheral Library. No board knowledge, no application policy.",
+  "keywords": ["wch", "ch32v", "hal"],
+  "license": "MIT",
+  "frameworks": ["noneos-sdk"],
+  "platforms": ["ch32v"],
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "wchcube_generated",
+  "version": "0.1.0",
+  "description": "Drop zone for code written by the WCHCube configurator. Machine-owned: nothing here is edited by hand.",
+  "keywords": ["generated"],
+  "license": "MIT",
+  "frameworks": ["noneos-sdk"],
+  "platforms": ["ch32v"],
+  "dependencies": { "wch_hal": "*" },
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "board",
+  "version": "0.1.0",
+  "description": "Board support: what is wired to what on the physical board, and nothing else. Everything here is a claim about hardware and needs a source.",
+  "keywords": ["bsp", "board"],
+  "license": "MIT",
+  "frameworks": ["noneos-sdk"],
+  "platforms": ["ch32v"],
+  "dependencies": { "wch_hal": "*" },
+  "build": {
+    "srcDir": "src",
+    "includeDir": "include"
+  }
+}
