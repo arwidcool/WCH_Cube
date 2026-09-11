@@ -15,6 +15,7 @@ import { cFiles, gpioPlan, cfg, user } from './codegen.js';
 // because neither side reads the other at module-evaluation time - PROJECT is only
 // touched inside functions - and build.py concatenates both into one scope anyway.
 import { PROJECT } from './project.js';
+import { zipFiles } from './zip.js';
 
 const num = v => (Math.round(v * 1000) / 1000).toString();
 
@@ -608,3 +609,19 @@ export function projectFiles() {
 
 /** The folder name a project should be written into. */
 export const projectFolderName = () => safeName(PROJECT.name);
+
+/**
+ * The same project as a ZIP, for the browser - which has no filesystem and can only
+ * hand the user a download. Every entry is under one top-level folder so unpacking
+ * gives a project directory rather than scattering files into Downloads.
+ *
+ * Returns `{ name, bytes }`; the caller makes a Blob of it. Deterministic, because
+ * `zipFiles` fixes its timestamps: the same configuration zips to the same bytes.
+ */
+export function projectZip() {
+  const folder = projectFolderName();
+  return {
+    name: `${folder}.zip`,
+    bytes: zipFiles(projectFiles().map(f => ({ path: `${folder}/${f.path}`, text: f.text }))),
+  };
+}
