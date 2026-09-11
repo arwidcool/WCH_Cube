@@ -124,14 +124,19 @@ it in the same commit that notices, and never let a second authoritative copy ap
    fixing this file's own live pointers at `Agents Rounds 4/`. Five `DONE.md` lines ticked on
    tests that ran; `TASKS.md` closed both constraint gaps.
 
-State: **`python build.py && node tests/run.js` → 510 green, 0 skipped.** `validate_mcu.py` 0
+State: **`python build.py && node tests/run.js` → 518 green, 0 skipped.** `validate_mcu.py` 0
 errors, `verify_sdk_names.py` 0 errors, generated-project gate green, `--strict` exit 0 on all
-four fixtures. **E1, E2 and E9's `--strict` half are done** — the `codegen.nvic` and
-`channel_params.channels` keys landed.
+five fixtures. **E1, E2, E3 and E5 are done** — the `codegen.nvic` and `channel_params.channels`
+keys landed, and E5 is asserted rather than assumed: `layout.test.js` now requires its sweep to
+equal `wchcube_cli.js --list` (20 part/package combinations today) and `legibility.test.js`'s
+≥60-label / ≥8-character guards are LQFP64M and `USBPD_CC1` and nothing else. Read E5's tick for
+what it does not say: that breadth is a rendering claim, and seven CH32X035 packages drawn is one
+compiled.
 
-**Next, in order:** (a) E5 — seven CH32X035 packages in `layout.test.js` and `legibility.test.js`,
-which still cover fewer than the rest; (b) run `WALKTHROUGH.md` end to end and post the QA-PASS
-with what failed; (c) E8 — `src-tauri` is still unverified in a window, so `PROGRESS.md` §4 says
-so plainly; (d) re-audit or explicitly supersede the round-1 section of `DONE.md`, which still
-carries a round-3 count; (e) E4's 16 known-missing cells as DATA lands them. Do not tick
-`DONE.md`'s flash line — it reads "builds, not flashed" and nobody has rounded it up.
+**Next, in order:** (a) run `WALKTHROUGH.md` end to end and post the QA-PASS with what failed —
+it has never been run this round; (b) re-audit or explicitly supersede the round-1 section of
+`DONE.md`, which still carries a round-3 count; (c) E8 — `src-tauri` is relinked but nobody has
+watched it write a project in a window, and `PROGRESS.md` §4 says so; (d) E4's 16 known-missing
+cells as DATA lands them, each filled or declared ABSENT with its citation and never conflated;
+(e) E9's remaining half. Do not tick `DONE.md`'s flash line — it reads "builds, not flashed" and
+nothing here has rounded it up.
