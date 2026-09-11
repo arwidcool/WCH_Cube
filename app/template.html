@@ -165,7 +165,8 @@
   .treenone{padding:14px 10px;color:var(--muted);font-size:12px}
   .config{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel);margin-top:8px}
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
-  .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text)}
+  .ctabs[hidden]{display:none}
+  .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text);white-space:nowrap}
   .ctab.active{background:var(--blue-hdr);color:#fff;border-color:var(--blue-hdr)}
   /* Six columns of real GPIO values need 694 px and the centre column is ~440 px at 1280,
      so this scrolls sideways. A cut edge with no affordance reads as a broken layout, so
@@ -246,20 +247,61 @@
   .dreq.on{border-style:solid;border-color:var(--blue);background:var(--blue-pale);color:var(--text)}
   .dreq a{color:inherit;text-decoration:underline;cursor:pointer}
   .dreq small{display:block;font-size:10px;color:var(--muted)}
-  table.dmach tr.clash td{background:var(--res-bg);box-shadow:inset 3px 0 0 var(--res)}
-  table.dmach tr.clash:hover td{background:var(--res-bg)}
-  table.nvictab{min-width:640px}
+  /* A request the USER configured is solid; one merely available is dashed. A channel
+     with two configured requests is a HARD conflict (the user asked for both and the
+     channel serves one) and gets the bad colour, not the softer shared-resource one. */
+  .dreq.used{border-style:solid;border-color:var(--blue);background:var(--blue-pale);color:var(--text);font-weight:600}
+  table.dmach tr.used td{background:var(--blue-pale)}
+  table.dmach tr.clash td{background:var(--bad-bg);box-shadow:inset 3px 0 0 var(--bad)}
+  table.dmach tr.clash:hover td{background:var(--bad-bg)}
+  .clashowners{color:var(--bad)}
+  /* DMA Settings: the request list, then the selected row's DMA_InitTypeDef below it. */
+  table.dmatab{border-collapse:collapse;width:100%;min-width:420px;font-size:12.5px;table-layout:fixed}
+  table.dmatab th{background:var(--head);color:var(--on-accent);text-align:left;padding:4px 8px;font-weight:600;white-space:normal;line-height:1.15}
+  table.dmatab td{padding:3px 8px;border-bottom:1px solid var(--line-soft)}
+  table.dmatab tbody tr{cursor:pointer}
+  table.dmatab tbody tr:hover td{background:var(--blue-pale)}
+  table.dmatab tr.sel td{background:var(--blue-pale);box-shadow:inset 3px 0 0 var(--blue)}
+  table.dmatab tr.clash td{background:var(--bad-bg);box-shadow:inset 3px 0 0 var(--bad)}
+  table.dmatab th:nth-child(2),table.dmatab td:nth-child(2){width:80px}
+  table.dmatab th:nth-child(3),table.dmatab td:nth-child(3){width:132px}
+  table.dmatab th:nth-child(4),table.dmatab td:nth-child(4){width:86px}
+  table.dmatab th:nth-child(5),table.dmatab td:nth-child(5){width:34px}
+  table.dmatab select{width:100%;padding:1px 2px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  .dmadel{border:0;background:none;color:var(--muted);font-size:13px;line-height:1;padding:2px 5px;border-radius:3px}
+  .dmadel:hover{background:var(--bad);color:var(--on-accent)}
+  .dmaadd{display:flex;gap:6px;align-items:center;padding:7px 8px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+  .dmaadd select{flex:1;min-width:140px;padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  .dmaadd button{border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:3px;padding:3px 12px}
+  .dmaadd button:hover{background:var(--blue-pale)}
+  /* NVIC table. Two shapes: with an Owner column (System Core) and without (a
+     peripheral's own tab), so the column widths are set per shape. */
+  /* Sized for the VALUES: `DMA1_Channel1_IRQHandler` is 24 characters of monospace, and
+     it is the one string in this table the user has to copy exactly. The header is one
+     word so the column is not the one that gets squeezed; what it means is spelled out
+     above the table and in its title=. */
+  table.nvictab{min-width:676px}
   table.nvictab th:nth-child(1),table.nvictab td:nth-child(1){width:44px}
-  table.nvictab th:nth-child(2),table.nvictab td:nth-child(2){width:90px}
-  table.nvictab th:nth-child(3),table.nvictab td:nth-child(3){width:158px}
-  table.nvictab th:nth-child(4),table.nvictab td:nth-child(4){width:176px}
-  table.nvictab th:nth-child(5),table.nvictab td:nth-child(5){width:74px}
-  table.nvictab th:nth-child(6),table.nvictab td:nth-child(6){width:98px}
+  table.nvictab th:nth-child(2),table.nvictab td:nth-child(2){width:150px}
+  table.nvictab th:nth-child(3),table.nvictab td:nth-child(3){width:74px}
+  table.nvictab th:nth-child(4),table.nvictab td:nth-child(4){width:70px}
+  table.nvictab th:nth-child(5),table.nvictab td:nth-child(5){width:108px}
+  table.nvictab th:nth-child(6),table.nvictab td:nth-child(6){width:80px}
+  table.nvictab th:nth-child(7),table.nvictab td:nth-child(7){width:150px}
+  table.nvictab.noowner{min-width:602px}
+  table.nvictab.noowner th:nth-child(3),table.nvictab.noowner td:nth-child(3){width:70px}
+  table.nvictab.noowner th:nth-child(4),table.nvictab.noowner td:nth-child(4){width:108px}
+  table.nvictab.noowner th:nth-child(5),table.nvictab.noowner td:nth-child(5){width:80px}
+  table.nvictab.noowner th:nth-child(6),table.nvictab.noowner td:nth-child(6){width:150px}
   table.nvictab td code{font:11px/1.3 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);
                         display:block;overflow:hidden;text-overflow:ellipsis}
+  table.nvictab select{width:100%;padding:1px 2px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  table.nvictab tr.on td{background:var(--blue-pale)}
+  table.nvictab tr.on:hover td{background:var(--blue-pale)}
   table.nvictab tr.off td{color:var(--muted)}
   table.nvictab tr.off td code{color:var(--muted)}
   table.nvictab a{color:var(--link);text-decoration:underline;cursor:pointer}
+  .fixedval{color:var(--text);white-space:nowrap}
   .ro{color:var(--muted)}
   .mode code{white-space:nowrap}
   /* NVIC's Mode panel states facts about the silicon, so it does not wear the yellow
@@ -579,6 +621,10 @@
        aria-label= still carry the full phrase for hover and for screen readers. */
     .menu .lbl-full{display:none}
     .menu .lbl-short{display:inline}
+    /* Four Configuration tabs of CubeMX's full names do not fit the centre column
+       below this; "Settings" is the same word on all four, so it is the one to lose. */
+    .ctab .tabword{display:none}
+    .ctab{padding:4px 9px}
   }
   @media (max-width:1180px){
     #view-pinout{grid-template-columns:212px minmax(296px,1fr) minmax(356px,1.25fr)}
@@ -1711,15 +1757,42 @@ document.getElementById('tree-search').addEventListener('input', renderTree);
  * read-only overviews live on the NVIC and DMA1 entries in System Core, which need no
  * state and are already useful.
  */
-// An engine export the bundle may not define at all: `typeof someName` on a bare
-// identifier throws, so ask the global object, which is where build.py puts them.
-const engineHas = n => typeof globalThis[n] === 'function';
+/**
+ * Does this bundle's engine have that function?
+ *
+ * Asked `globalThis[name]` at first, which is wrong and was quietly wrong: build.py
+ * inlines `app/engine/*` as its own <script>, so a name it declares with
+ * `export function` does become a property of the global object, but a name it declares
+ * with `export const` does NOT — a top-level `const` is a lexical binding, not a global
+ * property. `nvicGroup`, `nvicGroups`, `nvicScheme` and `dmaAddableRequests` are all
+ * `export const`, so every one of those checks answered "no" while the function was
+ * sitting right there: every interrupt priority rendered as an em dash and the DMA tab
+ * grew no Add control. `typeof <identifier>` sees both kinds, and does not throw on a
+ * name that was never declared, so the checks are spelled out one identifier at a time
+ * rather than looked up by string.
+ *
+ * (The identifiers are safe to touch: the engine's <script> runs to completion before
+ * this one starts, so nothing below is in the temporal dead zone.)
+ */
+const hasNvic = () => typeof nvicVectors === 'function' && typeof setNvicVector === 'function';
+const hasNvicGroups = () => typeof nvicGroups === 'function' && typeof nvicGroup === 'function';
+const hasNvicScheme = () => typeof nvicScheme === 'function';
+const hasSetNvicGroup = () => typeof setNvicGroup === 'function';
+const hasDma = () => typeof dmaRequests === 'function' && typeof setDmaParam === 'function';
+const hasDmaAdd = () => typeof dmaAddableRequests === 'function' && typeof addDmaRequest === 'function';
+const hasDmaParams = () => typeof dmaParamDefs === 'function' && typeof dmaParamValue === 'function';
+const hasDmaConflicts = () => typeof dmaConflicts === 'function';
+const hasDmaState = () => typeof dmaState === 'function';
 const CTABS = [
   { id: 'param', name: 'Parameter Settings', has: pid => pid !== 'GPIO' && paramRows(pid).length > 0 },
-  { id: 'nvic', name: 'NVIC Settings', has: pid => engineHas('setNvicVector') && nvicVectorsOf(pid).length > 0 },
-  { id: 'dma', name: 'DMA Settings', has: pid => engineHas('setDmaParam') && dmaRequestNamesOf(pid).length > 0 },
+  { id: 'nvic', name: 'NVIC Settings', has: pid => hasNvic() && nvicVectorsOf(pid).length > 0 },
+  { id: 'dma', name: 'DMA Settings', has: pid => hasDma() && dmaRequestNamesOf(pid).length > 0 },
   { id: 'gpio', name: 'GPIO Settings', has: pid => pid === 'GPIO' || periphPins(pid).length > 0 },
 ];
+// The engine is the authority on every list below; these only exist so the tab strip can
+// ask "does this peripheral have any" without loading the whole table.
+const engineNvicVectors = () => (hasNvic() ? nvicVectors() : []);
+const engineDmaRequests = () => (hasDma() ? dmaRequests() : []);
 const tabsFor = pid => (!pid ? [] : CTABS.filter(t => { try { return t.has(pid); } catch (e) { return false; } }));
 let ctab = 'gpio';
 function renderCtabs(pid) {
@@ -1728,9 +1801,17 @@ function renderCtabs(pid) {
   // The selected tab has to survive selecting another peripheral, but only if that
   // peripheral has it; otherwise fall to the first one it does have.
   if (!tabs.some(t => t.id === ctab)) ctab = tabs.length ? tabs[0].id : null;
-  bar.innerHTML = tabs.map(t =>
-    `<button class="ctab${t.id === ctab ? ' active' : ''}" data-ctab="${t.id}" role="tab"`
-    + ` aria-selected="${t.id === ctab}">${esc(t.name)}</button>`).join('');
+  // Four tabs of CubeMX's full names need ~536 px and the centre column is ~440 px at
+  // 1280, so they wrapped to two lines. The word "Settings" is the same on all four and
+  // carries nothing; it drops out when the panel is narrow (CSS, below) and the full name
+  // stays in title= and aria-label=.
+  bar.innerHTML = tabs.map(t => {
+    const cut = t.name.endsWith(' Settings');
+    const stem = cut ? t.name.slice(0, -9) : t.name;
+    return `<button class="ctab${t.id === ctab ? ' active' : ''}" data-ctab="${t.id}" role="tab"`
+      + ` title="${attr(t.name)}" aria-label="${attr(t.name)}" aria-selected="${t.id === ctab}">`
+      + `${esc(stem)}${cut ? '<span class="tabword"> Settings</span>' : ''}</button>`;
+  }).join('');
   bar.hidden = tabs.length === 0;
   return ctab;
 }
@@ -1774,9 +1855,9 @@ document.getElementById('ptitle').addEventListener('click', e => {
 /** Pins this peripheral currently claims. */
 const periphPins = pid => Object.entries(E.pins)
   .filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
-/** The vectors `nvic:` gives this peripheral. `system: true` ones belong to NVIC itself. */
-const nvicVectorsOf = pid => ((M.nvic || {}).vectors || [])
-  .filter(v => (pid === 'NVIC' ? v.system : v.peripheral === pid));
+/** The vectors this peripheral owns. `system: true` ones belong to the NVIC entry itself. */
+const nvicVectorsOf = pid => (hasNvic() ? nvicVectors() : ((M.nvic || {}).vectors || []))
+  .filter(v => (pid === 'NVIC' ? true : v.peripheral === pid));
 /** The DMA request names owned by this peripheral, with the channels each can use. */
 function dmaRequestNamesOf(pid) {
   const reqs = (M.dma || {}).requests || {};
@@ -1854,67 +1935,193 @@ function renderCentre() {
     : `<div class="empty">${esc(pid)} has nothing to configure on this part.</div>`;
   body.innerHTML = ctab === 'gpio' ? gpioTable(periphPins(pid))
     : ctab === 'param' ? paramTable(pid)
-      : isDmaCtl ? '' : nothing;
+      : ctab === 'nvic' ? nvicTable(nvicVectorsOf(pid), { showOwner: false })
+        : ctab === 'dma' ? dmaTable(pid)
+          : isDmaCtl ? '' : nothing;
   if (isDmaCtl) body.innerHTML += dmaChannelTable();
 }
 
-// ---- DMA1 in System Core: every channel, what wants it, and who owns it -------
-// Read-only on purpose. Which requests the user has ADDED, and how each one is
-// configured, is state the engine does not have yet (requested from AGENT-2 on the
-// board, 14:30Z); this shows what the SILICON offers and which of it is live, which is
-// the half `dma:` can answer today. `dmaState()` is the same engine call the shared-
-// resource warnings come from, so this table and the warning cannot disagree.
+// ---- DMA1 in System Core: every channel, what can use it, and what is on it ----
+// `dmaState()` is the same engine call the shared-resource warnings come from and
+// `dmaConflicts()` is the hard "two requests, one channel" list, so this table and the
+// banners above it cannot disagree. Configuring a request is the DMA Settings tab on its
+// peripheral; this is the one place that shows every channel at once.
 function dmaChannelTable() {
   const d = M.dma;
   if (!d || !d.requests) return '';
-  const st = typeof dmaState === 'function' ? dmaState() : null;
+  const st = hasDmaState() ? dmaState() : null;
   const defs = d.request_defaults || {};
   const owner = r => (M.peripherals[r] ? r : String(r).split('_')[0]);
-  const contended = new Set(((E.resourceIssues || []).filter(x => x.kind === 'dma')).map(x => String(x.channel)));
+  const configured = {};                    // channel -> the requests the USER configured
+  for (const r of engineDmaRequests()) (configured[r.channel] ||= []).push(r);
+  const clash = {};
+  if (hasDmaConflicts()) for (const c of dmaConflicts()) clash[String(c.channel)] = c;
   const rows = [];
   for (let ch = 1; ch <= (d.channels || Object.keys(d.requests).length); ch++) {
     const list = d.requests[ch] || d.requests[String(ch)] || [];
     const live = (st && st.channels[ch]) ? st.channels[ch].live : [];
+    const mine = (configured[String(ch)] || []).map(r => r.request);
     const cells = list.map(r => {
       const o = owner(r);
+      const used = mine.includes(r);
       const on = live.includes(r);
-      const dir = (defs[r] || {}).dir;
-      const link = M.peripherals[o]
-        ? `<a data-goto="${attr(o)}" title="Go to ${attr(o)}">${esc(r)}</a>` : esc(r);
-      return `<span class="dreq${on ? ' on' : ''}" title="${attr(`${r} — owner ${o}${dir ? `, default direction ${dir}` : ''}${on ? ', that peripheral is switched on' : ', that peripheral is off'}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
+      const dir = used ? dmaParamValue(r, 'dir') : (defs[r] || {}).dir;
+      const link = M.peripherals[o] ? `<a data-goto="${attr(o)}" title="Go to ${attr(o)}">${esc(r)}</a>` : esc(r);
+      const why = used ? 'configured on this channel' : on ? 'that peripheral is switched on, but no DMA request is configured' : 'that peripheral is off';
+      return `<span class="dreq${used ? ' used' : on ? ' on' : ''}" title="${attr(`${r} — owner ${o}${dir ? `, ${used ? '' : 'default '}direction ${dir}` : ''}; ${why}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
     }).join('');
-    rows.push(`<tr class="${contended.has(String(ch)) ? 'clash' : ''}"><td>${ch}</td><td>${cells || '<span class="ro">no request maps here</span>'}</td>`
-      + `<td>${live.length ? live.map(r => esc(owner(r))).filter((v, i, a) => a.indexOf(v) === i).join(', ') : '<span class="ro">—</span>'}</td></tr>`);
+    const c = clash[String(ch)];
+    rows.push(`<tr class="${c ? 'clash' : mine.length ? 'used' : ''}"${c ? ` title="${attr(c.text)}"` : ''}>`
+      + `<td>${ch}</td><td>${cells || '<span class="ro">no request maps here</span>'}</td>`
+      + `<td>${c ? `<b class="clashowners">${esc(c.owners.join(' + '))}</b>`
+        : mine.length ? esc([...new Set((configured[String(ch)] || []).map(r => r.owner))].join(', '))
+          : '<span class="ro">—</span>'}</td></tr>`);
   }
   const off = st && !st.enabled
-    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing on it is live yet. Switch it on in its Mode panel above.</div>` : '';
-  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and which of those peripherals is switched on.`
-    + ` A channel two switched-on peripherals both want is outlined; only one of them can drive it.</div>${off}`
-    + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Live owner</th></tr></thead>`
+    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing here reaches the generated code yet. Switch it on in its Mode panel above.</div>` : '';
+  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and what is configured on it.`
+    + ` Configure a request on its peripheral's <b>DMA Settings</b> tab. A channel with two configured requests is outlined`
+    + ` and names both owners: one channel serves one request, and the generated C says <code>#error</code> rather than picking.</div>${off}`
+    + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Configured</th></tr></thead>`
     + `<tbody>${rows.join('')}</tbody></table>`;
 }
 
-// ---- NVIC in System Core: every vector this part has --------------------------
-// Also read-only, for the same reason: enabling a vector and setting its priority is
-// state the engine does not have yet. What it CAN say without inventing anything is
-// which interrupts exist, what the SDK calls each one (two names, and they differ), who
-// owns it, and whether that owner is switched on. The priority scheme is printed as the
-// fact it is rather than as a control that would not write anywhere - and the numbers
-// come from `nvic.scheme`, never from CubeMX muscle memory: this PFIC implements TWO
-// priority bits, not four.
+// ---- DMA Settings, per peripheral ---------------------------------------------
+//
+// A table of this peripheral's configured requests with Add / Delete, and the selected
+// row's DMA_InitTypeDef fields below it. Those fields are rendered by the SAME editors
+// as Parameter Settings: `dma.channel_params` is deliberately the same schema as
+// `params:` and `dmaParamDefs()` returns what `getParams()` returns, so there is one set
+// of editors and one set of rules rather than two that can disagree.
+//
+// **The channel is not a selector unless the part actually offers a choice.** All 23 of
+// CH32V006's requests are wired to exactly one channel, so `legalChannels` comes back one
+// long and the cell is fixed text - the same rule as `gpio.speeds`, and computed from the
+// map rather than assumed, so a part whose request can reach several channels gets a real
+// selector without this code changing.
+let dmaPick = null;                 // UI-only: which request row is open. Not in S.
+function dmaTable(pid) {
+  const all = engineDmaRequests();
+  const mine = all.filter(r => r.owner === pid);
+  const addable = (hasDmaAdd() ? dmaAddableRequests() : []).filter(r => r.owner === pid);
+  const clash = {};
+  if (hasDmaConflicts()) for (const c of dmaConflicts()) for (const id of c.ids) clash[id] = c;
+  if (!mine.some(r => r.id === dmaPick)) dmaPick = mine.length ? mine[0].id : null;
+
+  const rows = mine.map(r => {
+    const c = clash[r.id];
+    const ch = r.legalChannels.length > 1
+      ? `<select data-dr="${attr(r.id)}" data-dk="channel" aria-label="${attr(`${r.request} channel`)}">`
+        + r.legalChannels.map(x => `<option${String(x) === r.channel ? ' selected' : ''}>${x}</option>`).join('') + '</select>'
+      : `<span class="fixedval" title="${attr(`${r.request} is wired to channel ${r.channel} only`)}">${esc(r.channel)}</span>`;
+    return `<tr class="${r.id === dmaPick ? 'sel' : ''}${c ? ' clash' : ''}" data-dpick="${attr(r.id)}">`
+      + `<td>${esc(r.request)}</td><td>${ch}</td>`
+      + `<td>${esc(String(dmaParamValue(r.id, 'dir') ?? '—'))}</td>`
+      + `<td>${esc(String(dmaParamValue(r.id, 'pl') ?? dmaParamValue(r.id, 'priority') ?? '—'))}</td>`
+      + `<td><button class="dmadel" data-ddel="${attr(r.id)}" title="${attr(`Remove ${r.request}`)}" aria-label="${attr(`Remove ${r.request}`)}">✕</button></td></tr>`;
+  }).join('');
+
+  let h = `<div class="paramhead">DMA requests ${esc(pid)} can make, and how each one is configured.`
+    + ` The buffer address and the transfer count are not here: <code>DMA_PeripheralBaseAddr</code>,`
+    + ` <code>DMA_MemoryBaseAddr</code> and <code>DMA_BufferSize</code> are your application's buffer, not a`
+    + ` configuration choice, and the generated C leaves them as named TODOs.</div>`;
+  for (const c of Object.values(clash).filter((v, i, a) => a.indexOf(v) === i)) {
+    h += `<div class="pmnote bad" style="position:static">⚠ ${esc(c.text)} — <b>${esc(c.owners.join(' and '))}</b>.`
+      + ` The generated C will say <code>#error</code> rather than pick one.</div>`;
+  }
+  h += `<table class="dmatab"><thead><tr><th>Request</th><th>Channel</th><th>Direction</th><th>Priority</th><th></th></tr></thead>`
+    + `<tbody>${rows || `<tr><td colspan="5" class="ro">No DMA request configured for ${esc(pid)} yet.</td></tr>`}</tbody></table>`;
+  h += `<div class="dmaadd">`
+    + (addable.length
+      ? `<select id="dma-add" aria-label="DMA request to add">`
+        + addable.map(r => `<option value="${attr(r.request)}">${esc(r.request)} — channel ${esc(r.channel)}</option>`).join('')
+        + `</select><button id="dma-add-go">Add</button>`
+      : `<span class="ro">${mine.length ? `Every DMA request ${esc(pid)} has is configured.` : `${esc(pid)} has no DMA request on this part.`}</span>`)
+    + `</div>`;
+
+  // The selected row's DMA_InitTypeDef fields, through the Parameter Settings editors.
+  const sel = mine.find(r => r.id === dmaPick);
+  if (sel) {
+    const defs = hasDmaParams() ? dmaParamDefs() : [];
+    h += `<div class="section-h">${esc(sel.request)} — ${esc((M.dma || {}).init_struct || 'DMA_InitTypeDef')}</div>`
+      + paramTableFrom(defs.map(d => Object.assign({}, d, { value: dmaParamValue(sel.id, d.key) })), {
+        owner: sel.id, head: `${sel.request} on channel ${sel.channel}`,
+        attrs: { o: 'dp', k: 'dn' }, keyPrefix: 'DMA',
+        note: (M.dma.request_notes || {})[sel.request] || '',
+      });
+  }
+  return h;
+}
+
+// ---- NVIC ---------------------------------------------------------------------
+//
+// One table, two callers: the NVIC entry in System Core shows every vector, and a
+// peripheral's NVIC Settings tab shows the ones it owns. Same renderer, so the two views
+// cannot drift apart.
+//
+// **The priority ranges come from `nvic.scheme`, never from CubeMX muscle memory.** The
+// PFIC on this part implements TWO priority bits, not four: PFIC_IPRIORx [5:0] are
+// reserved and write-invalid (RM 6.5.2.21), so with nesting on it is one preemption bit
+// and one sub-priority bit, both 0-1. A spinner offering 0-15 would be offering settings
+// the silicon throws away. A field the active grouping gives zero bits is rendered as
+// fixed text, not a disabled control - the same rule as the GPIO speed column.
+function nvicPriorityCell(v, which, spec) {
+  if (!spec) return '<span class="ro">—</span>';
+  const value = which === 'preempt' ? v.preempt : v.sub;
+  if (!v.enabled) return `<span class="ro">${value}</span>`;
+  if (spec.max <= spec.min) {
+    return `<span class="fixedval" title="${attr(`This grouping gives ${which === 'preempt' ? 'preemption' : 'sub-'}priority ${spec.bits || 0} bits, so ${spec.min} is the only value`)}">${spec.min}</span>`;
+  }
+  let o = '';
+  for (let i = spec.min; i <= spec.max; i++) o += `<option${i === value ? ' selected' : ''}>${i}</option>`;
+  return `<select data-nv="${attr(v.name)}" data-nk="${which}" aria-label="${attr(`${v.name} ${which} priority`)}">${o}</select>`;
+}
+
+function nvicTable(rows, { showOwner }) {
+  const g = hasNvicGroups() ? nvicGroup() : null;
+  const pre = g && g.preempt ? { min: g.preempt.min || 0, max: g.preempt.max || 0, bits: g.preempt.bits || 0 } : null;
+  const sub = g && g.sub ? { min: g.sub.min || 0, max: g.sub.max || 0, bits: g.sub.bits || 0 } : null;
+  if (!rows.length) return '<div class="empty">No interrupt vector belongs to this peripheral.</div>';
+  const body = rows.map(v => {
+    const who = v.system ? '<span class="ro">core</span>'
+      : M.peripherals[v.peripheral] ? `<a data-goto="${attr(v.peripheral)}" title="Go to ${attr(v.peripheral)}">${esc(v.peripheral)}</a>`
+        : esc(v.peripheral || '—');
+    const box = v.fixed
+      ? `<span class="fixedval" title="${attr(`${v.name} is always active on this core and cannot be switched off`)}">always on</span>`
+      : `<input type="checkbox" data-nv="${attr(v.name)}" data-nk="enabled"${v.enabled ? ' checked' : ''}`
+        + `${v.available ? '' : ' disabled'} aria-label="${attr(`Enable the ${v.name} interrupt`)}">`;
+    return `<tr class="${v.enabled ? 'on' : ''}${v.available ? '' : ' off'}" title="${attr(v.description || v.name)}">`
+      + `<td>${v.vector}</td><td>${esc(v.name)}<br><code>${esc(v.irqn || '')}</code></td>`
+      + (showOwner ? `<td>${who}</td>` : '')
+      + `<td>${box}</td><td>${nvicPriorityCell(v, 'preempt', pre)}</td><td>${nvicPriorityCell(v, 'sub', sub)}</td>`
+      + `<td><code>${esc(v.handler || '')}</code></td></tr>`;
+  }).join('');
+  return `<table class="nvictab${showOwner ? '' : ' noowner'}"><thead><tr><th>No.</th><th>Interrupt</th>`
+    + (showOwner ? '<th>Owner</th>' : '')
+    + `<th>Enabled</th><th>Preemption priority</th><th>Sub priority</th>`
+    + `<th title="the symbol in the startup vector table your ISR must be called to be linked in">Handler</th></tr></thead>`
+    + `<tbody>${body}</tbody></table>`;
+}
+
+/** One delegated writer for both callers. Every write goes through the engine. */
+document.getElementById('cbody').addEventListener('change', e => {
+  const el = e.target; if (!el.dataset.nv) return;
+  try {
+    setNvicVector(el.dataset.nv, { [el.dataset.nk]: el.type === 'checkbox' ? el.checked : Number(el.value) });
+  } catch (err) { toast(err.message); }
+  renderAll();
+});
+
+/** The NVIC entry in System Core: the scheme, the grouping selector, every vector. */
 function renderNvicOverview(mode, body) {
   const n = M.nvic || {};
-  const sch = n.scheme || {};
-  const groups = sch.groups || [];
-  const active = groups.find(g => g.default) || groups[0];
-  const ownedLive = v => !v.system && M.peripherals[v.peripheral] && isEnabled(v.peripheral);
-  const vectors = (n.vectors || []).slice().sort((a, b) => (a.vector || 0) - (b.vector || 0));
-  const core = vectors.filter(v => v.system).length;
-  const live = vectors.filter(ownedLive).length;
+  const sch = (hasNvicScheme() ? nvicScheme() : n.scheme) || {};
+  const groups = hasNvicGroups() ? nvicGroups() : (sch.groups || []);
+  const vectors = nvicVectorsOf('NVIC').slice().sort((a, b) => (a.vector || 0) - (b.vector || 0));
+  const on = vectors.filter(v => v.enabled).length;
 
-  // These are FACTS about the silicon, not settings, so they are not drawn with the
-  // yellow setting labels the rest of the Mode panel uses - a read-only value wearing an
-  // editable row's clothes is its own kind of lie.
+  // Facts about the silicon are not drawn with the yellow setting labels the editable
+  // rows use - a read-only value wearing an editable row's clothes is its own kind of lie.
   const fact = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
   let facts = '';
   if (sch.priority_bits !== undefined) {
@@ -1923,30 +2130,30 @@ function renderNvicOverview(mode, body) {
       + `${sch.priority_lsb !== undefined ? ` — bits [${sch.priority_lsb + sch.priority_bits - 1}:${sch.priority_lsb}]. The rest are reserved and write-invalid.` : ''}`);
   }
   if (sch.max_nesting !== undefined) facts += fact('Maximum nesting', sch.max_nesting);
-  if (active) {
-    facts += fact('Priority grouping', esc(active.name)
-      + (groups.length > 1 ? `<br><span class="ro">This part also offers: ${groups.filter(g => g !== active).map(g => esc(g.name)).join('; ')}. Choosing between them arrives with the NVIC Settings tab.</span>` : ''));
+  // One grouping is not a choice; show it as text. Two or more is a real selector.
+  if (groups.length > 1 && hasSetNvicGroup()) {
+    const i = hasNvicGroups() ? groups.indexOf(nvicGroup()) : 0;
+    facts += fact('Priority grouping', `<select id="nvic-group" aria-label="Interrupt priority grouping">`
+      + groups.map((x, j) => `<option value="${j}"${j === i ? ' selected' : ''}>${esc(x.name)}</option>`).join('')
+      + `</select>`);
+  } else if (groups.length === 1) {
+    facts += fact('Priority grouping', esc(groups[0].name));
   }
-  mode.innerHTML = `<div class="nvicfacts"><p>${esc(n.controller || 'NVIC')} — ${vectors.length} interrupt vector${vectors.length === 1 ? '' : 's'} on this part:`
-    + ` ${core} belonging to the core itself and ${live} to a peripheral you have switched on.</p>`
-    + (facts ? `<dl>${facts}</dl>` : '') + `</div>`;
+  mode.innerHTML = `<div class="nvicfacts"><p>${esc(n.controller || 'NVIC')} — ${vectors.length} interrupt vector${vectors.length === 1 ? '' : 's'} on this part,`
+    + ` ${on} enabled.</p>` + (facts ? `<dl>${facts}</dl>` : '') + `</div>`;
+  const gs = mode.querySelector('#nvic-group');
+  if (gs) gs.onchange = () => {
+    // Priorities already set are clamped into the new range by the engine, so re-render
+    // everything rather than only this panel: a number elsewhere may have just moved.
+    try { setNvicGroup(+gs.value); } catch (err) { toast(err.message); }
+    renderAll();
+  };
 
-  const rows = vectors.map(v => {
-    const on = v.system || ownedLive(v);
-    const who = v.system ? '<span class="ro">core</span>'
-      : M.peripherals[v.peripheral] ? `<a data-goto="${attr(v.peripheral)}" title="Go to ${attr(v.peripheral)}">${esc(v.peripheral)}</a>`
-        : esc(v.peripheral || '—');
-    return `<tr class="${on ? '' : 'off'}"><td>${v.vector}</td><td>${esc(v.name)}</td><td><code>${esc(v.irqn || '')}</code></td>`
-      + `<td><code>${esc(v.handler || '')}</code></td><td>${who}</td>`
-      + `<td>${v.fixed ? '<span class="ro">fixed</span>' : on ? 'available' : '<span class="ro">owner is off</span>'}</td></tr>`;
-  }).join('');
-  body.innerHTML = `<div class="paramhead">Every vector in this part's table. <b>Two names per vector</b>, because the SDK uses two`
-    + ` and they are not interchangeable: <code>IRQn</code> is what <code>NVIC_IRQChannel</code> takes, <code>Handler</code> is the`
-    + ` symbol your ISR must be called to be linked in. Enabling a vector and setting its priority arrives with the NVIC Settings tab.</div>`
-    + `<table class="nvictab"><thead><tr><th>No.</th><th>Interrupt</th><th>IRQn</th><th>Handler</th><th>Owner</th><th>State</th></tr></thead>`
-    + `<tbody>${rows}</tbody></table>`
-    // The MCU file's own note about the scheme. It is here rather than in the Mode panel
-    // because that panel is capped at 42 % of the column and would scroll a paragraph.
+  body.innerHTML = `<div class="paramhead"><b>Two names per vector</b>, because the SDK uses two and they are not`
+    + ` interchangeable: <code>IRQn</code> is what <code>NVIC_IRQChannel</code> takes, and the <b>Handler</b> column is the`
+    + ` symbol in the startup table your ISR must be called to be linked in. A vector whose peripheral is switched off`
+    + ` cannot be enabled here — switch the peripheral on first.</div>`
+    + nvicTable(vectors, { showOwner: true })
     + (sch.notes ? `<div class="paramhead" style="border:0;border-top:1px solid var(--line-soft);margin-top:6px">${esc(String(sch.notes).trim())}</div>` : '');
 }
 document.getElementById('cbody').addEventListener('click', e => {
@@ -2004,8 +2211,12 @@ function paramActive(pid, row, byName) {
   });
 }
 
-function paramEditor(pid, row, live) {
-  const key = `data-pp="${attr(pid)}" data-pn="${attr(paramKey(row))}"`;
+// `A` names the two data- attributes the editor writes, so the same editors serve
+// peripheral parameters (`data-pp`/`data-pn` -> setParam) and DMA_InitTypeDef fields
+// (`data-dp`/`data-dn` -> setDmaParam). `dma.channel_params` is deliberately the same
+// schema as `params:`, and this is what lets that pay off as one set of editors.
+function paramEditor(pid, row, live, A = { o: 'pp', k: 'pn' }) {
+  const key = `data-${A.o}="${attr(pid)}" data-${A.k}="${attr(paramKey(row))}"`;
   const unit = row.unit ? `<span class="unit">${esc(row.unit)}</span>` : '';
   if (paramReadonly(row)) {
     const has = row.value !== undefined && row.value !== null && row.value !== '';
@@ -2023,6 +2234,40 @@ function paramEditor(pid, row, live) {
   const step = row.step !== undefined ? ` step="${attr(row.step)}"` : (row.type === 'int' ? ' step="1"' : ' step="any"');
   const mm = (row.min !== undefined ? ` min="${row.min}"` : '') + (row.max !== undefined ? ` max="${row.max}"` : '');
   return `<div class="ed"><input type="number" ${key} value="${attr(row.value !== undefined ? row.value : '')}"${step}${mm}${dis}>${unit}</div>`;
+}
+
+/**
+ * The Basic/Advanced grouped parameter table, given rows that already carry their value.
+ * Both Parameter Settings and the DMA Settings tab's DMA_InitTypeDef block render through
+ * this, so a change to how a parameter looks cannot land in one and not the other.
+ */
+function paramTableFrom(rows, { owner, head, attrs = { o: 'pp', k: 'pn' }, live = true, note = '', keyPrefix } = {}) {
+  if (!rows.length) return '<div class="empty">Nothing to configure here.</div>';
+  const grouped = rows.some(r => r.group);
+  const groups = new Map();
+  for (const r of rows) {
+    const g = grouped ? (r.group || (r.advanced ? 'Advanced' : 'Basic')) : '';
+    (groups.get(g) || groups.set(g, []).get(g)).push(r);
+  }
+  const order = [...groups.keys()].sort((a, b) => {
+    const rank = n => (n === 'Basic' ? 0 : n === 'Advanced' ? 2 : 1);
+    return rank(a) - rank(b) || a.localeCompare(b);
+  });
+  let h = '';
+  for (const g of order) {
+    const key = `${keyPrefix || owner}/${g}`, shut = g && paramsClosed.has(key);
+    if (g) h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g)}</td></tr>`;
+    if (shut) continue;
+    for (const r of groups.get(g)) {
+      const cls = paramReadonly(r) ? 'calc' : '';
+      const rn = [paramNote(r), r.register ? `register: ${r.register}` : '', r.sdk_field ? `DMA_InitTypeDef.${r.sdk_field}` : '']
+        .filter(Boolean).join(' — ');
+      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${rn ? `<span class="pnote">${esc(rn)}</span>` : ''}</td>`
+        + `<td>${paramEditor(owner, r, live, attrs)}</td></tr>`;
+    }
+  }
+  return (note ? `<div class="paramhead">${esc(note)}</div>` : '')
+    + `<table class="params"><thead><tr><th>${esc(head || owner)}</th><th>Value</th></tr></thead><tbody>${h}</tbody></table>`;
 }
 
 // Numbers the engine derives from the parameters plus the clock tree. Shown
@@ -2061,6 +2306,8 @@ function paramTable(pid) {
   const live = typeof setParam === 'function' && typeof getParams === 'function'
     && (() => { try { return (getParams(pid) || []).length > 0; } catch (e) { return false; } })();
 
+  // A row whose `when:` is not met is drawn recessed and not writable - the condition is
+  // in the data, so it is kept here rather than pushed into the shared renderer.
   const byName = Object.fromEntries(rows.map(r => [paramLabel(r), r.value]));
   const grouped = rows.some(r => r.group);
   const groups = new Map();
@@ -2099,13 +2346,42 @@ function paramTable(pid) {
 }
 
 document.getElementById('cbody').addEventListener('click', e => {
+  // Add / remove / select a DMA request. Every write is an engine call, so all three
+  // land on the undo stack and in the saved project.
+  const del = e.target.closest('[data-ddel]');
+  if (del) {
+    try { removeDmaRequest(del.dataset.ddel); } catch (err) { toast(err.message); }
+    renderAll(); return;
+  }
+  if (e.target.id === 'dma-add-go') {
+    const sel = document.getElementById('dma-add');
+    if (sel) { try { addDmaRequest(sel.value); dmaPick = sel.value; } catch (err) { toast(err.message); } }
+    renderAll(); return;
+  }
+  const pick = e.target.closest('tr[data-dpick]');
+  if (pick && !e.target.closest('select,button')) { dmaPick = pick.dataset.dpick; renderCentre(); return; }
+
   const g = e.target.closest('tr.grp'); if (!g) return;
   const key = g.dataset.grp;
   paramsClosed.has(key) ? paramsClosed.delete(key) : paramsClosed.add(key);
   renderCentre();
 });
 document.getElementById('cbody').addEventListener('change', e => {
-  const el = e.target; if (!el.dataset.pp) return;
+  const el = e.target;
+  // A DMA_InitTypeDef field, through the same editors but a different setter.
+  if (el.dataset.dp) {
+    try { setDmaParam(el.dataset.dp, el.dataset.dn, el.type === 'checkbox' ? el.checked : el.value); }
+    catch (err) { toast(err.message); }
+    renderAll();
+    return;
+  }
+  if (el.dataset.dr) {                      // the channel selector on a request row
+    try { setDmaRequest(el.dataset.dr, { [el.dataset.dk]: el.value }); }
+    catch (err) { toast(err.message); }
+    renderAll();
+    return;
+  }
+  if (!el.dataset.pp) return;
   if (typeof setParam !== 'function') return;
   const pid = el.dataset.pp, key = el.dataset.pn;
   const v = el.type === 'checkbox' ? el.checked : el.value;
