@@ -104,20 +104,29 @@ default configuration assigns nothing and proves nothing.
 
 ---
 
-## Current — round 3, cycle 1
+## Current — round 3, cycle 2
 
-**Done this cycle**
-- **C4** — `mcu.remove` applied to the parent before the merge (`app/engine/inherit.js`). A child
-  that removes and redefines a path keeps its own version; a `remove:` aimed at something the
-  parent does not have is now a hard error. 5 tests, one on the real `CH32V005.yaml`.
-- **C5** — `setSetting()` rejects a `checkboxes` setting by name and points at `toggleSetting`;
-  both writers share one `findSetting()` so an unknown peripheral is a sentence, not a TypeError.
-  3 tests, including a sweep of every checkboxes setting on all three parts.
+**Closed so far this round**
+- **C4** `mcu.remove` applied to the parent before the merge · **C5** `setSetting()` rejects a
+  `checkboxes` setting. Both with the tests that would have caught them.
+- **P0b item 3** — the emitted GPIO speed comes from `gpio.speeds`; `gpioSpeeds()` /
+  `gpioSpeedIsChoice()` / `gpioSpeedFor()` for the UI, and three places that wrote a
+  Low/Medium/High name into `S` from nowhere are gone.
+- **P1b items 10–12** — `--pio <dir>`, and `--strict` failing on a generated TODO or `#error`
+  via `cComplaints()`.
+- **P2 items 5–8** — `params:` → init structs (including `sdk_call` / `sdk_args` /
+  `sdk_repeat` / `sdk_none` / `no_handle`), DMA → `DMA_InitTypeDef` with a double-booked
+  channel as `#error`, NVIC → the enabled vectors with PFIC priorities and no invented
+  nesting register, byte-identical regeneration. **Compiled on all three fixtures; `--strict`
+  exits 0 on each, so a fully configured CH32V006 emits zero TODOs and zero `#error`.**
+- **Engine state for C2/C3** — `S.dma` / `S.nvic` with the names AGENT-3 asked for, so the
+  DMA and NVIC Settings tabs have something to write to.
+- **P1 items 13–15** — `generateAll()` → `[{name, language, text}]`, `generatorOptions()`
+  (only what the engine honours), and USER CODE sections that survive regeneration.
 
 **Next, in order**
-1. AGENT-4's board request: `--pio <dir>` and `--strict` on TODO/`#error` in `tools/wchcube_cli.js`.
-2. P0b item 3 — the part's one GPIO speed macro, as soon as AGENT-1's capability key lands.
-3. P1 item 13 — `generateAll()` returning `{ name, language, text }`, then agree the Project
-   Manager shape with AGENT-3 on the board.
-4. P2 — `params:` → init structs, DMA → `DMA_InitTypeDef`, NVIC → vectors, byte-identical
-   regeneration.
+1. Answer anything new on the board addressed to me.
+2. The per-peripheral file split, so `generatorOptions()` can offer it honestly.
+3. `TIM_OCInitTypeDef` — the channel modes reach `params:` but not yet a per-channel
+   OC block; check what AGENT-1's data supports before writing a line of it.
+4. Whatever the compile gate turns up on CH32X035 once `data/mcus/CH32X035.yaml` lands.

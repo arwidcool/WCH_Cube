@@ -207,10 +207,13 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 - [~] (AGENT-3) `Tools` tab: implement it or remove it. A dead tab is a dead control.
       Blocked on `tests/layout.test.js`, which asserts the four tab names and is AGENT-4's
       file — requested on the board 15:47Z. It is the last `disabled` control in the app.
-- [ ] (AGENT-2) `generateAll()` returns `{ name, language, text }` per file so the UI can list and
+- [x] (AGENT-2) `generateAll()` returns `{ name, language, text }` per file so the UI can list and
       preview without knowing what codegen produces
-- [ ] (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
-- [ ] (AGENT-2) User code sections preserved across regeneration — or the option is **not offered**
+- [x] (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
+      — `generatorOptions()` lists only what the engine honours; the per-peripheral split is
+      **not offered** rather than offered and broken (BOARD 16:22Z)
+- [x] (AGENT-2) User code sections preserved across regeneration — or the option is **not offered**
+      — `mergeUserCode()`, a configuration-independent tag set, and orphaned blocks kept under `#if 0`
 - [ ] (AGENT-4) Tauri command to write generated files to a chosen folder, next to `save_project`
 
 ### P2 — configuration must reach the C
