@@ -390,6 +390,15 @@ def check_params(doc: dict, idx: Index, r: Report) -> None:
         elif fld:
             r.warn(f"{where}.sdk_field",
                    f"`{fld}` names an init-struct member but no `struct:` says which struct")
+        # A parameter the SDK sets through a CALL rather than an init-struct member
+        # (TIM_ARRPreloadConfig, SPI_CalculateCRC, ADC_RegularChannelConfig). The
+        # function has to exist too - it is no less a claim than a field name.
+        want(r, idx, f"{where}.sdk_call", p.get("sdk_call"),
+             idx.functions, "a declared function")
+        if p.get("sdk_none") and not p.get("sdk_note"):
+            r.warn(f"{where}.sdk_none",
+                   "says the SDK exposes nothing for this parameter but gives no `sdk_note:` "
+                   "saying where the bit is. An unexplained gap reads as an oversight.")
         for j, o in enumerate(p.get("options") or []):
             if isinstance(o, dict) and o.get("sdk"):
                 want(r, idx, f"{where}.options[{j}].sdk", o["sdk"],

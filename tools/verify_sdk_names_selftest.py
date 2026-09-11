@@ -147,6 +147,15 @@ def build_cases(doc: dict):
                  {"struct": "USART_InitTypeDef", "sdk_field": "USART_Baudrate"}),
              f"peripherals.{pid}.params[{pi}]", "USART_Baudrate"),
 
+            ("params sdk_call, a function the SDK does not declare",
+             lambda d: d["peripherals"][pid]["params"][pi].update(
+                 {"sdk_call": "TIM_ARRPreloadConfigure"}),
+             f"peripherals.{pid}.params[{pi}]", "TIM_ARRPreloadConfigure"),
+
+            ("params sdk_none with no sdk_note -> an unexplained gap must WARN",
+             lambda d: d["peripherals"][pid]["params"][pi].update({"sdk_none": True}),
+             f"peripherals.{pid}.params[{pi}]", "no `sdk_note:`"),
+
             ("params option sdk, a macro that does not exist",
              lambda d: d["peripherals"][pid]["params"][pi]["options"][0].update(
                  {"sdk": "USART_WordLength_9bit"}),

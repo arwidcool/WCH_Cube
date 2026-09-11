@@ -504,40 +504,50 @@ peripherals:
     params:
       - key: sample
         name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_note: "ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per CHANNEL, not per peripheral. ch32v00X_adc.h:165."
         type: enum
         default: 11.5 cycles
         options:
-          - { name: 3.5 cycles  , value: 0 }
-          - { name: 7.5 cycles  , value: 1 }
-          - { name: 11.5 cycles , value: 2 }
-          - { name: 19.5 cycles , value: 3 }
-          - { name: 35.5 cycles , value: 4 }
-          - { name: 55.5 cycles , value: 5 }
-          - { name: 71.5 cycles , value: 6 }
-          - { name: 239.5 cycles, value: 7 }
+          - { name: 3.5 cycles  , value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles  , value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 11.5 cycles , value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 19.5 cycles , value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 35.5 cycles , value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles , value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles , value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
         help: "ADC_SAMPTR1/2 SMPx[2:0], codes 000..111 in this order. These are the NORMAL-mode figures; in low-power mode codes 010/011/100 mean 13.5/28.5/41.5 cycles instead (RM 9.3.4). Total conversion = sampling + 12.5 ADC clocks."
       - key: lowpower
         name: Low power mode
+        sdk_none: true
+        sdk_note: ch32v00X_adc.h exposes NOTHING for the low-power bit - no struct member and no function (grepped the whole header). It is ADC_CTLR1 ADC_LP and codegen must write the register or leave it alone. Do not invent an ADC_LowPowerCmd.
         type: bool
         default: false
         help: "ADC_CTLR3 ADC_LP, bit 0. Changes what three of the sampling-time codes mean - see that row."
       - key: cont
         name: Continuous conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ContinuousConvMode
         type: bool
         default: false
         help: ADC_CTLR2 CONT, bit 1.
       - key: scan
         name: Scan conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ScanConvMode
         type: bool
         default: false
         help: ADC_CTLR1 SCAN, bit 8.
       - key: align
         name: Data alignment
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_DataAlign
         type: enum
         default: Right
         options:
-          - { name: Right, value: 0 }
-          - { name: Left , value: 1 }
+          - { name: Right, value: 0, sdk: ADC_DataAlign_Right }
+          - { name: Left , value: 1, sdk: ADC_DataAlign_Left }
         help: ADC_CTLR2 ALIGN, bit 11.
 
 
@@ -654,6 +664,8 @@ peripherals:
     params:
       - key: prescaler
         name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
         type: int
         default: 0
         min: 0
@@ -661,6 +673,8 @@ peripherals:
         help: "TIM1_PSC. Counter clock = HCLK / (Prescaler + 1)."
       - key: period
         name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
         type: int
         default: 65535
         min: 0
@@ -668,31 +682,39 @@ peripherals:
         help: "TIM1_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
       - key: counter
         name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
         type: enum
         default: Up
         options:
-          - { name: Up              , value: 0 }
-          - { name: Down            , value: 1 }
-          - { name: Center aligned 1, value: 2 }
-          - { name: Center aligned 2, value: 3 }
-          - { name: Center aligned 3, value: 4 }
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
         help: "TIM1_CTLR1 DIR (bit 4) and CMS[6:5]."
       - key: ckd
         name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
         type: enum
         default: "1"
         options:
-          - { name: "1", value: 0 }
-          - { name: "2", value: 1 }
-          - { name: "4", value: 2 }
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
         help: "TIM1_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
       - key: arpe
         name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
         help: "TIM1_CTLR1 ARPE, bit 7."
       - key: rcr
         name: Repetition counter (RPTCR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_RepetitionCounter
         type: int
         default: 0
         min: 0
@@ -700,6 +722,9 @@ peripherals:
         help: TIM1_RPTCR. An update event happens every (value + 1) counter cycles. Advanced timer only.
       - key: deadtime
         name: Dead time
+        struct: TIM_BDTRInitTypeDef
+        sdk_field: TIM_DeadTime
+        sdk_note: "A DIFFERENT struct from the rest of this peripheral: dead time lives in TIM_BDTRInitTypeDef and is applied by TIM_BDTRConfig, not TIM_TimeBaseInit. Putting it in the time-base block would not compile."
         type: int
         default: 0
         min: 0
@@ -765,6 +790,8 @@ peripherals:
     params:
       - key: prescaler
         name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
         type: int
         default: 0
         min: 0
@@ -772,6 +799,8 @@ peripherals:
         help: "TIM2_PSC. Counter clock = HCLK / (Prescaler + 1)."
       - key: period
         name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
         type: int
         default: 65535
         min: 0
@@ -779,26 +808,32 @@ peripherals:
         help: "TIM2_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
       - key: counter
         name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
         type: enum
         default: Up
         options:
-          - { name: Up              , value: 0 }
-          - { name: Down            , value: 1 }
-          - { name: Center aligned 1, value: 2 }
-          - { name: Center aligned 2, value: 3 }
-          - { name: Center aligned 3, value: 4 }
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
         help: "TIM2_CTLR1 DIR (bit 4) and CMS[6:5]."
       - key: ckd
         name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
         type: enum
         default: "1"
         options:
-          - { name: "1", value: 0 }
-          - { name: "2", value: 1 }
-          - { name: "4", value: 2 }
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
         help: "TIM2_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
       - key: arpe
         name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
         help: "TIM2_CTLR1 ARPE, bit 7."
@@ -849,6 +884,8 @@ peripherals:
     params:
       - key: baud
         name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
         type: int
         default: 115200
         min: 110
@@ -857,30 +894,36 @@ peripherals:
         help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
       - key: word
         name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
         type: enum
         default: 8 bits
         options:
-          - { name: 8 bits, value: 0 }
-          - { name: 9 bits, value: 1 }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
         help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
       - key: parity
         name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
         type: enum
         default: "None"
         options:
-          - { name: "None", value: 0 }
-          - { name: Even  , value: 2 }
-          - { name: Odd   , value: 3 }
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
         help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
       - key: stop
         name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
         type: enum
         default: "1"
         options:
-          - { name: "1"  , value: 0 }
-          - { name: "0.5", value: 1 }
-          - { name: "2"  , value: 2 }
-          - { name: "1.5", value: 3 }
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
 
 
@@ -918,6 +961,8 @@ peripherals:
     params:
       - key: baud
         name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
         type: int
         default: 115200
         min: 110
@@ -926,30 +971,36 @@ peripherals:
         help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
       - key: word
         name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
         type: enum
         default: 8 bits
         options:
-          - { name: 8 bits, value: 0 }
-          - { name: 9 bits, value: 1 }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
         help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
       - key: parity
         name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
         type: enum
         default: "None"
         options:
-          - { name: "None", value: 0 }
-          - { name: Even  , value: 2 }
-          - { name: Odd   , value: 3 }
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
         help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
       - key: stop
         name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
         type: enum
         default: "1"
         options:
-          - { name: "1"  , value: 0 }
-          - { name: "0.5", value: 1 }
-          - { name: "2"  , value: 2 }
-          - { name: "1.5", value: 3 }
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
 
 
@@ -988,52 +1039,64 @@ peripherals:
     params:
       - key: prescaler
         name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
         type: enum
         default: "16"
         options:
-          - { name: "2"  , value: 0 }
-          - { name: "4"  , value: 1 }
-          - { name: "8"  , value: 2 }
-          - { name: "16" , value: 3 }
-          - { name: "32" , value: 4 }
-          - { name: "64" , value: 5 }
-          - { name: "128", value: 6 }
-          - { name: "256", value: 7 }
+          - { name: "2"  , value: 0, sdk: SPI_BaudRatePrescaler_2 }
+          - { name: "4"  , value: 1, sdk: SPI_BaudRatePrescaler_4 }
+          - { name: "8"  , value: 2, sdk: SPI_BaudRatePrescaler_8 }
+          - { name: "16" , value: 3, sdk: SPI_BaudRatePrescaler_16 }
+          - { name: "32" , value: 4, sdk: SPI_BaudRatePrescaler_32 }
+          - { name: "64" , value: 5, sdk: SPI_BaudRatePrescaler_64 }
+          - { name: "128", value: 6, sdk: SPI_BaudRatePrescaler_128 }
+          - { name: "256", value: 7, sdk: SPI_BaudRatePrescaler_256 }
         help: "SPI_CTLR1 BR[5:3], codes 000..111 in this order. Divides HCLK - this family has one bus frequency, not a separate peripheral clock."
       - key: cpol
         name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
         type: enum
         default: Low
         options:
-          - { name: Low , value: 0 }
-          - { name: High, value: 1 }
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
         help: SPI_CTLR1 CPOL, bit 1.
       - key: cpha
         name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
         type: enum
         default: 1 Edge
         options:
-          - { name: 1 Edge, value: 0 }
-          - { name: 2 Edge, value: 1 }
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
         help: SPI_CTLR1 CPHA, bit 0.
       - key: datasize
         name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
         type: enum
         default: 8 bits
         options:
-          - { name: 8 bits , value: 0 }
-          - { name: 16 bits, value: 1 }
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
         help: SPI_CTLR1 DFF, bit 11.
       - key: firstbit
         name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
         type: enum
         default: MSB First
         options:
-          - { name: MSB First, value: 0 }
-          - { name: LSB First, value: 1 }
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
         help: SPI_CTLR1 LSBFIRST, bit 7.
       - key: crc
         name: CRC calculation
+        sdk_call: SPI_CalculateCRC
+        sdk_note: "SPI_InitTypeDef has SPI_CRCPolynomial (the polynomial) but no CRC ENABLE member; enabling it is a call after SPI_Init. ch32v00X_spi.h:53 and :140."
         type: bool
         default: false
         help: SPI_CTLR1 CRCEN, bit 13. The polynomial lives in SPI_CRCR and defaults to 7.
@@ -1058,6 +1121,8 @@ peripherals:
     params:
       - key: speed
         name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
         type: int
         default: 100000
         min: 1000
@@ -1066,22 +1131,28 @@ peripherals:
         help: "I2C_CKCFGR CCR[11:0] together with F/S (bit 15). Above 100 kHz the peripheral must be in fast mode."
       - key: duty
         name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
         type: enum
         default: "2:1"
         options:
-          - { name: "2:1" , value: 0 }
-          - { name: "16:9", value: 1 }
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
         help: "I2C_CKCFGR DUTY, bit 14. Ignored below 100 kHz, where the peripheral runs in standard mode."
       - key: addrmode
         name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
         type: enum
         default: 7-bit
         options:
-          - { name: 7-bit , value: 0 }
-          - { name: 10-bit, value: 1 }
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
         help: I2C_OAR1 ADDMODE, bit 15.
       - key: addr
         name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
         type: int
         default: 0
         min: 0

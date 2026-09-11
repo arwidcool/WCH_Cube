@@ -238,6 +238,40 @@ the module is right.
 | `options` | enum | plain names, or `{ name, value }` pairs |
 | `help` | no | one sentence, shown as help text |
 | `when` / `depends_on` | no | when the parameter applies at all |
+| `struct` / `sdk_field` | no | the `*_InitTypeDef` and the exact member this parameter sets |
+| `sdk_call` | no | the SDK function that sets it, when no struct member exists |
+| `sdk_none` | no | the SDK exposes neither; codegen must write the register |
+| `sdk_note` | no | why, when one of the three above is not the obvious answer |
+
+### Say where in the SDK each parameter goes
+
+Codegen must not infer the SDK mapping from a display name. `struct` + `sdk_field` say it
+outright, and `tools/verify_sdk_names.py` checks that the type exists, that the member is
+really a member of it, and that every option's `sdk` macro exists:
+
+```yaml
+- key: word
+  name: Word length
+  struct: USART_InitTypeDef
+  sdk_field: USART_WordLength
+  options:
+    - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+    - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+```
+
+**Not every parameter is an init-struct member, and guessing that it is produces code that
+does not compile.** Three cases, all of them real on CH32V006:
+
+| Case | Say | Example |
+|---|---|---|
+| the SDK sets it with a function | `sdk_call:` | `arpe` → `TIM_ARRPreloadConfig`; `TIM_TimeBaseInitTypeDef` has no such member |
+| the SDK exposes nothing at all | `sdk_none: true` | ADC `lowpower` — `ch32v00X_adc.h` has neither a member nor a function for `ADC_CTLR1.ADC_LP` |
+| it belongs to a **different** struct | `struct:` naming that one | TIM1 `deadtime` → `TIM_BDTRInitTypeDef.TIM_DeadTime`, applied by `TIM_BDTRConfig`, not `TIM_TimeBaseInit` |
+
+`sdk_none` without an `sdk_note` is a warning: an unexplained gap reads as an oversight
+rather than a finding. And note ADC `sample`: it is `sdk_call: ADC_RegularChannelConfig`
+because sample time is an argument set **per channel**, not a property of the peripheral —
+a mapping that is invisible from the display name and wrong if assumed.
 
 ### Give every enum its register encoding
 
