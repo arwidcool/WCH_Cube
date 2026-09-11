@@ -75,4 +75,3 @@ export function batch(label, fn) {
   batching = true;
   try { return fn(); } finally { batching = false; }
 }
-export const recording = () => !batching;

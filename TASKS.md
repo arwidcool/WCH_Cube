@@ -44,7 +44,7 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 - [x] Keyboard: Esc closes picker, arrow keys move between pins, Enter opens picker, L labels, Del resets
 - [x] Save / load project (`.wchproj` YAML: mcu, variant, package, all settings, clock) — Ctrl+S / Open project…
 - [x] New Project dialog: pick MCU → part number / package (with flash, SRAM, I/O count, temp grade) → name; one project per MCU+package
-- [ ] System view (block diagram) — low priority
+- [x] System view (block diagram): buses from `clock.buses`, blocks coloured by status, click to configure
 
 ## Phase 2 — Real MCU data  (CURRENT)
 

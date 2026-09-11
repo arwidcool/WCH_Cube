@@ -1,5 +1,5 @@
 // history.js — undo/redo, and the state writers that feed it.
-import { test, assert, fresh, snapshot } from './_harness.js';
+import { test, assert, fresh, snapshot, eng } from './_harness.js';
 
 // Undo restores the configuration, never the view (selection, zoom, pan).
 const config = S => {
@@ -183,4 +183,26 @@ test('pinModified and userLabel report what the UI filters on', () => {
   assert.equal(e.pinModified('PD7'), true, 'SYS_RST claims it out of reset');
   e.setGpioField('PC0', 'label', 'LED');
   assert.equal(e.userLabel('PC0'), 'LED');
+});
+
+test('redoLabel names the step that redo would replay', () => {
+  const e = fresh();
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  assert.equal(e.redoLabel(), null);
+  assert.equal(e.undoLabel(), 'GPIO_Output on PC0');
+  e.undo();
+  assert.equal(e.redoLabel(), 'GPIO_Output on PC0');
+  assert.equal(e.undoLabel(), null);
+});
+
+test('deepClone copies Sets, Maps and nesting without structuredClone', () => {
+  const src = { a: [1, { b: new Set(['x', 'y']) }], m: new Map([['k', { deep: true }]]), n: null, s: 'str' };
+  const out = eng.deepClone(src);
+  assert.deepEqual(out, src);
+  assert.ok(out.a[1].b instanceof Set);
+  assert.ok(out.m instanceof Map);
+  out.a[1].b.add('z');
+  out.m.get('k').deep = false;
+  assert.equal(src.a[1].b.has('z'), false, 'the copy is independent');
+  assert.equal(src.m.get('k').deep, true);
 });
