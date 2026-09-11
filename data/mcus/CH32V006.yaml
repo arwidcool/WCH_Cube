@@ -505,6 +505,8 @@ peripherals:
       - key: sample
         name: Sampling time
         sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
         sdk_note: "ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per CHANNEL, not per peripheral. ch32v00X_adc.h:165."
         type: enum
         default: 11.5 cycles
@@ -521,7 +523,7 @@ peripherals:
       - key: lowpower
         name: Low power mode
         sdk_none: true
-        sdk_note: ch32v00X_adc.h exposes NOTHING for the low-power bit - no struct member and no function (grepped the whole header). It is ADC_CTLR1 ADC_LP and codegen must write the register or leave it alone. Do not invent an ADC_LowPowerCmd.
+        sdk_note: ch32v00X_adc.h exposes NOTHING for the low-power bit - no struct member and no function (grepped the whole header). It is ADC_CTLR1 ADC_LP, so codegen must write the register or leave it alone - and must not invent a low-power command function, because none exists to call.
         type: bool
         default: false
         help: "ADC_CTLR3 ADC_LP, bit 0. Changes what three of the sampling-time codes mean - see that row."
@@ -529,6 +531,8 @@ peripherals:
         name: Continuous conversion
         struct: ADC_InitTypeDef
         sdk_field: ADC_ContinuousConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         type: bool
         default: false
         help: ADC_CTLR2 CONT, bit 1.
@@ -536,6 +540,8 @@ peripherals:
         name: Scan conversion
         struct: ADC_InitTypeDef
         sdk_field: ADC_ScanConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         type: bool
         default: false
         help: ADC_CTLR1 SCAN, bit 8.
@@ -572,8 +578,25 @@ peripherals:
 
   OPA1:
     category: Analog
-    notes: OPA/PGA/CMP. Pin assignment from DS pin table (OPA_P0..P3, OPA_N0..N2, OPA_OUT0/1); selection via OPA_CTLR1 PSEL/NSEL/MODE.
+    notes: >
+      OPA/PGA/CMP. Pin assignment from DS pin table (OPA_P0..P3, OPA_N0..N2, OPA_OUT0/1);
+      selection via OPA_CTLR1 PSEL/NSEL/MODE. The polling set below was Medium confidence
+      until the EVT package landed and is now settled - see the notes file.
     settings:
+      # POLLING: the EVT header is explicit and it corrects what this file used to offer.
+      # `OPA_InitTypeDef` has POLL_NUM of type OPA_PSEL_POLL_NUM_TypeDef, whose members are
+      # CHP_POLL_NUM_1, _2 and _3 - **three is the maximum**, so the old
+      # "Polling P0/P1/P2/P3" choice asked for hardware that does not exist and is gone.
+      # Each slot is independent: POLL_CH1/CH2/CH3 are OPA_POLL_CH1/2/3_TypeDef and every
+      # one of them offers PA2 / PD7 / PD3 / PD1, i.e. any of P0..P3. So the thing that
+      # decides which PINS are claimed is the SET of channels polled, and every set of two
+      # or three distinct channels is legal - all ten are listed rather than the single
+      # arbitrary P0/P1/P2 this file used to hardcode.
+      # A one-channel "poll" claims the same pin as simply selecting it, so it is not
+      # listed separately. POLL_NUM and POLL_CH1..3 are DERIVED from the chosen set by the
+      # generator; they are deliberately not user parameters, because a user-set POLL_NUM
+      # could contradict the set and then the pins and the register would disagree.
+      # Source: data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_opa.h.
       - name: Positive input (PSEL)
         choices:
           - { name: Disable }
@@ -581,8 +604,16 @@ peripherals:
           - { name: P1 — PD7, signals: [P1] }
           - { name: P2 — PD3, signals: [P2] }
           - { name: P3 — PD1, signals: [P3] }
+          - { name: Polling P0/P1, signals: [P0, P1] }
+          - { name: Polling P0/P2, signals: [P0, P2] }
+          - { name: Polling P0/P3, signals: [P0, P3] }
+          - { name: Polling P1/P2, signals: [P1, P2] }
+          - { name: Polling P1/P3, signals: [P1, P3] }
+          - { name: Polling P2/P3, signals: [P2, P3] }
           - { name: Polling P0/P1/P2, signals: [P0, P1, P2] }
-          - { name: Polling P0/P1/P2/P3, signals: [P0, P1, P2, P3] }
+          - { name: Polling P0/P1/P3, signals: [P0, P1, P3] }
+          - { name: Polling P0/P2/P3, signals: [P0, P2, P3] }
+          - { name: Polling P1/P2/P3, signals: [P1, P2, P3] }
       - name: Negative input (NSEL)
         choices:
           - { name: Disable }
@@ -596,6 +627,80 @@ peripherals:
           - { name: OUT0 — PD4, signals: [OUT0] }
           - { name: OUT1 — PA5, signals: [OUT1] }
           - { name: Internal to ADC IN9 only }
+    # Everything here is a NON-pin setting, deliberately: what decides a pin lives in
+    # `settings:` above where the conflict engine can see it. Every struct, field and
+    # enum member read out of ch32v00X_opa.h and checked by tools/verify_sdk_names.py.
+    params:
+      - key: poll_trigger
+        name: Poll trigger
+        struct: OPA_InitTypeDef
+        sdk_field: POLL_SEL
+        type: enum
+        group: Basic
+        default: Software
+        options:
+          - { name: Software,  value: 0, sdk: OPA_POLL_SEL_SOFT }
+          - { name: TIM1_CH4,  value: 1, sdk: OPA_POLL_SEL_TIM1_CH4 }
+          - { name: TIM2_CH4,  value: 2, sdk: OPA_POLL_SEL_TIM2_CH4 }
+          - { name: TIM3_CH1,  value: 3, sdk: OPA_POLL_SEL_TIM3_CH1 }
+          - { name: TIM3_CH2,  value: 4, sdk: OPA_POLL_SEL_TIM3_CH2 }
+        help: "What advances the poll to the next channel. Only meaningful when the positive input is a polling set. The three TIM3 options do not exist on CH32V005, which has no TIM3."
+      - key: poll_auto
+        name: Automatic polling
+        struct: OPA_InitTypeDef
+        sdk_field: POLL_AT
+        type: enum
+        group: Basic
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: OPA_POLL_AUTO_OFF }
+          - { name: "On",  value: 1, sdk: OPA_POLL_AUTO_ON }
+        help: "Advance the poll without software help once it is started."
+      - key: setup_cfg
+        name: ADC conversion interval
+        struct: OPA_InitTypeDef
+        sdk_field: SETUP_CFG
+        type: enum
+        group: Advanced
+        default: Setting 0
+        options:
+          - { name: Setting 0, value: 0, sdk: OPA_SETUP_CFG_0 }
+          - { name: Setting 1, value: 1, sdk: OPA_SETUP_CFG_1 }
+          - { name: Setting 2, value: 3, sdk: OPA_SETUP_CFG_2 }
+        help: "How long the OPA is given to settle before the ADC samples it. The enum skips value 2: OPA_SETUP_CFG_2 is 3, not 2, so the option index is NOT the register value here."
+      - key: highspeed
+        name: High speed mode
+        struct: OPA_InitTypeDef
+        sdk_field: OPA_HS
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: HS_OFF }
+          - { name: "On",  value: 1, sdk: HS_ON }
+        help: "Faster slew at a higher supply current."
+      - key: out_ie
+        name: Output interrupt
+        struct: OPA_InitTypeDef
+        sdk_field: OUT_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: OUT_IE_OFF }
+          - { name: "On",  value: 1, sdk: OUT_IE_ON }
+        help: "Interrupt on the comparator output changing."
+      - key: nmi_ie
+        name: Output NMI
+        struct: OPA_InitTypeDef
+        sdk_field: NMI_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: NMI_IE_OFF }
+          - { name: "On",  value: 1, sdk: NMI_IE_ON }
+        help: "Route the output to the non-maskable interrupt instead. RM Table 6-1 gives this part no OPA vector of its own, which is consistent with the output arriving as NMI."
     remaps:
       - name: Default
         pins: { P0: PA2, P1: PD7, P2: PD3, P3: PD1, N0: PA1, N1: PD0, N2: PA4, OUT0: PD4, OUT1: PA5 }
@@ -707,6 +812,9 @@ peripherals:
       - key: arpe
         name: Auto-reload preload
         sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
@@ -833,6 +941,9 @@ peripherals:
       - key: arpe
         name: Auto-reload preload
         sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
@@ -1096,6 +1207,9 @@ peripherals:
       - key: crc
         name: CRC calculation
         sdk_call: SPI_CalculateCRC
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
         sdk_note: "SPI_InitTypeDef has SPI_CRCPolynomial (the polynomial) but no CRC ENABLE member; enabling it is a call after SPI_Init. ch32v00X_spi.h:53 and :140."
         type: bool
         default: false
@@ -1510,6 +1624,27 @@ gpio:
   speeds:
     - { name: "30 MHz", macro: GPIO_Speed_30MHz }
 
+  # The SPL macro for each GPIO-table mode, so the generator stops carrying its own
+  # table. Same reasoning as `speeds` above and the same defect class: `GPIOMode_TypeDef`
+  # is per family, and a mode macro from another CH32 part is a name that compiles
+  # nowhere. All EIGHT members of the enum in
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 28-38 are
+  # accounted for below - five here, three under `input_modes`.
+  modes:
+    - { name: Output Push Pull,              macro: GPIO_Mode_Out_PP }
+    - { name: Output Open Drain,             macro: GPIO_Mode_Out_OD }
+    - { name: Alternate Function Push Pull,  macro: GPIO_Mode_AF_PP }
+    - { name: Alternate Function Open Drain, macro: GPIO_Mode_AF_OD }
+    - { name: Analog,                        macro: GPIO_Mode_AIN }
+
+  # Mode `Input` does not have one macro: the SPL folds the PULL setting into the mode,
+  # so which of these three applies is decided by the GPIO table's Pull-up/Pull-down
+  # column, not by a fourth mode entry. Keyed by the pull name for that reason.
+  input_modes:
+    - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
+    - { name: Pull-up,   macro: GPIO_Mode_IPU }
+    - { name: Pull-down, macro: GPIO_Mode_IPD }
+
 # -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.
 # Requested by AGENT-2 (BOARD 05:43Z / 05:44Z). Every number below was read off the
@@ -1573,6 +1708,52 @@ codegen:
       # supports that shape; [{lsb:14,bits:3}] would encode identically.
       TIM2:   [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }]
       USART2: [{ lsb: 20, bits: 3 }]
+
+  # Which SDK function applies each init struct, and what it applies it TO. AGENT-2's
+  # generator refuses to derive a function name from a struct name, which is right: the
+  # pairing is not mechanical. Every line confirmed in the EVT headers.
+  init_structs:
+    GPIO_InitTypeDef:          { fn: GPIO_Init }          # ch32v00X_gpio.h:138
+    USART_InitTypeDef:         { fn: USART_Init }         # ch32v00X_usart.h:121
+    SPI_InitTypeDef:           { fn: SPI_Init }           # ch32v00X_spi.h:129
+    I2C_InitTypeDef:           { fn: I2C_Init }           # ch32v00X_i2c.h:287
+    ADC_InitTypeDef:           { fn: ADC_Init }           # ch32v00X_adc.h:156
+    DMA_InitTypeDef:           { fn: DMA_Init }           # ch32v00X_dma.h:162
+    TIM_TimeBaseInitTypeDef:   { fn: TIM_TimeBaseInit }   # ch32v00X_tim.h:431
+    # NOT TIM_TimeBaseInit, and not derivable from the struct name either. The dead-time
+    # parameter lives in this struct and only TIM_BDTRConfig applies it.
+    TIM_BDTRInitTypeDef:       { fn: TIM_BDTRConfig }     # ch32v00X_tim.h:438
+    # OPA is a SINGLE-INSTANCE peripheral and `OPA_Init` takes the struct ALONE - there is
+    # no handle argument (ch32v00X_opa.h:352). `no_handle` says so explicitly rather than
+    # leaving the generator to emit OPA_Init(OPA, &s), which would not compile.
+    OPA_InitTypeDef:           { fn: OPA_Init, no_handle: true }
+
+  # The SPL name of each peripheral's register block - the first argument of the functions
+  # above. Confirmed in ch32v00X.h: TIM2 444, I2C1 447, ADC1 455, TIM1 456, SPI1 457,
+  # USART1 458, DMA1 459, USART2 472, TIM3 474.
+  #
+  # Note OPA: the block is named `OPA`, not `OPA1` (ch32v00X.h:473), so the tree id and the
+  # SDK name differ. It is listed for completeness; OPA_Init does not take it.
+  periph_handle:
+    USART1: USART1
+    USART2: USART2
+    SPI1:   SPI1
+    I2C1:   I2C1
+    TIM1:   TIM1
+    TIM2:   TIM2
+    TIM3:   TIM3
+    ADC1:   ADC1
+    DMA1:   DMA1
+    OPA1:   OPA
+
+  # Signal name -> SDK macro, for a `sdk_repeat: channels` call. ADC_RegularChannelConfig
+  # takes a channel and a rank, so sampling time is set per CHANNEL rather than once per
+  # peripheral, and the generator needs the macro for each. ch32v00X_adc.h lines 67-76
+  # define ADC_Channel_0..9; this part bonds IN0..IN7, and IN8/IN9 are the internal
+  # references, which is why the list stops at 7 and does not simply mirror the header.
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7 }
 
   # Which signals want GPIO_Mode_AIN rather than AF_PP. Without this the generator has
   # to guess from the peripheral's category, and it cannot tell ADC1_IN4 from

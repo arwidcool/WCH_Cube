@@ -1066,6 +1066,27 @@ gpio:
     - { name: "10 MHz", macro: GPIO_Speed_10MHz }
     - { name: "50 MHz", macro: GPIO_Speed_50MHz }
 
+  # The SPL macro for each GPIO-table mode, so the generator stops carrying its own
+  # table. Same reasoning as `speeds` above and the same defect class: `GPIOMode_TypeDef`
+  # is per family, and a mode macro from another CH32 part is a name that compiles
+  # nowhere. All EIGHT members of the enum in
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 28-38 are
+  # accounted for below - five here, three under `input_modes`.
+  modes:
+    - { name: Output Push Pull,              macro: GPIO_Mode_Out_PP }
+    - { name: Output Open Drain,             macro: GPIO_Mode_Out_OD }
+    - { name: Alternate Function Push Pull,  macro: GPIO_Mode_AF_PP }
+    - { name: Alternate Function Open Drain, macro: GPIO_Mode_AF_OD }
+    - { name: Analog,                        macro: GPIO_Mode_AIN }
+
+  # Mode `Input` does not have one macro: the SPL folds the PULL setting into the mode,
+  # so which of these three applies is decided by the GPIO table's Pull-up/Pull-down
+  # column, not by a fourth mode entry. Keyed by the pull name for that reason.
+  input_modes:
+    - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
+    - { name: Pull-up,   macro: GPIO_Mode_IPU }
+    - { name: Pull-down, macro: GPIO_Mode_IPD }
+
 # -----------------------------------------------------------------------------
 # DMA1 - seven channels, F1-style.
 #

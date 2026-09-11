@@ -98,6 +98,18 @@ def build_cases(doc: dict):
          lambda d: set_path(d, "gpio.speeds.0.macro", "GPIO_Speed_50MHz"),
          "gpio.speeds[0].macro", "GPIO_Speed_50MHz"),
 
+        ("gpio.modes[].macro, a mode macro that does not exist",
+         lambda d: set_path(d, "gpio.modes.0.macro", "GPIO_Mode_Out_PushPull"),
+         "gpio.modes[0].macro", "GPIO_Mode_Out_PushPull"),
+
+        ("gpio.input_modes[].macro, the STM32 floating-input spelling",
+         lambda d: set_path(d, "gpio.input_modes.0.macro", "GPIO_Mode_IN_Floating"),
+         "gpio.input_modes[0].macro", "GPIO_Mode_IN_Floating"),
+
+        ("a GPIOMode_TypeDef member no mode entry can reach -> WARN",
+         lambda d: d["gpio"]["modes"].pop(),
+         "gpio.modes", "unaccounted"),
+
         ("codegen.speeds value, the CH32V10x spelling",
          lambda d: d["codegen"]["speeds"].__setitem__("Low", "GPIO_Speed_2MHz"),
          "codegen.speeds.Low", "GPIO_Speed_2MHz"),
@@ -125,6 +137,23 @@ def build_cases(doc: dict):
         ("nvic irqn, the handler symbol used where the enum member belongs",
          lambda d: set_path(d, f"nvic.vectors.{adc}.irqn", "ADC1_IRQHandlerr"),
          "nvic.vectors", "ADC1_IRQHandlerr"),
+
+        ("init_structs fn, a function the SDK does not declare",
+         lambda d: set_path(d, "codegen.init_structs.USART_InitTypeDef.fn", "USART_Initialise"),
+         "codegen.init_structs.USART_InitTypeDef.fn", "USART_Initialise"),
+
+        ("init_structs keyed by a struct the SDK does not define",
+         lambda d: d["codegen"]["init_structs"].__setitem__(
+             "UART_InitTypeDef", {"fn": "USART_Init"}),
+         "codegen.init_structs.UART_InitTypeDef", "UART_InitTypeDef"),
+
+        ("periph_handle naming a register block that does not exist",
+         lambda d: set_path(d, "codegen.periph_handle.OPA1", "OPA1"),
+         "codegen.periph_handle.OPA1", "OPA1"),
+
+        ("channel_macros naming a channel macro that does not exist",
+         lambda d: set_path(d, "codegen.channel_macros.ADC1.IN0", "ADC_Channel0"),
+         "codegen.channel_macros.ADC1.IN0", "ADC_Channel0"),
 
         ("sdk.series unknown -> must WARN 'not checked', never pass silently",
          lambda d: (d["codegen"].pop("sdk"),
@@ -155,6 +184,15 @@ def build_cases(doc: dict):
             ("params sdk_none with no sdk_note -> an unexplained gap must WARN",
              lambda d: d["peripherals"][pid]["params"][pi].update({"sdk_none": True}),
              f"peripherals.{pid}.params[{pi}]", "no `sdk_note:`"),
+
+            ("sdk_args using a placeholder the generator does not define",
+             lambda d: d["peripherals"][pid]["params"][pi].update(
+                 {"sdk_call": "ADC_Init", "sdk_args": ["$HANDEL", "$VALUE"]}),
+             f"peripherals.{pid}.params[{pi}]", "$HANDEL"),
+
+            ("sdk_call with no sdk_args -> WARN, because it becomes a TODO",
+             lambda d: d["peripherals"][pid]["params"][pi].update({"sdk_call": "ADC_Init"}),
+             f"peripherals.{pid}.params[{pi}]", "how"),
 
             ("params option sdk, a macro that does not exist",
              lambda d: d["peripherals"][pid]["params"][pi]["options"][0].update(

@@ -97,6 +97,59 @@ peripherals:
           - { name: OUT0 — PD4, signals: [OUT0] }
           - { name: OUT1 — PA5, signals: [OUT1] }
           - { name: Internal to ADC IN9 only }
+    # Restated for the same reason as `settings:` above - a list replaces wholesale, so
+    # this drops the parent's two POLLING parameters on a part that cannot poll.
+    # `poll_trigger` would have been worse than merely useless here: three of its five
+    # options are TIM3 events and CH32V005 has no TIM3 either. This is the hazard
+    # data/FORMAT.md names under `mcu.inherits` - a new entry in the parent is a new
+    # entry in every child - and it is why adding to the parent is worth a thought about
+    # what the derived part actually has.
+    params:
+      - key: setup_cfg
+        name: ADC conversion interval
+        struct: OPA_InitTypeDef
+        sdk_field: SETUP_CFG
+        type: enum
+        group: Advanced
+        default: Setting 0
+        options:
+          - { name: Setting 0, value: 0, sdk: OPA_SETUP_CFG_0 }
+          - { name: Setting 1, value: 1, sdk: OPA_SETUP_CFG_1 }
+          - { name: Setting 2, value: 3, sdk: OPA_SETUP_CFG_2 }
+        help: "How long the OPA is given to settle before the ADC samples it. The enum skips value 2: OPA_SETUP_CFG_2 is 3, not 2."
+      - key: highspeed
+        name: High speed mode
+        struct: OPA_InitTypeDef
+        sdk_field: OPA_HS
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: HS_OFF }
+          - { name: "On",  value: 1, sdk: HS_ON }
+        help: "Faster slew at a higher supply current."
+      - key: out_ie
+        name: Output interrupt
+        struct: OPA_InitTypeDef
+        sdk_field: OUT_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: OUT_IE_OFF }
+          - { name: "On",  value: 1, sdk: OUT_IE_ON }
+        help: "Interrupt on the comparator output changing."
+      - key: nmi_ie
+        name: Output NMI
+        struct: OPA_InitTypeDef
+        sdk_field: NMI_IE
+        type: enum
+        group: Advanced
+        default: "Off"
+        options:
+          - { name: "Off", value: 0, sdk: NMI_IE_OFF }
+          - { name: "On",  value: 1, sdk: NMI_IE_ON }
+        help: "Route the output to the non-maskable interrupt instead."
 
 # -----------------------------------------------------------------------------
 # DMA1 — the parent's map with every TIM3 request dropped (RM Table 8-2 note 2 applies

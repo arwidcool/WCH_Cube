@@ -31,10 +31,14 @@ What it checks, per part
   codegen.speeds            every value is a member of GPIOSpeed_TypeDef
   codegen.periph_clock      every domain's .fn is declared, and .prefix + each bit key
                             is a defined macro
+  codegen.init_structs      the struct is a type the SDK defines and .fn is a declared
+                            function that could apply it
+  codegen.periph_handle     each peripheral's register block is a defined macro
   dma.channel_params        .sdk_field is a field of DMA_InitTypeDef; every option's
                             .sdk is a defined macro or enum member
   peripherals.*.params      .struct is a known type, .sdk_field is one of its members,
-                            and every option's .sdk is a defined macro or enum member
+                            .sdk_call is a declared function, .sdk_enabled/.sdk_disabled
+                            are real macros, and every option's .sdk exists
   nvic.vectors[].irqn       a member of IRQn_Type, or a handler symbol the startup file
                             actually declares
 
@@ -347,6 +351,23 @@ def check_gpio(doc: dict, idx: Index, r: Report) -> None:
         want(r, idx, f"codegen.speeds.{key}", macro, speed_pool,
              "a member of GPIOSpeed_TypeDef")
 
+    # Mode macros, same rule: GPIOMode_TypeDef is per family.
+    mode_pool = idx.enums.get("GPIOMode_TypeDef") or idx.enum_members
+    seen_modes = set()
+    for listname in ("modes", "input_modes"):
+        for i, mo in enumerate(((doc.get("gpio") or {}).get(listname)) or []):
+            if isinstance(mo, dict):
+                want(r, idx, f"gpio.{listname}[{i}].macro", mo.get("macro"), mode_pool,
+                     "a member of GPIOMode_TypeDef")
+                if mo.get("macro"):
+                    seen_modes.add(mo["macro"])
+    real_modes = idx.enums.get("GPIOMode_TypeDef")
+    if seen_modes and real_modes and seen_modes < real_modes:
+        r.warn("gpio.modes",
+               f"GPIOMode_TypeDef has {len(real_modes)} member(s), this part accounts for "
+               f"{len(seen_modes)}; unaccounted: {', '.join(sorted(real_modes - seen_modes))}. "
+               "A mode the part has but the table cannot ask for is a mode the user cannot reach.")
+
     # A part that states its speeds should account for all of them.
     real = idx.enums.get("GPIOSpeed_TypeDef")
     if declared and real and declared < real:
@@ -354,6 +375,25 @@ def check_gpio(doc: dict, idx: Index, r: Report) -> None:
                f"GPIOSpeed_TypeDef has {len(real)} member(s), this part offers "
                f"{len(declared)}; not offered: {', '.join(sorted(real - declared))}. "
                "Correct only if the silicon really lacks them - say so in the notes.")
+
+
+def check_init_structs(doc: dict, idx: Index, r: Report) -> None:
+    """`codegen.init_structs` pairs a struct with the function that applies it, and
+    `codegen.periph_handle` names each peripheral's register block. Both are claims."""
+    cg = doc.get("codegen") or {}
+    for struct, spec in (cg.get("init_structs") or {}).items():
+        want(r, idx, f"codegen.init_structs.{struct}", struct, idx.types,
+             "a type the SDK defines")
+        if isinstance(spec, dict):
+            want(r, idx, f"codegen.init_structs.{struct}.fn", spec.get("fn"),
+                 idx.functions, "a declared function")
+    for pid, chans in (cg.get("channel_macros") or {}).items():
+        for sig, macro in (chans or {}).items():
+            want(r, idx, f"codegen.channel_macros.{pid}.{sig}", macro,
+                 idx.macros | idx.enum_members, "a defined macro or enum member")
+    for pid, handle in (cg.get("periph_handle") or {}).items():
+        # A register-block handle is a macro in the main header (`#define ADC1 ((...)*)`).
+        want(r, idx, f"codegen.periph_handle.{pid}", handle, idx.macros, "a defined macro")
 
 
 def check_periph_clock(doc: dict, idx: Index, r: Report) -> None:
@@ -395,6 +435,27 @@ def check_params(doc: dict, idx: Index, r: Report) -> None:
         # function has to exist too - it is no less a claim than a field name.
         want(r, idx, f"{where}.sdk_call", p.get("sdk_call"),
              idx.functions, "a declared function")
+        # An argument list is a contract with the generator, so only the placeholders it
+        # defines are legal - a typo like $HANDEL would otherwise reach generated C as
+        # literal text. Anything not starting with $ is passed through as a literal.
+        known = {"$HANDLE", "$VALUE", "$CHANNEL", "$RANK", "$INDEX"}
+        for a in (p.get("sdk_args") or []):
+            if str(a).startswith("$") and str(a) not in known:
+                r.error(f"{where}.sdk_args",
+                        f"`{a}` is not a placeholder the generator defines "
+                        f"(known: {', '.join(sorted(known))})"
+                        + idx.suggest(str(a), known))
+        if p.get("sdk_args") and not p.get("sdk_call"):
+            r.warn(f"{where}.sdk_args",
+                   "an argument list with no `sdk_call:` names no function to pass it to")
+        if p.get("sdk_call") and not p.get("sdk_args"):
+            r.warn(f"{where}.sdk_call",
+                   f"`{p['sdk_call']}` is named but `sdk_args:` is missing, so the generator "
+                   "knows what to call and not how - it will emit a TODO instead of the call")
+        # A bool parameter that reaches a FunctionalState member names its two macros.
+        for k in ("sdk_enabled", "sdk_disabled"):
+            want(r, idx, f"{where}.{k}", p.get(k),
+                 idx.macros | idx.enum_members, "a defined macro or enum member")
         if p.get("sdk_none") and not p.get("sdk_note"):
             r.warn(f"{where}.sdk_none",
                    "says the SDK exposes nothing for this parameter but gives no `sdk_note:` "
@@ -432,7 +493,8 @@ def check_nvic(doc: dict, idx: Index, r: Report) -> None:
                 f"declares (searched {idx.label})" + idx.suggest(name, pool))
 
 
-CHECKS = (check_header, check_gpio, check_periph_clock, check_params, check_nvic)
+CHECKS = (check_header, check_gpio, check_init_structs, check_periph_clock,
+          check_params, check_nvic)
 
 
 def verify_file(path: pathlib.Path) -> Report:

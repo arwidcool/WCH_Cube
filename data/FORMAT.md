@@ -240,6 +240,9 @@ the module is right.
 | `when` / `depends_on` | no | when the parameter applies at all |
 | `struct` / `sdk_field` | no | the `*_InitTypeDef` and the exact member this parameter sets |
 | `sdk_call` | no | the SDK function that sets it, when no struct member exists |
+| `sdk_args` | with `sdk_call` | its argument list, as placeholders |
+| `sdk_repeat` | no | `channels` — one call per enabled channel rather than one per peripheral |
+| `sdk_enabled` / `sdk_disabled` | `bool` only | the macros for true and false, e.g. `ENABLE` / `DISABLE` |
 | `sdk_none` | no | the SDK exposes neither; codegen must write the register |
 | `sdk_note` | no | why, when one of the three above is not the obvious answer |
 
@@ -267,6 +270,31 @@ does not compile.** Three cases, all of them real on CH32V006:
 | the SDK sets it with a function | `sdk_call:` | `arpe` → `TIM_ARRPreloadConfig`; `TIM_TimeBaseInitTypeDef` has no such member |
 | the SDK exposes nothing at all | `sdk_none: true` | ADC `lowpower` — `ch32v00X_adc.h` has neither a member nor a function for `ADC_CTLR1.ADC_LP` |
 | it belongs to a **different** struct | `struct:` naming that one | TIM1 `deadtime` → `TIM_BDTRInitTypeDef.TIM_DeadTime`, applied by `TIM_BDTRConfig`, not `TIM_TimeBaseInit` |
+
+**`sdk_call` needs `sdk_args`.** Knowing *what* to call is not knowing *how*; without the
+argument list the generator emits a TODO instead of the call. Arguments are a list of
+placeholders, and anything that is not a placeholder is passed through literally:
+
+| Placeholder | Resolves to |
+|---|---|
+| `$HANDLE` | `codegen.periph_handle[<peripheral>]` — the register block, e.g. `ADC1` |
+| `$VALUE` | the option's `sdk` macro; for a `bool`, `sdk_enabled` / `sdk_disabled` |
+| `$CHANNEL` | `codegen.channel_macros[<peripheral>][<signal>]`, under `sdk_repeat: channels` |
+| `$RANK` | the 1-based position of that channel in the conversion sequence |
+| `$INDEX` | the 0-based loop index |
+
+```yaml
+- key: arpe
+  sdk_call: TIM_ARRPreloadConfig
+  sdk_args: [$HANDLE, $VALUE]      # TIM_ARRPreloadConfig(TIM1, ENABLE)
+  sdk_enabled: ENABLE
+  sdk_disabled: DISABLE
+```
+
+`sdk_repeat: channels` is for a call that is **per channel, not per peripheral**. ADC
+sample time is the only one today: `ADC_RegularChannelConfig($HANDLE, $CHANNEL, $RANK,
+$VALUE)` runs once for each enabled channel. `verify_sdk_names.py` rejects a placeholder it
+does not define, so `$HANDEL` fails the gate instead of reaching generated C as literal text.
 
 `sdk_none` without an `sdk_note` is a warning: an unexplained gap reads as an oversight
 rather than a finding. And note ADC `sample`: it is `sdk_call: ADC_RegularChannelConfig`
@@ -502,6 +530,14 @@ gpio:
 | Key | What it is |
 |---|---|
 | `speeds` | ordered list of the output speeds the part has. `name` is what the GPIO table shows and what a `.wchproj` stores; `macro` is the SPL enum member, and it must exist in that part's headers. |
+| `modes` | the GPIO-table modes and their `GPIOMode_TypeDef` macros |
+| `input_modes` | mode `Input` has no single macro — the SPL folds the **pull** setting into it, so these are keyed by the pull name |
+
+Between them, `modes` and `input_modes` must account for every member of
+`GPIOMode_TypeDef`: a mode the silicon has but the table cannot ask for is a mode the user
+cannot reach, and `verify_sdk_names.py` warns about the ones left over. They exist so the
+generator carries no macro table of its own — the same reasoning as `speeds`, and the same
+defect class, since `GPIOMode_TypeDef` is per family too.
 
 **A one-entry `speeds` list means the control is NOT SHOWN.** The value is rendered as
 fixed text. It does *not* mean "shown disabled" — greying is for an option that exists on
@@ -588,6 +624,29 @@ codegen:
 
 That is how a synthetic part is skipped — by its own declaration, not by a name
 hardcoded in the tool, so adding a second fixture part needs no change to the checker.
+
+**`init_structs` says what applies each struct, and `periph_handle` says to what.**
+
+```yaml
+codegen:
+  init_structs:
+    USART_InitTypeDef: { fn: USART_Init }
+    TIM_BDTRInitTypeDef: { fn: TIM_BDTRConfig }        # NOT TIM_TimeBaseInit
+    OPA_InitTypeDef: { fn: OPA_Init, no_handle: true } # single instance, takes no handle
+  periph_handle:
+    USART1: USART1
+    OPA1: OPA                                          # tree id and SDK name differ
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0 }
+```
+
+The generator deliberately **does not derive a function name from a struct name**, because
+the pairing is not mechanical: `TIM_TimeBaseInitTypeDef` goes to `TIM_TimeBaseInit` but
+`TIM_BDTRInitTypeDef` goes to `TIM_BDTRConfig`, and `OPA_Init` takes no handle at all while
+every other init function takes one. `no_handle: true` says so rather than letting the
+generator emit `OPA_Init(OPA, &s)`, which would not compile. Note also that a peripheral's
+tree id and its SDK register-block name are not always equal — CH32V006's OPA block is
+`OPA`, not `OPA1`.
 
 **`speeds:` is a translation table, not an offer.** What the part offers is `gpio.speeds`.
 Keys here are stored GPIO-table speed names — including names kept only so an older
