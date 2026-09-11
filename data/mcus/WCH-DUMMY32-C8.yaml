@@ -1048,6 +1048,416 @@ peripherals:
         pins: { DM: PA11, DP: PA12 }
 
 # -----------------------------------------------------------------------------
+# GPIO capabilities.
+#
+# THIS PART DELIBERATELY HAS THREE OUTPUT SPEEDS, and it is the only part in the
+# repo that does. CH32V005 and CH32V006 both have exactly one (GPIOx_CFGLR.MODEy is
+# a single bit on that silicon), so without this the multi-speed branch of the UI and
+# the engine would have no part behind it: the selector would never be rendered, and
+# `setGpioField` rejecting a speed the part does not offer would never be exercised
+# outside an inline test fixture. Same reasoning as this file's OSC_IN/OSC_OUT HSE
+# pins - spell it differently, on purpose, so a hardcoded assumption cannot hide.
+#
+# FORMAT.md: a ONE-entry list means the control is not shown; two or more means a real
+# selector with exactly these entries.
+gpio:
+  speeds:
+    - { name: "2 MHz",  macro: GPIO_Speed_2MHz }
+    - { name: "10 MHz", macro: GPIO_Speed_10MHz }
+    - { name: "50 MHz", macro: GPIO_Speed_50MHz }
+
+# -----------------------------------------------------------------------------
+# DMA1 - seven channels, F1-style.
+#
+# Same schema as CH32V006's `dma:` block, so the DMA Settings tab renders from one
+# set of editors on both parts. The CONTENT is deliberately different: different
+# request names, a different channel layout, and an eighth parameter CH32V006 does
+# not have (`fifo`), so a tab that quietly assumes V006's parameter list shows up.
+dma:
+  controller: DMA1
+  channels: 7
+
+  requests:
+    1: [ADC1, TIM2_CH3, TIM4_CH1]
+    2: [SPI1_RX, USART3_TX, TIM1_CH1, TIM2_UP]
+    3: [SPI1_TX, USART3_RX, TIM1_CH2, TIM3_CH4]
+    4: [SPI2_RX, USART1_TX, I2C2_TX, TIM1_CH4, TIM4_CH2]
+    5: [SPI2_TX, USART1_RX, I2C2_RX, TIM2_CH1, TIM4_CH3]
+    6: [USART2_RX, I2C1_TX, TIM1_CH3, TIM3_CH1, ADC2]
+    7: [USART2_TX, I2C1_RX, TIM2_CH2, TIM4_CH4]
+
+  init_struct: DMA_InitTypeDef
+
+  # DMA_CFGRx, one per channel, 20 bytes apart. Synthetic but self-consistent: the
+  # field layout matches what `channel_params` below claims, which is what
+  # validate_mcu.py cross-checks.
+  register:
+    name: DMA_CFGRx
+    address: 0x40020008
+    stride: 20
+    channel_macro: DMA1_Channel$CH
+    fields:
+      EN:     { lsb: 0,  bits: 1 }
+      TCIE:   { lsb: 1,  bits: 1 }
+      HTIE:   { lsb: 2,  bits: 1 }
+      TEIE:   { lsb: 3,  bits: 1 }
+      DIR:    { lsb: 4,  bits: 1 }
+      CIRC:   { lsb: 5,  bits: 1 }
+      PINC:   { lsb: 6,  bits: 1 }
+      MINC:   { lsb: 7,  bits: 1 }
+      PSIZE:  { lsb: 8,  bits: 2 }
+      MSIZE:  { lsb: 10, bits: 2 }
+      PL:     { lsb: 12, bits: 2 }
+      MEM2MEM: { lsb: 14, bits: 1 }
+
+  interrupt_fields: [TCIE, HTIE, TEIE]
+
+  # Every field of DMA_InitTypeDef the user picks. Identical KEYS to CH32V006 so one
+  # editor renders both, plus `fifo`, which this part has and that one does not.
+  channel_params:
+    - key: dir
+      name: Direction
+      type: enum
+      group: Basic
+      field: DIR
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_DIR
+      default: Peripheral to memory
+      options:
+        - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+        - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+      help: "DMA_CFGRx DIR, bit 4. The SDK names it after what the PERIPHERAL is, so PeripheralSRC is peripheral-to-memory."
+    - key: priority
+      name: Priority
+      type: enum
+      group: Basic
+      field: PL
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_Priority
+      default: Low
+      options:
+        - { name: Low,       value: 0, sdk: DMA_Priority_Low }
+        - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
+        - { name: High,      value: 2, sdk: DMA_Priority_High }
+        - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
+      help: "DMA_CFGRx PL[13:12]. Only decides who wins when two channels want the bus in the same cycle; a lower-numbered channel breaks a tie."
+    - key: mode
+      name: Mode
+      type: enum
+      group: Basic
+      field: CIRC
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_Mode
+      default: Normal
+      options:
+        - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
+        - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
+      help: "DMA_CFGRx CIRC, bit 5. Circular reloads CNTR when it reaches zero and never stops."
+    - key: pinc
+      name: Peripheral increment
+      type: enum
+      group: Advanced
+      field: PINC
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_PeripheralInc
+      default: Disable
+      options:
+        - { name: Disable, value: 0, sdk: DMA_PeripheralInc_Disable }
+        - { name: Enable,  value: 1, sdk: DMA_PeripheralInc_Enable }
+      help: "DMA_CFGRx PINC, bit 6. Almost always Disable: a peripheral data register does not move."
+    - key: minc
+      name: Memory increment
+      type: enum
+      group: Advanced
+      field: MINC
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_MemoryInc
+      default: Enable
+      options:
+        - { name: Disable, value: 0, sdk: DMA_MemoryInc_Disable }
+        - { name: Enable,  value: 1, sdk: DMA_MemoryInc_Enable }
+      help: "DMA_CFGRx MINC, bit 7. Enable for a buffer, Disable to hammer one address."
+    - key: psize
+      name: Peripheral data width
+      type: enum
+      group: Advanced
+      field: PSIZE
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_PeripheralDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
+      help: "DMA_CFGRx PSIZE[9:8]. Must match the peripheral's data register width or every transfer truncates."
+    - key: msize
+      name: Memory data width
+      type: enum
+      group: Advanced
+      field: MSIZE
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_MemoryDataSize
+      default: Byte
+      options:
+        - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
+        - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
+        - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
+      help: "DMA_CFGRx MSIZE[11:10]. May differ from PSIZE; the controller packs or unpacks."
+    - key: m2m
+      name: Memory to memory
+      type: enum
+      group: Advanced
+      field: MEM2MEM
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_M2M
+      default: Disable
+      options:
+        - { name: Disable, value: 0, sdk: DMA_M2M_Disable }
+        - { name: Enable,  value: 1, sdk: DMA_M2M_Enable }
+      help: "DMA_CFGRx MEM2MEM, bit 14. Ignores the peripheral request line and runs flat out."
+    - key: fifo
+      name: FIFO threshold
+      type: enum
+      group: Advanced
+      struct: DMA_InitTypeDef
+      sdk_field: DMA_FIFOThreshold
+      default: Half full
+      options:
+        - { name: Quarter full,       value: 0, sdk: DMA_FIFOThreshold_1QuarterFull }
+        - { name: Half full,          value: 1, sdk: DMA_FIFOThreshold_HalfFull }
+        - { name: Three quarters full, value: 2, sdk: DMA_FIFOThreshold_3QuartersFull }
+        - { name: Full,               value: 3, sdk: DMA_FIFOThreshold_Full }
+      help: >
+        Deliberately has NO `field:` - this part's FIFO threshold lives in a second
+        register, not in DMA_CFGRx. It is here so that a generator or a tab which
+        assumes every channel parameter maps to a bitfield of one register is caught
+        by a part rather than by a user. CH32V006 has no equivalent.
+
+  # Starting values, so a request that is switched on is already configured sensibly.
+  # Same rule as CH32V006: the width follows the peripheral's data register.
+  request_defaults:
+    ADC1:      { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+    ADC2:      { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+    USART1_TX: { dir: Memory to peripheral }
+    USART1_RX: { dir: Peripheral to memory }
+    USART2_TX: { dir: Memory to peripheral }
+    USART2_RX: { dir: Peripheral to memory }
+    USART3_TX: { dir: Memory to peripheral }
+    USART3_RX: { dir: Peripheral to memory }
+    SPI1_TX:   { dir: Memory to peripheral }
+    SPI1_RX:   { dir: Peripheral to memory }
+    SPI2_TX:   { dir: Memory to peripheral }
+    SPI2_RX:   { dir: Peripheral to memory }
+    I2C1_TX:   { dir: Memory to peripheral }
+    I2C1_RX:   { dir: Peripheral to memory }
+    I2C2_TX:   { dir: Memory to peripheral }
+    I2C2_RX:   { dir: Peripheral to memory }
+    TIM1_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM1_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_UP:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM2_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM3_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH1:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH2:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH3:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+    TIM4_CH4:  { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+
+  request_notes:
+    TIM: >
+      A TIMx_CHy request serves BOTH PWM output (memory to peripheral) and input
+      capture (peripheral to memory) under one name. The default is the common case;
+      change `dir` when you are capturing.
+
+  notes: >
+    Synthetic. Nothing here is from a datasheet - it exists so the DMA Settings tab,
+    the channel-clash detector and the DMA half of code generation are exercised on a
+    SECOND part with a different shape, on packages up to LQFP144.
+
+# -----------------------------------------------------------------------------
+# Interrupt vectors.
+#
+# Deliberately a DIFFERENT priority scheme from CH32V006. That part's PFIC implements
+# TWO priority bits and offers 0-1 / 0-1 or a flat 0-3. This one has FOUR, grouped the
+# Cortex-M way, so ranges run to 0-15. A NVIC tab that hardcodes either part's ranges
+# is wrong on the other, which is the entire point of having this file.
+nvic:
+  controller: NVIC
+  scheme:
+    register: { name: NVIC_IPR, address: 0xE000E400, bits_per_vector: 8 }
+    priority_bits: 4
+    priority_lsb: 4
+    max_nesting: 8
+    groups:
+      - name: 4 bits for pre-emption priority, 0 bits for subpriority
+        preempt: { bits: 4, lsb: 4, min: 0, max: 15 }
+        sub:     { bits: 0, min: 0, max: 0 }
+      - name: 3 bits for pre-emption priority, 1 bit for subpriority
+        default: true
+        preempt: { bits: 3, lsb: 5, min: 0, max: 7 }
+        sub:     { bits: 1, lsb: 4, min: 0, max: 1 }
+      - name: 2 bits for pre-emption priority, 2 bits for subpriority
+        preempt: { bits: 2, lsb: 6, min: 0, max: 3 }
+        sub:     { bits: 2, lsb: 4, min: 0, max: 3 }
+      - name: 0 bits for pre-emption priority, 4 bits for subpriority
+        preempt: { bits: 0, min: 0, max: 0 }
+        sub:     { bits: 4, lsb: 4, min: 0, max: 15 }
+  enable:  { register: NVIC_ISER, address: 0xE000E100 }
+  disable: { register: NVIC_ICER, address: 0xE000E180 }
+  notes: >
+    Synthetic. Four priority bits and four grouping choices, against CH32V006's two
+    bits and two choices, so neither the spinner ranges nor the number of groups can
+    be hardcoded anywhere.
+  vectors:
+    - { name: NMI,       vector: 2,  irqn: NonMaskableInt_IRQn, handler: NMI_Handler,              system: true, fixed: true, description: Non-maskable interrupt }
+    - { name: HardFault, vector: 3,  irqn: HardFault_IRQn,      handler: HardFault_Handler,        system: true, fixed: true, description: Abnormal interrupt (exception) }
+    - { name: SVCall,    vector: 11, irqn: SVCall_IRQn,         handler: SVC_Handler,              system: true, description: Supervisor call }
+    - { name: PendSV,    vector: 14, irqn: PendSV_IRQn,         handler: PendSV_Handler,           system: true, description: Pendable request for system service }
+    - { name: SysTick,   vector: 15, irqn: SysTick_IRQn,        handler: SysTick_Handler,          system: true, description: System timer interrupt }
+    - { name: WWDG,      vector: 16, irqn: WWDG_IRQn,           handler: WWDG_IRQHandler,          peripheral: WWDG, description: Window watchdog timer interrupt }
+    - { name: RCC,       vector: 21, irqn: RCC_IRQn,            handler: RCC_IRQHandler,           peripheral: RCC, description: Reset and clock control interrupt }
+    - { name: DMA1_CH1,  vector: 27, irqn: DMA1_Channel1_IRQn,  handler: DMA1_Channel1_IRQHandler, peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
+    - { name: DMA1_CH2,  vector: 28, irqn: DMA1_Channel2_IRQn,  handler: DMA1_Channel2_IRQHandler, peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
+    - { name: DMA1_CH3,  vector: 29, irqn: DMA1_Channel3_IRQn,  handler: DMA1_Channel3_IRQHandler, peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
+    - { name: DMA1_CH4,  vector: 30, irqn: DMA1_Channel4_IRQn,  handler: DMA1_Channel4_IRQHandler, peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
+    - { name: DMA1_CH5,  vector: 31, irqn: DMA1_Channel5_IRQn,  handler: DMA1_Channel5_IRQHandler, peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
+    - { name: DMA1_CH6,  vector: 32, irqn: DMA1_Channel6_IRQn,  handler: DMA1_Channel6_IRQHandler, peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
+    - { name: DMA1_CH7,  vector: 33, irqn: DMA1_Channel7_IRQn,  handler: DMA1_Channel7_IRQHandler, peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
+    - { name: ADC1_2,    vector: 34, irqn: ADC1_2_IRQn,         handler: ADC1_2_IRQHandler,        peripheral: ADC1, description: ADC1 and ADC2 global interrupt (one vector for both) }
+    - { name: USB_HP,    vector: 35, irqn: USB_HP_IRQn,         handler: USB_HP_IRQHandler,        peripheral: USB, description: USB high priority interrupt }
+    - { name: USB_LP,    vector: 36, irqn: USB_LP_IRQn,         handler: USB_LP_IRQHandler,        peripheral: USB, description: USB low priority interrupt }
+    - { name: CAN1_TX,   vector: 37, irqn: CAN1_TX_IRQn,        handler: CAN1_TX_IRQHandler,       peripheral: CAN1, description: CAN1 TX interrupt }
+    - { name: CAN1_RX0,  vector: 38, irqn: CAN1_RX0_IRQn,       handler: CAN1_RX0_IRQHandler,      peripheral: CAN1, description: CAN1 RX0 interrupt }
+    - { name: TIM1_BRK,  vector: 40, irqn: TIM1_BRK_IRQn,       handler: TIM1_BRK_IRQHandler,      peripheral: TIM1, description: TIM1 break interrupt }
+    - { name: TIM1_UP,   vector: 41, irqn: TIM1_UP_IRQn,        handler: TIM1_UP_IRQHandler,       peripheral: TIM1, description: TIM1 update interrupt }
+    - { name: TIM1_TRG,  vector: 42, irqn: TIM1_TRG_COM_IRQn,   handler: TIM1_TRG_COM_IRQHandler,  peripheral: TIM1, description: TIM1 trigger and commutation interrupt }
+    - { name: TIM1_CC,   vector: 43, irqn: TIM1_CC_IRQn,        handler: TIM1_CC_IRQHandler,       peripheral: TIM1, description: TIM1 capture/compare interrupt }
+    - { name: TIM2,      vector: 44, irqn: TIM2_IRQn,           handler: TIM2_IRQHandler,          peripheral: TIM2, description: TIM2 global interrupt }
+    - { name: TIM3,      vector: 45, irqn: TIM3_IRQn,           handler: TIM3_IRQHandler,          peripheral: TIM3, description: TIM3 global interrupt }
+    - { name: TIM4,      vector: 46, irqn: TIM4_IRQn,           handler: TIM4_IRQHandler,          peripheral: TIM4, description: TIM4 global interrupt }
+    - { name: I2C1_EV,   vector: 47, irqn: I2C1_EV_IRQn,        handler: I2C1_EV_IRQHandler,       peripheral: I2C1, description: I2C1 event interrupt }
+    - { name: I2C1_ER,   vector: 48, irqn: I2C1_ER_IRQn,        handler: I2C1_ER_IRQHandler,       peripheral: I2C1, description: I2C1 error interrupt }
+    - { name: I2C2_EV,   vector: 49, irqn: I2C2_EV_IRQn,        handler: I2C2_EV_IRQHandler,       peripheral: I2C2, description: I2C2 event interrupt }
+    - { name: I2C2_ER,   vector: 50, irqn: I2C2_ER_IRQn,        handler: I2C2_ER_IRQHandler,       peripheral: I2C2, description: I2C2 error interrupt }
+    - { name: SPI1,      vector: 51, irqn: SPI1_IRQn,           handler: SPI1_IRQHandler,          peripheral: SPI1, description: SPI1 global interrupt }
+    - { name: SPI2,      vector: 52, irqn: SPI2_IRQn,           handler: SPI2_IRQHandler,          peripheral: SPI2, description: SPI2 global interrupt }
+    - { name: USART1,    vector: 53, irqn: USART1_IRQn,         handler: USART1_IRQHandler,        peripheral: USART1, description: USART1 global interrupt }
+    - { name: USART2,    vector: 54, irqn: USART2_IRQn,         handler: USART2_IRQHandler,        peripheral: USART2, description: USART2 global interrupt }
+    - { name: USART3,    vector: 55, irqn: USART3_IRQn,         handler: USART3_IRQHandler,        peripheral: USART3, description: USART3 global interrupt }
+    - { name: IWDG,      vector: 57, irqn: IWDG_IRQn,           handler: IWDG_IRQHandler,          peripheral: IWDG, description: Independent watchdog early-wake interrupt }
+    - { name: OPA1,      vector: 58, irqn: OPA1_IRQn,           handler: OPA1_IRQHandler,          peripheral: OPA1, description: Operational amplifier comparator output interrupt }
+
+# -----------------------------------------------------------------------------
+# Code generation.
+#
+# `sdk: { synthetic: true }` is how a part that is NOT real silicon opts out of
+# tools/verify_sdk_names.py. It is a declaration in the data, not a name hardcoded in
+# the checker, so a second fixture part needs no change to the tool. Everything below
+# is F1-shaped and self-consistent, and none of it is checked against any header
+# because there is no header to check it against - that is the point of saying so.
+codegen:
+  header: dummy32.h
+  sdk: { synthetic: true }
+
+  # NOTE the spelling: APB2, not the PB2 that CH32V006 uses. Two live spellings in the
+  # repo means neither can be hardcoded in the generator.
+  gpio_clock: { fn: RCC_APB2PeriphClockCmd, port: RCC_APB2Periph_GPIO$PORT, afio: RCC_APB2Periph_AFIO }
+
+  # Three real speeds here, against CH32V006's one. `gpio.speeds` above is what the
+  # part OFFERS; this maps a stored name to its macro.
+  speeds:
+    "2 MHz":  GPIO_Speed_2MHz
+    "10 MHz": GPIO_Speed_10MHz
+    "50 MHz": GPIO_Speed_50MHz
+
+  # AFIO_MAPR-style remap word. Only peripherals whose `remaps:` INDEX is the field
+  # value belong here - SYS is absent for the same reason as on CH32V006: its remap
+  # list picks a debug-pin arrangement, not an AFIO field.
+  remap:
+    register: "AFIO->MAPR"
+    fields:
+      SPI1:   [{ lsb: 0,  bits: 1 }]
+      I2C1:   [{ lsb: 1,  bits: 1 }]
+      USART1: [{ lsb: 2,  bits: 1 }]
+      USART2: [{ lsb: 3,  bits: 1 }]
+      USART3: [{ lsb: 4,  bits: 2 }]
+      TIM1:   [{ lsb: 6,  bits: 2 }]
+      TIM2:   [{ lsb: 8,  bits: 2 }]
+      TIM3:   [{ lsb: 10, bits: 2 }]
+      TIM4:   [{ lsb: 12, bits: 1 }]
+      CAN1:   [{ lsb: 13, bits: 2 }]
+
+  analog_signals:
+    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9]
+    ADC2: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7]
+    OPA1: [VINP, VINM, VOUT]
+
+  rcc:
+    register: "RCC->CFGR0"
+    sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }
+    pllsrc: { lsb: 16, bits: 1, values: { HSI: 0, HSE: 1 } }
+    # Keys are the choice NAMES of peripherals.RCC "Master Clock Output". On this part
+    # that setting is a plain Disable/Enable pair rather than a source list, so the
+    # encoding is a two-value field - deliberately unlike CH32V006, whose MCO setting
+    # names its four sources. validate_mcu.py checks these keys still line up.
+    mco:
+      peripheral: RCC
+      setting: Master Clock Output
+      lsb: 24
+      bits: 3
+      values: { Disable: 0, Enable: 4 }
+    prescalers:
+      AHB:  { lsb: 4,  bits: 4, values: { 1: 0, 2: 8, 4: 9, 8: 10, 16: 11, 64: 12, 128: 13, 256: 14, 512: 15 } }
+      APB1: { lsb: 8,  bits: 3, values: { 1: 0, 2: 4, 4: 5, 8: 6, 16: 7 } }
+      APB2: { lsb: 11, bits: 3, values: { 1: 0, 2: 4, 4: 5, 8: 6, 16: 7 } }
+      ADC:  { lsb: 14, bits: 2, values: { 2: 0, 4: 1, 6: 2, 8: 3 } }
+
+  ctlr:
+    register: "RCC->CTLR"
+    fields:
+      HSION:  { lsb: 0,  bits: 1 }
+      HSIRDY: { lsb: 1,  bits: 1, access: ro }
+      HSEON:  { lsb: 16, bits: 1 }
+      HSERDY: { lsb: 17, bits: 1, access: ro }
+      HSEBYP: { lsb: 18, bits: 1 }
+      PLLON:  { lsb: 24, bits: 1 }
+      PLLRDY: { lsb: 25, bits: 1, access: ro }
+    # Must cover EVERY choice of peripherals.RCC "High Speed Clock (HSE)", and these
+    # are spelled the way that setting spells them (no spaces around the slash), which
+    # is not how CH32V006 spells its equivalent. validate_mcu.py enforces both halves.
+    hse_choices:
+      Disable:                   { HSEON: 0, HSEBYP: 0 }
+      BYPASS Clock Source:       { HSEON: 1, HSEBYP: 1 }
+      Crystal/Ceramic Resonator: { HSEON: 1, HSEBYP: 0 }
+
+  # Which enable register each peripheral's clock bit lives in. Three domains here
+  # against CH32V006's HB/PB2/PB1, and they are spelled AHB/APB2/APB1.
+  periph_clock:
+    AHB:
+      register: RCC_AHBPCENR
+      fn: RCC_AHBPeriphClockCmd
+      prefix: RCC_AHBPeriph_
+      bits: { DMA1: 0 }   # SRAM/FLITF/CRC have no tree entry here, so no enable is claimed
+    APB2:
+      register: RCC_APB2PCENR
+      fn: RCC_APB2PeriphClockCmd
+      prefix: RCC_APB2Periph_
+      bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4, GPIOD: 5, GPIOE: 6, GPIOF: 7, GPIOG: 8, ADC1: 9, ADC2: 10, TIM1: 11, SPI1: 12, USART1: 14 }
+    APB1:
+      register: RCC_APB1PCENR
+      fn: RCC_APB1PeriphClockCmd
+      prefix: RCC_APB1Periph_
+      bits: { TIM2: 0, TIM3: 1, TIM4: 2, WWDG: 11, SPI2: 14, USART2: 17, USART3: 18, I2C1: 21, I2C2: 22, USB: 23, CAN1: 25 }
+    notes: >
+      GPIOH and GPIOI have pins in the LQFP144 package table but no enable bit here.
+      That is deliberate: it is the shape of a real datasheet gap, and it is what the
+      generator meets when a package exposes a port the clock tree does not document.
+
+# -----------------------------------------------------------------------------
 # Clock tree (F1-style). Everything in MHz unless noted.
 clock:
   sources:
