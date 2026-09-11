@@ -8,6 +8,7 @@ peripherals:
   SYS:
     settings:
       Debug interface: Serial Wire (SDI)
+      External reset pin: RST disabled - pin is GPIO (RST_MODE=11, factory default)
     remap: 0
   RCC:
     settings:
@@ -184,13 +185,16 @@ peripherals:
   PWR:
     settings:
       Programmable Voltage Detector (PVD): Disable
+      Low power mode: None
     remap: 0
     params:
+      stop_entry: WFI
       pvd_level: 2.3 V
   FLASH:
     settings:
       Independent watchdog start (IWDG_SW): Started by software (factory default)
-      Reset on entering Standby (STANDBY_RST): No reset (factory default)
+      Reset on entering Standby (STANDY_RST): No reset (factory default)
+      Reset on entering Stop (STOP_RST): No reset (factory default)
     remap: 0
   EXTI:
     settings:

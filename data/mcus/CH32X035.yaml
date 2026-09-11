@@ -407,9 +407,35 @@ peripherals:
         choices:
           - { name: Serial Wire (SDI), signals: [DIO, DCK] }
           - { name: Disable }
+      # Option byte USER[4:3] = RST_MODE, RM v1.9 20.3.8 / the USER byte table:
+      #   00: RST multiplexing enabled  -  the pin IS the external reset
+      #   11: multiplexing off, PA21/PC3/PB7 for GPIO function
+      # Reset value is 11b, so unlike CH32V006 - whose factory RST_MODE is 10b and holds
+      # the pin - a blank CH32X035 leaves the pin as GPIO and the user opts IN. That is
+      # why "Disabled" is choices[0] here and the enabled choice is not the default; on
+      # CH32V006 it is the other way round and validate_mcu warns about it on purpose.
+      - name: External reset pin
+        choices:
+          - { name: "RST disabled - pin is GPIO (RST_MODE=11, factory default)" }
+          - { name: "RST enabled (RST_MODE=00)", signals: [RST] }
+    # WHICH pin is the reset depends on the package, exactly as on CH32V006.
+    #   PA21 - RM USER-byte note: "PA21 can be multiplexed as an external reset pin in
+    #          64-pin R8T6 and 48-pin C8T6 packages". PA21 is bonded only on those two.
+    #   PC3  - DS:2583: "The RST function on pin PC3 is only available for the CH32X035
+    #          in the QSOP28 package and TSSOP20 package."
+    # PB7 also carries RST in DS Table 2-3, but DS:2584 says that is CH32X033 in TSSOP20
+    # - a different part - so it is NOT offered here. That one was found by the remap
+    # collision check reporting RST on three pins at index 0.
+    #
+    # QFN28, QFN20 and QFN12 are NOT in remap_by_package: PA21 is not bonded on any of
+    # them and neither source says PC3 is the reset there. An absent entry is the honest
+    # answer - see CH32X035.notes.md. Do not fill them in by analogy.
     remaps:
-      - name: Default
-        pins: { DIO: PC18, DCK: PC19 }
+      - name: RST on PA21 (LQFP64M / LQFP48)
+        pins: { DIO: PC18, DCK: PC19, RST: PA21 }
+      - name: RST on PC3 (QSOP28 / TSSOP20)
+        pins: { DIO: PC18, DCK: PC19, RST: PC3 }
+    remap_by_package: { LQFP64M: 0, LQFP48: 0, QSOP28: 1, TSSOP20: 1 }
 
   RCC:
     category: System Core
@@ -1687,7 +1713,29 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled }
+      # DS Features: "Low power modes: Sleep, Stop, Standby", and the SPL has
+      # PWR_EnterSTOPMode(PWR_STOPEntry) and PWR_EnterSTANDBYMode() (ch32x035_pwr.h).
+      # Sleep is WFI/WFE on the core and needs no PWR call, which is why it is a choice
+      # here and not a param. None of these claims a pin.
+      - name: Low power mode
+        choices:
+          - { name: None }
+          - { name: Sleep }
+          - { name: Stop }
+          - { name: Standby }
     params:
+      - key: stop_entry
+        name: Stop mode entry
+        sdk_call: PWR_EnterSTOPMode
+        sdk_args: [$VALUE]
+        type: enum
+        group: Advanced
+        default: WFI
+        options:
+          - { name: WFI, value: 1, sdk: PWR_STOPEntry_WFI }
+          - { name: WFE, value: 2, sdk: PWR_STOPEntry_WFE }
+        help: "Which instruction puts the core to sleep when entering Stop. Only meaningful when the low power mode is Stop."
+        when: { setting: Low power mode, is: Stop }
       - key: pvd_level
         name: PVD threshold
         sdk_call: PWR_PVDLevelConfig
@@ -1714,7 +1762,15 @@ peripherals:
         choices:
           - { name: Started by software (factory default) }
           - { name: Started by hardware }
-      - name: Reset on entering Standby (STANDBY_RST)
+      - name: Reset on entering Standby (STANDY_RST)
+        choices:
+          - { name: No reset (factory default) }
+          - { name: Reset }
+      # A user option byte CH32V006 DOES NOT HAVE. RM v1.9 USER byte, bit 1: "System
+      # reset control in Stop mode: 1: Disable, system will not be reset when entering
+      # Stop mode; 0: Enable". Reset value 1. Found by auditing the USER byte against
+      # CH32V006's, which has STANDBY_RST but no Stop-mode equivalent.
+      - name: Reset on entering Stop (STOP_RST)
         choices:
           - { name: No reset (factory default) }
           - { name: Reset }
