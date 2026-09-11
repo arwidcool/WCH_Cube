@@ -2304,21 +2304,126 @@ gpio:
   # I wrote both in from CH32V006 out of habit and verify_sdk_names.py rejected them,
   # which is the whole argument for the gate: they are real, correctly spelled SPL
   # names that belong to a different chip.
+  #
+  # `class:` is the silicon's own direction and it exists so a constraint can say "no
+  # output function" once, rather than list mode names that go stale the day a mode is
+  # added. Closed set: `out`, `in`, `analog`. `Input` is not listed here - it is the
+  # implicit fourth mode and is always `in`; `input_modes` is the pull list under it.
   modes:
-    - { name: Output Push Pull,             macro: GPIO_Mode_Out_PP }
-    - { name: Alternate Function Push Pull, macro: GPIO_Mode_AF_PP }
-    - { name: Analog,                       macro: GPIO_Mode_AIN }
+    - { name: Output Push Pull,             macro: GPIO_Mode_Out_PP, class: out }
+    - { name: Alternate Function Push Pull, macro: GPIO_Mode_AF_PP, class: out }
+    - { name: Analog,                       macro: GPIO_Mode_AIN,    class: analog }
 
   # Mode `Input` folds the PULL setting into the macro, so these are keyed by pull name.
   #
   # **Pull-down is NOT available on every pin.** The header says so in a comment on the
   # member itself: "Only PA0--PA15 and PC16--PC17 support input pull-down"
-  # (ch32x035_gpio.h, GPIO_Mode_IPD). That is a per-PIN capability, which nothing in
-  # data/mcus/ has ever had to express - no part here has had a pull that works on some
-  # pins and not others. `pins_note` records the constraint until the schema can carry
-  # it properly; see CH32X035.notes.md, and AGENT-2/AGENT-3 have it on the board.
+  # (ch32x035_gpio.h:33). That is a per-PIN capability. It used to be recorded here as a
+  # human `pins_note:` because nothing in data/mcus/ could express it; it is now a real
+  # entry in `constraints:` below, which is the same fact stated in a form the GPIO
+  # table, the conflict engine and codegen can all act on.
   input_modes:
     - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
     - { name: Pull-up,   macro: GPIO_Mode_IPU }
-    - { name: Pull-down, macro: GPIO_Mode_IPD,
-        pins_note: "Only PA0-PA15 and PC16-PC17 support input pull-down (ch32x035_gpio.h)" }
+    - { name: Pull-down, macro: GPIO_Mode_IPD }
+
+# =============================================================================
+# Constraints - a choice the app must NOT offer, on some pins or in some state.
+#
+# The mechanism is documented in data/FORMAT.md under `constraints`; read it there
+# before adding an entry. Nothing here names a part and nothing in app/ knows this part
+# exists - the whole point of round 5 is that this is a data job.
+#
+# Semantics are PROHIBITION ONLY. One entry restricts one control, and:
+#   only_on: [pins]   the choice is legal ONLY on these pins; refused everywhere else
+#   not_on:  [pins]   the choice is refused on exactly these pins
+# `packages:` scopes the entry to those packages - omitted means every package - and
+# `when:` makes the refusal conditional on another peripheral being enabled. A pin that
+# is not bonded on the current package cannot be configured at all, so an entry naming
+# it is simply inert there.
+#
+# The three shapes the round asked for are all below and none folds into another:
+# case 1 is an allow-list, case 2 is a deny-list that applies on some packages only,
+# case 3 is conditional on a peripheral's state. Everything here is transcribed from a
+# named source; where a source is quoted the quote is verbatim.
+constraints:
+
+  # ---- Case 1: the choice exists on some pins and not others -------------------
+  #
+  # Two sources say the same thing. The EVT header is cited first because a name the
+  # software uses outranks a datasheet; the DS is cited because it covers the pins the
+  # header does not enumerate (it says "the remaining pins do not support pull-down").
+  - id: pull-down-only-on-pa0-pa15-pc16-pc17
+    option: gpio.pull
+    choices: [Pull-down]
+    only_on: [PA0, PA1, PA2, PA3, PA4, PA5, PA6, PA7, PA8, PA9, PA10, PA11, PA12, PA13, PA14, PA15, PC16, PC17]
+    reason: "Pull-down is available on PA0-PA15 and PC16-PC17 only; every other pin has no pull-down resistor."
+    source: "ch32x035_gpio.h:33 + CH32X035DS0.md ch.1.4.19 (p.11)"
+
+  # ---- Case 2: a shorted pair may not be an output function --------------------
+  #
+  # Note 4 excludes CH32X035F8U6 (QFN20) and CH32X035D8U6 (QFN12) BY NAME, so this is
+  # the instance that is genuinely per-PACKAGE rather than per-die: on those two, PC16
+  # and PC17 are bonded and NOT shorted, and driving them is legal. Scoping the entry is
+  # therefore not bookkeeping - leaving it unscoped would refuse a choice the silicon
+  # honours, which is the same defect as offering one it does not.
+  - id: shorted-pc10-pc11-pc16-pc17-not-output
+    option: gpio.mode
+    classes: [out]
+    not_on: [PC10, PC11, PC16, PC17]
+    packages: [LQFP64M, LQFP48, QFN28, QSOP28, TSSOP20]
+    reason: "PC10 and PC17 are short-joined inside the chip, as are PC11 and PC16; neither pin of a shorted pair may be configured as an output function."
+    source: "CH32X035DS0.md Note 4 (p.19)"
+
+  - id: shorted-pb1-pb5-not-output
+    option: gpio.mode
+    classes: [out]
+    not_on: [PB1, PB5]
+    packages: [QFN28, QSOP28]
+    reason: "PB1 and PB5 are shorted and sealed inside the chip; neither may be configured as an output function."
+    source: "CH32X035DS0.md Note 5 (p.19)"
+
+  - id: shorted-pa12-pc14-pa13-pc15-not-output
+    option: gpio.mode
+    classes: [out]
+    not_on: [PA12, PC14, PA13, PC15]
+    packages: [QSOP28]
+    reason: "PA12 and PC14 are shorted and sealed inside the chip, as are PA13 and PC15; neither pin of either pair may be configured as an output function."
+    source: "CH32X035DS0.md Note 6 (p.19)"
+
+  - id: shorted-pa7-pc7-not-output
+    option: gpio.mode
+    classes: [out]
+    not_on: [PA7, PC7]
+    packages: [QFN12]
+    reason: "PA7 and PC7 are short-circuited inside the chip; neither may be configured as an output function."
+    source: "CH32X035DS0.md Note 7 (p.19)"
+
+  # ---- Case 3: the choice is illegal while another peripheral is on ------------
+  #
+  # The DS states the CONSEQUENCE - "in USB applications, the PC10 and PC11 pins should
+  # be configured in floating input mode (default value after reset)". Two prohibitions
+  # state it as a rule: no output or analog mode, and no pull. What is left is exactly
+  # Input + No pull, which is what floating input means - and, as the DS notes
+  # parenthetically, what the pins already are out of reset.
+  #
+  # PC16/PC17 carry the USB data lines themselves, so this only bites on a package where
+  # PC10/PC11 are bonded, and there the shorted-pair rule above already makes PC10/PC11
+  # unusable while USBFS holds PC16/PC17. This entry is what names the REASON as USB and
+  # not merely "the pin is shared", which is the difference between a warning the user
+  # can act on and one they cannot.
+  - id: usb-pc10-pc11-not-driven
+    option: gpio.mode
+    classes: [out, analog]
+    not_on: [PC10, PC11]
+    when: { peripheral: USBFS, enabled: true }
+    reason: "PC10 and PC11 are short-joined to the USBFS data pins, so while USBFS is enabled they must stay floating inputs."
+    source: "CH32X035DS0.md Note 4 (p.19)"
+
+  - id: usb-pc10-pc11-no-pull
+    option: gpio.pull
+    choices: [Pull-up, Pull-down]
+    not_on: [PC10, PC11]
+    when: { peripheral: USBFS, enabled: true }
+    reason: "PC10 and PC11 are short-joined to the USBFS data pins, so while USBFS is enabled they must stay floating inputs and carry no pull."
+    source: "CH32X035DS0.md Note 4 (p.19)"

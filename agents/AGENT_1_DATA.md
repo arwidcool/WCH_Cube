@@ -89,11 +89,43 @@ Ordered by what unblocks the most. Each one is a `TODO` in the generated C today
 
 ## Current
 
-**Opening round 5.** Round 4 closed with `data/mcus/CH32X035.yaml` validating clean and the pin
-map audited against all 23 RM chapters — 0 missing, 0 extra, 0 mismatched over 60 pins, 20
-peripherals and 101 tokens. Five gaps are recorded in `CH32X035.notes.md` and open, in your last
-board order: TKEY timing, the ADC internal channel, USART LIN/SmartCard/IrDA, OPA, CMP.
+**Cycle 1 of round 5 — Deliverable A's DATA half is in, and the shape question is closed.**
+(`BOARD` 2026-09-11T22:02Z schema, 22:17Z entries.)
 
-**Your first act is the schema, not the entries.** APP cannot touch the GPIO table, the conflict
-engine or codegen until the shape of the constraint block is posted, and QA cannot write the test
-that can fail. Post it, then fill it, in that order.
+**Done this cycle.**
+
+- The **schema was posted before a single entry was filled**, which is what unblocked APP and QA.
+  It is a top-level `constraints:` list — `id`, `option` (`gpio.mode` / `gpio.pull` / `gpio.speed`),
+  `choices:` XOR `classes:`, `only_on:` XOR `not_on:`, optional `packages:`, optional
+  `when: {peripheral, enabled}`, `reason`, `source`. Prohibition-only semantics: "PC10/PC11 must be
+  a floating input while USBFS is on" is the complement of two prohibitions, so there is no second
+  mechanism that can disagree with the first.
+- `gpio.modes[]` entries gained `class:` (`out` / `in` / `analog`) so "not an output function" is
+  said once instead of as a list of mode names that goes stale the day a mode is added. `Input` is
+  the implicit fourth mode and is always `in`.
+- **7 cited entries on CH32X035**, one per DS note, covering all three shapes. Every source is a
+  `file:line` or a DS note number.
+- `data/FORMAT.md` gained `## constraints`: the mechanism, the key table, the validator rules, the
+  three consumers, and the reasoning. `validate_mcu.py` is the authority and they agree.
+- `check_gpio()` + `check_constraints()` in `tools/validate_mcu.py`, and
+  **`tools/validate_constraints_selftest.py`: 19 planted breaks, 19 caught**, with the unmutated
+  part validating clean first so a selftest that fires on everything cannot pass.
+- **CH32V006/CH32V005 audited and the result recorded either way** in `CH32V006.notes.md`:
+  instance 2 exists (DS notes 3, 4) and is deliberately unfilled because the acceptance test wants
+  that part byte-identical; instances 1 and 3 are absent with the source quoted; a **fourth shape**
+  (`PA1PA2_RM = 1`, PA1/PA2 unusable as GPIO) is recorded as one the mechanism cannot express.
+
+**Next cycle, in order.**
+
+1. The five partial CH32X035 peripherals: OPA, CMP1/2/3, TKEY (decide the `TKEY1_CHARGE1` / ADC
+   `sample` overlap first), USBFS, USBPD.
+2. The ADC internal Vrefint channel — a repo-wide decision, because CH32V006 has the same gap.
+3. USART LIN / SmartCard / IrDA as `params:` mode flags.
+4. Then E6 (`CH32X033F8P6`, DS Table 2-2 — and remember Table 2-2 has no end marker, which is how
+   `extract_pins.py` once read CH32X033 rows as CH32X035 pins) and E7 (the QFN28/20/12 reset
+   question — an answer or a recorded BLOCKED).
+
+**One thing not to lose:** `CH32V006.notes.md` now carries an **open line for whoever fills V006's
+shorted-pair constraints** — `app/tests/codegen.test.js` assigns `GPIO_Output` to `PA4` and
+`app/tests/api.test.js` does the same, both through the TSSOP20 `PD7/PA4` pair. Those are APP's and
+QA's tests, and the change would have to answer them. Do not fold it in unannounced.

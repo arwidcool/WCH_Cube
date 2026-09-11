@@ -707,7 +707,7 @@ gpio:
 | Key | What it is |
 |---|---|
 | `speeds` | ordered list of the output speeds the part has. `name` is what the GPIO table shows and what a `.wchproj` stores; `macro` is the SPL enum member, and it must exist in that part's headers. |
-| `modes` | the GPIO-table modes and their `GPIOMode_TypeDef` macros |
+| `modes` | the GPIO-table modes and their `GPIOMode_TypeDef` macros; each may carry `class:` (see below) |
 | `input_modes` | mode `Input` has no single macro — the SPL folds the **pull** setting into it, so these are keyed by the pull name |
 
 **The set of modes is per part, not per project.** CH32X035's `GPIOMode_TypeDef` has
@@ -717,10 +717,24 @@ where CH32V006's has five, and the GPIO table must render what the part offers r
 a fixed five. Copying CH32V006's list across is how this was nearly shipped; the gate
 caught it.
 
-A mode entry may also carry `pins_note:` — CH32X035's `GPIO_Mode_IPD` is annotated in the
-header *"Only PA0--PA15 and PC16--PC17 support input pull-down"*, which is a **per-pin**
-capability the schema cannot express yet. The note records the constraint until it can;
-see `CH32X035.notes.md`.
+### `class:` — the direction a mode drives
+
+A `modes` entry may carry `class:`, one of **`out`, `in`, `analog`**. It is the silicon's
+own direction, and it exists so a constraint can say *"not an output function"* once
+instead of listing mode names that go stale the day a mode is added. `Input` is not a
+`modes` entry — it is the implicit fourth mode and its class is always `in`, with
+`input_modes` as the pull list underneath it.
+
+`class:` is optional, but a file that writes a `classes:` constraint must give **every**
+`modes` entry a `class:` — `validate_mcu.py` fails otherwise. A class-based constraint
+that could silently fail to match a new mode is exactly the defect the mechanism exists to
+prevent.
+
+**A restriction is not written here as prose.** `pins_note:` records a human note about a
+mode; a *rule* the app must enforce goes in `constraints:` below. CH32X035's
+`GPIO_Mode_IPD` was annotated *"Only PA0--PA15 and PC16--PC17 support input pull-down"* in
+`pins_note` for two rounds because nothing could express it; it is now constraint
+`pull-down-only-on-pa0-pa15-pc16-pc17`.
 
 Between them, `modes` and `input_modes` must account for every member of
 `GPIOMode_TypeDef`: a mode the silicon has but the table cannot ask for is a mode the user
@@ -739,6 +753,97 @@ A part with no `gpio:` block at all makes no claim, and the engine falls back to
 `gpio.speeds[].macro` is checked against the part's SDK headers by
 `tools/verify_sdk_names.py`, so a spelling from another family fails the gate instead of
 reaching a compiler.
+
+---
+
+## `constraints`
+
+**A choice the app must not offer — on some pins, on some packages, or while some other
+peripheral is on.** This is round 5's mechanism, and its rule is one sentence: *a wrong
+choice the app offers is worse than a missing feature*, because an offered-but-impossible
+choice produces a configuration that compiles, exports, looks correct and does not work on
+the board.
+
+Nothing in this block names a part, and nothing in `app/` knows any part exists. A part
+with **no** `constraints:` block behaves exactly as it did before the block existed, which
+is what keeps a part that has no instances byte-identical.
+
+```yaml
+constraints:
+  - id: pull-down-only-on-pa0-pa15-pc16-pc17
+    option: gpio.pull
+    choices: [Pull-down]
+    only_on: [PA0, PA1, ... PA15, PC16, PC17]
+    reason: "Pull-down is available on PA0-PA15 and PC16-PC17 only; ..."
+    source: "ch32x035_gpio.h:33"
+
+  - id: shorted-pc10-pc11-pc16-pc17-not-output
+    option: gpio.mode
+    classes: [out]
+    not_on: [PC10, PC11, PC16, PC17]
+    packages: [LQFP64M, LQFP48, QFN28, QSOP28, TSSOP20]
+    reason: "..."
+    source: "CH32X035DS0.md Note 4 (p.19)"
+
+  - id: usb-pc10-pc11-not-driven
+    option: gpio.mode
+    classes: [out, analog]
+    not_on: [PC10, PC11]
+    when: { peripheral: USBFS, enabled: true }
+    reason: "..."
+    source: "CH32X035DS0.md Note 4 (p.19)"
+```
+
+| Key | Required | What it is |
+|---|---|---|
+| `id` | yes | unique slug. A conflict message and a test name the constraint by it, so it must read as the rule, not as the part. |
+| `option` | yes | which control the choice comes from, dotted: `gpio.mode`, `gpio.pull`, `gpio.speed`. |
+| `choices` | one of | the restricted choice names, **verbatim as the GPIO table spells them** |
+| `classes` | one of | every choice of these classes, read off `gpio.modes[].class` — how "an output function" is said without listing modes |
+| `only_on` | one of | the pin **allow**-list: the choice is legal on these pins and refused everywhere else |
+| `not_on` | one of | the pin **deny**-list: the choice is refused on exactly these pins |
+| `packages` | no | scope the entry to these packages. Omitted = every package. |
+| `when` | no | `{ peripheral: <name>, enabled: true\|false }` — the refusal only applies while that peripheral is (or is not) enabled |
+| `reason` | yes | one sentence, shown to the user: the GPIO table's tooltip and the conflict engine's text both use it verbatim |
+| `source` | yes | `file:line` or a DS/RM table or note number. A family is not a source. |
+
+### Rules the validator enforces
+
+- `choices` and `classes` are mutually exclusive, and exactly one must be present.
+- `only_on` and `not_on` are mutually exclusive, and exactly one must be present.
+- Every name in `choices` must exist in that part's list for `option` — `gpio.modes` for
+  `gpio.mode`, `gpio.input_modes` for `gpio.pull`. A constraint naming a choice the part
+  does not offer is silently dead, which reads exactly like a constraint that works.
+- A `classes:` entry requires every `gpio.modes` entry to declare a `class:`.
+- Every pin named in `only_on`/`not_on` must exist in that part's `pins:`. If `packages:`
+  is given, it must exist in **each** named package as well.
+- Every name in `packages:` must be a package of the part.
+- `when.peripheral` must be a peripheral of the part; `when.enabled` must be a boolean.
+- `id` must be unique within the file.
+
+### How the app reads it — the three consumers, and why they must agree
+
+1. **The GPIO table.** For each row the control's option list is reduced: a choice a
+   constraint refuses on that pin is **not offered**, not offered-and-greyed. Greying is
+   for something the part has and cannot use *right now*; a constraint that depends on a
+   peripheral states its `when` in the tooltip.
+2. **The conflict engine.** A configured choice that a constraint refuses is an issue,
+   and the issue **names the constraint's `reason`** — the user has to be told which rule
+   they hit, or the table looks broken.
+3. **Codegen.** It never emits a combination the data forbids: it declines, names the
+   constraint, and emits the `TODO` the strict gate looks for. Declining is the
+   documented behaviour — the generator must never emit plausible-looking wrong code.
+
+**Semantics are prohibition only**, deliberately. "PC10 and PC11 must be a floating input
+while USBFS is on" is written as two prohibitions — no output or analog mode, no pull —
+which leaves exactly `Input` + `No pull`. A positive `require:` form would be a second
+mechanism for a case the first one already covers, and two mechanisms that can disagree is
+how the GPIO speed defect shipped twice.
+
+**A pin that is not bonded on the current package cannot be configured at all**, so an
+entry naming it is inert there rather than an error. `packages:` exists for the case where
+the pin *does* exist and the rule still does not apply — CH32X035's Note 4 excludes the
+QFN20 and QFN12 packages by name while both bond PC16 and PC17.
 
 ---
 

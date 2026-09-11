@@ -38,6 +38,17 @@ What it checks
                      the peripheral really routes, and value maps keyed by choice
                      names that still exist. The bit NUMBERS are the RM's word and
                      only a human re-reading it can check those.
+  gpio               `speeds` / `modes` / `input_modes` are well formed, every entry
+                     has the `name` the UI and a .wchproj key on, and `class:` - which
+                     `constraints:` selects modes by - uses the closed set
+  constraints        every entry names a choice, a pin and a package that exist HERE:
+                     `choices` must be choices the part offers and `classes` needs every
+                     mode classified, `only_on`/`not_on` pins must be in `pins:` and
+                     bonded on every package the entry scopes itself to, `when` must
+                     name a real peripheral. Plus the two ways an entry can be
+                     unreadable: `only_on` and `not_on` together, and the same choice
+                     both allow-listed and deny-listed in the same circumstances.
+                     A constraint that matches nothing reads exactly like one that works.
 
 Output is deliberately ASCII only: the Windows console here is cp1252 and chokes
 on arrows and box characters.
@@ -78,6 +89,18 @@ SETTING_TYPES = {"choice", "checkboxes"}
 CHOICE_KEYS = {"name", "signals", "default"}
 SETTING_KEYS = {"name", "type", "choices", "notes"}
 PIN_ENTRY_KEYS = {"type", "analog", "notes", "five_volt_tolerant", "drive"}
+
+# `gpio.*` entries. `class` is only meaningful on a mode - it is the direction the mode
+# drives, and `constraints:` selects modes by it (see GPIO_MODE_CLASSES).
+GPIO_ENTRY_KEYS = {"name", "macro", "pins_note"}
+GPIO_MODE_CLASSES = {"in", "out", "analog"}
+
+# Which `gpio:` list an `option:` in a constraint is about. Dotted because the same
+# mechanism has to reach a future column without a second schema.
+GPIO_OPTION_SOURCES = {"gpio.mode": "modes", "gpio.pull": "input_modes", "gpio.speed": "speeds"}
+
+CONSTRAINT_KEYS = {"id", "option", "choices", "classes", "only_on", "not_on",
+                   "packages", "when", "reason", "source"}
 
 
 def unknown_keys(mapping, allowed):
@@ -793,6 +816,219 @@ def check_exti(doc: dict, r: Report) -> None:
                 r.error(f"exti.lines.{line}", f"`{bits}` selects `{pin}`, which is not declared in `pins:`")
 
 
+def check_gpio(doc: dict, r: Report) -> None:
+    """`gpio:` says what this part's GPIO block actually offers, so the UI stops
+    offering a hardware choice the silicon does not have. The lists are the part's own
+    and per family, so the checks here are about shape and about `class:` - the field
+    `constraints:` selects modes by, where a typo would make a rule match nothing and
+    read exactly like one that works."""
+    g = doc.get("gpio")
+    if g is None:
+        return
+    if not isinstance(g, dict):
+        r.error("gpio", "must be a mapping")
+        return
+    stray = unknown_keys(g, {"speeds", "modes", "input_modes"})
+    if stray:
+        r.error("gpio", f"unknown key(s) {stray}")
+
+    for key in ("speeds", "modes", "input_modes"):
+        lst = g.get(key)
+        if lst is None:
+            continue
+        if not isinstance(lst, list):
+            r.error(f"gpio.{key}", "must be a list")
+            continue
+        for i, entry in enumerate(lst):
+            where = f"gpio.{key}[{i}]"
+            if not isinstance(entry, dict):
+                r.error(where, "must be a mapping like { name: ..., macro: ... }")
+                continue
+            if not entry.get("name"):
+                r.error(where, "has no `name`; the UI and a .wchproj both key on it")
+            allowed = GPIO_ENTRY_KEYS | ({"class"} if key == "modes" else set())
+            extra = unknown_keys(entry, allowed)
+            if extra:
+                r.error(where, f"unknown key(s) {extra}")
+            if not entry.get("macro"):
+                r.warn(where, "has no `macro`; nothing can emit this choice")
+            if key == "modes" and "class" in entry and entry["class"] not in GPIO_MODE_CLASSES:
+                r.error(where, f"unknown class `{entry['class']}` "
+                               f"(known: {', '.join(sorted(GPIO_MODE_CLASSES))})")
+
+
+def check_constraints(doc: dict, r: Report) -> None:
+    """`constraints:` is round 5's mechanism - one entry per choice the app must not
+    offer, on some pins, on some packages, or while another peripheral is on. The GPIO
+    table, the conflict engine and codegen all read it, so a constraint that matches
+    nothing is indistinguishable from one that works. Every name in an entry is
+    therefore resolved against this file, and the two checks that are not about names -
+    mutual exclusion and allow-vs-deny - are the two ways an entry can be unreadable."""
+    items = doc.get("constraints")
+    if items is None:
+        return
+    if not isinstance(items, list):
+        r.error("constraints", "must be a list of { id, option, ... } entries")
+        return
+    gpio = doc.get("gpio") or {}
+    pins_map = doc.get("pins") or {}
+    packages = doc.get("packages") or {}
+    periphs = doc.get("peripherals") or {}
+    modes = [e for e in (gpio.get("modes") or []) if isinstance(e, dict)]
+
+    def choices_for(option):
+        key = GPIO_OPTION_SOURCES.get(option)
+        if not key:
+            return None
+        return [str((e or {}).get("name")) for e in (gpio.get(key) or []) if isinstance(e, dict)]
+
+    seen_ids: set = set()
+    for i, c in enumerate(items):
+        fallback = f"constraints[{i}]"
+        if not isinstance(c, dict):
+            r.error(fallback, "must be a mapping")
+            continue
+        cid = c.get("id")
+        where = f"constraints.{cid}" if cid else fallback
+        extra = unknown_keys(c, CONSTRAINT_KEYS)
+        if extra:
+            r.error(where, f"unknown key(s) {extra}")
+        if not cid:
+            r.error(where, "has no `id`; a conflict message and a test both name the rule by it")
+        elif cid in seen_ids:
+            r.error(where, "duplicate `id`; it is how one rule is named and tested")
+        else:
+            seen_ids.add(cid)
+        if not c.get("reason"):
+            r.error(where, "has no `reason`; that sentence is what the user is shown")
+        if not c.get("source"):
+            r.error(where, "has no `source`; a citation is a file:line or a table/note "
+                           "number, never a family")
+
+        option = c.get("option")
+        known = choices_for(option)
+        if not option:
+            r.error(where, "has no `option`")
+        elif known is None:
+            r.error(where, f"unknown option `{option}` "
+                           f"(known: {', '.join(sorted(GPIO_OPTION_SOURCES))})")
+
+        has_choices, has_classes = "choices" in c, "classes" in c
+        if has_choices == has_classes:
+            r.error(where, "needs exactly one of `choices:` (by name) or "
+                           "`classes:` (every mode of that class)")
+        elif has_choices:
+            lst = c.get("choices")
+            if not isinstance(lst, list) or not lst:
+                r.error(f"{where}.choices", "must be a non-empty list")
+            elif known is not None:
+                for name in lst:
+                    if str(name) not in known:
+                        r.error(f"{where}.choices",
+                                f"`{name}` is not a choice this part offers "
+                                f"(has: {', '.join(known) if known else 'none'}) - a constraint "
+                                f"naming a choice that does not exist is silently dead")
+        else:
+            lst = c.get("classes")
+            if not isinstance(lst, list) or not lst:
+                r.error(f"{where}.classes", "must be a non-empty list")
+            else:
+                if option != "gpio.mode":
+                    r.error(f"{where}.classes", "`classes:` selects from `gpio.modes`, so it "
+                                                "only applies to `option: gpio.mode`")
+                unclassed = [str(e.get("name") or "?") for e in modes if not e.get("class")]
+                if unclassed:
+                    r.error(f"{where}.classes", "`gpio.modes` must give EVERY entry a `class:` "
+                           f"before one is selected here; missing on: {', '.join(unclassed)}")
+                for cls in lst:
+                    if cls not in GPIO_MODE_CLASSES:
+                        r.error(f"{where}.classes", f"unknown class `{cls}` "
+                               f"(known: {', '.join(sorted(GPIO_MODE_CLASSES))})")
+
+        has_only, has_not = "only_on" in c, "not_on" in c
+        if has_only == has_not:
+            r.error(where, "needs exactly one of `only_on:` (valid here) or "
+                           "`not_on:` (invalid here)")
+        pin_key = "only_on" if has_only else "not_on"
+        plist = c.get(pin_key)
+        if not isinstance(plist, list) or not plist:
+            r.error(f"{where}.{pin_key}", "must be a non-empty list of pin names")
+            plist = []
+        else:
+            if len(plist) == 1:
+                r.warn(f"{where}.{pin_key}", f"names one pin (`{plist[0]}`); check it is not a "
+                                             "truncated list")
+            for p in plist:
+                if p not in pins_map:
+                    r.error(f"{where}.{pin_key}", f"`{p}` is not declared in `pins:`")
+
+        pkgs = c.get("packages")
+        if pkgs is not None:
+            if not isinstance(pkgs, list) or not pkgs:
+                r.error(f"{where}.packages", "must be a non-empty list of package ids")
+            else:
+                for pkg in pkgs:
+                    table = packages.get(pkg)
+                    if not isinstance(table, dict):
+                        r.error(f"{where}.packages", f"`{pkg}` is not a package of this part")
+                        continue
+                    # The scoping exists so a rule can exclude a package where the pin IS
+                    # bonded but the rule does not hold. Naming a pin that is not bonded
+                    # there is a different claim and a wrong one: the pin cannot be
+                    # configured at all, so the entry is inert and reads as enforcement.
+                    bonded = {n for names in table.values() for n in names_of(names)}
+                    for p in plist:
+                        if p in pins_map and p not in bonded:
+                            r.error(f"{where}.packages",
+                                    f"`{p}` is named but is not bonded on `{pkg}`, so the rule "
+                                    "can never apply there")
+
+        when = c.get("when")
+        if when is not None:
+            if not isinstance(when, dict):
+                r.error(f"{where}.when", "must be a mapping, e.g. { peripheral: USBFS, enabled: true }")
+            else:
+                extra = unknown_keys(when, {"peripheral", "enabled"})
+                if extra:
+                    r.error(f"{where}.when", f"unknown key(s) {extra}")
+                pid = when.get("peripheral")
+                if not pid:
+                    r.error(f"{where}.when", "has no `peripheral`")
+                elif pid not in periphs:
+                    r.error(f"{where}.when", f"`{pid}` is not a peripheral in this file")
+                if "enabled" in when and not isinstance(when["enabled"], bool):
+                    r.error(f"{where}.when", "`enabled` must be true or false")
+
+    # One choice cannot be both allow-listed and deny-listed in the same circumstances:
+    # two entries like that are not a rule, they are two rules that cannot both be read,
+    # and which one wins is whichever the engine happens to consult first.
+    def targets(c):
+        out = set()
+        for name in c.get("choices") or []:
+            out.add(("choice", str(name)))
+        for cls in c.get("classes") or []:
+            out.add(("class", str(cls)))
+        return out
+
+    for i, a in enumerate(items):
+        if not isinstance(a, dict) or a.get("when") is not None:
+            continue
+        for b in items[i + 1:]:
+            if not isinstance(b, dict) or b.get("when") is not None:
+                continue
+            if a.get("option") != b.get("option") or a.get("packages") != b.get("packages"):
+                continue
+            if ("only_on" in a) == ("only_on" in b):
+                continue
+            both = targets(a) & targets(b)
+            if both:
+                names = ", ".join(sorted(t for _, t in both))
+                r.error(f"constraints.{b.get('id')}",
+                        f"`{names}` is both allow-listed and deny-listed on "
+                        f"`{a.get('option')}` in the same circumstances (see "
+                        f"constraints.{a.get('id')})")
+
+
 # --- `mcu.inherits:` ---------------------------------------------------------
 # A derived part (CH32V005 = CH32V006 minus TouchKey and TIM3) names its parent and
 # lists what it drops. Resolution has to happen BEFORE validation, or every check
@@ -940,6 +1176,8 @@ def validate_file(path: pathlib.Path, geom: dict) -> Report:
     check_dma(doc, r)
     check_nvic(doc, r)
     check_codegen(doc, r)
+    check_gpio(doc, r)
+    check_constraints(doc, r)
     check_exti(doc, r)
     check_flow_mappings(path.read_text(encoding="utf-8"), r)
     return r

@@ -609,3 +609,108 @@ and codegen - with CH32V006/CH32V005 byte-identical as the regression half.
 today, blocked on `codegen.nvic`, `channel_params.channels` and the CH32X035 params gaps.
 
 Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT.md`.
+
+### Round 5 — open lines
+
+- [x] (AGENT-2) **The constraint consumer and the constraint data used two different shapes,
+      and while they did the mechanism did nothing at all.** The data (and `data/FORMAT.md`
+      `## constraints`, which `tools/validate_mcu.py` enforces) is the document ROOT key
+      `constraints:` with `option: gpio.mode|gpio.pull|gpio.speed`, exactly one of `choices:` /
+      `classes:`, exactly one of `only_on:` / `not_on:`, optional `packages:` and
+      `when: {peripheral, enabled}`, plus `reason:` and `source:`. `app/engine/constraints.js`
+      read `M.gpio.constraints` with `field:` / `deny:` / `allow:` / `on_pins:` / `off_pins:` /
+      `on_shorted:` / `on_packages:`. Because the placement failed first, `gpioConstraints()`
+      returned `[]` and `gpioConstraintProblems()` reported **nothing** — not an error, not a
+      warning, not a FAIL — while the GPIO table went on offering Pull-down on PC0 and an output
+      mode on every shorted pair. **CLOSED**: the consumer moved to `FORMAT.md`'s shape in the
+      same cycle (BOARD 22:11Z QA-FAIL, 22:25Z correction, 22:52Z QA-PASS);
+      `tests/constraints.test.js` asserts the shipped blocks reach the engine with no skip in
+      between, plus both halves of the pull-down case, the shorted-pair case, the USBFS-
+      conditional case and the violating-`.wchproj` path — 13 tests, and a planted break that
+      removes the restriction and requires the option to come back.
+- [x] (AGENT-2) **`normaliseGpioConstraints()` had no caller**, so a project carrying a choice
+      the silicon forbids opened without being rewritten or reported. **CLOSED**: it runs on the
+      project-load path beside `normaliseGpioSpeeds()`, its sentences join the same `dropped`
+      array, and `tests/constraints.test.js` "a violating project loads with zero console output
+      and says what it dropped" holds it shut — with `console.error`/`console.warn` captured, so
+      a silent rewrite that logged would fail too.
+- [x] (AGENT-3) `tests/strict.test.js` — `--strict` asserted on the exit code for every fixture ×
+      both formats, every shipped part required to have a fixture, and both planted breaks
+      (a conflicted project, a part with no `codegen:` block) confirmed to exit 2.
+- [x] (AGENT-3) E3 — `tests/sdk_names.test.js` registers one test per shipped part and turns the
+      tool's own NOT CHECKED sentence into a counted SKIP, so a part whose SDK was not resolved
+      can no longer read as a green tick; the file list is asserted against `wchcube_cli.js --list`
+      and a planted no-`codegen.sdk` file proves the skip fires.
+- [x] (AGENT-1) **The constraint mechanism, DATA half.** Schema posted on the board BEFORE any
+      entry was filled; `data/FORMAT.md` gains `## constraints` (mechanism, key table, the rules
+      the validator enforces, how the three consumers read it, and why "must be a floating input"
+      is two prohibitions rather than a second `require:` mechanism); `gpio.modes[]` gains
+      `class:` (`out`/`in`/`analog`); **7 cited entries** on CH32X035 covering all three DS cases
+      (allow-list, per-package deny-list, peripheral-conditional); `check_gpio()` and
+      `check_constraints()` added to `tools/validate_mcu.py`; `tools/validate_constraints_selftest.py`
+      plants **19 breaks, one per rule, and catches all 19** with the unmutated part validating
+      clean first. BOARD 2026-09-11T22:17Z. The shape question is settled in DATA's favour by
+      `data/FORMAT.md` + `validate_mcu.py` + QA's 22:25Z recommendation; `on_shorted:` is
+      recorded as considered-and-deferred, with the reason, in the same board entry.
+- [x] (AGENT-1) **CH32V006/CH32V005 audited for the same class, result recorded either way**
+      (`data/mcus/CH32V006.notes.md`). Instance 2 (shorted pair not an output) **exists** there -
+      CH32V006 DS notes 3 and 4, quoted verbatim - and is deliberately NOT filled this round,
+      because Deliverable A's acceptance test requires that part's behaviour to stay
+      byte-identical; it needs no code change when it does land. Instance 1 is **absent** ("All
+      GPIO pins support controllable pull-up and pull-down resistors", DS ch.1.4.16) and instance
+      3 is **absent** (no USB), both with the source read rather than assumed. The audit also
+      found a **fourth shape the mechanism cannot express** - "When PA1 and PA2 are crystal pins,
+      i.e., PA1PA2_RM = 1, PA1 and PA2 cannot be used for GPIO functions" (same chapter), which is
+      conditional on a remap/clock state rather than on a peripheral being enabled - recorded as
+      an open question rather than stretched to fit `when: {peripheral, enabled}`.
+- [ ] (AGENT-3) Gate `tools/validate_constraints_selftest.py` the way `tests/sdk_names.test.js`
+      gates the SDK-name selftest: assert the exit code AND that the output says `19/19`, so a
+      selftest that degenerates to "0 cases" cannot read as a pass. Requested on the board
+      2026-09-11T22:17Z.
+- [ ] (AGENT-1) **CH32X035's five partial peripherals**, in this order: OPA (13 members, 3
+      modelled), CMP1/2/3 (5 and 3), TKEY (raw registers; `TKEY1_CHARGE1` **overlaps** the ADC
+      `sample` parameter and the interaction has to be decided before either ships), USBFS and
+      USBPD `params:`. EVT headers are the citation, `data/FORMAT.md` the contract.
+- [ ] (AGENT-1) **The ADC internal Vrefint channel** - a repo-wide decision, not an X035 miss,
+      because the same gap exists on CH32V006. Decide once, apply to every part.
+- [ ] (AGENT-1) **USART LIN / SmartCard / IrDA** on X035 as `params:` mode flags — the DS
+      advertises them and the SPL has the calls.
+
+### Deliverable A — the three consumers (AGENT-2)
+
+The schema is `data/FORMAT.md` `## constraints` (AGENT-1, 22:02Z). APP reads it and decides
+nothing about a part; `app/engine/constraints.js` is the only place it is interpreted.
+
+- [x] (AGENT-2) **The GPIO table** — per ROW, from the data: a refused choice is not offered (not
+      offered-and-greyed), and when every option is refused the control is absent and the value is
+      text. The row's tooltip carries the constraint's `reason` and `source`. Measured in a real
+      browser on CH32X035/QFN28: PC16/PC11 offers Input+Analog, PA3 offers all four modes, PC18
+      offers No pull+Pull-up while PA3 offers Pull-down too.
+- [x] (AGENT-2) **The conflict engine** — a configured choice a constraint refuses is an issue
+      carrying the author's `reason` and the constraint `id`, attached to the owning peripheral and
+      collected in `E.constraintIssues` for a strip beside the shared-resource one. The pull is
+      checked only when the mode is Input, because the SPL ignores the pull column otherwise.
+- [x] (AGENT-2) **Codegen** — it never emits a forbidden combination: it declines and emits the
+      TODO the strict gate looks for, naming the constraint. The `speed` and `mode`/`pull` halves
+      are separate, so a speed constraint cannot suppress a legal mode macro.
+- [x] (AGENT-2) **A stored value the part forbids degrades the way a stored speed already does** —
+      `normaliseGpioConstraints()` called from `projectApply()`, next to `normaliseGpioSpeeds()`,
+      same contract: the file opens, the value is rewritten to the first legal one, and
+      `PROJECT.warnings` says which constraint and what it used instead. QA's 22:11Z request closed.
+- [x] (AGENT-2) **One shared mode derivation** — `gpioEffectiveMode()`/`skippedClaim()`/
+      `analogClaim()` in `app/engine/constraints.js`, called by both the engine and `gpioPlan()`,
+      so a rule the engine reports and the generator refuses cannot be two rules. Moved, not
+      copied: the generated C for all four fixtures is byte-identical to the baseline.
+- [x] (AGENT-2) **CH32V006 and CH32V005 unchanged** — every existing test unchanged, and every
+      generated `.c`/`.h` byte-identical before and after (`wchcube_cli.js --format c` on all four
+      fixtures, hashes compared). `--strict` exits 0 on all four, both formats.
+- [x] (AGENT-2) `app/tests/constraint.test.js` — 14 engine tests on a part invented in the test
+      (no part named in `app/`), covering both halves of a region, per-package scoping, the
+      `classes:` direction read off the data, the peripheral-coupled rule lifting, the codegen
+      TODO, the project degrade and the regression loop over all three real parts.
+- [ ] (AGENT-2) **The USBFS interaction the mechanism exposed** — `classes: [out]` on the shorted
+      pairs refuses the alternate function too, so enabling USBFS on five of seven CH32X035
+      packages makes `--strict` exit 2 for a configuration the silicon honours. REQUEST(→AGENT-1)
+      2026-09-12T01:22Z, with the measurement and a suggested `choices:` shape. Blocked on DATA by
+      design: the mechanism is faithful either way and `data/` is not mine.
+
