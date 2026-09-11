@@ -1407,20 +1407,54 @@ nvic:
     this is the first thing to check.
 
 # -----------------------------------------------------------------------------
+# GPIO capabilities — what the pin actually offers, so the UI does not offer more.
+#
+# This part has exactly ONE output speed. `GPIOx_CFGLR.MODEy` is a single bit
+# (RM v1.4 7.3.1.1: "1: Output mode, maximum speed 30MHz; 0: Input mode"), and the
+# EVT SDK agrees: `GPIOSpeed_TypeDef` in
+# data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h lines 23-26 has a
+# single member, `GPIO_Speed_30MHz = 1`. There is no 2 MHz, 10 MHz or 50 MHz on this
+# silicon; those are the CH32V10x/20x/30x spellings and they do not compile here.
+#
+# FORMAT.md: a `speeds:` list with ONE entry means the control is NOT SHOWN — the
+# value is displayed as fixed text. It does not mean "shown disabled".
+gpio:
+  speeds:
+    - { name: "30 MHz", macro: GPIO_Speed_30MHz }
+
+# -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.
 # Requested by AGENT-2 (BOARD 05:43Z / 05:44Z). Every number below was read off the
 # reference manual directly, not copied from the request; the one disagreement that
 # found is called out where it occurs.
 codegen:
-  header: ch32v00x.h
+  # ch32v00X.h — CAPITAL X. `ch32v00x.h` is the CH32V003 header, a different part with
+  # a different register map; it resolved here only because NTFS ignores case, and it
+  # fails outright on Linux. Confirmed: EVT
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X.h line 2 "File Name : ch32v00X.h",
+  # guard `__CH32V00X_H` line 12.
+  header: ch32v00X.h
 
   # RM 3.4.7: the GPIO ports and AFIO sit in RCC_PB2PCENR — AFIOEN bit 0, IOPAEN..IOPDEN
   # bits 2..5. The register really is named "PB2" on this family, not "APB2" (RM Table
   # 3-x, R32_RCC_PB2PCENR at 0x40021018), which is why the macro spelling below reads
-  # PB2. Confirming the EVT SDK uses the same spelling for the *function* is HUMAN_TODO
-  # item 5; the register name itself is settled.
+  # PB2. CONFIRMED against EVT, HUMAN_TODO item 5 closed:
+  # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_rcc.h declares
+  # RCC_PB2PeriphClockCmd (line 157), RCC_PB2Periph_AFIO (88) and
+  # RCC_PB2Periph_GPIOA..GPIOD (89-92). The `APB2` spelling belongs to CH32X035.
   gpio_clock: { fn: RCC_PB2PeriphClockCmd, port: RCC_PB2Periph_GPIO$PORT, afio: RCC_PB2Periph_AFIO }
-  speeds: { Low: GPIO_Speed_2MHz, Medium: GPIO_Speed_10MHz, High: GPIO_Speed_50MHz }
+
+  # GPIO-table speed name -> SPL macro. The authoritative list of speeds this part
+  # OFFERS is `gpio.speeds` above; this map only translates a stored name to a macro.
+  # Low/Medium/High are here as ALIASES so a .wchproj saved before the one-speed fix
+  # still generates code that compiles — they are not an offer, and the UI must read
+  # `gpio.speeds`, never these keys. AGENT-2: once emission is driven by gpio.speeds,
+  # this whole map becomes redundant and should go.
+  speeds:
+    "30 MHz": GPIO_Speed_30MHz
+    Low:      GPIO_Speed_30MHz    # legacy alias
+    Medium:   GPIO_Speed_30MHz    # legacy alias
+    High:     GPIO_Speed_30MHz    # legacy alias
 
   # AFIO_PCFR1 — RM 7.3.2.2. Bit layout row, high half then low half:
   #   [31:27] Reserved  [26:24] SWCFG  23 Reserved  [22:20] USART2_RM  19 ADC_ETRGREG_RM

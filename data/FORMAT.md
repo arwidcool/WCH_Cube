@@ -31,6 +31,7 @@ peripheral about what it can do.
 | `dma` | no | DMA channel → peripheral requests, and how a request is configured |
 | `nvic` | no | every interrupt vector, its owner, and the priority scheme |
 | `clock` | no | the Clock Configuration tab |
+| `gpio` | no | what the GPIO block on **this part** actually offers |
 | `codegen` | no | register encodings the C generator cannot derive |
 
 The loader only *requires* `mcu`, `packages`, `pins` and `peripherals`. Unknown top-level
@@ -393,6 +394,36 @@ only in a footnote about crystal ESR, not as a limit.)
 
 ---
 
+## `gpio`
+
+What the GPIO block on **this part** offers. It exists so the UI can stop offering a
+hardware choice the silicon does not have — round 3's rule, and the reason the CH32V006
+GPIO table used to show a Low/Medium/High speed selector for a port with one speed.
+
+```yaml
+gpio:
+  speeds:
+    - { name: "30 MHz", macro: GPIO_Speed_30MHz }
+```
+
+| Key | What it is |
+|---|---|
+| `speeds` | ordered list of the output speeds the part has. `name` is what the GPIO table shows and what a `.wchproj` stores; `macro` is the SPL enum member, and it must exist in that part's headers. |
+
+**A one-entry `speeds` list means the control is NOT SHOWN.** The value is rendered as
+fixed text. It does *not* mean "shown disabled" — greying is for an option that exists on
+the part and is unavailable right now, never for an option the part does not have.
+Two or more entries means a real selector with those entries and no others.
+
+A part with no `gpio:` block at all makes no claim, and the engine falls back to whatever
+`codegen.speeds` says. Prefer stating it: silence is how the wrong thing got offered.
+
+`gpio.speeds[].macro` is checked against the part's SDK headers by
+`tools/verify_sdk_names.py`, so a spelling from another family fails the gate instead of
+reaching a compiler.
+
+---
+
 ## `codegen`
 
 Everything the C generator cannot work out from the model: which register field a remap
@@ -402,9 +433,11 @@ exactly what is missing, so a part with no `codegen:` still generates a useful f
 
 ```yaml
 codegen:
-  header: ch32v00x.h
+  header: ch32v00X.h          # the part's OWN main header — see the warning below
   gpio_clock: { fn: RCC_PB2PeriphClockCmd, port: RCC_PB2Periph_GPIO$PORT, afio: RCC_PB2Periph_AFIO }
-  speeds: { Low: GPIO_Speed_2MHz, Medium: GPIO_Speed_10MHz, High: GPIO_Speed_50MHz }
+  speeds:                     # stored GPIO-table speed name -> SPL macro
+    "30 MHz": GPIO_Speed_30MHz
+    Low:      GPIO_Speed_30MHz    # alias, so a .wchproj saved earlier still compiles
   remap:
     register: "AFIO->PCFR1"
     fields:
@@ -431,6 +464,20 @@ codegen:
       Disable:                     { HSEON: 0, HSEBYP: 0 }
       Crystal / ceramic resonator: { HSEON: 1, HSEBYP: 0 }
 ```
+
+**`header:` is the part's own main SPL header, spelled exactly as the file is spelled.**
+This is not cosmetic and it has already shipped wrong once. The SDK carries a series
+`ch32v00Xx` (header `ch32v00X.h`, CH32V005/CH32V006) *and* a series `ch32v00x` (header
+`ch32v00x.h`, CH32V003) — two different parts with different register maps. On NTFS the
+wrong case resolves anyway, so the mistake is invisible on Windows, fails outright on
+Linux, and on a machine with both include paths silently compiles the other part. The
+series a part belongs to is not guessable from its part number; it is written down in
+`data/sources/README.md` and checked by `tools/verify_sdk_names.py`.
+
+**`speeds:` is a translation table, not an offer.** What the part offers is `gpio.speeds`.
+Keys here are stored GPIO-table speed names — including names kept only so an older
+`.wchproj` still generates code that compiles — and every value must be a macro that
+exists in this part's headers.
 
 Two registers are involved in a clock change, not one: `CFGR0` carries the muxes and
 prescalers, `CTLR` the oscillator *enables*. Selecting HSE therefore needs `HSEON` in
