@@ -27,7 +27,7 @@ export const paramKey = d => String(d.key !== undefined ? d.key : d.name);
 function normOptions(list) {
   if (!Array.isArray(list)) return null;
   return list.map(o => (o && typeof o === 'object')
-    ? { name: String(o.name), value: o.value }
+    ? { name: String(o.name), value: o.value, sdk: o.sdk }
     : { name: String(o), value: o });
 }
 
@@ -64,11 +64,16 @@ function normDeps(d) {
   return out;
 }
 
-/** The definitions for one peripheral, normalised and in display order. */
-export function paramDefs(pid) {
-  const P = (M && M.peripherals && M.peripherals[pid]) || null;
-  const list = P && Array.isArray(P.params) ? P.params : [];
-  return list.filter(d => d && (d.key !== undefined || d.name !== undefined)).map(d => ({
+/**
+ * Normalise a raw `params:`-schema list into display order. Exported because it is
+ * not only peripherals: `dma.channel_params` is deliberately the SAME schema, so
+ * resources.js renders and validates DMA_InitTypeDef fields through this one
+ * definition rather than a second, drifting copy. `sdk_field` / `sdk` / `field` are
+ * carried through untouched - codegen needs them and nothing here interprets them.
+ */
+export function normaliseParamDefs(list) {
+  const raw = Array.isArray(list) ? list : [];
+  return raw.filter(d => d && (d.key !== undefined || d.name !== undefined)).map(d => ({
     key: paramKey(d),
     name: d.name !== undefined ? String(d.name) : paramKey(d),
     type: d.type || (Array.isArray(d.options) ? 'enum' : typeof d.default === 'boolean' ? 'bool' : 'number'),
@@ -82,7 +87,16 @@ export function paramDefs(pid) {
     readonly: !!(d.readonly || d.computed),
     help: d.help || d.notes || '',
     deps: normDeps(d),
+    field: d.field, sdk_field: d.sdk_field,
+    sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
+    struct: d.struct,
   }));
+}
+
+/** The definitions for one peripheral, normalised and in display order. */
+export function paramDefs(pid) {
+  const P = (M && M.peripherals && M.peripherals[pid]) || null;
+  return normaliseParamDefs(P && P.params);
 }
 
 /** Defaults for a peripheral, for initState(). Pure: no S, no undo. */

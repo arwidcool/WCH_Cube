@@ -12,10 +12,20 @@
 //        DMA, so this is reported as a warning about a shared channel, and only
 //        once the DMA controller itself is switched on.
 //
-//  Both are reported through E.resources and folded into E.issues, so the tree
-//  and the centre panel show them with no UI change.
+//  NVIC  which vectors the user switched on, and at what PFIC priority. Not a
+//        conflict so much as the other resource that is not a pin, and it shares
+//        this file because a DMA channel interrupt is one object seen from both.
+//
+//  Both conflicts are reported through E.resources and folded into E.issues, so the
+//  tree and the centre panel show them with no UI change.
+//
+//  The state the user builds here - `S.dma.requests` and `S.nvic` - is defined in
+//  model.js initState(), round-tripped by project.js and undone by history.js like
+//  everything else. The setters below are the only way to change it.
 // =============================================================================
 import { M, S, isEnabled, pinExists } from './model.js';
+import { normaliseParamDefs, validateParam } from './params.js';
+import { record } from './history.js';
 
 // EXTI line a pin can drive, or null. `lines` maps a selector value to a pin.
 export function extiLineOf(pin) {
@@ -83,10 +93,368 @@ export function dmaState() {
   return { controller: d.controller, channels, enabled: on, issues };
 }
 
+// =============================================================================
+//  DMA requests — what the user asked the controller to move
+// =============================================================================
+//  `M.dma.requests` is the hardware map: channel -> the request lines wired to it.
+//  On CH32V006 every request name appears on exactly ONE channel, so the channel is
+//  not a choice at all - it is a consequence of the request. `legalChannels` is
+//  computed from the map rather than assumed, so a part whose request CAN go to more
+//  than one channel gets a real selector and this part gets fixed text. A one-entry
+//  list means the control is not shown, exactly as with gpio.speeds.
+//
+//  `S.dma.requests` is a LIST, not a map, because regenerating after a save/open
+//  cycle has to produce byte-identical C and object key order is not something to
+//  rely on. It is kept sorted by channel then request name, so two users who added
+//  the same requests in a different order still generate the same file.
+//
+//  `id` is the request name. A request line is a single piece of silicon: it cannot
+//  be added twice, so it is its own identity, it survives a .wchproj round trip
+//  unchanged, and a human reading the saved file can tell what it is.
+
+const dmaCfg = () => (M && M.dma) || {};
+
+/** Request name -> the channels that can serve it, from the hardware map. */
+export function dmaLegalChannels(request) {
+  const out = [];
+  for (const [ch, list] of Object.entries(dmaCfg().requests || {})) {
+    if ((list || []).map(String).includes(String(request))) out.push(String(ch));
+  }
+  return out.sort((a, b) => Number(a) - Number(b));
+}
+
+/** Every request this part has, in channel order. */
+export function dmaAllRequests() {
+  const out = [];
+  for (const [ch, list] of Object.entries(dmaCfg().requests || {})) {
+    for (const r of list || []) {
+      out.push({ request: String(r), channel: String(ch), owner: requestOwner(r) });
+    }
+  }
+  return out.sort((a, b) => (a.channel === b.channel ? a.request.localeCompare(b.request) : Number(a.channel) - Number(b.channel)));
+}
+
+/** The ones not added yet — what an "Add" control should offer. */
+export const dmaAddableRequests = () =>
+  dmaAllRequests().filter(r => !(S.dma.requests || []).some(x => x.id === r.request));
+
+/** Normalised DMA_InitTypeDef parameter definitions — the same schema as params:. */
+export function dmaParamDefs() {
+  const list = dmaCfg().channel_params;
+  if (!Array.isArray(list)) return [];
+  return normaliseParamDefs(list);
+}
+
+const dmaDefOf = key => dmaParamDefs().find(d => d.key === key);
+
+/** Starting values for a request: the definition defaults, then dma.request_defaults. */
+export function dmaRequestDefaults(request) {
+  const out = {};
+  for (const d of dmaParamDefs()) out[d.key] = d.default;
+  const seed = (dmaCfg().request_defaults || {})[request];
+  if (seed && typeof seed === 'object') {
+    for (const [k, v] of Object.entries(seed)) {
+      const d = dmaDefOf(k);
+      if (!d) continue;                       // the data names a parameter that is gone
+      try { out[k] = validateParam(d, v, `dma.request_defaults.${request}.${k}`); }
+      catch (e) { /* a bad starting value is not worth refusing to load the part for */ }
+    }
+  }
+  return out;
+}
+
+const byChannelThenName = (a, b) =>
+  (a.channel === b.channel ? String(a.id).localeCompare(String(b.id)) : Number(a.channel) - Number(b.channel));
+
+/** Everything the DMA Settings tab renders, one row per added request. */
+export function dmaRequests() {
+  if (!dmaCfg().requests) return [];
+  return (S.dma.requests || []).map(r => ({
+    id: r.id,
+    request: r.request,
+    owner: requestOwner(r.request),
+    channel: String(r.channel),
+    legalChannels: dmaLegalChannels(r.request),
+    params: { ...r.params },
+  })).sort(byChannelThenName);
+}
+
+const findRequest = id => (S.dma.requests || []).find(r => r.id === id);
+
+/**
+ * Add a request. The channel comes from the hardware map; pass one only when the
+ * part offers more than one and the user picked. Throws on a request this part does
+ * not have, and on adding the same request twice - one request line, one user.
+ */
+export function addDmaRequest(request, channel) {
+  const name = String(request);
+  const legal = dmaLegalChannels(name);
+  if (!legal.length) {
+    const all = dmaAllRequests().map(r => r.request);
+    throw new Error(`${M.mcu.name} has no DMA request "${name}"${all.length ? ` (has: ${all.join(', ')})` : ''}`);
+  }
+  const already = findRequest(name);
+  if (already) throw new Error(`${name} is already on DMA channel ${already.channel}`);
+  const ch = channel === undefined ? legal[0] : String(channel);
+  if (!legal.includes(ch)) throw new Error(`DMA request ${name} cannot use channel ${ch} — it is wired to ${legal.join(', ')}`);
+  record(`Add DMA ${name}`);
+  (S.dma.requests ||= []).push({ id: name, request: name, channel: ch, params: dmaRequestDefaults(name) });
+  S.dma.requests.sort(byChannelThenName);
+  return name;
+}
+
+export function removeDmaRequest(id) {
+  const i = (S.dma.requests || []).findIndex(r => r.id === id);
+  if (i < 0) throw new Error(`No DMA request "${id}" is configured`);
+  record(`Remove DMA ${id}`);
+  S.dma.requests.splice(i, 1);
+}
+
+/** Move a request to another channel it is actually wired to. */
+export function setDmaRequest(id, patch) {
+  const r = findRequest(id);
+  if (!r) throw new Error(`No DMA request "${id}" is configured`);
+  if (!patch || patch.channel === undefined) return;
+  const ch = String(patch.channel);
+  const legal = dmaLegalChannels(r.request);
+  if (!legal.includes(ch)) throw new Error(`DMA request ${r.request} cannot use channel ${ch} — it is wired to ${legal.join(', ')}`);
+  record(`DMA ${id} channel`);
+  r.channel = ch;
+  S.dma.requests.sort(byChannelThenName);
+}
+
+/** One DMA_InitTypeDef field, validated exactly like a peripheral parameter. */
+export function setDmaParam(id, key, value) {
+  const r = findRequest(id);
+  if (!r) throw new Error(`No DMA request "${id}" is configured`);
+  const d = dmaDefOf(key);
+  if (!d) {
+    const known = dmaParamDefs().map(x => x.key).join(', ');
+    throw new Error(`DMA has no parameter "${key}"${known ? ` (has: ${known})` : ''}`);
+  }
+  if (d.readonly) throw new Error(`DMA.${d.name} is fixed by the hardware and cannot be set`);
+  const v = validateParam(d, value, `${r.request}.${d.name}`);
+  record(`DMA ${id} ${d.name}`);
+  (r.params ||= {})[key] = v;
+  return v;
+}
+
+export function dmaParamValue(id, key) {
+  const r = findRequest(id);
+  if (!r) return undefined;
+  if (r.params && r.params[key] !== undefined) return r.params[key];
+  const d = dmaDefOf(key);
+  return d ? d.default : undefined;
+}
+
+/** The register encoding behind a chosen option, for codegen. */
+export function dmaParamRegisterValue(id, key) {
+  const d = dmaDefOf(key);
+  if (!d) return undefined;
+  const v = dmaParamValue(id, key);
+  if (!d.options) return v;
+  const hit = d.options.find(o => String(o.name) === String(v));
+  return hit ? hit.value : undefined;
+}
+
+/**
+ * Two requests the user configured on one channel. This is a HARD conflict, not the
+ * soft "this channel is shared" warning dmaState() reports about what is merely
+ * switched on: the user has explicitly asked for both, and the channel can serve one.
+ * codegen turns it into an #error rather than last-wins code.
+ */
+export function dmaConflicts() {
+  const byCh = {};
+  for (const r of dmaRequests()) (byCh[r.channel] ||= []).push(r);
+  const out = [];
+  for (const [channel, rows] of Object.entries(byCh)) {
+    if (rows.length < 2) continue;
+    out.push({
+      channel,
+      ids: rows.map(r => r.id),
+      owners: [...new Set(rows.map(r => r.owner))],
+      text: `${dmaCfg().controller || 'DMA'} channel ${channel} is configured for ${rows.map(r => r.request).join(' and ')}`
+        + ' — one channel serves one request at a time',
+    });
+  }
+  return out.sort((a, b) => Number(a.channel) - Number(b.channel));
+}
+
+/**
+ * A coupling the data deliberately does not automate (AGENT-1, round 2): SPI1 moving
+ * 16-bit frames needs half-word widths on both sides of the transfer. Nothing enforces
+ * it, so say so rather than generate a silent mismatch.
+ */
+function dmaCouplingWarnings() {
+  const out = [];
+  for (const r of dmaRequests()) {
+    const ps = (S.periph[r.owner] || {}).params || {};
+    const wide = Object.entries(ps).some(([k, v]) => /data|size|frame|width/i.test(k) && /16/.test(String(v)));
+    if (!wide) continue;
+    const psize = dmaParamValue(r.id, 'psize'), msize = dmaParamValue(r.id, 'msize');
+    if (psize === undefined && msize === undefined) continue;
+    if (String(psize) === 'Half Word' && String(msize) === 'Half Word') continue;
+    out.push({
+      kind: 'dma', severity: 'warning', owners: [r.owner, dmaCfg().controller].filter(Boolean),
+      text: `${r.owner} moves 16-bit data but ${r.request} transfers ${psize} / ${msize}`
+        + ' — both widths should be Half Word or the transfer is misaligned',
+    });
+  }
+  return out;
+}
+
+// =============================================================================
+//  NVIC — which interrupt vectors are on, and at what priority
+// =============================================================================
+//  The PFIC is NOT the Cortex-M scheme. `PFIC_IPRIORx` gives every vector a byte and
+//  implements TWO of its bits ([5:0] are reserved, fixed to 0 and write-invalid; RM
+//  6.5.2.21), and the maximum nesting depth is 2. `nvic.scheme.groups` carries the
+//  variants; the ranges come from the ACTIVE group, never from a hardcoded 0-15.
+//
+//  Where the nesting depth itself is configured is not in this reference manual, so
+//  the group is a recorded choice with no register write claimed for it. Do not
+//  invent one - AGENT-1's note under `nvic.scheme.notes` says why.
+
+const nvicCfg = () => (M && M.nvic) || {};
+export const nvicScheme = () => nvicCfg().scheme || null;
+export const nvicGroups = () => ((nvicCfg().scheme || {}).groups || []);
+export const nvicGroup = () => nvicGroups()[S.nvic.group] || null;
+
+/** A vector is available when the peripheral that raises it is switched on. */
+function vectorAvailable(v) {
+  if (v.system) return true;                       // NMI, SysTick, the software interrupt
+  if (!v.peripheral) return true;
+  if (!M.peripherals[v.peripheral]) return false;  // the part does not have it at all
+  return isEnabled(v.peripheral);
+}
+
+/** Clamp a priority into the active group's range, or null when there is no group. */
+function nvicRange(which) {
+  const g = nvicGroup();
+  const spec = g && g[which];
+  if (!spec) return null;
+  return { min: spec.min || 0, max: spec.max === undefined ? 0 : spec.max, bits: spec.bits || 0 };
+}
+
+/** Everything the NVIC Settings tab and the System Core overview render. */
+export function nvicVectors() {
+  const list = nvicCfg().vectors;
+  if (!Array.isArray(list)) return [];
+  return list.map(v => {
+    const st = (S.nvic.vectors || {})[v.name] || {};
+    return {
+      name: String(v.name),
+      vector: v.vector,
+      irqn: v.irqn || null,          // IRQn_Type member — NVIC_InitStructure.NVIC_IRQChannel
+      handler: v.handler || null,    // the startup-table symbol the user's ISR must be called
+      peripheral: v.peripheral || null,
+      channel: v.channel === undefined ? null : v.channel,
+      description: v.description || '',
+      system: !!v.system,
+      fixed: !!v.fixed,              // NMI and HardFault cannot be switched off
+      available: vectorAvailable(v),
+      enabled: v.fixed ? true : !!st.enabled,
+      preempt: st.preempt === undefined ? (nvicRange('preempt') || { min: 0 }).min : st.preempt,
+      sub: st.sub === undefined ? (nvicRange('sub') || { min: 0 }).min : st.sub,
+    };
+  });
+}
+
+const vectorDef = name => (nvicCfg().vectors || []).find(v => String(v.name) === String(name));
+
+/** Enable a vector, or set its priority. Validated against the ACTIVE group. */
+export function setNvicVector(name, patch) {
+  const v = vectorDef(name);
+  if (!v) {
+    const known = (nvicCfg().vectors || []).map(x => x.name).join(', ');
+    throw new Error(`${M.mcu.name} has no interrupt vector "${name}"${known ? ` (has: ${known})` : ''}`);
+  }
+  const p = patch || {};
+  if (v.fixed && p.enabled === false) {
+    throw new Error(`${name} cannot be disabled — it is always active on this core`);
+  }
+  for (const which of ['preempt', 'sub']) {
+    if (p[which] === undefined) continue;
+    const r = nvicRange(which);
+    if (!r) throw new Error(`${M.mcu.name} has no priority grouping data, so ${which} priority cannot be set`);
+    const n = Number(p[which]);
+    if (!Number.isInteger(n) || n < r.min || n > r.max) {
+      throw new Error(`${name}: ${which} priority ${p[which]} is outside ${r.min}-${r.max}`
+        + ` for "${(nvicGroup() || {}).name || 'the active grouping'}"`);
+    }
+  }
+  record(`${name} interrupt`);
+  const st = ((S.nvic.vectors ||= {})[name] ||= {});
+  if (p.enabled !== undefined) st.enabled = !!p.enabled;
+  if (p.preempt !== undefined) st.preempt = Number(p.preempt);
+  if (p.sub !== undefined) st.sub = Number(p.sub);
+  return st;
+}
+
+/**
+ * Change the priority grouping. Priorities already set are clamped into the new
+ * group's range rather than silently left out of it - a 1-bit preempt field cannot
+ * hold the 3 that a wider grouping allowed.
+ */
+export function setNvicGroup(index) {
+  const groups = nvicGroups();
+  const i = Number(index);
+  if (!groups[i]) throw new Error(`${M.mcu.name} has no interrupt priority grouping ${index} (it has ${groups.length})`);
+  record('Interrupt priority grouping');
+  S.nvic.group = i;
+  for (const st of Object.values(S.nvic.vectors || {})) {
+    for (const which of ['preempt', 'sub']) {
+      if (st[which] === undefined) continue;
+      const r = nvicRange(which);
+      if (r) st[which] = Math.min(Math.max(st[which], r.min), r.max);
+    }
+  }
+  return i;
+}
+
+/** A vector the user enabled on a peripheral that is now off. */
+function nvicIssues() {
+  const out = [];
+  for (const v of nvicVectors()) {
+    if (!v.enabled || v.available || v.fixed) continue;
+    out.push({
+      kind: 'nvic', severity: 'warning', owners: [v.peripheral].filter(Boolean),
+      text: `${v.name} is enabled but ${v.peripheral ? `${v.peripheral} is switched off` : 'nothing raises it'}`
+        + ' — the vector will never fire',
+    });
+  }
+  return out;
+}
+
+/** The whole NVIC picture, for the System Core overview. */
+export function nvicState() {
+  if (!nvicCfg().vectors) return null;
+  return {
+    controller: nvicCfg().controller || 'NVIC',
+    scheme: nvicScheme(),
+    groups: nvicGroups(),
+    group: S.nvic.group,
+    vectors: nvicVectors(),
+    issues: nvicIssues(),
+  };
+}
+
 // Everything above, plus the flat issue list compute() folds into E.
 export function resourceState() {
   const exti = extiState();
   const dma = dmaState();
-  const issues = [...((exti && exti.issues) || []), ...((dma && dma.issues) || [])];
-  return { exti, dma, issues };
+  const nvic = nvicState();
+  const hard = dmaConflicts().map(c => ({
+    kind: 'dma', severity: 'conflict', channel: c.channel,
+    owners: [...new Set([dmaCfg().controller, ...c.owners].filter(Boolean))],
+    text: c.text,
+  }));
+  const issues = [
+    ...((exti && exti.issues) || []),
+    ...((dma && dma.issues) || []),
+    ...hard,
+    ...dmaCouplingWarnings(),
+    ...((nvic && nvic.issues) || []),
+  ];
+  return { exti, dma, nvic, issues };
 }

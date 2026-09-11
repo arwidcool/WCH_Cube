@@ -5,7 +5,12 @@
 // =============================================================================
 import {
   M, S, MCU_FILES, loadMcu, applyPackageRemaps, yamlDump, yamlLoad, gpioSpeeds, gpioSpeedFor,
+  defaultNvicGroup,
 } from './model.js';
+import {
+  addDmaRequest, setDmaParam, setDmaRequest, dmaLegalChannels,
+  setNvicVector, setNvicGroup, nvicGroups,
+} from './resources.js';
 import { applyParams, paramsObject } from './params.js';
 import { clearHistory } from './history.js';
 
@@ -68,7 +73,30 @@ export function projectObject() {
     gpio_manual: S.manual,
     gpio_settings: S.gpio,
     clock: S.clock,
+    ...dmaObject(),
+    ...nvicObject(),
   };
+}
+
+// Both blocks are omitted when the user has not touched them, so a project saved
+// before either existed round-trips byte-identically and a diff of two .wchproj
+// files shows only what somebody actually changed.
+function dmaObject() {
+  const list = S.dma && S.dma.requests;
+  if (!list || !list.length) return {};
+  return { dma: list.map(r => ({ request: r.request, channel: Number(r.channel), params: { ...r.params } })) };
+}
+
+function nvicObject() {
+  const n = S.nvic || {};
+  const vectors = {};
+  for (const [name, st] of Object.entries(n.vectors || {})) {
+    if (!st || (!st.enabled && st.preempt === undefined && st.sub === undefined)) continue;
+    vectors[name] = { enabled: !!st.enabled, preempt: st.preempt, sub: st.sub };
+  }
+  const groupChanged = n.group !== undefined && n.group !== defaultNvicGroup(M.nvic);
+  if (!Object.keys(vectors).length && !groupChanged) return {};
+  return { nvic: { group: n.group || 0, vectors } };
 }
 
 export function projectSerialize() {
@@ -90,6 +118,59 @@ function normaliseGpioSpeeds() {
     if (fixed === g.speed) continue;
     out.push(`${pin}: output speed "${g.speed}" is not one this part has; using "${fixed}".`);
     g.speed = fixed;
+  }
+  return out;
+}
+
+/**
+ * DMA requests from a .wchproj. Everything goes through the same setters the UI uses,
+ * so a saved file can never put state into S that the engine would reject live: a
+ * request the part no longer has, a channel it is not wired to, a parameter value out
+ * of range. Each of those is dropped and reported, never applied - the project still
+ * opens, minus the line that stopped being true.
+ */
+function applyDma(list) {
+  const out = [];
+  if (!Array.isArray(list)) return out;
+  for (const row of list) {
+    if (!row || row.request === undefined) continue;
+    const name = String(row.request);
+    try {
+      // The channel is only passed on when the part really offers a choice; otherwise
+      // the hardware map decides and a stale one in the file is simply ignored.
+      const legal = dmaLegalChannels(name);
+      addDmaRequest(name, legal.length > 1 && row.channel !== undefined ? row.channel : undefined);
+    } catch (e) { out.push(`dma ${name}: ${e.message}`); continue; }
+    if (row.channel !== undefined && dmaLegalChannels(name).length > 1) {
+      try { setDmaRequest(name, { channel: row.channel }); } catch (e) { out.push(`dma ${name}: ${e.message}`); }
+    }
+    for (const [k, v] of Object.entries(row.params || {})) {
+      try { setDmaParam(name, k, v); } catch (e) { out.push(`dma ${name}: ${e.message}`); }
+    }
+  }
+  return out;
+}
+
+/** The same, for interrupt vectors and the priority grouping. */
+function applyNvic(obj) {
+  const out = [];
+  if (!obj || typeof obj !== 'object') return out;
+  if (obj.group !== undefined && nvicGroups().length) {
+    try { setNvicGroup(obj.group); } catch (e) { out.push(`nvic: ${e.message}`); }
+  }
+  for (const [name, st] of Object.entries(obj.vectors || {})) {
+    if (!st || typeof st !== 'object') continue;
+    const patch = {};
+    for (const k of ['enabled', 'preempt', 'sub']) if (st[k] !== undefined) patch[k] = st[k];
+    if (!Object.keys(patch).length) continue;
+    try { setNvicVector(name, patch); }
+    catch (e) {
+      out.push(`nvic ${name}: ${e.message}`);
+      // a priority that no longer fits is not a reason to lose the enable
+      if (patch.enabled !== undefined) {
+        try { setNvicVector(name, { enabled: patch.enabled }); } catch (e2) { /* already reported */ }
+      }
+    }
   }
   return out;
 }
@@ -122,6 +203,8 @@ export function projectApply(src) {
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
   dropped.push(...normaliseGpioSpeeds());
+  dropped.push(...applyDma(obj.dma));
+  dropped.push(...applyNvic(obj.nvic));
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;

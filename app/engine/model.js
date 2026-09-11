@@ -68,6 +68,15 @@ export function deriveMcu(y) {
   return y;
 }
 
+// The priority grouping a part starts in: the one the data marks `default: true`,
+// else the first. A part with no `nvic.scheme.groups` has no grouping to choose and
+// the index stays 0, which every reader treats as "no group data".
+export function defaultNvicGroup(nvic) {
+  const groups = ((nvic || {}).scheme || {}).groups || [];
+  const i = groups.findIndex(g => g && g.default);
+  return i >= 0 ? i : 0;
+}
+
 export function initState(m) {
   const pkgs = Object.keys(m.packages);
   const st = {
@@ -78,6 +87,12 @@ export function initState(m) {
     sel: null,             // selected peripheral
     selPin: null,
     clock: defaultClock(m.clock),
+    // What the user has asked the DMA controller and the interrupt controller to do.
+    // Both are shared resources rather than pins, so they live beside `periph` rather
+    // than inside it: one DMA channel serves several peripherals, and one vector can be
+    // the only interrupt a peripheral has. Shapes and rules: app/engine/resources.js.
+    dma: { requests: [] },     // [{ id, request, channel, params: {key: value} }]
+    nvic: { group: defaultNvicGroup(m.nvic), vectors: {} },  // name -> { enabled, preempt, sub }
     zoom: 1, panX: 0, panY: 0,
   };
   for (const [pid, P] of Object.entries(m.peripherals)) {

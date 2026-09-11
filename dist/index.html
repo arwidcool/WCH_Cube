@@ -62,7 +62,12 @@
   /* Short labels are the narrow-window spelling; one of the pair is always hidden. */
   .menu .lbl-short{display:none}
   .menubar .spacer{flex:1 1 0;min-width:4px}
+  /* This has to FIT, not ellipsise: an ellipsis is still a value the user cannot read,
+     and AGENT-4's legibility suite counts it as one. The core name is the long half and
+     the memory sizes are the half people actually scan, so the core drops out when the
+     bar gets tight and the full string stays in title=. */
   .menubar .mcu-name{color:var(--muted);flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  @media (max-width:1600px){ .menubar .meta-core{display:none} }
   .menubar .mcusel-wrap{display:flex;align-items:center;gap:5px;flex:0 1 auto;min-width:0}
   .menubar .mcusel-wrap>span{color:var(--muted);white-space:nowrap}
   #mcusel{max-width:190px;min-width:96px}
@@ -309,7 +314,11 @@
   .canvas{flex:1;overflow:hidden;position:relative;cursor:grab;background:var(--panel)}
   .canvas.grabbing{cursor:grabbing}
   .canvas svg{width:100%;height:100%;display:block}
-  .chipbar{display:flex;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line);background:var(--bar)}
+  /* flex-wrap is unconditional. It used to arrive only below 1460 px, so at 1536 CSS
+     px (1920 at 125 % zoom) the bar did not wrap and "Only modified" and the unused-GPIO
+     counter were painted past the right edge of the window - AGENT-4's legibility suite
+     caught it at a width my own sweep never measured. A toolbar wraps; that is what it is. */
+  .chipbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line);background:var(--bar)}
   .chipbar .ic{border:0;background:none;color:var(--link);font-size:17px;padding:2px 6px;border-radius:3px}
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
@@ -470,6 +479,9 @@
   .pmfile{display:block;width:100%;text-align:left;border:0;background:none;color:var(--text);padding:5px 10px;font:inherit;cursor:pointer;border-left:3px solid transparent}
   .pmfile:hover{background:var(--blue-pale)}
   .pmfile.on{background:var(--blue-pale);border-left-color:var(--blue);font-weight:600}
+  /* Generated names are long and full of underscores; wrapping them keeps every
+     character readable where an ellipsis would hide which package a file is for. */
+  .pmfile .nm{display:block;overflow-wrap:anywhere;line-height:1.25}
   .pmfile small{display:block;color:var(--muted);font-size:10.5px;font-weight:400}
   /* A file the generator complained in is flagged in the LIST as well as in the text:
      an #error 400 lines down a file nobody scrolled is how a wrong identifier ships. */
@@ -489,10 +501,13 @@
   /* The generator says "I could not work this out" in exactly two spellings and the
      engine hands them back by line number (cComplaints). They are marked here so they
      cannot scroll past: an explanation of what is missing is not generated code. */
-  .pmcode tr.err td{background:var(--bad-bg)} .pmcode tr.err td:not(.ln){color:var(--bad);font-weight:600}
+  .pmcode tr.error td{background:var(--bad-bg)} .pmcode tr.error td:not(.ln){color:var(--bad);font-weight:600}
   .pmcode tr.todo td{background:var(--warn-bg)} .pmcode tr.todo td:not(.ln){color:var(--warn-ink)}
-  .pmcode tr.err td.ln,.pmcode tr.todo td.ln{font-weight:700}
-  .pmnote{padding:6px 10px;font-size:11.5px;border-bottom:1px solid var(--line)}
+  .pmcode tr.error td.ln,.pmcode tr.todo td.ln{font-weight:700;color:var(--bad)}
+  .pmcode tr.todo td.ln{color:var(--warn-ink)}
+  /* Sticky, and in the UI font rather than the code font: it is a statement about the
+     file, not a line of it, and it has to stay visible while the user scrolls the file. */
+  .pmnote{position:sticky;top:0;z-index:2;padding:6px 10px;font:12px/1.4 var(--font);border-bottom:1px solid var(--line)}
   .pmnote.bad{background:var(--bad-bg);color:var(--bad)}
   .pmnote.warn{background:var(--warn-bg);color:var(--warn-ink)}
   /* Side by side for as long as both halves are usable; below that the settings stack
@@ -560,7 +575,6 @@
   @media (max-width:1460px){
     #view-pinout{grid-template-columns:266px minmax(360px,1fr) minmax(450px,1.3fr)}
     .subbar{gap:60px}
-    .chipbar{flex-wrap:wrap}
     /* 152, not 120: the placeholder "🔍 find pin or signal" measures 132 px in this
        font, and a 120 px box clipped it to "find pin or sigr" (round-2 finding L5). */
     #pin-search{width:152px!important}
@@ -1282,40 +1296,50 @@ peripherals:
     params:
       - key: sample
         name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_note: "ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per CHANNEL, not per peripheral. ch32v00X_adc.h:165."
         type: enum
         default: 11.5 cycles
         options:
-          - { name: 3.5 cycles  , value: 0 }
-          - { name: 7.5 cycles  , value: 1 }
-          - { name: 11.5 cycles , value: 2 }
-          - { name: 19.5 cycles , value: 3 }
-          - { name: 35.5 cycles , value: 4 }
-          - { name: 55.5 cycles , value: 5 }
-          - { name: 71.5 cycles , value: 6 }
-          - { name: 239.5 cycles, value: 7 }
+          - { name: 3.5 cycles  , value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles  , value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 11.5 cycles , value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 19.5 cycles , value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 35.5 cycles , value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles , value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles , value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
         help: "ADC_SAMPTR1/2 SMPx[2:0], codes 000..111 in this order. These are the NORMAL-mode figures; in low-power mode codes 010/011/100 mean 13.5/28.5/41.5 cycles instead (RM 9.3.4). Total conversion = sampling + 12.5 ADC clocks."
       - key: lowpower
         name: Low power mode
+        sdk_none: true
+        sdk_note: ch32v00X_adc.h exposes NOTHING for the low-power bit - no struct member and no function (grepped the whole header). It is ADC_CTLR1 ADC_LP and codegen must write the register or leave it alone. Do not invent an ADC_LowPowerCmd.
         type: bool
         default: false
         help: "ADC_CTLR3 ADC_LP, bit 0. Changes what three of the sampling-time codes mean - see that row."
       - key: cont
         name: Continuous conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ContinuousConvMode
         type: bool
         default: false
         help: ADC_CTLR2 CONT, bit 1.
       - key: scan
         name: Scan conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ScanConvMode
         type: bool
         default: false
         help: ADC_CTLR1 SCAN, bit 8.
       - key: align
         name: Data alignment
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_DataAlign
         type: enum
         default: Right
         options:
-          - { name: Right, value: 0 }
-          - { name: Left , value: 1 }
+          - { name: Right, value: 0, sdk: ADC_DataAlign_Right }
+          - { name: Left , value: 1, sdk: ADC_DataAlign_Left }
         help: ADC_CTLR2 ALIGN, bit 11.
 
 
@@ -1432,6 +1456,8 @@ peripherals:
     params:
       - key: prescaler
         name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
         type: int
         default: 0
         min: 0
@@ -1439,6 +1465,8 @@ peripherals:
         help: "TIM1_PSC. Counter clock = HCLK / (Prescaler + 1)."
       - key: period
         name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
         type: int
         default: 65535
         min: 0
@@ -1446,31 +1474,39 @@ peripherals:
         help: "TIM1_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
       - key: counter
         name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
         type: enum
         default: Up
         options:
-          - { name: Up              , value: 0 }
-          - { name: Down            , value: 1 }
-          - { name: Center aligned 1, value: 2 }
-          - { name: Center aligned 2, value: 3 }
-          - { name: Center aligned 3, value: 4 }
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
         help: "TIM1_CTLR1 DIR (bit 4) and CMS[6:5]."
       - key: ckd
         name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
         type: enum
         default: "1"
         options:
-          - { name: "1", value: 0 }
-          - { name: "2", value: 1 }
-          - { name: "4", value: 2 }
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
         help: "TIM1_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
       - key: arpe
         name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
         help: "TIM1_CTLR1 ARPE, bit 7."
       - key: rcr
         name: Repetition counter (RPTCR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_RepetitionCounter
         type: int
         default: 0
         min: 0
@@ -1478,6 +1514,9 @@ peripherals:
         help: TIM1_RPTCR. An update event happens every (value + 1) counter cycles. Advanced timer only.
       - key: deadtime
         name: Dead time
+        struct: TIM_BDTRInitTypeDef
+        sdk_field: TIM_DeadTime
+        sdk_note: "A DIFFERENT struct from the rest of this peripheral: dead time lives in TIM_BDTRInitTypeDef and is applied by TIM_BDTRConfig, not TIM_TimeBaseInit. Putting it in the time-base block would not compile."
         type: int
         default: 0
         min: 0
@@ -1543,6 +1582,8 @@ peripherals:
     params:
       - key: prescaler
         name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
         type: int
         default: 0
         min: 0
@@ -1550,6 +1591,8 @@ peripherals:
         help: "TIM2_PSC. Counter clock = HCLK / (Prescaler + 1)."
       - key: period
         name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
         type: int
         default: 65535
         min: 0
@@ -1557,26 +1600,32 @@ peripherals:
         help: "TIM2_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
       - key: counter
         name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
         type: enum
         default: Up
         options:
-          - { name: Up              , value: 0 }
-          - { name: Down            , value: 1 }
-          - { name: Center aligned 1, value: 2 }
-          - { name: Center aligned 2, value: 3 }
-          - { name: Center aligned 3, value: 4 }
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
         help: "TIM2_CTLR1 DIR (bit 4) and CMS[6:5]."
       - key: ckd
         name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
         type: enum
         default: "1"
         options:
-          - { name: "1", value: 0 }
-          - { name: "2", value: 1 }
-          - { name: "4", value: 2 }
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
         help: "TIM2_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
       - key: arpe
         name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
         type: bool
         default: false
         help: "TIM2_CTLR1 ARPE, bit 7."
@@ -1627,6 +1676,8 @@ peripherals:
     params:
       - key: baud
         name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
         type: int
         default: 115200
         min: 110
@@ -1635,30 +1686,36 @@ peripherals:
         help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
       - key: word
         name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
         type: enum
         default: 8 bits
         options:
-          - { name: 8 bits, value: 0 }
-          - { name: 9 bits, value: 1 }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
         help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
       - key: parity
         name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
         type: enum
         default: "None"
         options:
-          - { name: "None", value: 0 }
-          - { name: Even  , value: 2 }
-          - { name: Odd   , value: 3 }
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
         help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
       - key: stop
         name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
         type: enum
         default: "1"
         options:
-          - { name: "1"  , value: 0 }
-          - { name: "0.5", value: 1 }
-          - { name: "2"  , value: 2 }
-          - { name: "1.5", value: 3 }
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
 
 
@@ -1696,6 +1753,8 @@ peripherals:
     params:
       - key: baud
         name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
         type: int
         default: 115200
         min: 110
@@ -1704,30 +1763,36 @@ peripherals:
         help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
       - key: word
         name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
         type: enum
         default: 8 bits
         options:
-          - { name: 8 bits, value: 0 }
-          - { name: 9 bits, value: 1 }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
         help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
       - key: parity
         name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
         type: enum
         default: "None"
         options:
-          - { name: "None", value: 0 }
-          - { name: Even  , value: 2 }
-          - { name: Odd   , value: 3 }
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
         help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
       - key: stop
         name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
         type: enum
         default: "1"
         options:
-          - { name: "1"  , value: 0 }
-          - { name: "0.5", value: 1 }
-          - { name: "2"  , value: 2 }
-          - { name: "1.5", value: 3 }
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
 
 
@@ -1766,52 +1831,64 @@ peripherals:
     params:
       - key: prescaler
         name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
         type: enum
         default: "16"
         options:
-          - { name: "2"  , value: 0 }
-          - { name: "4"  , value: 1 }
-          - { name: "8"  , value: 2 }
-          - { name: "16" , value: 3 }
-          - { name: "32" , value: 4 }
-          - { name: "64" , value: 5 }
-          - { name: "128", value: 6 }
-          - { name: "256", value: 7 }
+          - { name: "2"  , value: 0, sdk: SPI_BaudRatePrescaler_2 }
+          - { name: "4"  , value: 1, sdk: SPI_BaudRatePrescaler_4 }
+          - { name: "8"  , value: 2, sdk: SPI_BaudRatePrescaler_8 }
+          - { name: "16" , value: 3, sdk: SPI_BaudRatePrescaler_16 }
+          - { name: "32" , value: 4, sdk: SPI_BaudRatePrescaler_32 }
+          - { name: "64" , value: 5, sdk: SPI_BaudRatePrescaler_64 }
+          - { name: "128", value: 6, sdk: SPI_BaudRatePrescaler_128 }
+          - { name: "256", value: 7, sdk: SPI_BaudRatePrescaler_256 }
         help: "SPI_CTLR1 BR[5:3], codes 000..111 in this order. Divides HCLK - this family has one bus frequency, not a separate peripheral clock."
       - key: cpol
         name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
         type: enum
         default: Low
         options:
-          - { name: Low , value: 0 }
-          - { name: High, value: 1 }
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
         help: SPI_CTLR1 CPOL, bit 1.
       - key: cpha
         name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
         type: enum
         default: 1 Edge
         options:
-          - { name: 1 Edge, value: 0 }
-          - { name: 2 Edge, value: 1 }
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
         help: SPI_CTLR1 CPHA, bit 0.
       - key: datasize
         name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
         type: enum
         default: 8 bits
         options:
-          - { name: 8 bits , value: 0 }
-          - { name: 16 bits, value: 1 }
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
         help: SPI_CTLR1 DFF, bit 11.
       - key: firstbit
         name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
         type: enum
         default: MSB First
         options:
-          - { name: MSB First, value: 0 }
-          - { name: LSB First, value: 1 }
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
         help: SPI_CTLR1 LSBFIRST, bit 7.
       - key: crc
         name: CRC calculation
+        sdk_call: SPI_CalculateCRC
+        sdk_note: "SPI_InitTypeDef has SPI_CRCPolynomial (the polynomial) but no CRC ENABLE member; enabling it is a call after SPI_Init. ch32v00X_spi.h:53 and :140."
         type: bool
         default: false
         help: SPI_CTLR1 CRCEN, bit 13. The polynomial lives in SPI_CRCR and defaults to 7.
@@ -1836,6 +1913,8 @@ peripherals:
     params:
       - key: speed
         name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
         type: int
         default: 100000
         min: 1000
@@ -1844,22 +1923,28 @@ peripherals:
         help: "I2C_CKCFGR CCR[11:0] together with F/S (bit 15). Above 100 kHz the peripheral must be in fast mode."
       - key: duty
         name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
         type: enum
         default: "2:1"
         options:
-          - { name: "2:1" , value: 0 }
-          - { name: "16:9", value: 1 }
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
         help: "I2C_CKCFGR DUTY, bit 14. Ignored below 100 kHz, where the peripheral runs in standard mode."
       - key: addrmode
         name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
         type: enum
         default: 7-bit
         options:
-          - { name: 7-bit , value: 0 }
-          - { name: 10-bit, value: 1 }
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
         help: I2C_OAR1 ADDMODE, bit 15.
       - key: addr
         name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
         type: int
         default: 0
         min: 0
@@ -4169,6 +4254,15 @@ function deriveMcu(y) {
   return y;
 }
 
+// The priority grouping a part starts in: the one the data marks `default: true`,
+// else the first. A part with no `nvic.scheme.groups` has no grouping to choose and
+// the index stays 0, which every reader treats as "no group data".
+function defaultNvicGroup(nvic) {
+  const groups = ((nvic || {}).scheme || {}).groups || [];
+  const i = groups.findIndex(g => g && g.default);
+  return i >= 0 ? i : 0;
+}
+
 function initState(m) {
   const pkgs = Object.keys(m.packages);
   const st = {
@@ -4179,6 +4273,12 @@ function initState(m) {
     sel: null,             // selected peripheral
     selPin: null,
     clock: defaultClock(m.clock),
+    // What the user has asked the DMA controller and the interrupt controller to do.
+    // Both are shared resources rather than pins, so they live beside `periph` rather
+    // than inside it: one DMA channel serves several peripherals, and one vector can be
+    // the only interrupt a peripheral has. Shapes and rules: app/engine/resources.js.
+    dma: { requests: [] },     // [{ id, request, channel, params: {key: value} }]
+    nvic: { group: defaultNvicGroup(m.nvic), vectors: {} },  // name -> { enabled, preempt, sub }
     zoom: 1, panX: 0, panY: 0,
   };
   for (const [pid, P] of Object.entries(m.peripherals)) {
@@ -4357,7 +4457,7 @@ const paramKey = d => String(d.key !== undefined ? d.key : d.name);
 function normOptions(list) {
   if (!Array.isArray(list)) return null;
   return list.map(o => (o && typeof o === 'object')
-    ? { name: String(o.name), value: o.value }
+    ? { name: String(o.name), value: o.value, sdk: o.sdk }
     : { name: String(o), value: o });
 }
 
@@ -4394,11 +4494,16 @@ function normDeps(d) {
   return out;
 }
 
-/** The definitions for one peripheral, normalised and in display order. */
-function paramDefs(pid) {
-  const P = (M && M.peripherals && M.peripherals[pid]) || null;
-  const list = P && Array.isArray(P.params) ? P.params : [];
-  return list.filter(d => d && (d.key !== undefined || d.name !== undefined)).map(d => ({
+/**
+ * Normalise a raw `params:`-schema list into display order. Exported because it is
+ * not only peripherals: `dma.channel_params` is deliberately the SAME schema, so
+ * resources.js renders and validates DMA_InitTypeDef fields through this one
+ * definition rather than a second, drifting copy. `sdk_field` / `sdk` / `field` are
+ * carried through untouched - codegen needs them and nothing here interprets them.
+ */
+function normaliseParamDefs(list) {
+  const raw = Array.isArray(list) ? list : [];
+  return raw.filter(d => d && (d.key !== undefined || d.name !== undefined)).map(d => ({
     key: paramKey(d),
     name: d.name !== undefined ? String(d.name) : paramKey(d),
     type: d.type || (Array.isArray(d.options) ? 'enum' : typeof d.default === 'boolean' ? 'bool' : 'number'),
@@ -4412,7 +4517,16 @@ function paramDefs(pid) {
     readonly: !!(d.readonly || d.computed),
     help: d.help || d.notes || '',
     deps: normDeps(d),
+    field: d.field, sdk_field: d.sdk_field,
+    sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
+    struct: d.struct,
   }));
+}
+
+/** The definitions for one peripheral, normalised and in display order. */
+function paramDefs(pid) {
+  const P = (M && M.peripherals && M.peripherals[pid]) || null;
+  return normaliseParamDefs(P && P.params);
 }
 
 /** Defaults for a peripheral, for initState(). Pure: no S, no undo. */
@@ -4836,9 +4950,19 @@ function adcConversionUs(pid, sarCycles = 11, m = M, s = S) {
 //        DMA, so this is reported as a warning about a shared channel, and only
 //        once the DMA controller itself is switched on.
 //
-//  Both are reported through E.resources and folded into E.issues, so the tree
-//  and the centre panel show them with no UI change.
+//  NVIC  which vectors the user switched on, and at what PFIC priority. Not a
+//        conflict so much as the other resource that is not a pin, and it shares
+//        this file because a DMA channel interrupt is one object seen from both.
+//
+//  Both conflicts are reported through E.resources and folded into E.issues, so the
+//  tree and the centre panel show them with no UI change.
+//
+//  The state the user builds here - `S.dma.requests` and `S.nvic` - is defined in
+//  model.js initState(), round-tripped by project.js and undone by history.js like
+//  everything else. The setters below are the only way to change it.
 // =============================================================================
+
+
 
 
 // EXTI line a pin can drive, or null. `lines` maps a selector value to a pin.
@@ -4907,12 +5031,370 @@ function dmaState() {
   return { controller: d.controller, channels, enabled: on, issues };
 }
 
+// =============================================================================
+//  DMA requests — what the user asked the controller to move
+// =============================================================================
+//  `M.dma.requests` is the hardware map: channel -> the request lines wired to it.
+//  On CH32V006 every request name appears on exactly ONE channel, so the channel is
+//  not a choice at all - it is a consequence of the request. `legalChannels` is
+//  computed from the map rather than assumed, so a part whose request CAN go to more
+//  than one channel gets a real selector and this part gets fixed text. A one-entry
+//  list means the control is not shown, exactly as with gpio.speeds.
+//
+//  `S.dma.requests` is a LIST, not a map, because regenerating after a save/open
+//  cycle has to produce byte-identical C and object key order is not something to
+//  rely on. It is kept sorted by channel then request name, so two users who added
+//  the same requests in a different order still generate the same file.
+//
+//  `id` is the request name. A request line is a single piece of silicon: it cannot
+//  be added twice, so it is its own identity, it survives a .wchproj round trip
+//  unchanged, and a human reading the saved file can tell what it is.
+
+const dmaCfg = () => (M && M.dma) || {};
+
+/** Request name -> the channels that can serve it, from the hardware map. */
+function dmaLegalChannels(request) {
+  const out = [];
+  for (const [ch, list] of Object.entries(dmaCfg().requests || {})) {
+    if ((list || []).map(String).includes(String(request))) out.push(String(ch));
+  }
+  return out.sort((a, b) => Number(a) - Number(b));
+}
+
+/** Every request this part has, in channel order. */
+function dmaAllRequests() {
+  const out = [];
+  for (const [ch, list] of Object.entries(dmaCfg().requests || {})) {
+    for (const r of list || []) {
+      out.push({ request: String(r), channel: String(ch), owner: requestOwner(r) });
+    }
+  }
+  return out.sort((a, b) => (a.channel === b.channel ? a.request.localeCompare(b.request) : Number(a.channel) - Number(b.channel)));
+}
+
+/** The ones not added yet — what an "Add" control should offer. */
+const dmaAddableRequests = () =>
+  dmaAllRequests().filter(r => !(S.dma.requests || []).some(x => x.id === r.request));
+
+/** Normalised DMA_InitTypeDef parameter definitions — the same schema as params:. */
+function dmaParamDefs() {
+  const list = dmaCfg().channel_params;
+  if (!Array.isArray(list)) return [];
+  return normaliseParamDefs(list);
+}
+
+const dmaDefOf = key => dmaParamDefs().find(d => d.key === key);
+
+/** Starting values for a request: the definition defaults, then dma.request_defaults. */
+function dmaRequestDefaults(request) {
+  const out = {};
+  for (const d of dmaParamDefs()) out[d.key] = d.default;
+  const seed = (dmaCfg().request_defaults || {})[request];
+  if (seed && typeof seed === 'object') {
+    for (const [k, v] of Object.entries(seed)) {
+      const d = dmaDefOf(k);
+      if (!d) continue;                       // the data names a parameter that is gone
+      try { out[k] = validateParam(d, v, `dma.request_defaults.${request}.${k}`); }
+      catch (e) { /* a bad starting value is not worth refusing to load the part for */ }
+    }
+  }
+  return out;
+}
+
+const byChannelThenName = (a, b) =>
+  (a.channel === b.channel ? String(a.id).localeCompare(String(b.id)) : Number(a.channel) - Number(b.channel));
+
+/** Everything the DMA Settings tab renders, one row per added request. */
+function dmaRequests() {
+  if (!dmaCfg().requests) return [];
+  return (S.dma.requests || []).map(r => ({
+    id: r.id,
+    request: r.request,
+    owner: requestOwner(r.request),
+    channel: String(r.channel),
+    legalChannels: dmaLegalChannels(r.request),
+    params: { ...r.params },
+  })).sort(byChannelThenName);
+}
+
+const findRequest = id => (S.dma.requests || []).find(r => r.id === id);
+
+/**
+ * Add a request. The channel comes from the hardware map; pass one only when the
+ * part offers more than one and the user picked. Throws on a request this part does
+ * not have, and on adding the same request twice - one request line, one user.
+ */
+function addDmaRequest(request, channel) {
+  const name = String(request);
+  const legal = dmaLegalChannels(name);
+  if (!legal.length) {
+    const all = dmaAllRequests().map(r => r.request);
+    throw new Error(`${M.mcu.name} has no DMA request "${name}"${all.length ? ` (has: ${all.join(', ')})` : ''}`);
+  }
+  const already = findRequest(name);
+  if (already) throw new Error(`${name} is already on DMA channel ${already.channel}`);
+  const ch = channel === undefined ? legal[0] : String(channel);
+  if (!legal.includes(ch)) throw new Error(`DMA request ${name} cannot use channel ${ch} — it is wired to ${legal.join(', ')}`);
+  record(`Add DMA ${name}`);
+  (S.dma.requests ||= []).push({ id: name, request: name, channel: ch, params: dmaRequestDefaults(name) });
+  S.dma.requests.sort(byChannelThenName);
+  return name;
+}
+
+function removeDmaRequest(id) {
+  const i = (S.dma.requests || []).findIndex(r => r.id === id);
+  if (i < 0) throw new Error(`No DMA request "${id}" is configured`);
+  record(`Remove DMA ${id}`);
+  S.dma.requests.splice(i, 1);
+}
+
+/** Move a request to another channel it is actually wired to. */
+function setDmaRequest(id, patch) {
+  const r = findRequest(id);
+  if (!r) throw new Error(`No DMA request "${id}" is configured`);
+  if (!patch || patch.channel === undefined) return;
+  const ch = String(patch.channel);
+  const legal = dmaLegalChannels(r.request);
+  if (!legal.includes(ch)) throw new Error(`DMA request ${r.request} cannot use channel ${ch} — it is wired to ${legal.join(', ')}`);
+  record(`DMA ${id} channel`);
+  r.channel = ch;
+  S.dma.requests.sort(byChannelThenName);
+}
+
+/** One DMA_InitTypeDef field, validated exactly like a peripheral parameter. */
+function setDmaParam(id, key, value) {
+  const r = findRequest(id);
+  if (!r) throw new Error(`No DMA request "${id}" is configured`);
+  const d = dmaDefOf(key);
+  if (!d) {
+    const known = dmaParamDefs().map(x => x.key).join(', ');
+    throw new Error(`DMA has no parameter "${key}"${known ? ` (has: ${known})` : ''}`);
+  }
+  if (d.readonly) throw new Error(`DMA.${d.name} is fixed by the hardware and cannot be set`);
+  const v = validateParam(d, value, `${r.request}.${d.name}`);
+  record(`DMA ${id} ${d.name}`);
+  (r.params ||= {})[key] = v;
+  return v;
+}
+
+function dmaParamValue(id, key) {
+  const r = findRequest(id);
+  if (!r) return undefined;
+  if (r.params && r.params[key] !== undefined) return r.params[key];
+  const d = dmaDefOf(key);
+  return d ? d.default : undefined;
+}
+
+/** The register encoding behind a chosen option, for codegen. */
+function dmaParamRegisterValue(id, key) {
+  const d = dmaDefOf(key);
+  if (!d) return undefined;
+  const v = dmaParamValue(id, key);
+  if (!d.options) return v;
+  const hit = d.options.find(o => String(o.name) === String(v));
+  return hit ? hit.value : undefined;
+}
+
+/**
+ * Two requests the user configured on one channel. This is a HARD conflict, not the
+ * soft "this channel is shared" warning dmaState() reports about what is merely
+ * switched on: the user has explicitly asked for both, and the channel can serve one.
+ * codegen turns it into an #error rather than last-wins code.
+ */
+function dmaConflicts() {
+  const byCh = {};
+  for (const r of dmaRequests()) (byCh[r.channel] ||= []).push(r);
+  const out = [];
+  for (const [channel, rows] of Object.entries(byCh)) {
+    if (rows.length < 2) continue;
+    out.push({
+      channel,
+      ids: rows.map(r => r.id),
+      owners: [...new Set(rows.map(r => r.owner))],
+      text: `${dmaCfg().controller || 'DMA'} channel ${channel} is configured for ${rows.map(r => r.request).join(' and ')}`
+        + ' — one channel serves one request at a time',
+    });
+  }
+  return out.sort((a, b) => Number(a.channel) - Number(b.channel));
+}
+
+/**
+ * A coupling the data deliberately does not automate (AGENT-1, round 2): SPI1 moving
+ * 16-bit frames needs half-word widths on both sides of the transfer. Nothing enforces
+ * it, so say so rather than generate a silent mismatch.
+ */
+function dmaCouplingWarnings() {
+  const out = [];
+  for (const r of dmaRequests()) {
+    const ps = (S.periph[r.owner] || {}).params || {};
+    const wide = Object.entries(ps).some(([k, v]) => /data|size|frame|width/i.test(k) && /16/.test(String(v)));
+    if (!wide) continue;
+    const psize = dmaParamValue(r.id, 'psize'), msize = dmaParamValue(r.id, 'msize');
+    if (psize === undefined && msize === undefined) continue;
+    if (String(psize) === 'Half Word' && String(msize) === 'Half Word') continue;
+    out.push({
+      kind: 'dma', severity: 'warning', owners: [r.owner, dmaCfg().controller].filter(Boolean),
+      text: `${r.owner} moves 16-bit data but ${r.request} transfers ${psize} / ${msize}`
+        + ' — both widths should be Half Word or the transfer is misaligned',
+    });
+  }
+  return out;
+}
+
+// =============================================================================
+//  NVIC — which interrupt vectors are on, and at what priority
+// =============================================================================
+//  The PFIC is NOT the Cortex-M scheme. `PFIC_IPRIORx` gives every vector a byte and
+//  implements TWO of its bits ([5:0] are reserved, fixed to 0 and write-invalid; RM
+//  6.5.2.21), and the maximum nesting depth is 2. `nvic.scheme.groups` carries the
+//  variants; the ranges come from the ACTIVE group, never from a hardcoded 0-15.
+//
+//  Where the nesting depth itself is configured is not in this reference manual, so
+//  the group is a recorded choice with no register write claimed for it. Do not
+//  invent one - AGENT-1's note under `nvic.scheme.notes` says why.
+
+const nvicCfg = () => (M && M.nvic) || {};
+const nvicScheme = () => nvicCfg().scheme || null;
+const nvicGroups = () => ((nvicCfg().scheme || {}).groups || []);
+const nvicGroup = () => nvicGroups()[S.nvic.group] || null;
+
+/** A vector is available when the peripheral that raises it is switched on. */
+function vectorAvailable(v) {
+  if (v.system) return true;                       // NMI, SysTick, the software interrupt
+  if (!v.peripheral) return true;
+  if (!M.peripherals[v.peripheral]) return false;  // the part does not have it at all
+  return isEnabled(v.peripheral);
+}
+
+/** Clamp a priority into the active group's range, or null when there is no group. */
+function nvicRange(which) {
+  const g = nvicGroup();
+  const spec = g && g[which];
+  if (!spec) return null;
+  return { min: spec.min || 0, max: spec.max === undefined ? 0 : spec.max, bits: spec.bits || 0 };
+}
+
+/** Everything the NVIC Settings tab and the System Core overview render. */
+function nvicVectors() {
+  const list = nvicCfg().vectors;
+  if (!Array.isArray(list)) return [];
+  return list.map(v => {
+    const st = (S.nvic.vectors || {})[v.name] || {};
+    return {
+      name: String(v.name),
+      vector: v.vector,
+      irqn: v.irqn || null,          // IRQn_Type member — NVIC_InitStructure.NVIC_IRQChannel
+      handler: v.handler || null,    // the startup-table symbol the user's ISR must be called
+      peripheral: v.peripheral || null,
+      channel: v.channel === undefined ? null : v.channel,
+      description: v.description || '',
+      system: !!v.system,
+      fixed: !!v.fixed,              // NMI and HardFault cannot be switched off
+      available: vectorAvailable(v),
+      enabled: v.fixed ? true : !!st.enabled,
+      preempt: st.preempt === undefined ? (nvicRange('preempt') || { min: 0 }).min : st.preempt,
+      sub: st.sub === undefined ? (nvicRange('sub') || { min: 0 }).min : st.sub,
+    };
+  });
+}
+
+const vectorDef = name => (nvicCfg().vectors || []).find(v => String(v.name) === String(name));
+
+/** Enable a vector, or set its priority. Validated against the ACTIVE group. */
+function setNvicVector(name, patch) {
+  const v = vectorDef(name);
+  if (!v) {
+    const known = (nvicCfg().vectors || []).map(x => x.name).join(', ');
+    throw new Error(`${M.mcu.name} has no interrupt vector "${name}"${known ? ` (has: ${known})` : ''}`);
+  }
+  const p = patch || {};
+  if (v.fixed && p.enabled === false) {
+    throw new Error(`${name} cannot be disabled — it is always active on this core`);
+  }
+  for (const which of ['preempt', 'sub']) {
+    if (p[which] === undefined) continue;
+    const r = nvicRange(which);
+    if (!r) throw new Error(`${M.mcu.name} has no priority grouping data, so ${which} priority cannot be set`);
+    const n = Number(p[which]);
+    if (!Number.isInteger(n) || n < r.min || n > r.max) {
+      throw new Error(`${name}: ${which} priority ${p[which]} is outside ${r.min}-${r.max}`
+        + ` for "${(nvicGroup() || {}).name || 'the active grouping'}"`);
+    }
+  }
+  record(`${name} interrupt`);
+  const st = ((S.nvic.vectors ||= {})[name] ||= {});
+  if (p.enabled !== undefined) st.enabled = !!p.enabled;
+  if (p.preempt !== undefined) st.preempt = Number(p.preempt);
+  if (p.sub !== undefined) st.sub = Number(p.sub);
+  return st;
+}
+
+/**
+ * Change the priority grouping. Priorities already set are clamped into the new
+ * group's range rather than silently left out of it - a 1-bit preempt field cannot
+ * hold the 3 that a wider grouping allowed.
+ */
+function setNvicGroup(index) {
+  const groups = nvicGroups();
+  const i = Number(index);
+  if (!groups[i]) throw new Error(`${M.mcu.name} has no interrupt priority grouping ${index} (it has ${groups.length})`);
+  record('Interrupt priority grouping');
+  S.nvic.group = i;
+  for (const st of Object.values(S.nvic.vectors || {})) {
+    for (const which of ['preempt', 'sub']) {
+      if (st[which] === undefined) continue;
+      const r = nvicRange(which);
+      if (r) st[which] = Math.min(Math.max(st[which], r.min), r.max);
+    }
+  }
+  return i;
+}
+
+/** A vector the user enabled on a peripheral that is now off. */
+function nvicIssues() {
+  const out = [];
+  for (const v of nvicVectors()) {
+    if (!v.enabled || v.available || v.fixed) continue;
+    out.push({
+      kind: 'nvic', severity: 'warning', owners: [v.peripheral].filter(Boolean),
+      text: `${v.name} is enabled but ${v.peripheral ? `${v.peripheral} is switched off` : 'nothing raises it'}`
+        + ' — the vector will never fire',
+    });
+  }
+  return out;
+}
+
+/** The whole NVIC picture, for the System Core overview. */
+function nvicState() {
+  if (!nvicCfg().vectors) return null;
+  return {
+    controller: nvicCfg().controller || 'NVIC',
+    scheme: nvicScheme(),
+    groups: nvicGroups(),
+    group: S.nvic.group,
+    vectors: nvicVectors(),
+    issues: nvicIssues(),
+  };
+}
+
 // Everything above, plus the flat issue list compute() folds into E.
 function resourceState() {
   const exti = extiState();
   const dma = dmaState();
-  const issues = [...((exti && exti.issues) || []), ...((dma && dma.issues) || [])];
-  return { exti, dma, issues };
+  const nvic = nvicState();
+  const hard = dmaConflicts().map(c => ({
+    kind: 'dma', severity: 'conflict', channel: c.channel,
+    owners: [...new Set([dmaCfg().controller, ...c.owners].filter(Boolean))],
+    text: c.text,
+  }));
+  const issues = [
+    ...((exti && exti.issues) || []),
+    ...((dma && dma.issues) || []),
+    ...hard,
+    ...dmaCouplingWarnings(),
+    ...((nvic && nvic.issues) || []),
+  ];
+  return { exti, dma, nvic, issues };
 }
 
 // ===== app/engine/engine.js ===================================================
@@ -5245,6 +5727,7 @@ function setClock(patch) {
 
 
 
+
 const PROJECT = { name: 'Untitled', variant: null, dirty: false };
 
 // The .wchproj format number. Bump it only when an OLD file would be read wrongly
@@ -5304,7 +5787,30 @@ function projectObject() {
     gpio_manual: S.manual,
     gpio_settings: S.gpio,
     clock: S.clock,
+    ...dmaObject(),
+    ...nvicObject(),
   };
+}
+
+// Both blocks are omitted when the user has not touched them, so a project saved
+// before either existed round-trips byte-identically and a diff of two .wchproj
+// files shows only what somebody actually changed.
+function dmaObject() {
+  const list = S.dma && S.dma.requests;
+  if (!list || !list.length) return {};
+  return { dma: list.map(r => ({ request: r.request, channel: Number(r.channel), params: { ...r.params } })) };
+}
+
+function nvicObject() {
+  const n = S.nvic || {};
+  const vectors = {};
+  for (const [name, st] of Object.entries(n.vectors || {})) {
+    if (!st || (!st.enabled && st.preempt === undefined && st.sub === undefined)) continue;
+    vectors[name] = { enabled: !!st.enabled, preempt: st.preempt, sub: st.sub };
+  }
+  const groupChanged = n.group !== undefined && n.group !== defaultNvicGroup(M.nvic);
+  if (!Object.keys(vectors).length && !groupChanged) return {};
+  return { nvic: { group: n.group || 0, vectors } };
 }
 
 function projectSerialize() {
@@ -5326,6 +5832,59 @@ function normaliseGpioSpeeds() {
     if (fixed === g.speed) continue;
     out.push(`${pin}: output speed "${g.speed}" is not one this part has; using "${fixed}".`);
     g.speed = fixed;
+  }
+  return out;
+}
+
+/**
+ * DMA requests from a .wchproj. Everything goes through the same setters the UI uses,
+ * so a saved file can never put state into S that the engine would reject live: a
+ * request the part no longer has, a channel it is not wired to, a parameter value out
+ * of range. Each of those is dropped and reported, never applied - the project still
+ * opens, minus the line that stopped being true.
+ */
+function applyDma(list) {
+  const out = [];
+  if (!Array.isArray(list)) return out;
+  for (const row of list) {
+    if (!row || row.request === undefined) continue;
+    const name = String(row.request);
+    try {
+      // The channel is only passed on when the part really offers a choice; otherwise
+      // the hardware map decides and a stale one in the file is simply ignored.
+      const legal = dmaLegalChannels(name);
+      addDmaRequest(name, legal.length > 1 && row.channel !== undefined ? row.channel : undefined);
+    } catch (e) { out.push(`dma ${name}: ${e.message}`); continue; }
+    if (row.channel !== undefined && dmaLegalChannels(name).length > 1) {
+      try { setDmaRequest(name, { channel: row.channel }); } catch (e) { out.push(`dma ${name}: ${e.message}`); }
+    }
+    for (const [k, v] of Object.entries(row.params || {})) {
+      try { setDmaParam(name, k, v); } catch (e) { out.push(`dma ${name}: ${e.message}`); }
+    }
+  }
+  return out;
+}
+
+/** The same, for interrupt vectors and the priority grouping. */
+function applyNvic(obj) {
+  const out = [];
+  if (!obj || typeof obj !== 'object') return out;
+  if (obj.group !== undefined && nvicGroups().length) {
+    try { setNvicGroup(obj.group); } catch (e) { out.push(`nvic: ${e.message}`); }
+  }
+  for (const [name, st] of Object.entries(obj.vectors || {})) {
+    if (!st || typeof st !== 'object') continue;
+    const patch = {};
+    for (const k of ['enabled', 'preempt', 'sub']) if (st[k] !== undefined) patch[k] = st[k];
+    if (!Object.keys(patch).length) continue;
+    try { setNvicVector(name, patch); }
+    catch (e) {
+      out.push(`nvic ${name}: ${e.message}`);
+      // a priority that no longer fits is not a reason to lose the enable
+      if (patch.enabled !== undefined) {
+        try { setNvicVector(name, { enabled: patch.enabled }); } catch (e2) { /* already reported */ }
+      }
+    }
   }
   return out;
 }
@@ -5358,6 +5917,8 @@ function projectApply(src) {
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
   dropped.push(...normaliseGpioSpeeds());
+  dropped.push(...applyDma(obj.dma));
+  dropped.push(...applyNvic(obj.nvic));
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
@@ -6080,7 +6641,11 @@ document.querySelectorAll('script[id^="yaml-mcu-"]').forEach(s => {
 function openMcu(source) { loadMcu(source); syncMcuUi(); renderAll(true); }
 function syncMcuUi() {
   document.getElementById('crumb-mcu').textContent = M.mcu.name;
-  document.getElementById('mcu-meta').textContent = `${M.mcu.core || ''}  ·  ${M.mcu.flash_kb || '?'} KB flash  ·  ${M.mcu.sram_kb || '?'} KB SRAM`;
+  const meta = document.getElementById('mcu-meta');
+  const core = M.mcu.core || '';
+  const mem = `${M.mcu.flash_kb || '?'} KB flash · ${M.mcu.sram_kb || '?'} KB SRAM`;
+  meta.innerHTML = (core ? `<span class="meta-core">${esc(core)} · </span>` : '') + `<span>${esc(mem)}</span>`;
+  meta.title = [core, mem].filter(Boolean).join(' · ');
   const ps = document.getElementById('pkgsel');
   ps.innerHTML = '';
   for (const k of Object.keys(M.packages)) {
@@ -7844,9 +8409,7 @@ function renderPmConfig(files) {
     + `<label class="row"><span>Name</span><input type="text" id="pm-name" value="${attr(PROJECT.name)}" maxlength="64" aria-label="Project name"></label>`
     + `<dl>`
     + dd('MCU', esc(M.mcu.name))
-    + dd('Part number', variant ? esc(variant)
-      : pkgVariants.length ? `<span class="ro">not chosen — ${esc(pkgVariants.join(', '))} use this package</span>`
-        : '<span class="ro">this MCU file lists no part numbers</span>')
+    + dd('Part number', partCell)
     + dd('Package', esc(S.pkg))
     + dd('Core', esc(M.mcu.core || '—'))
     + dd('Memory', `${esc(String(M.mcu.flash_kb ?? '?'))} KB flash · ${esc(String(M.mcu.sram_kb ?? '?'))} KB SRAM`)
@@ -7905,9 +8468,8 @@ function pmEnvName(variant) {
   const info = variant ? (M.mcu.variants || {})[variant] : null;
   const env = info && (info.pio_env || info.env);
   if (env) return `<code>${esc(env)}</code>`;
-  return `<span class="ro">not stated by this MCU file. The environments are in `
-    + `<code>data/firmware/platformio.ini</code>; it is not the part number — that file maps`
-    + ` <code>CH32V006F8P7</code> to <code>CH32V006F8P6</code>, so this panel will not guess it.</span>`;
+  return `<span class="ro">not stated by this MCU file — see <code>data/firmware/platformio.ini</code>.`
+    + ` It is not always the part number, so this panel will not guess it.</span>`;
 }
 
 function pmDescribe(f) {
@@ -7926,7 +8488,7 @@ function renderPmFiles(files, flags) {
     const flag = kinds.includes('error') ? `<span class="flag" title="this file contains #error">#error</span>`
       : kinds.length ? `<span class="flag todo" title="${kinds.length} TODO section${kinds.length === 1 ? '' : 's'}">TODO</span>` : '';
     return `<button class="pmfile${f.name === PM.pick ? ' on' : ''}" data-pmpick="${attr(f.name)}" role="option"`
-      + ` aria-selected="${f.name === PM.pick}">${flag}${esc(f.name)}`
+      + ` title="${attr(f.name)}" aria-selected="${f.name === PM.pick}">${flag}<span class="nm">${esc(f.name)}</span>`
       + `<small>${f.text.split('\n').length} lines${PM.skip.has(f.name) ? ' · not generated' : ''}</small></button>`;
   }).join('') || '<div class="treenone">Nothing to preview.</div>';
   box.querySelectorAll('[data-pmpick]').forEach(b => b.onclick = () => { PM.pick = b.dataset.pmpick; renderProjectManager(); });
@@ -7942,13 +8504,31 @@ function renderPmCode(file, flags) {
   head.innerHTML = `<b>${esc(file.name)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
     + `<div class="spacer"></div><button id="pm-copy">Copy</button>`;
   head.querySelector('#pm-copy').onclick = () => pmCopy(file);
-  const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — this file will not compile as it stands. The generator refuses to guess a register encoding the MCU file does not give it.</div>`
-    : todos ? `<div class="pmnote warn">${todos} TODO section${todos === 1 ? '' : 's'} — the generator could not work something out and said so instead of emitting plausible bits.</div>` : '';
+  const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — <b>this file will not compile as it stands.</b>`
+    + ` The generator says so rather than emitting code for a configuration it cannot express. The line${errs === 1 ? ' is' : 's are'} marked below.</div>`
+    : todos ? `<div class="pmnote warn">${todos} TODO section${todos === 1 ? '' : 's'} — the generator could not work something out and said so instead of emitting plausible-looking bits.`
+      + ` It compiles; it just does less than the configuration asks for. Marked below.</div>` : '';
+  // `kind` is cComplaints' own vocabulary ('error' / 'todo') and is used as the class
+  // verbatim, so a new kind cannot silently stop being highlighted the way a hand-written
+  // mapping would. (It did: the class said `error` and the stylesheet said `err`, and the
+  // banner counted a line the table was not marking.)
   code.innerHTML = note + '<table><tbody>' + lines.map((l, i) => {
     const k = marks[i + 1];
-    return `<tr${k ? ` class="${k}"` : ''}><td class="ln">${i + 1}</td><td>${esc(l) || '&nbsp;'}</td></tr>`;
+    return `<tr${k ? ` class="${attr(k)}"` : ''}${k ? ` id="pm-l${i + 1}"` : ''}>`
+      + `<td class="ln">${i + 1}</td><td>${esc(l) || '&nbsp;'}</td></tr>`;
   }).join('') + '</tbody></table>';
+  // Land on the first complaint if it is below the fold - an #error 400 lines down a
+  // file nobody scrolled is how a wrong identifier ships. Only if it is below the fold:
+  // scrolling when it is already visible would push the banner above it out of view.
+  const firstBad = Object.keys(marks).map(Number).sort((a, b) => a - b)[0];
   code.scrollTop = 0;
+  if (firstBad) {
+    const row = code.querySelector('#pm-l' + firstBad);
+    if (row) {
+      const rr = row.getBoundingClientRect(), cr = code.getBoundingClientRect();
+      if (rr.bottom > cr.bottom) code.scrollTop += (rr.top - cr.top) - code.clientHeight / 3;
+    }
+  }
 }
 
 function pmCopy(file) {
