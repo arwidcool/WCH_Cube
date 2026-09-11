@@ -319,3 +319,73 @@ test('applyParams reports rather than throws when a stored value no longer fits'
   assert.equal(dropped.length, 2);
   assert.deepEqual(e.applyParams('USART1', null), [], 'nothing to apply is not an error');
 });
+
+// ---------------------------------------------------------------- comparisons
+// AGENT-1, 11:20Z: I2C fast-mode duty only matters above 100 kHz, which equality
+// cannot express.
+
+const COMPARE = `
+mcu: { name: CH32V006-CMP, inherits: CH32V006 }
+peripherals:
+  I2C1:
+    params:
+      - { key: speed, name: Clock speed, type: int, default: 100000, min: 1000, max: 400000 }
+      - key: duty
+        name: Fast-mode duty
+        type: enum
+        default: "2:1"
+        options: ["2:1", "16:9"]
+        depends_on: { param: speed, gt: 100000 }
+      - key: slow
+        name: Only below 50 kHz
+        type: bool
+        default: false
+        depends_on: { param: speed, lt: 50000 }
+      - key: listed
+        name: Only at a listed speed
+        type: bool
+        default: false
+        depends_on: { param: speed, in: [100000, 400000] }
+      - key: notstandard
+        name: Not at 100 kHz
+        type: bool
+        default: false
+        depends_on: { param: speed, ne: 100000 }
+`;
+
+const compare = () => {
+  const e = fresh();
+  e.registerMcuFile(COMPARE);
+  e.loadMcu('CH32V006-CMP');
+  return e;
+};
+const applies = (e, key) => e.getParams('I2C1').find(p => p.key === key).applicable;
+
+test('a dependency can compare numerically, not just match', () => {
+  const e = compare();
+  assert.equal(applies(e, 'duty'), false, '100 kHz is not ABOVE 100 kHz');
+  e.setParam('I2C1', 'speed', 100001);
+  assert.equal(applies(e, 'duty'), true);
+  e.setParam('I2C1', 'speed', 400000);
+  assert.equal(applies(e, 'duty'), true);
+});
+
+test('lt, ne and in all work the same way', () => {
+  const e = compare();
+  assert.equal(applies(e, 'slow'), false);
+  assert.equal(applies(e, 'listed'), true, '100000 is in the list');
+  assert.equal(applies(e, 'notstandard'), false, 'it is exactly 100 kHz');
+
+  e.setParam('I2C1', 'speed', 40000);
+  assert.equal(applies(e, 'slow'), true);
+  assert.equal(applies(e, 'listed'), false);
+  assert.equal(applies(e, 'notstandard'), true);
+});
+
+test('equality stays the default, so files written before this keep their meaning', () => {
+  const e = withParams();
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  const baud = e.paramDefs('USART1').find(d => d.key === 'baud');
+  assert.deepEqual(baud.deps, [{ kind: 'setting', name: 'Mode', op: 'equals', value: 'Asynchronous' }]);
+  assert.equal(e.paramApplies('USART1', baud), true);
+});

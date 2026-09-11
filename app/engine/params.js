@@ -31,25 +31,34 @@ function normOptions(list) {
     : { name: String(o), value: o });
 }
 
+// A dependency may compare instead of match: I2C fast-mode duty only matters above
+// 100 kHz, which is `depends_on: { param: speed, gt: 100000 }` (AGENT-1, 11:20Z).
+// `equals` remains the default, so every file written so far keeps its meaning.
+const OPS = ['equals', 'ne', 'gt', 'gte', 'lt', 'lte', 'in'];
+function comparison(dep) {
+  for (const op of OPS) if (dep[op] !== undefined) return { op, value: dep[op] };
+  return { op: 'equals', value: true };
+}
+
 // `when: { Mode: Asynchronous }` (a settings dependency) and
 // `depends_on: { param: 'CRC Calculation', equals: true }` (a parameter dependency)
 // both mean "this only applies while ...". Normalise them to one list.
 function normDeps(d) {
   const out = [];
   if (d.when && typeof d.when === 'object') {
-    for (const [name, equals] of Object.entries(d.when)) out.push({ kind: 'setting', name, equals });
+    for (const [name, want] of Object.entries(d.when)) out.push({ kind: 'setting', name, op: 'equals', value: want });
   }
   const dep = d.depends_on;
   if (dep) {
     if (typeof dep === 'string') {
       const [name, ...rest] = dep.split('=');
-      out.push({ kind: 'any', name: name.trim(), equals: rest.join('=').trim() });
+      out.push({ kind: 'any', name: name.trim(), op: 'equals', value: rest.join('=').trim() });
     } else if (dep.param !== undefined) {
-      out.push({ kind: 'param', name: String(dep.param), equals: dep.equals !== undefined ? dep.equals : true });
+      out.push({ kind: 'param', name: String(dep.param), ...comparison(dep) });
     } else if (dep.setting !== undefined) {
-      out.push({ kind: 'setting', name: String(dep.setting), equals: dep.equals !== undefined ? dep.equals : true });
+      out.push({ kind: 'setting', name: String(dep.setting), ...comparison(dep) });
     } else {
-      for (const [name, equals] of Object.entries(dep)) out.push({ kind: 'any', name, equals });
+      for (const [name, want] of Object.entries(dep)) out.push({ kind: 'any', name, op: 'equals', value: want });
     }
   }
   return out;
@@ -124,6 +133,24 @@ export function validateParam(def, value, where) {
   return n;
 }
 
+// A value that cannot be compared numerically leaves the field visible: a typo in the
+// data must never silently hide a setting the user needs.
+function compare(have, op, want) {
+  if (op === 'in') return Array.isArray(want) && want.map(String).includes(String(have));
+  if (have instanceof Set) return have.has(String(want));
+  if (op === 'equals' || op === 'ne') {
+    const same = typeof want === 'boolean' ? Boolean(have) === want : String(have) === String(want);
+    return op === 'ne' ? !same : same;
+  }
+  const a = Number(have), b = Number(want);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return true;
+  if (op === 'gt') return a > b;
+  if (op === 'gte') return a >= b;
+  if (op === 'lt') return a < b;
+  if (op === 'lte') return a <= b;
+  return true;
+}
+
 /**
  * Does this parameter apply right now? A dependency may name a setting or another
  * parameter. A dependency on something that does not exist is ignored rather than
@@ -140,9 +167,7 @@ export function paramApplies(pid, def) {
     else if (dep.kind === 'param') have = ps[dep.name];
     else have = dep.name in ps ? ps[dep.name] : st[dep.name];
     if (have === undefined) return true;
-    if (have instanceof Set) return have.has(String(dep.equals));
-    if (typeof dep.equals === 'boolean') return Boolean(have) === dep.equals;
-    return String(have) === String(dep.equals);
+    return compare(have, dep.op || 'equals', dep.value !== undefined ? dep.value : dep.equals);
   });
 }
 

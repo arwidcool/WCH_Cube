@@ -165,13 +165,40 @@ export function rccWord() {
   const k = S.clock;
   let value = 0, mask = 0;
   const parts = [];
+  // One setting may need bits in more than one place: the V00x ADC divider is
+  // ADCPRE[4:0] at bit 11 PLUS ADC_CLK_MODE at bit 31, and the gap between them holds
+  // PLLSRC and MCO, so one wide field would swallow them. A spec may therefore be a
+  // single { lsb, bits, values } or a LIST of them - the shape remap.fields already
+  // uses. `default:` covers a slice that has no entry for the current value.
   const put = (spec, raw, what) => {
     if (!spec) return;
-    const field = spec.values ? spec.values[raw] : raw;
-    if (field === undefined) { parts.push({ what, note: `no encoding for ${raw}` }); return; }
-    value |= (field & ((1 << spec.bits) - 1)) << spec.lsb;
-    mask |= ((1 << spec.bits) - 1) << spec.lsb;
-    parts.push({ what, raw, field, bits: spec.bits, lsb: spec.lsb });
+    const slices = Array.isArray(spec) ? spec : [spec];
+    const encoded = [];
+    let anyExplicit = false;
+    for (const s of slices) {
+      let field = s.values ? s.values[raw] : raw;
+      if (field !== undefined) anyExplicit = true;
+      else if (s.default !== undefined) field = s.default;
+      else if (slices.length > 1) field = 0;   // a split field: the slice that does not
+      encoded.push({ s, field });              // name this value contributes zero
+    }
+    if (!anyExplicit || encoded.some(e => e.field === undefined)) {
+      parts.push({ what, note: `no encoding for ${raw}` });
+      return;                                  // a half-written divider is worse than a gap
+    }
+    for (const { s, field } of encoded) {
+      const width = (1 << s.bits) - 1;
+      value |= (field & width) << s.lsb;
+      mask |= width << s.lsb;
+    }
+    const one = encoded.length === 1;
+    parts.push({
+      what, raw,
+      field: one ? encoded[0].field : encoded.map(e => e.field),
+      bits: one ? encoded[0].s.bits : encoded.map(e => e.s.bits),
+      lsb: one ? encoded[0].s.lsb : encoded.map(e => e.s.lsb),
+      slices: encoded.length,
+    });
   };
   put(c.sw, k.sys, 'SYSCLK source');
   if (c.pllsrc && M.clock.pll) put(c.pllsrc, M.clock.pll.inputs[k.pllIn].source, 'PLL input');

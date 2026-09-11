@@ -311,3 +311,65 @@ test('an explicit mode in the GPIO table always wins', () => {
   assert.equal(row.macro, 'GPIO_Mode_Out_OD');
   assert.equal(row.inferred, false);
 });
+
+// A divider whose bits are not contiguous: ADCPRE[4:0] at bit 11 plus ADC_CLK_MODE
+// at bit 31, with PLLSRC and MCO in between. AGENT-1 asked for this at 11:12Z.
+const MULTI_SLICE = `
+mcu: { name: CH32V006-RCCMULTI, inherits: CH32V006 }
+codegen:
+  rcc:
+    register: RCC->CFGR0
+    sw: { lsb: 0, bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }
+    prescalers:
+      HB: { lsb: 4, bits: 4, values: { 1: 0, 2: 1 } }
+      ADC:
+        - { lsb: 11, bits: 5, values: { 2: 0, 4: 4 } }
+        - { lsb: 31, bits: 1, values: { 1: 1 }, default: 0 }
+`;
+
+const multiSlice = () => {
+  const e = fresh();
+  e.registerMcuFile(MULTI_SLICE);
+  e.loadMcu('CH32V006-RCCMULTI');
+  return e;
+};
+
+test('a prescaler can put its bits in two places at once', () => {
+  const e = multiSlice();
+  const adc = () => e.rccWord().parts.find(p => /ADC/.test(p.what));
+
+  e.setClock({ pre: { ADC: 4 } });
+  assert.equal(e.rccWord().value & 0xf800, 4 << 11, 'ADCPRE carries the divider');
+  assert.equal(e.rccWord().value >>> 31, 0, 'and ADC_CLK_MODE stays clear');
+  assert.deepEqual(adc().lsb, [11, 31]);
+  assert.equal(adc().slices, 2);
+
+  e.setClock({ pre: { ADC: 1 } });
+  assert.equal(e.rccWord().value >>> 31, 1, '/1 is the ADC_CLK_MODE bit, not an ADCPRE code');
+  assert.equal(e.rccWord().value & 0xf800, 0, 'and ADCPRE goes to zero');
+
+  e.setClock({ pre: { ADC: 2 } });
+  assert.equal(e.rccWord().value >>> 31, 0);
+  assert.equal(e.rccWord().value & 0xf800, 0);
+});
+
+test('the mask covers every slice, so no neighbouring field is clobbered', () => {
+  const e = multiSlice();
+  e.setClock({ pre: { ADC: 4 } });
+  const m = e.rccWord().mask >>> 0;
+  assert.equal(m >>> 31, 1, 'bit 31 is written');
+  assert.equal((m >> 11) & 0x1f, 0x1f, 'the five ADCPRE bits are written');
+  assert.equal((m >> 24) & 7, 0, 'MCO at 24-26 is left alone');
+  // bits 12..30 other than PLLSRC at 16, which this block legitimately writes
+  // ADCPRE is bits 11..15 and PLLSRC is 16; bits 17..30 belong to nobody here
+  assert.equal(m & 0x7ffe0000, 0, 'nothing between PLLSRC and bit 31 is touched');
+});
+
+test('a divider with no encoding is reported, not half written', () => {
+  const e = multiSlice();
+  e.setClock({ pre: { ADC: 16 } });            // no entry in either slice
+  const adc = e.rccWord().parts.find(p => /ADC/.test(p.what));
+  assert.match(adc.note, /no encoding for 16/);
+  assert.equal(e.rccWord().value >>> 31, 0, 'nothing was written for it');
+  assert.equal((e.rccWord().mask >> 11) & 0x1f, 0, 'and the field is not even masked');
+});
