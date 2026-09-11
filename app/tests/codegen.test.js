@@ -1099,3 +1099,25 @@ test('a part the engine has never seen needs no engine change to generate', () =
   assert.ok(e.cHeader().includes(`#include "${e.M.codegen.header}"`),
     'its own SPL header, from its own file - and in the .h, where the application sees it too');
 });
+
+test('a user action is not a generator complaint, so DMA does not fail --strict for ever', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.addDmaRequest('USART1_TX');
+  e.compute();
+  const c = e.cSource();
+  // The buffer address is not missing from the DATA - it is not a configuration choice
+  // at all. Marked TODO it would make every project that uses DMA fail --strict, over
+  // something no MCU file could ever supply.
+  assert.match(c, /USER ACTION: the application owns the addresses and the length/);
+  assert.equal(/TODO[^\n]*DMA_PeripheralBaseAddr/.test(c), false);
+  assert.deepEqual(e.cComplaints().filter(x => /BaseAddr|BufferSize/.test(x.text)), [],
+    'and cComplaints does not count it');
+
+  // it is still impossible to miss, which is the point of putting it there
+  // it is still impossible to miss, which is the point of putting it there.
+  // `DMA_Init(` also matches inside `WCHCube_DMA_Init(`, so anchor on the real call.
+  const call = c.indexOf('        DMA_Init(');
+  assert.ok(call > 0, 'setup: the DMA_Init call is generated');
+  assert.ok(c.indexOf('USER ACTION') < call, 'it sits above the call that uses those fields');
+});

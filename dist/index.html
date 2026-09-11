@@ -10055,7 +10055,12 @@ function dmaSection() {
       if (!text) { L.push(`        /* TODO: ${d.name} = ${value}: no sdk macro in dma.channel_params. */`); continue; }
       L.push(`        ${varName}.${d.sdk_field} = ${text};   /* ${d.name}: ${value} */`);
     }
-    L.push('        /* TODO: the application owns the addresses and the length —');
+    // USER ACTION, not TODO, and the distinction matters: `cComplaints()` reports what
+    // the GENERATOR could not do because the MCU file is missing something, and --strict
+    // fails CI on that. A buffer address is not missing from the data - it is not a
+    // configuration choice at all, and CubeMX does not ask for it either. Marking it
+    // TODO would make every project with a DMA request fail --strict forever.
+    L.push('        /* USER ACTION: the application owns the addresses and the length —');
     L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_MemoryBaseAddr and`);
     L.push('           .DMA_BufferSize before this call. They are a buffer, not a');
     L.push('           configuration choice, so the configurator does not ask for them. */');
@@ -10201,6 +10206,12 @@ function cFiles() {
 // says so in exactly two spellings, both written above: `#error "..."` at the start
 // of a line, and a `/* TODO: ...` comment block. Scanning our own output is
 // therefore not a heuristic - it reads back what these functions just wrote.
+//
+// `/* USER ACTION:` is deliberately NOT one of them. A complaint means the MCU file is
+// missing something and --strict fails CI on it; a user action means the generated code
+// is complete and the application still has a buffer address to fill in. Treating the
+// second as the first would fail every project that uses DMA, for ever, over something
+// no data could supply.
 //
 // `--strict` on the CLI turns a non-empty list into exit 2, so CI can tell a build
 // that generated code from one that generated an explanation of what is missing.
