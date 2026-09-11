@@ -8679,9 +8679,27 @@ const nvicScheme = () => nvicCfg().scheme || null;
 const nvicGroups = () => ((nvicCfg().scheme || {}).groups || []);
 const nvicGroup = () => nvicGroups()[S.nvic.group] || null;
 
-/** A vector is available when the peripheral that raises it is switched on. */
+/** The EXTI lines the configuration has actually claimed, as numbers. */
+function claimedExtiLines() {
+  const ex = extiState();
+  if (!ex) return [];
+  return Object.keys(ex.lines).map(l => Number(String(l).replace(/\D+/g, ''))).filter(Number.isFinite);
+}
+
+/**
+ * A vector is available when something can raise it.
+ *
+ * A vector that declares `lines:` is raised by a PIN, not by a peripheral being
+ * switched on in the settings - EXTI has no "Mode: Enable", it has pins. So its
+ * availability is "at least one of my lines is claimed". That is keyed off the data's
+ * own `lines:` key rather than off the peripheral being called EXTI, so a part that
+ * groups some other vector the same way gets the same treatment for free.
+ */
 function vectorAvailable(v) {
   if (v.system) return true;                       // NMI, SysTick, the software interrupt
+  if (Array.isArray(v.lines) && v.lines.length === 2) {
+    return claimedExtiLines().some(n => n >= v.lines[0] && n <= v.lines[1]);
+  }
   if (!v.peripheral) return true;
   if (!M.peripherals[v.peripheral]) return false;  // the part does not have it at all
   return isEnabled(v.peripheral);
@@ -8711,6 +8729,10 @@ function nvicVectors() {
       description: v.description || '',
       system: !!v.system,
       fixed: !!v.fixed,              // NMI and HardFault cannot be switched off
+      // An EXTI vector may cover MANY lines: CH32X035's EXTI7_0 / EXTI15_8 / EXTI25_16
+      // carry 26 between them, so `lines: [first, last]` (inclusive) is how one row
+      // stands for a group. A vector with no `lines:` is simply not an EXTI group.
+      lines: Array.isArray(v.lines) && v.lines.length === 2 ? [v.lines[0], v.lines[1]] : null,
       available: vectorAvailable(v),
       enabled: v.fixed ? true : !!st.enabled,
       preempt: st.preempt === undefined ? (nvicRange('preempt') || { min: 0 }).min : st.preempt,
@@ -8720,6 +8742,39 @@ function nvicVectors() {
 }
 
 const vectorDef = name => (nvicCfg().vectors || []).find(v => String(v.name) === String(name));
+
+/**
+ * The vector an EXTI line raises. Looked up line -> vector, which is the direction
+ * every question is actually asked in: "the user made PA3 an external interrupt, which
+ * vector has to be on?" Many lines map to one vector, so enabling a second line in the
+ * same group enables nothing new - the group is already on.
+ */
+function nvicVectorForLine(line) {
+  const n = Number(line);
+  if (!Number.isFinite(n)) return null;
+  return nvicVectors().find(v => v.lines && n >= v.lines[0] && n <= v.lines[1]) || null;
+}
+
+/**
+ * The vectors the configured external interrupts need, each once. `extiState()` gives
+ * the lines; this turns them into the rows the NVIC tab should light up, so the tab
+ * lists three vectors rather than twenty-six lines.
+ */
+function extiVectorsNeeded() {
+  const ex = extiState();
+  if (!ex) return [];
+  const out = new Map();
+  for (const [line, users] of Object.entries(ex.lines)) {
+    const num = Number(String(line).replace(/\D+/g, ''));
+    const v = nvicVectorForLine(num);
+    if (!v) continue;
+    const row = out.get(v.name) || { vector: v, lines: [], pins: [] };
+    row.lines.push(num);
+    row.pins.push(...users.map(u => u.pin));
+    out.set(v.name, row);
+  }
+  return [...out.values()].sort((a, b) => a.vector.vector - b.vector.vector);
+}
 
 /** Enable a vector, or set its priority. Validated against the ACTIVE group. */
 function setNvicVector(name, patch) {
@@ -8807,6 +8862,27 @@ function paramReachWarnings() {
   return out;
 }
 
+/**
+ * An external interrupt the user configured whose vector is not enabled. The pin is
+ * routed and the line is claimed, and nothing will ever fire - which is invisible
+ * until it is 3am. The mirror of the "enabled but nothing can raise it" warning.
+ */
+function extiVectorWarnings() {
+  const out = [];
+  for (const row of extiVectorsNeeded()) {
+    if (row.vector.enabled) continue;
+    out.push({
+      kind: 'nvic', severity: 'warning', owners: ['EXTI', row.vector.peripheral].filter(Boolean),
+      text: `${row.pins.join(', ')} ${row.pins.length === 1 ? 'is an external interrupt' : 'are external interrupts'}`
+        + ` but ${row.vector.name} is not enabled — nothing will fire.`
+        + ` One vector covers line${row.vector.lines[0] === row.vector.lines[1] ? '' : 's'}`
+        + ` ${row.vector.lines[0]}${row.vector.lines[0] === row.vector.lines[1] ? '' : `-${row.vector.lines[1]}`},`
+        + ' so enabling it once covers all of them',
+    });
+  }
+  return out;
+}
+
 /** A vector the user enabled on a peripheral that is now off. */
 function nvicIssues() {
   const out = [];
@@ -8830,7 +8906,8 @@ function nvicState() {
     groups: nvicGroups(),
     group: S.nvic.group,
     vectors: nvicVectors(),
-    issues: nvicIssues(),
+    extiVectors: extiVectorsNeeded(),
+    issues: [...nvicIssues(), ...extiVectorWarnings()],
   };
 }
 
@@ -9606,7 +9683,44 @@ function skippedPins() {
   return out.sort((a, b) => a.pin.localeCompare(b.pin));
 }
 
-// ---- AFIO remap word ---------------------------------------------------------
+// ---- alternate function remap ------------------------------------------------
+//  Two families, two spellings, one rule: the DATA says which.
+//
+//  `codegen.remap.style: macro` - CH32X035 - means each remap entry carries a
+//  `macro:` and the SDK's own `GPIO_PinRemapConfig(<macro>, ENABLE)` applies it. The
+//  macro packs the register position AND the value into one constant that the SDK
+//  decodes, so building the mask by hand would re-derive an encoding the SDK already
+//  knows - and a wrong macro name fails to compile, where a wrong hand-built mask is
+//  silent. An index with NO macro emits nothing, which is how "No remap" stays quiet.
+//
+//  `codegen.remap.fields` - CH32V006 - means the remap index IS the register field
+//  value and one `AFIO->PCFR1` word carries every peripheral at once.
+//
+//  A part may in principle have both; a peripheral whose selected remap has a macro is
+//  applied by the call and left out of the word, so it is never written twice.
+
+/** The `GPIO_PinRemapConfig`-style calls this configuration needs. */
+function remapPlan() {
+  const c = cfg().remap || {};
+  const calls = [];
+  for (const [pid, P] of Object.entries(M.peripherals)) {
+    if (!S.periph[pid]) continue;
+    const index = S.periph[pid].remap || 0;
+    const r = (P.remaps || [])[index];
+    if (!r || !r.macro) continue;
+    calls.push({ periph: pid, index, name: r.name, macro: r.macro, used: requiredSignals(pid).size > 0 });
+  }
+  calls.sort((a, b) => a.periph.localeCompare(b.periph));
+  return { style: c.style || (c.fields ? 'register' : null), fn: c.fn || null, enable: c.enable || 'ENABLE', calls };
+}
+
+/** True when this peripheral's selected remap is applied by a macro call. */
+function remappedByMacro(pid) {
+  const index = (S.periph[pid] || {}).remap || 0;
+  const r = ((M.peripherals[pid] || {}).remaps || [])[index];
+  return !!(r && r.macro);
+}
+
 // Returns { register, value, mask, parts } or null when the file has no map.
 function remapWord() {
   const c = cfg().remap;
@@ -9615,6 +9729,7 @@ function remapWord() {
   const parts = [];
   for (const [pid, slices] of Object.entries(c.fields)) {
     if (!S.periph[pid]) continue;
+    if (remappedByMacro(pid)) continue;          // the call applies it; writing it twice is a bug
     const index = S.periph[pid].remap || 0;
     const remaps = (M.peripherals[pid] || {}).remaps || [];
     let width = 0;
@@ -9821,8 +9936,29 @@ function gpioSection() {
 
   if (left.length) L.push(...skipNote(left));
 
+  // Macro style first: one SDK call per peripheral whose selected remap names a macro.
+  const rp = remapPlan();
+  const live = rp.calls.filter(c => c.used);
+  if (live.length && rp.fn) {
+    L.push('    /* Alternate function remap */');
+    for (const c of live) {
+      L.push(`    ${rp.fn}(${c.macro}, ${rp.enable});   /* ${c.periph}: ${c.name} */`);
+    }
+    L.push('');
+  } else if (live.length) {
+    L.push('    /* TODO: alternate function remap. The MCU file gives a macro per remap but no');
+    L.push('       codegen.remap.fn, so the call that applies it cannot be written. Selected:');
+    for (const c of live) L.push(`         ${c.periph}: ${c.name} — ${c.macro}`);
+    L.push('       Add codegen.remap.fn (GPIO_PinRemapConfig on the parts seen so far). */');
+  }
+  for (const c of rp.calls) {
+    if (c.used) continue;
+    L.push(`    /*   ${c.periph} selects "${c.name}" but is switched off; nothing is remapped for it. */`);
+  }
+
+  // Register style: one word carrying every peripheral a macro did not already apply.
   const remap = remapWord();
-  if (remap) {
+  if (remap && remap.parts.length) {
     const active = remap.parts.filter(p => p.used);
     L.push('    /* Alternate function remap (AFIO) */');
     for (const p of remap.parts) {
@@ -9830,16 +9966,21 @@ function gpioSection() {
     }
     L.push(`    ${remap.register} = (${remap.register} & ~${hex(remap.mask)}) | ${hex(remap.value)};`);
     if (!active.length) L.push('    /*   nothing enabled uses a remap; the write is the reset value. */');
-  } else {
-    const used = Object.keys(M.peripherals).filter(pid => (M.peripherals[pid].remaps || []).length > 1 && requiredSignals(pid).size);
+  } else if (!rp.calls.length) {
+    // Neither style reaches these: the peripheral is on, has a real choice of remaps,
+    // and the data says nothing about how to apply the one that is selected.
+    const used = Object.keys(M.peripherals).filter(pid =>
+      (M.peripherals[pid].remaps || []).length > 1
+      && requiredSignals(pid).size
+      && (S.periph[pid] || {}).remap);
     if (used.length) {
-      L.push('    /* TODO: alternate function remap. The MCU file has no codegen.remap.fields,');
-      L.push('       so the AFIO register word cannot be computed. Selected remaps are:');
+      L.push('    /* TODO: alternate function remap. The MCU file has neither a `macro:` on the');
+      L.push('       selected remap nor codegen.remap.fields, so nothing can be applied. Selected:');
       for (const pid of used) {
         const i = S.periph[pid].remap;
         L.push(`         ${pid}: index ${i} — ${M.peripherals[pid].remaps[i].name}`);
       }
-      L.push('       Add codegen.remap.fields to the MCU YAML and generate again. */');
+      L.push('       Add one or the other to the MCU YAML and generate again. */');
     }
   }
   L.push(...user('GPIO', '    '));

@@ -165,7 +165,44 @@ export function skippedPins() {
   return out.sort((a, b) => a.pin.localeCompare(b.pin));
 }
 
-// ---- AFIO remap word ---------------------------------------------------------
+// ---- alternate function remap ------------------------------------------------
+//  Two families, two spellings, one rule: the DATA says which.
+//
+//  `codegen.remap.style: macro` - CH32X035 - means each remap entry carries a
+//  `macro:` and the SDK's own `GPIO_PinRemapConfig(<macro>, ENABLE)` applies it. The
+//  macro packs the register position AND the value into one constant that the SDK
+//  decodes, so building the mask by hand would re-derive an encoding the SDK already
+//  knows - and a wrong macro name fails to compile, where a wrong hand-built mask is
+//  silent. An index with NO macro emits nothing, which is how "No remap" stays quiet.
+//
+//  `codegen.remap.fields` - CH32V006 - means the remap index IS the register field
+//  value and one `AFIO->PCFR1` word carries every peripheral at once.
+//
+//  A part may in principle have both; a peripheral whose selected remap has a macro is
+//  applied by the call and left out of the word, so it is never written twice.
+
+/** The `GPIO_PinRemapConfig`-style calls this configuration needs. */
+export function remapPlan() {
+  const c = cfg().remap || {};
+  const calls = [];
+  for (const [pid, P] of Object.entries(M.peripherals)) {
+    if (!S.periph[pid]) continue;
+    const index = S.periph[pid].remap || 0;
+    const r = (P.remaps || [])[index];
+    if (!r || !r.macro) continue;
+    calls.push({ periph: pid, index, name: r.name, macro: r.macro, used: requiredSignals(pid).size > 0 });
+  }
+  calls.sort((a, b) => a.periph.localeCompare(b.periph));
+  return { style: c.style || (c.fields ? 'register' : null), fn: c.fn || null, enable: c.enable || 'ENABLE', calls };
+}
+
+/** True when this peripheral's selected remap is applied by a macro call. */
+function remappedByMacro(pid) {
+  const index = (S.periph[pid] || {}).remap || 0;
+  const r = ((M.peripherals[pid] || {}).remaps || [])[index];
+  return !!(r && r.macro);
+}
+
 // Returns { register, value, mask, parts } or null when the file has no map.
 export function remapWord() {
   const c = cfg().remap;
@@ -174,6 +211,7 @@ export function remapWord() {
   const parts = [];
   for (const [pid, slices] of Object.entries(c.fields)) {
     if (!S.periph[pid]) continue;
+    if (remappedByMacro(pid)) continue;          // the call applies it; writing it twice is a bug
     const index = S.periph[pid].remap || 0;
     const remaps = (M.peripherals[pid] || {}).remaps || [];
     let width = 0;
@@ -380,8 +418,29 @@ function gpioSection() {
 
   if (left.length) L.push(...skipNote(left));
 
+  // Macro style first: one SDK call per peripheral whose selected remap names a macro.
+  const rp = remapPlan();
+  const live = rp.calls.filter(c => c.used);
+  if (live.length && rp.fn) {
+    L.push('    /* Alternate function remap */');
+    for (const c of live) {
+      L.push(`    ${rp.fn}(${c.macro}, ${rp.enable});   /* ${c.periph}: ${c.name} */`);
+    }
+    L.push('');
+  } else if (live.length) {
+    L.push('    /* TODO: alternate function remap. The MCU file gives a macro per remap but no');
+    L.push('       codegen.remap.fn, so the call that applies it cannot be written. Selected:');
+    for (const c of live) L.push(`         ${c.periph}: ${c.name} — ${c.macro}`);
+    L.push('       Add codegen.remap.fn (GPIO_PinRemapConfig on the parts seen so far). */');
+  }
+  for (const c of rp.calls) {
+    if (c.used) continue;
+    L.push(`    /*   ${c.periph} selects "${c.name}" but is switched off; nothing is remapped for it. */`);
+  }
+
+  // Register style: one word carrying every peripheral a macro did not already apply.
   const remap = remapWord();
-  if (remap) {
+  if (remap && remap.parts.length) {
     const active = remap.parts.filter(p => p.used);
     L.push('    /* Alternate function remap (AFIO) */');
     for (const p of remap.parts) {
@@ -389,16 +448,21 @@ function gpioSection() {
     }
     L.push(`    ${remap.register} = (${remap.register} & ~${hex(remap.mask)}) | ${hex(remap.value)};`);
     if (!active.length) L.push('    /*   nothing enabled uses a remap; the write is the reset value. */');
-  } else {
-    const used = Object.keys(M.peripherals).filter(pid => (M.peripherals[pid].remaps || []).length > 1 && requiredSignals(pid).size);
+  } else if (!rp.calls.length) {
+    // Neither style reaches these: the peripheral is on, has a real choice of remaps,
+    // and the data says nothing about how to apply the one that is selected.
+    const used = Object.keys(M.peripherals).filter(pid =>
+      (M.peripherals[pid].remaps || []).length > 1
+      && requiredSignals(pid).size
+      && (S.periph[pid] || {}).remap);
     if (used.length) {
-      L.push('    /* TODO: alternate function remap. The MCU file has no codegen.remap.fields,');
-      L.push('       so the AFIO register word cannot be computed. Selected remaps are:');
+      L.push('    /* TODO: alternate function remap. The MCU file has neither a `macro:` on the');
+      L.push('       selected remap nor codegen.remap.fields, so nothing can be applied. Selected:');
       for (const pid of used) {
         const i = S.periph[pid].remap;
         L.push(`         ${pid}: index ${i} — ${M.peripherals[pid].remaps[i].name}`);
       }
-      L.push('       Add codegen.remap.fields to the MCU YAML and generate again. */');
+      L.push('       Add one or the other to the MCU YAML and generate again. */');
     }
   }
   L.push(...user('GPIO', '    '));

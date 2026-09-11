@@ -1,6 +1,6 @@
 // resources.js — the conflicts that are not about pins: EXTI lines and DMA
 // channels. Data from AGENT-1's `exti:` and `dma:` blocks (RM Table 6-2 and 8-2).
-import { test, assert, fresh } from './_harness.js';
+import { test, assert, fresh, eng } from './_harness.js';
 
 const issuesOf = (e, kind) => e.E.resourceIssues.filter(i => i.kind === kind);
 
@@ -586,4 +586,203 @@ test('a per-channel value on a switched-off peripheral is warned about too', () 
   const w = e.E.resources.issues.filter(i => i.kind === 'params');
   assert.equal(w.length, 1);
   assert.match(w[0].text, /channel 2/);
+});
+
+// =============================================================================
+//  Round 4 P0b 7 and 9 — two families, two spellings, and the DATA says which
+// =============================================================================
+
+test('a remap with a macro is applied by the SDK call, not by a register word', () => {
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  e.setPackage('LQFP64M');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  const withMacro = e.M.peripherals.USART1.remaps.findIndex(r => r.macro);
+  assert.ok(withMacro > 0, 'setup: this part gives its remaps macros');
+  e.setRemap('USART1', withMacro);
+  e.compute();
+
+  const c = e.cSource();
+  const macro = e.M.peripherals.USART1.remaps[withMacro].macro;
+  assert.ok(c.includes(`${e.M.codegen.remap.fn}(${macro}, ${e.M.codegen.remap.enable});`),
+    `the call the data names, with the macro the data names (${macro})`);
+  assert.equal(/AFIO->PCFR1/.test(c), false,
+    'and no hand-built mask: the macro packs the position and the value already');
+});
+
+test('the default mapping emits nothing, because there is no macro for it', () => {
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  e.setPackage('LQFP64M');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setRemap('USART1', 0);
+  e.compute();
+  assert.equal(e.M.peripherals.USART1.remaps[0].macro, undefined,
+    'setup: ch32x035_gpio.h has no macro for the default mapping');
+  const c = e.cSource();
+  assert.equal(/GPIO_PinRemapConfig/.test(c), false, 'so nothing is applied, and no TODO either');
+  assert.deepEqual(e.cComplaints(), []);
+});
+
+test('a peripheral that is switched off is not remapped', () => {
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  e.setPackage('LQFP64M');
+  const i = e.M.peripherals.USART1.remaps.findIndex(r => r.macro);
+  e.setRemap('USART1', i);                    // selected, but USART1 is off
+  // a real IO pin elsewhere, so the GPIO section is generated at all
+  const free = Object.keys(e.M.pins).find(p =>
+    e.pinExists(p) && e.pinType(p) === 'io' && !e.compute().pins[e.canon(p)]);
+  assert.ok(free, 'setup: found a free IO pin');
+  e.assignSignal(free, { gpio: 'GPIO_Output' });
+  e.compute();
+  const c = e.cSource();
+  assert.equal(/GPIO_PinRemapConfig\(/.test(c), false, 'no call for a peripheral nothing uses');
+  assert.match(c, /USART1 selects .* but is switched off/, 'and the file says why');
+});
+
+test('the register-word family is untouched by any of this', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setRemap('USART1', 3);
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /AFIO->PCFR1 = \(AFIO->PCFR1 & ~0x[0-9A-F]+U\) \| 0x[0-9A-F]+U;/);
+  assert.equal(/GPIO_PinRemapConfig/.test(c), false, 'this part has no macros and needs none');
+  assert.deepEqual(e.cComplaints(), []);
+});
+
+test('a peripheral applied by a macro is left out of the register word', () => {
+  // A part could in principle carry both. Writing the same field twice - once by the
+  // call and once in the word - is the bug this guards.
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-BOTHREMAPS
+  inherits: CH32V006
+codegen:
+  remap:
+    fn: GPIO_PinRemapConfig
+    enable: ENABLE
+peripherals:
+  USART1:
+    remaps:
+      - { name: "000 Default", pins: { TX: PD5, RX: PD6 } }
+      - { name: "001", macro: GPIO_Remap_USART1_Test, pins: { TX: PD0, RX: PD1 } }
+`);
+  e.loadMcu('CH32V006-BOTHREMAPS');
+  e.setPackage('TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setRemap('USART1', 1);
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('GPIO_PinRemapConfig(GPIO_Remap_USART1_Test, ENABLE);'), 'the call is made');
+  const word = /AFIO->PCFR1 = \(AFIO->PCFR1 & ~(0x[0-9A-F]+)U\)/.exec(c);
+  if (word) {
+    // USART1_RM is [9:6] on this part; the mask must not claim those bits any more
+    assert.equal((parseInt(word[1], 16) >>> 6) & 0xF, 0,
+      'the macro applies USART1, so the word must not write its field as well');
+  }
+});
+
+test('a remap the data cannot apply is a TODO naming both ways of fixing it', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-NOREMAPWAY
+  inherits: CH32V006
+  remove: [codegen.remap]
+`);
+  e.loadMcu('CH32V006-NOREMAPWAY');
+  e.setPackage('TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setRemap('USART1', 3);
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /TODO: alternate function remap/);
+  assert.match(c, /neither a `macro:` on the/);
+  assert.match(c, /USART1: index 3/);
+  assert.ok(e.cComplaints().some(x => x.kind === 'todo'));
+});
+
+// ---- grouped NVIC vectors ----------------------------------------------------
+
+test('many EXTI lines map to one vector, and the lookup goes line -> vector', () => {
+  const e = fresh();
+  const part = Object.keys(eng.MCU_FILES).find(n => {
+    const g = fresh(); g.loadMcu(n);
+    return g.nvicVectors().some(v => v.lines);
+  });
+  if (!part) return;                          // no bundled part groups its vectors yet
+  e.loadMcu(part);
+  const grouped = e.nvicVectors().filter(v => v.lines);
+  assert.ok(grouped.length, `${part} groups its EXTI vectors`);
+  for (const v of grouped) {
+    assert.equal(v.lines.length, 2, 'lines: [first, last], inclusive');
+    assert.ok(v.lines[0] <= v.lines[1]);
+    assert.equal(e.nvicVectorForLine(v.lines[0]).name, v.name, `line ${v.lines[0]} -> ${v.name}`);
+    assert.equal(e.nvicVectorForLine(v.lines[1]).name, v.name, `line ${v.lines[1]} -> ${v.name}`);
+  }
+  // the groups do not overlap, or a line would have two vectors
+  for (let i = 0; i < grouped.length; i++) {
+    for (let j = i + 1; j < grouped.length; j++) {
+      const a = grouped[i].lines, b = grouped[j].lines;
+      assert.ok(a[1] < b[0] || b[1] < a[0],
+        `${grouped[i].name} and ${grouped[j].name} both claim a line`);
+    }
+  }
+  const past = Math.max(...grouped.map(v => v.lines[1])) + 1;
+  assert.equal(e.nvicVectorForLine(past), null, 'a line no group covers has no vector');
+  assert.equal(e.nvicVectorForLine('nonsense'), null);
+});
+
+test('a part whose vectors are not grouped answers cleanly rather than throwing', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.assignSignal('PC3', { gpio: 'GPIO_EXTI' });
+  e.compute();
+  // CH32V006's EXTI7_0 covers eight lines but the data does not say so yet. Nothing is
+  // inferred from the NAME, so the answer is "no grouping stated", not a guess.
+  assert.deepEqual(e.extiVectorsNeeded(), []);
+  assert.equal(e.nvicVectorForLine(3), null);
+  assert.deepEqual(e.E.resources.issues.filter(i => i.kind === 'nvic'), []);
+});
+
+test('an external interrupt whose group vector is off is a warning, not silence', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-GROUPED
+  inherits: CH32V006
+nvic:
+  vectors:
+    - { name: EXTI7_0, vector: 20, irqn: EXTI7_0_IRQn, handler: EXTI7_0_IRQHandler, peripheral: EXTI, lines: [0, 7] }
+`);
+  e.loadMcu('CH32V006-GROUPED');
+  e.setPackage('TSSOP20');
+  e.assignSignal('PC3', { gpio: 'GPIO_EXTI' });
+  e.compute();
+
+  const need = e.extiVectorsNeeded();
+  assert.equal(need.length, 1, 'one vector, however many lines');
+  assert.equal(need[0].vector.name, 'EXTI7_0');
+  assert.deepEqual(need[0].pins, ['PC3']);
+
+  const w = e.E.resources.issues.filter(i => i.kind === 'nvic');
+  assert.equal(w.length, 1);
+  assert.match(w[0].text, /PC3 is an external interrupt but EXTI7_0 is not enabled/);
+  assert.match(w[0].text, /enabling it once covers all of them/);
+
+  // a second line in the same group is still one vector and still one warning
+  e.assignSignal('PC5', { gpio: 'GPIO_EXTI' });
+  e.compute();
+  assert.equal(e.extiVectorsNeeded().length, 1, 'the group is already on the list');
+  assert.equal(e.E.resources.issues.filter(i => i.kind === 'nvic').length, 1);
+
+  e.setNvicVector('EXTI7_0', { enabled: true });
+  e.compute();
+  assert.deepEqual(e.E.resources.issues.filter(i => i.kind === 'nvic'), [],
+    'enabling the group once clears it for every line in it');
 });

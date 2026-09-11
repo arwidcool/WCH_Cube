@@ -320,9 +320,27 @@ export const nvicScheme = () => nvicCfg().scheme || null;
 export const nvicGroups = () => ((nvicCfg().scheme || {}).groups || []);
 export const nvicGroup = () => nvicGroups()[S.nvic.group] || null;
 
-/** A vector is available when the peripheral that raises it is switched on. */
+/** The EXTI lines the configuration has actually claimed, as numbers. */
+function claimedExtiLines() {
+  const ex = extiState();
+  if (!ex) return [];
+  return Object.keys(ex.lines).map(l => Number(String(l).replace(/\D+/g, ''))).filter(Number.isFinite);
+}
+
+/**
+ * A vector is available when something can raise it.
+ *
+ * A vector that declares `lines:` is raised by a PIN, not by a peripheral being
+ * switched on in the settings - EXTI has no "Mode: Enable", it has pins. So its
+ * availability is "at least one of my lines is claimed". That is keyed off the data's
+ * own `lines:` key rather than off the peripheral being called EXTI, so a part that
+ * groups some other vector the same way gets the same treatment for free.
+ */
 function vectorAvailable(v) {
   if (v.system) return true;                       // NMI, SysTick, the software interrupt
+  if (Array.isArray(v.lines) && v.lines.length === 2) {
+    return claimedExtiLines().some(n => n >= v.lines[0] && n <= v.lines[1]);
+  }
   if (!v.peripheral) return true;
   if (!M.peripherals[v.peripheral]) return false;  // the part does not have it at all
   return isEnabled(v.peripheral);
@@ -352,6 +370,10 @@ export function nvicVectors() {
       description: v.description || '',
       system: !!v.system,
       fixed: !!v.fixed,              // NMI and HardFault cannot be switched off
+      // An EXTI vector may cover MANY lines: CH32X035's EXTI7_0 / EXTI15_8 / EXTI25_16
+      // carry 26 between them, so `lines: [first, last]` (inclusive) is how one row
+      // stands for a group. A vector with no `lines:` is simply not an EXTI group.
+      lines: Array.isArray(v.lines) && v.lines.length === 2 ? [v.lines[0], v.lines[1]] : null,
       available: vectorAvailable(v),
       enabled: v.fixed ? true : !!st.enabled,
       preempt: st.preempt === undefined ? (nvicRange('preempt') || { min: 0 }).min : st.preempt,
@@ -361,6 +383,39 @@ export function nvicVectors() {
 }
 
 const vectorDef = name => (nvicCfg().vectors || []).find(v => String(v.name) === String(name));
+
+/**
+ * The vector an EXTI line raises. Looked up line -> vector, which is the direction
+ * every question is actually asked in: "the user made PA3 an external interrupt, which
+ * vector has to be on?" Many lines map to one vector, so enabling a second line in the
+ * same group enables nothing new - the group is already on.
+ */
+export function nvicVectorForLine(line) {
+  const n = Number(line);
+  if (!Number.isFinite(n)) return null;
+  return nvicVectors().find(v => v.lines && n >= v.lines[0] && n <= v.lines[1]) || null;
+}
+
+/**
+ * The vectors the configured external interrupts need, each once. `extiState()` gives
+ * the lines; this turns them into the rows the NVIC tab should light up, so the tab
+ * lists three vectors rather than twenty-six lines.
+ */
+export function extiVectorsNeeded() {
+  const ex = extiState();
+  if (!ex) return [];
+  const out = new Map();
+  for (const [line, users] of Object.entries(ex.lines)) {
+    const num = Number(String(line).replace(/\D+/g, ''));
+    const v = nvicVectorForLine(num);
+    if (!v) continue;
+    const row = out.get(v.name) || { vector: v, lines: [], pins: [] };
+    row.lines.push(num);
+    row.pins.push(...users.map(u => u.pin));
+    out.set(v.name, row);
+  }
+  return [...out.values()].sort((a, b) => a.vector.vector - b.vector.vector);
+}
 
 /** Enable a vector, or set its priority. Validated against the ACTIVE group. */
 export function setNvicVector(name, patch) {
@@ -448,6 +503,27 @@ function paramReachWarnings() {
   return out;
 }
 
+/**
+ * An external interrupt the user configured whose vector is not enabled. The pin is
+ * routed and the line is claimed, and nothing will ever fire - which is invisible
+ * until it is 3am. The mirror of the "enabled but nothing can raise it" warning.
+ */
+function extiVectorWarnings() {
+  const out = [];
+  for (const row of extiVectorsNeeded()) {
+    if (row.vector.enabled) continue;
+    out.push({
+      kind: 'nvic', severity: 'warning', owners: ['EXTI', row.vector.peripheral].filter(Boolean),
+      text: `${row.pins.join(', ')} ${row.pins.length === 1 ? 'is an external interrupt' : 'are external interrupts'}`
+        + ` but ${row.vector.name} is not enabled — nothing will fire.`
+        + ` One vector covers line${row.vector.lines[0] === row.vector.lines[1] ? '' : 's'}`
+        + ` ${row.vector.lines[0]}${row.vector.lines[0] === row.vector.lines[1] ? '' : `-${row.vector.lines[1]}`},`
+        + ' so enabling it once covers all of them',
+    });
+  }
+  return out;
+}
+
 /** A vector the user enabled on a peripheral that is now off. */
 function nvicIssues() {
   const out = [];
@@ -471,7 +547,8 @@ export function nvicState() {
     groups: nvicGroups(),
     group: S.nvic.group,
     vectors: nvicVectors(),
-    issues: nvicIssues(),
+    extiVectors: extiVectorsNeeded(),
+    issues: [...nvicIssues(), ...extiVectorWarnings()],
   };
 }
 
