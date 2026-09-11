@@ -628,6 +628,99 @@ dma:
     TIM1_TRIG, TIM1_COM and TIM1_CH4 share channel 4 as one hardware request line.
 
 # -----------------------------------------------------------------------------
+# Code generation — register encodings the C generator cannot derive from the model.
+# Requested by AGENT-2 (BOARD 05:43Z / 05:44Z). Every number below was read off the
+# reference manual directly, not copied from the request; the one disagreement that
+# found is called out where it occurs.
+codegen:
+  header: ch32v00x.h
+
+  # RM 3.4.7: the GPIO ports and AFIO sit in RCC_PB2PCENR — AFIOEN bit 0, IOPAEN..IOPDEN
+  # bits 2..5. The register really is named "PB2" on this family, not "APB2" (RM Table
+  # 3-x, R32_RCC_PB2PCENR at 0x40021018), which is why the macro spelling below reads
+  # PB2. Confirming the EVT SDK uses the same spelling for the *function* is HUMAN_TODO
+  # item 5; the register name itself is settled.
+  gpio_clock: { fn: RCC_PB2PeriphClockCmd, port: RCC_PB2Periph_GPIO$PORT, afio: RCC_PB2Periph_AFIO }
+  speeds: { Low: GPIO_Speed_2MHz, Medium: GPIO_Speed_10MHz, High: GPIO_Speed_50MHz }
+
+  # AFIO_PCFR1 — RM 7.3.2.2. Bit layout row, high half then low half:
+  #   [31:27] Reserved  [26:24] SWCFG  23 Reserved  [22:20] USART2_RM  19 ADC_ETRGREG_RM
+  #   18 ADC_ETRGINJ_RM  17 PA1PA2_RM  16 TIM2_RM[2]
+  #   [15:14] TIM2_RM[1:0]  [13:10] TIM1_RM  [9:6] USART1_RM  [5:3] I2C1_RM  [2:0] SPI1_RM
+  #
+  # Only peripherals whose `remaps:` index IS the register field value belong here.
+  # SYS is deliberately absent: its remap list selects the package's reset pin, not an
+  # AFIO field, so putting SWCFG here would write the package index into the register.
+  # ADC1, TKEY, OPA1 and RCC each have a single "Default" remap for the same reason.
+  remap:
+    register: "AFIO->PCFR1"
+    fields:
+      SPI1:   [{ lsb: 0,  bits: 3 }]
+      I2C1:   [{ lsb: 3,  bits: 3 }]
+      USART1: [{ lsb: 6,  bits: 4 }]
+      TIM1:   [{ lsb: 10, bits: 4 }]
+      # TIM2_RM is three contiguous bits, [16:14]. It is written as two slices because
+      # the RM's bit diagram splits the field across its two half-rows and the engine
+      # supports that shape; [{lsb:14,bits:3}] would encode identically.
+      TIM2:   [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }]
+      USART2: [{ lsb: 20, bits: 3 }]
+
+  # Which signals want GPIO_Mode_AIN rather than AF_PP. Without this the generator has
+  # to guess from the peripheral's category, and it cannot tell ADC1_IN4 from
+  # ADC1_RETR0 — they share PD3 and only IN4 is analog. The triggers (RETR0/RETR1/
+  # IETR0/IETR1) are digital edge inputs and are correctly absent here.
+  analog_signals:
+    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7]
+    TKEY: [CH0, CH1, CH2, CH3, CH4, CH5, CH6, CH7]
+    OPA1: [P0, P1, P2, P3, N0, N1, N2, OUT0, OUT1]
+
+  # RCC_CFGR0 — RM 3.4.2, offset 0x04, reset 0x00000020.
+  rcc:
+    register: "RCC->CFGR0"
+    sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }   # SW[1:0]
+    pllsrc: { lsb: 16, bits: 1, values: { HSI: 0, HSE: 1 } }              # PLLSRC
+    prescalers:
+      # HPRE[3:0]. The RM gives two encodings for /2, /4 and /8; these are the ones from
+      # the 0000..0111 run, which covers every divider the clock tree offers below 16.
+      HB:  { lsb: 4,  bits: 4,
+             values: { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7,
+                       16: 11, 32: 12, 64: 13, 128: 14, 256: 15 } }
+      # ADCPRE[4:0]. The encoding is not a plain divider index: bits [4:3] pick a base
+      # (00 = /2, 01 = /4, 10 = /6, 11 = /8) and bits [2:0] scale it (0-3 = x1, 4 = x2,
+      # 5 = x4, 6 = x8, 7 = x16). Several dividers therefore have two legal codes; the
+      # values below are one valid code each, checked against the RM's own 21-line list.
+      #
+      # NOTE for whoever compares this against BOARD 05:43Z: that request proposed
+      # 6 -> 8. Code 8 is 01000, which is base /4 x1 = /4, so it would have run the ADC
+      # at 1.5x the requested clock. /6 is 10000 = 16. Every other value in the request
+      # checked out.
+      #
+      # /1 is deliberately absent. There is no ADCPRE code for it: undivided HB clock is
+      # ADC_CLK_MODE, bit 31 of this same register, a separate field. Mapping /1 onto
+      # the /2 code would silently halve the ADC clock, so the generator is left to
+      # report "no encoding for 1" until it can write bit 31 too. See BOARD.
+      ADC: { lsb: 11, bits: 5,
+             values: { 2: 0, 4: 4, 6: 16, 8: 12, 12: 20, 16: 28,
+                       24: 21, 32: 29, 48: 22, 64: 30, 96: 23, 128: 31 } }
+
+  # Not consumed by the generator yet — data first, so it is ready when it is.
+  # Which enable register each peripheral's clock bit lives in (RM 3.4.6 / 3.4.7 / 3.4.8).
+  # This is NOT a frequency split: there is only one prescaler (HPRE), so HB, PB1 and PB2
+  # all run at HCLK. It is purely about which RCC_*PCENR register to write.
+  periph_clock:
+    HB:  { register: RCC_HBPCENR,  fn: RCC_HBPeriphClockCmd,  prefix: RCC_HBPeriph_,
+           bits: { DMA1: 0, SRAM: 2 } }
+    PB2: { register: RCC_PB2PCENR, fn: RCC_PB2PeriphClockCmd, prefix: RCC_PB2Periph_,
+           bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4, GPIOD: 5, ADC1: 9,
+                   TIM1: 11, SPI1: 12, USART2: 13, USART1: 14 } }
+    PB1: { register: RCC_PB1PCENR, fn: RCC_PB1PeriphClockCmd, prefix: RCC_PB1Periph_,
+           bits: { TIM2: 0, TIM3: 2, WWDG: 11, I2C1: 21, PWR: 28 } }
+    notes: >
+      TKEY and OPA have no enable bit of their own in RM 3.4.6-3.4.8. TouchKey shares the
+      ADC block and OPA is documented as always-on analog, but neither is stated outright,
+      so neither is listed rather than guessed at.
+
+# -----------------------------------------------------------------------------
 # Clock tree — DS 1.3 Figure 1-3, RM 3 (RCC_CFGR0 HPRE / ADCPRE / MCO / PLLSRC)
 clock:
   sources:
@@ -651,4 +744,11 @@ clock:
     - { name: Core SysTick, source: HB, div: 8 }
   buses:
     HB: [TIM1, TIM2, TIM3, GPIO, AFIO, USART1, USART2, I2C1, SPI1, ADC1, TKEY, DMA1, WWDG, OPA1, PWR]
-  notes: "Single HB domain — no APB1/APB2 split. IWDG runs from LSI. MCO on PC4 can output SYSCLK, HSI, HSE or PLLCLK."
+  notes: >
+    One frequency domain: HPRE is the only bus prescaler, so every peripheral runs at
+    HCLK and `buses.HB` lists them all. That is a statement about frequency only — the
+    part does have three separate clock ENABLE registers (RCC_HBPCENR, RCC_PB2PCENR,
+    RCC_PB1PCENR, RM 3.4.6-3.4.8), and which one a peripheral sits in is in
+    `codegen.periph_clock`. An earlier version of this note said "no APB1/APB2 split",
+    which read as though PB1 and PB2 did not exist at all; they do.
+    IWDG runs from LSI. MCO on PC4 can output SYSCLK, HSI, HSE or PLLCLK.
