@@ -44,6 +44,9 @@ peripherals:
       word: 8 bits
       parity: None
       stop: '1'
+      lin: false
+      smartcard: false
+      irda: false
   USART2:
     settings:
       Mode: Disable
@@ -54,6 +57,9 @@ peripherals:
       word: 8 bits
       parity: None
       stop: '1'
+      lin: false
+      smartcard: false
+      irda: false
   USART3:
     settings:
       Mode: Disable
@@ -64,6 +70,9 @@ peripherals:
       word: 8 bits
       parity: None
       stop: '1'
+      lin: false
+      smartcard: false
+      irda: false
   USART4:
     settings:
       Mode: Disable
@@ -74,6 +83,9 @@ peripherals:
       word: 8 bits
       parity: None
       stop: '1'
+      lin: false
+      smartcard: false
+      irda: false
   SPI1:
     settings:
       Mode: Disable
