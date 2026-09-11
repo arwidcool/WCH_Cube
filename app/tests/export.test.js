@@ -140,21 +140,55 @@ test('the generated file carries a USER CODE section in every part of it', () =>
   for (const tag of source) assert.ok(e.cSource().includes(`/* USER CODE END ${tag} */`), tag);
 });
 
-test('the set of tags does not depend on the configuration', () => {
-  const tagsOf = e => [...e.cSource().matchAll(/USER CODE BEGIN (\S+)/g)].map(m => m[1]).join(',');
-  const empty = fresh('CH32V006', 'TSSOP20');
-  empty.compute();
+// This test USED to hold two `fresh()` results at once and compare them at the end.
+// `fresh()` returns the one engine singleton, so both variables were the same object and
+// the comparison was between a configuration and itself - it could not fail. Read each
+// one out before configuring the next.
+const CORE_USER_TAGS = ['Includes', 'PV', 'RCC', 'GPIO', 'Periph', 'DMA', 'NVIC', 'Init'];
 
-  const full = fresh('CH32V006', 'TSSOP20');
-  full.setSetting('USART1', 'Mode', 'Asynchronous');
-  full.assignSignal('PC0', { gpio: 'GPIO_Output' });
-  full.addDmaRequest('USART1_TX');
-  full.setNvicVector('USART1', { enabled: true });
-  full.compute();
+test('the core USER CODE tags do not depend on the configuration', () => {
+  const tagsOf = e => [...e.cSource().matchAll(/USER CODE BEGIN (\S+)/g)].map(m => m[1]);
 
-  assert.equal(tagsOf(empty), tagsOf(full),
-    'a tag that comes and goes with the configuration would orphan code every time a '
-    + 'peripheral is switched off');
+  const bare = fresh('CH32V006', 'TSSOP20');
+  bare.compute();
+  const empty = tagsOf(bare);
+
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.addDmaRequest('USART1_TX');
+  e.setNvicVector('USART1', { enabled: true });
+  e.compute();
+  const full = tagsOf(e);
+
+  assert.deepEqual(empty.filter(t => CORE_USER_TAGS.includes(t)), CORE_USER_TAGS);
+  assert.deepEqual(full.filter(t => CORE_USER_TAGS.includes(t)), CORE_USER_TAGS,
+    'a core tag that came and went would orphan code every time a peripheral was '
+    + 'switched off');
+  // The per-peripheral tags DO depend on the configuration - the deliberate exception,
+  // recorded on the board 16:41Z. Everything else must be core.
+  for (const t of [...empty, ...full]) {
+    if (CORE_USER_TAGS.includes(t)) continue;
+    assert.match(t, /^(Periph|Includes|Prototypes)_\w+$/, `${t} is neither core nor per-peripheral`);
+  }
+  assert.ok(full.includes('Periph_USART1'), 'setup: USART1 really got its own block');
+  assert.equal(empty.includes('Periph_USART1'), false, 'and a peripheral that is off has none');
+});
+
+test('switching a peripheral off orphans its user code loudly rather than dropping it', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.compute();
+  const edited = e.cSource().replace(
+    '/* USER CODE BEGIN Periph_USART1 */',
+    '/* USER CODE BEGIN Periph_USART1 */\n    USART_Cmd(USART1, ENABLE);');
+
+  e.setSetting('USART1', 'Mode', 'Disable');
+  e.compute();
+  const merged = eng.mergeUserCode(edited, e.cSource());
+  assert.deepEqual(merged.orphaned, ['Periph_USART1']);
+  assert.ok(merged.text.includes('USART_Cmd(USART1, ENABLE);'), 'the line is still in the file');
+  assert.match(merged.text, /was: USER CODE Periph_USART1/);
 });
 
 test('turning the option off removes the markers rather than ignoring them', () => {
