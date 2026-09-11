@@ -10,6 +10,21 @@ export function test(name, fn) { REG.push({ suite: current, name, fn }); }
 
 export class AssertionError extends Error {}
 
+/**
+ * Thrown by skip(): "this check did not run, and here is why."
+ *
+ * A skip is NOT a pass. The runner counts skips separately, prints the reason
+ * on the line, and repeats the total in the summary — because a compile check
+ * that quietly did nothing is exactly how "the generated C compiles" was
+ * asserted for a whole round without anyone compiling it.
+ */
+export class SkipError extends Error {
+  constructor(reason) { super(reason); this.name = 'SkipError'; }
+}
+
+/** Abandon the current test with a printed reason. Never call it on a failure. */
+export function skip(reason) { throw new SkipError(reason); }
+
 function fail(msg) { throw new AssertionError(msg); }
 
 const fmt = v => {

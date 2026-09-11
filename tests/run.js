@@ -43,7 +43,7 @@ if (fs.existsSync(enginePath)) {
   try { ({ collected } = await imp(enginePath)); }
   catch (e) { console.error(C.y('warning: app/tests/_harness.js failed to load — engine units skipped')); console.error('  ' + (e.message || e)); }
 }
-const { REG, AssertionError } = await imp(path.join(ROOT, 'tests', 'lib', 'harness.js'));
+const { REG, AssertionError, SkipError } = await imp(path.join(ROOT, 'tests', 'lib', 'harness.js'));
 
 // Four agents write this tree at once. If dist/index.html is rebuilt while the suite
 // is running, tests read two different apps and fail for reasons nobody introduced.
@@ -57,6 +57,7 @@ const distAtStart = stampDist();
 const t0 = Date.now();
 let pass = 0, filtered = 0;
 const failures = [];
+const skipped = [];
 
 for (const file of FILES) {
   const rel = path.relative(ROOT, file).replace(/\\/g, '/');
@@ -84,6 +85,12 @@ for (const file of FILES) {
       pass++;
       console.log(`  ${C.g('ok')}    ${label}${ms > 250 ? C.d(`  [${ms} ms]`) : ''}`);
     } catch (e) {
+      if (e instanceof SkipError || e.name === 'SkipError') {
+        skipped.push({ where: rel, name: label, reason: e.message });
+        console.log(`  ${C.y('SKIP')}  ${label}`);
+        console.log(`        ${C.y(e.message)}`);
+        continue;
+      }
       console.log(`  ${C.r('FAIL')}  ${label}`);
       const body = (e instanceof AssertionError || e.name === 'AssertionError')
         ? (e.message || String(e))
@@ -101,6 +108,14 @@ try { await (await imp(path.join(ROOT, 'tests', 'lib', 'browser.js'))).closeBrow
 
 const secs = ((Date.now() - t0) / 1000).toFixed(1);
 console.log('\n' + '-'.repeat(64));
+// Say this BEFORE the verdict, on a green run as loudly as on a red one. A check
+// that did not run proves nothing, and a skip nobody reads is how "the generated
+// C compiles" was asserted for a whole round without anyone compiling it.
+if (skipped.length) {
+  console.log(C.y(`${skipped.length} test(s) SKIPPED — they did not run and prove nothing:`));
+  for (const s of skipped) console.log(C.y(`  - ${s.where}  ${s.name}`) + '\n' + C.d(`      ${s.reason.split('\n')[0]}`));
+  console.log('');
+}
 if (failures.length) {
   console.log(C.r(`${failures.length} FAILED`) + `, ${pass} passed` + (filtered ? `, ${filtered} filtered out` : '') + `  (${secs}s)`);
   for (const f of failures) console.log('  ' + C.r('x') + ` ${f.where}  ${f.name}`);
@@ -111,4 +126,6 @@ if (failures.length) {
   }
   process.exit(1);
 }
-console.log(C.g('ALL GREEN') + ` — ${pass} tests` + (filtered ? `, ${filtered} filtered out` : '') + `  (${secs}s)`);
+console.log(C.g('ALL GREEN') + ` — ${pass} tests`
+  + (skipped.length ? C.y(`, ${skipped.length} SKIPPED`) : '')
+  + (filtered ? `, ${filtered} filtered out` : '') + `  (${secs}s)`);

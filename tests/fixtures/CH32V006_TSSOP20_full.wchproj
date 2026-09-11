@@ -1,0 +1,196 @@
+wchproj: 1
+name: compile-gate CH32V006 TSSOP20
+saved: fixture
+mcu: CH32V006
+variant: null
+package: TSSOP20
+peripherals:
+  SYS:
+    settings:
+      Debug (SDI): 1-wire SDI (SWIO)
+      External reset pin: RST enabled — ignore 12 ms (RST_MODE=10, factory default)
+    remap: 0
+  RCC:
+    settings:
+      High Speed Clock (HSE): Disable
+      Master Clock Output (MCO): Disable
+    remap: 0
+  DMA1:
+    settings:
+      Mode: Disable
+    remap: 0
+  IWDG:
+    settings:
+      Mode: Disable
+    remap: 0
+  WWDG:
+    settings:
+      Mode: Disable
+    remap: 0
+  PWR:
+    settings:
+      Power voltage detector (PVD): Disable
+      Auto wake-up (AWU): Disable
+      Low-power mode entered on WFI/WFE: Sleep
+    remap: 0
+    params:
+      pvd_level: 2.43 V rising / 2.41 V falling
+      ldo_mode: Normal - LDO 1.2 V
+      awu_prescaler: /4096
+      awu_window: 63
+  FLASH:
+    settings:
+      Independent watchdog start (IWDG_SW): Started by software (IWDG_SW = 1, factory default)
+      Reset on entering Standby (STANDBY_RST): No reset (STANDBY_RST = 1, factory default)
+      Power-on start mode (START_MODE): Boot from BOOT area (START_MODE = 1, factory default)
+      Read protection (RDPR): Unprotected (RDPR = 0xA5, factory default)
+    remap: 0
+    params:
+      latency: 2 wait states
+  EXTI:
+    settings:
+      EXTI line 0 trigger: Disable
+      EXTI line 1 trigger: Disable
+      EXTI line 2 trigger: Disable
+      EXTI line 3 trigger: Disable
+      EXTI line 4 trigger: Disable
+      EXTI line 5 trigger: Disable
+      EXTI line 6 trigger: Disable
+      EXTI line 7 trigger: Disable
+    remap: 0
+  ADC1:
+    settings:
+      Channels:
+        - IN2
+      Regular group external trigger: Disable
+      Injected group external trigger: Disable
+    remap: 0
+    params:
+      sample: 55.5 cycles
+      lowpower: false
+      cont: true
+      scan: false
+      align: Left
+  TKEY:
+    settings:
+      Channels: []
+    remap: 0
+  OPA1:
+    settings:
+      Positive input (PSEL): Disable
+      Negative input (NSEL): Disable
+      Output: Disable
+    remap: 0
+  TIM1:
+    settings:
+      Channel1: PWM Generation CH1
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Break Input: Disable
+      Channel 1 input source: CH1 pin (TIM1_RM = 0000..1001)
+    remap: 0
+    params:
+      prescaler: 47
+      period: 999
+      counter: Center aligned 1
+      ckd: '1'
+      arpe: true
+      rcr: 0
+      deadtime: 0
+  TIM2:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Encoder Mode: Disable
+      Complementary Outputs: Disable
+    remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
+  TIM3:
+    settings:
+      Mode: Disable
+    remap: 0
+  USART1:
+    settings:
+      Mode: Asynchronous
+      Hardware Flow Control: Disable
+    remap: 1
+    params:
+      baud: 115200
+      word: 9 bits
+      parity: Even
+      stop: '2'
+  USART2:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
+  SPI1:
+    settings:
+      Mode: Full-Duplex Master
+      Hardware NSS Signal: Disable (software NSS)
+    remap: 0
+    params:
+      prescaler: '8'
+      cpol: High
+      cpha: 2 Edge
+      datasize: 8 bits
+      firstbit: LSB First
+      crc: false
+  I2C1:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      speed: 100000
+      duty: '2:1'
+      addrmode: 7-bit
+      addr: 0
+gpio_manual:
+  PA1: GPIO_Output
+  PA2: GPIO_Input
+  PD4: GPIO_Output
+  PC0: GPIO_Output
+gpio_settings:
+  PA1:
+    mode: Output Push Pull
+    pull: No pull
+    speed: Low
+    label: ''
+  PA2:
+    mode: Input
+    pull: No pull
+    speed: Low
+    label: ''
+  PD4:
+    mode: Output Push Pull
+    pull: No pull
+    speed: Low
+    label: STATUS_LED
+  PC0:
+    mode: Output Push Pull
+    pull: No pull
+    speed: Low
+    label: ''
+clock:
+  hse: 24
+  pllIn: 0
+  pllMul: 2
+  sys: PLLCLK
+  pre:
+    HB: 1
+    ADC: 1
