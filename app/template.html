@@ -243,6 +243,13 @@
     .chipbar{flex-wrap:wrap}
     #pin-search{width:120px!important}
   }
+  @media (max-width:1180px){
+    #view-pinout{grid-template-columns:212px minmax(296px,1fr) minmax(356px,1.25fr)}
+    .subbar{gap:28px}
+    table.gpio{font-size:11.5px}
+    .mode{padding:8px 10px}
+    .menubar .menu{padding:6px 8px}
+  }
   @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
 </style>
 </head>
@@ -388,8 +395,9 @@ const attr = s => esc(s).replace(/"/g, '&quot;');
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
 const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false, cview: 'pinout' };
 
-const userLabel = name => ((S.gpio[name] || {}).label || '').trim();
-const pinModified = name => !!(E && E.pins[name]) || !!userLabel(name);
+// userLabel() and pinModified() now live in app/engine/engine.js (AGENT-3's
+// 01:00Z handoff). pinModified() there canonicalises the pin, so the second name
+// of a shorted pair reports correctly too.
 // how much horizontal room the longest label needs, so nothing is clipped at fit-zoom
 function labelRoom() {
   if (!E) return 190;
@@ -633,8 +641,7 @@ function placeFloat(d, cx, cy) {
   d.style.left = Math.max(4, Math.min(cx + 4, window.innerWidth - W - 8)) + 'px';
   d.style.top = Math.max(4, Math.min(cy + 4, window.innerHeight - H - 8)) + 'px';
 }
-// thin setters so the UI never pokes at S in more than one place (AGENT-2: adopt these into engine/model.js)
-function setGpioField(pin, key, val) { (S.gpio[pin] ||= {})[key] = val; }
+// setGpioField() is the engine's now (app/engine/engine.js) and records an undo step.
 function selectPeripheral(pid) { if (pid === 'GPIO' || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
 
 function openPinMenu(pin, cx, cy) {
@@ -753,9 +760,24 @@ function renderSystem() {
   const rest = Object.keys(M.peripherals).filter(p => !placed.has(p));
   if (rest.length) groups.push({ bus: groups.length ? 'Not on a documented bus' : 'Peripherals', items: rest });
 
-  const W = 1040, PAD = 18, COREW = 176, BX = PAD + COREW + 66;
+  const PAD = 18, COREW = 176, BX = PAD + COREW + 66;
   const BW = 108, BH = 30, GX = 9, GY = 9, HDR = 21, BANDGAP = 16;
-  const perRow = Math.max(1, Math.floor((W - BX - PAD + GX) / (BW + GX)));
+  // Choose how many blocks per row so the diagram ends up shaped like the panel it
+  // has to fill - a tall narrow panel gets few columns, a wide one gets many.
+  const panel = document.getElementById('syscanvas');
+  const aspect = Math.max(0.2, (panel.clientWidth || 620) / (panel.clientHeight || 430));
+  const widest = Math.max(1, ...groups.map(g => g.items.length));
+  const measure = pr => {
+    let yy = PAD;
+    for (const g of groups) yy += HDR + Math.ceil(g.items.length / pr) * (BH + GY) - GY + BANDGAP;
+    return { pr, w: BX + pr * (BW + GX) - GX + PAD, h: Math.max(yy - BANDGAP + PAD, 180) };
+  };
+  let best = null;
+  for (let pr = 1; pr <= Math.min(10, widest); pr++) {
+    const m = measure(pr), score = Math.abs(Math.log((m.w / m.h) / aspect));
+    if (!best || score < best.score) best = Object.assign(m, { score });
+  }
+  const perRow = best.pr, W = best.w;
   let y = PAD;
   for (const g of groups) {
     g.y = y;
@@ -792,7 +814,12 @@ function renderSystem() {
       g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}"` : ''}>`);
       g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
       g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
-      const note = !known ? 'fabric' : st === 'na' ? 'no pins here' : conf ? `${conf} conflict${conf > 1 ? 's' : ''}` : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
+      const iss = known ? (E.issues[p] || []).length : 0;
+      const note = !known ? 'fabric'
+        : st === 'na' ? 'not on this package'
+        : conf ? `${conf} conflict${conf > 1 ? 's' : ''}`
+        : iss ? `${iss} issue${iss > 1 ? 's' : ''}`
+        : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
       g.push(`<text x="${x + 8}" y="${by + 25}" fill="${FG[st]}" font-size="9.5" opacity=".85">${esc(note)}</text>`);
       g.push(`</g>`);
     });
@@ -801,7 +828,7 @@ function renderSystem() {
   g.push(`<text class="systxt" x="${PAD}" y="${H - 4}" font-size="11" fill="var(--muted)">${onCount} peripheral${onCount === 1 ? '' : 's'} enabled \u00b7 ${E.conflicts.length} pin conflict${E.conflicts.length === 1 ? '' : 's'} \u00b7 click a block to configure it</text>`);
 
   sv.setAttribute('viewBox', `0 0 ${W} ${H + 8}`);
-  sv.setAttribute('preserveAspectRatio', 'xMidYMin meet');
+  sv.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   sv.innerHTML = g.join('');
 }
 document.getElementById('syssvg').addEventListener('click', e => {
@@ -1183,6 +1210,24 @@ function renderAll(fit) {
   lastConflicts = key;
 }
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+
+// Undo / redo (engine: app/engine/history.js). Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z.
+// Ignored while typing, so the user label editor keeps its own undo.
+window.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const el = e.target;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  const wantRedo = k === 'y' || (k === 'z' && e.shiftKey);
+  if (k !== 'z' && k !== 'y') return;
+  e.preventDefault();
+  const label = wantRedo ? redo() : undo();
+  if (!label) { toast(wantRedo ? 'Nothing to redo' : 'Nothing to undo'); return; }
+  closePicker();
+  document.getElementById('pkgsel').value = S.pkg;      // undo can move the package
+  renderAll();
+  toast(`${wantRedo ? 'Redo' : 'Undo'}: ${label}`);
+});
 
 document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));

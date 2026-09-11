@@ -23,7 +23,8 @@ import sys
 ROOT = pathlib.Path(__file__).parent
 
 # dependency order; index.js is the Node-only barrel and is deliberately skipped
-ENGINE_MODULES = ["inherit.js", "model.js", "clock.js", "engine.js", "project.js", "export.js"]
+ENGINE_MODULES = ["util.js", "inherit.js", "history.js", "model.js", "clock.js",
+                  "engine.js", "project.js", "export.js"]
 
 IMPORT_RE = re.compile(r"^import\s[\s\S]*?from\s+['\"][^'\"]+['\"];[ \t]*$", re.M)
 EXPORT_RE = re.compile(r"^export\s+(?=(?:const|let|var|function|class|async))", re.M)
@@ -39,11 +40,16 @@ def bundle_engine() -> str:
     out = []
     for name in ENGINE_MODULES:
         path = ROOT / "app" / "engine" / name
-        src = path.read_text(encoding="utf-8")
-        src = IMPORT_RE.sub("", src)
+        raw = path.read_text(encoding="utf-8")
+        src = IMPORT_RE.sub("", raw)
         if BAD_EXPORT_RE.search(src):
             sys.exit(f"build: {name} uses `export {{...}}` / `export *`; the inliner only "
                      f"handles `export const|let|var|function|class`.")
+        for stmt in IMPORT_RE.findall(raw):
+            if re.search(r"as", stmt.split("from")[0]):
+                sys.exit(f"build: {name} imports under an alias ({' '.join(stmt.split())}). The "
+                         f"browser bundle drops the imports and relies on the names matching, "
+                         f"so an alias would be undefined at runtime. Import the plain name.")
         src = EXPORT_RE.sub("", src)
         out.append(f"// ===== app/engine/{name} " + "=" * (60 - len(name)) + "\n" + src.strip() + "\n")
     body = "\n".join(out)

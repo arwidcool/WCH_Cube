@@ -17,6 +17,7 @@ import {
   M, S, canon, pinExists, pinLabel, pinNum, groupOf, sigName,
   requiredSignals, isEnabled, isAvailable, neutralChoice,
 } from './model.js';
+import { record } from './history.js';
 
 export let E = null;
 
@@ -98,6 +99,7 @@ export function previewAssign(pin, opt) {
 // Assign an option from the pin picker: either a plain GPIO mode, or a
 // peripheral signal (which also selects the remap that routes it to this pin).
 export function assignSignal(pin, opt) {
+  record(`${opt.gpio || sigName(opt.periph, opt.signal)} on ${pinLabel(pin)}`);
   if (opt.gpio) {
     for (const n of groupOf(pin)) delete S.manual[n];
     S.manual[pin] = opt.gpio;
@@ -126,6 +128,7 @@ export function assignSignal(pin, opt) {
 // Put a pin back to its reset state: drop the manual GPIO and switch off
 // whichever peripheral choices were driving it.
 export function resetPin(pin) {
+  record(`Reset ${pinLabel(pin)}`);
   const cl = ((E && E.pins[canon(pin)]) || {}).claims || [];
   for (const n of groupOf(pin)) { delete S.manual[n]; delete S.gpio[n]; }
   for (const c of cl) {
@@ -141,3 +144,55 @@ export function resetPin(pin) {
     }
   }
 }
+
+
+// ---- state writers -----------------------------------------------------------
+// Everything that changes the configuration goes through one of these, so undo
+// works and the UI never has to know how S is shaped. (AGENT-3: route the centre
+// panel and the clock tab here — these replace the thin writers in section 4b.)
+
+// A dropdown setting: "Mode" -> "Asynchronous".
+export function setSetting(pid, setting, choice) {
+  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
+  if (!s) throw new Error(`${pid} has no setting "${setting}"`);
+  if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
+  record(`${pid} ${setting}`);
+  S.periph[pid].settings[setting] = choice;
+}
+
+// A checkbox setting: ADC1 "Channels" IN3 on or off.
+export function toggleSetting(pid, setting, choice, on) {
+  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
+  if (!s || s.type !== 'checkboxes') throw new Error(`${pid}.${setting} is not a checkbox setting`);
+  if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
+  record(`${pid} ${choice}`);
+  const set = S.periph[pid].settings[setting];
+  if (on === undefined ? set.has(choice) : !on) set.delete(choice); else set.add(choice);
+}
+
+// The AFIO remap / pin-location selector.
+export function setRemap(pid, index) {
+  const remaps = M.peripherals[pid].remaps || [];
+  if (!remaps[index]) throw new Error(`${pid} has no remap ${index}`);
+  record(`${pid} remap ${remaps[index].name}`);
+  S.periph[pid].remap = index;
+}
+
+// One cell of the GPIO settings table (mode, pull, speed, label).
+export function setGpioField(pin, key, value) {
+  record(value === '' ? `Clear ${key} on ${pinLabel(pin)}` : `${pinLabel(pin)} ${key}`);
+  (S.gpio[pin] ||= {})[key] = value;
+}
+export const userLabel = pin => ((S.gpio[pin] || {}).label || '').trim();
+export const pinModified = pin => !!(E && E.pins[canon(pin)]) || !!userLabel(pin);
+
+// Clock tab: { sys, hse, pllIn, pllMul, pre: { HB: 2 } } — partial, merged in.
+export function setClock(patch) {
+  record('Clock');
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+  }
+}
+
+// selectPeripheral() stays in the UI: it re-renders, and the engine never touches
+// the DOM. Selection is view state anyway — no undo step.

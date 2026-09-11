@@ -16,15 +16,16 @@
 //  peripherals entirely; nothing downstream ever sees `inherits`.
 // =============================================================================
 
+import { deepClone } from './util.js';
+
 const isMap = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-const clone = v => (v === null || typeof v !== 'object' ? v : structuredClone(v));
 
 export function deepMerge(base, over) {
-  if (!isMap(base) || !isMap(over)) return clone(over);
+  if (!isMap(base) || !isMap(over)) return deepClone(over);
   const out = {};
   for (const k of new Set([...Object.keys(base), ...Object.keys(over)])) {
-    if (!(k in over)) out[k] = clone(base[k]);
-    else if (!(k in base)) out[k] = clone(over[k]);
+    if (!(k in over)) out[k] = deepClone(base[k]);
+    else if (!(k in base)) out[k] = deepClone(over[k]);
     else out[k] = deepMerge(base[k], over[k]);
   }
   return out;
@@ -55,7 +56,7 @@ export function resolveInherits(y, lookup, parse, seen = []) {
 
   const base = resolveInherits(parse(src), lookup, parse, [...seen, me]);
   const merged = deepMerge(base, y);
-  if (y.mcu.variants) merged.mcu.variants = clone(y.mcu.variants);   // never inherit part numbers
+  if (y.mcu.variants) merged.mcu.variants = deepClone(y.mcu.variants);   // never inherit part numbers
 
   for (const path of y.mcu.remove || []) {
     if (!removePath(merged, path)) throw new Error(`"${me}": mcu.remove path "${path}" matched nothing in ${parent}`);

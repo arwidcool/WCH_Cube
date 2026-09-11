@@ -6,6 +6,7 @@
 import {
   M, S, MCU_FILES, loadMcu, applyPackageRemaps, yamlDump, yamlLoad,
 } from './model.js';
+import { clearHistory } from './history.js';
 
 export const PROJECT = { name: 'Untitled', variant: null, dirty: false };
 
@@ -63,6 +64,7 @@ export function projectApply(src) {
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
+  clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
   return PROJECT;
 }

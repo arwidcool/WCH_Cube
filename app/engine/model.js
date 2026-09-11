@@ -10,6 +10,7 @@
 // =============================================================================
 import { defaultClock } from './clock.js';
 import { resolveInherits } from './inherit.js';
+import { record, clearHistory } from './history.js';
 
 export const PACKAGES = {};          // package id -> geometry (from data/packages/packages.yaml)
 export const MCU_FILES = {};         // mcu.name -> yaml source text (bundled + opened from disk)
@@ -111,6 +112,7 @@ export function loadMcu(source) {
   MCU_FILES[y.mcu.name] ||= src;
   S = initState(M);
   applyPackageRemaps();
+  clearHistory();            // a different part is a different document
   return M;
 }
 
@@ -174,6 +176,7 @@ export function isAvailable(pid) {
 // are no longer bonded (the caller decides how loudly to say so).
 export function setPackage(pkg) {
   if (!(pkg in M.packages)) throw new Error(`No such package: ${pkg}`);
+  record(`Package ${pkg}`);
   S.pkg = pkg;
   applyPackageRemaps();
   return Object.keys(S.manual).filter(p => !pinExists(p));
