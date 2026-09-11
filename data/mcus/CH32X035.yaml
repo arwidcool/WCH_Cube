@@ -541,6 +541,50 @@ peripherals:
           - { name: CTS Only, signals: [CTS] }
           - { name: RTS Only, signals: [RTS] }
           - { name: CTS/RTS, signals: [CTS, RTS] }
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 3000000
+        unit: Bd
+        help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
     remaps:
       - name: No remap
         pins: { CK: PB9, CTS: PC16, RTS: PC17, RX: PB11, TX: PB10 }
@@ -569,6 +613,50 @@ peripherals:
           - { name: CTS Only, signals: [CTS] }
           - { name: RTS Only, signals: [RTS] }
           - { name: CTS/RTS, signals: [CTS, RTS] }
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 3000000
+        unit: Bd
+        help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
     remaps:
       - name: No remap
         pins: { CK: PA4, CTS: PA0, RTS: PA1, RX: PA3, TX: PA2 }
@@ -600,6 +688,50 @@ peripherals:
           - { name: CTS Only, signals: [CTS] }
           - { name: RTS Only, signals: [RTS] }
           - { name: CTS/RTS, signals: [CTS, RTS] }
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 3000000
+        unit: Bd
+        help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
     remaps:
       - name: No remap
         pins: { CK: PB5, CTS: PB6, RTS: PB7, RX: PB4, TX: PB3 }
@@ -628,6 +760,50 @@ peripherals:
           - { name: CTS Only, signals: [CTS] }
           - { name: RTS Only, signals: [RTS] }
           - { name: CTS/RTS, signals: [CTS, RTS] }
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 3000000
+        unit: Bd
+        help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
     remaps:
       - name: No remap
         pins: { CK: PB2, CTS: PB15, RTS: PA8, RX: PB1, TX: PB0 }
@@ -662,6 +838,73 @@ peripherals:
           - { name: Disable }
           - { name: Hardware NSS Input Signal, signals: [CS] }
           - { name: Hardware NSS Output Signal, signals: [CS] }
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
+        type: enum
+        default: "16"
+        options:
+          - { name: "2"  , value: 0, sdk: SPI_BaudRatePrescaler_2 }
+          - { name: "4"  , value: 1, sdk: SPI_BaudRatePrescaler_4 }
+          - { name: "8"  , value: 2, sdk: SPI_BaudRatePrescaler_8 }
+          - { name: "16" , value: 3, sdk: SPI_BaudRatePrescaler_16 }
+          - { name: "32" , value: 4, sdk: SPI_BaudRatePrescaler_32 }
+          - { name: "64" , value: 5, sdk: SPI_BaudRatePrescaler_64 }
+          - { name: "128", value: 6, sdk: SPI_BaudRatePrescaler_128 }
+          - { name: "256", value: 7, sdk: SPI_BaudRatePrescaler_256 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111 in this order. Divides HCLK - this family has one bus frequency, not a separate peripheral clock."
+      - key: cpol
+        name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
+        help: SPI_CTLR1 CPOL, bit 1.
+      - key: cpha
+        name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
+        type: enum
+        default: 1 Edge
+        options:
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
+        help: SPI_CTLR1 CPHA, bit 0.
+      - key: datasize
+        name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
+        help: SPI_CTLR1 DFF, bit 11.
+      - key: firstbit
+        name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
+        type: enum
+        default: MSB First
+        options:
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
+        help: SPI_CTLR1 LSBFIRST, bit 7.
+      - key: crc
+        name: CRC calculation
+        sdk_call: SPI_CalculateCRC
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "SPI_InitTypeDef has SPI_CRCPolynomial (the polynomial) but no CRC ENABLE member; enabling it is a call after SPI_Init. ch32v00X_spi.h:53 and :140."
+        type: bool
+        default: false
+        help: SPI_CTLR1 CRCEN, bit 13. The polynomial lives in SPI_CRCR and defaults to 7.
     remaps:
       - name: No remap
         pins: { CS: PA4, MISO: PA6, MOSI: PA7, SCK: PA5 }
@@ -682,6 +925,46 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: I2C, signals: [SCL, SDA] }
+    params:
+      - key: speed
+        name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
+        type: int
+        default: 100000
+        min: 1000
+        max: 400000
+        unit: Hz
+        help: "I2C_CKCFGR CCR[11:0] together with F/S (bit 15). Above 100 kHz the peripheral must be in fast mode."
+      - key: duty
+        name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
+        type: enum
+        default: "2:1"
+        options:
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
+        help: "I2C_CKCFGR DUTY, bit 14. Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
+        type: enum
+        default: 7-bit
+        options:
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
+        help: I2C_OAR1 ADDMODE, bit 15.
+      - key: addr
+        name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0]. Only the low 7 bits are used in 7-bit addressing mode."
     remaps:
       - name: No remap
         pins: { SCL: PA10, SDA: PA11 }
@@ -735,6 +1018,166 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Activate-Break-Input, signals: [BKIN] }
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIM1_PSC. Counter clock = HCLK / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIM1_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIM1_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIM1_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
+        type: bool
+        default: false
+        help: "TIM1_CTLR1 ARPE, bit 7."
+      - key: rcr
+        name: Repetition counter (RPTCR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_RepetitionCounter
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: TIM1_RPTCR. An update event happens every (value + 1) counter cycles. Advanced timer only.
+      - key: deadtime
+        name: Dead time
+        struct: TIM_BDTRInitTypeDef
+        sdk_field: TIM_DeadTime
+        sdk_note: "A DIFFERENT struct from the rest of this peripheral: dead time lives in TIM_BDTRInitTypeDef and is applied by TIM_BDTRConfig, not TIM_TimeBaseInit. Putting it in the time-base block would not compile."
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: "TIM1_BDTR DTG[7:0], inserted between a channel and its complementary output."
+    channel_params:
+      struct: TIM_OCInitTypeDef
+      applies_per: channel
+      sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+      params:
+        - key: ocmode
+          name: Output compare mode
+          sdk_field: TIM_OCMode
+          type: enum
+          group: Basic
+          default: PWM mode 1
+          options:
+            - { name: Frozen,          value: 0, sdk: TIM_OCMode_Timing }
+            - { name: Active on match, value: 1, sdk: TIM_OCMode_Active }
+            - { name: Inactive on match, value: 2, sdk: TIM_OCMode_Inactive }
+            - { name: Toggle,          value: 3, sdk: TIM_OCMode_Toggle }
+            - { name: PWM mode 1,      value: 6, sdk: TIM_OCMode_PWM1 }
+            - { name: PWM mode 2,      value: 7, sdk: TIM_OCMode_PWM2 }
+          help: "TIMx_CHCTLRn OCxM. The option values are the register encodings, so PWM mode 1 is 6 rather than 4 - modes 4 and 5 are the forced-low/forced-high settings, which TIM_ForcedAction* sets rather than this struct."
+        - key: pulse
+          name: Pulse (compare value)
+          sdk_field: TIM_Pulse
+          type: int
+          group: Basic
+          default: 0
+          min: 0
+          max: 65535
+          help: "TIMx_CHnCVR. With PWM mode 1 and an up-counter the output is active while the counter is below this, so duty is pulse / (period + 1)."
+        - key: ocpolarity
+          name: Output polarity
+          sdk_field: TIM_OCPolarity
+          type: enum
+          group: Basic
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCPolarity_Low }
+          help: "TIMx_CHCTLR CCxP. The only member of this struct the header does not mark as TIM1/TIM2 only."
+        - key: outputstate
+          name: Output state
+          sdk_field: TIM_OutputState
+          type: enum
+          group: Basic
+          default: Enable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputState_Enable }
+          help: "TIMx_CCER CCxE - whether the compare unit reaches the pin at all."
+        - key: outputnstate
+          name: Complementary output state
+          sdk_field: TIM_OutputNState
+          type: enum
+          group: Advanced
+          default: Disable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputNState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputNState_Enable }
+          help: "TIMx_CCER CCxNE. The header marks this valid only for TIM1 and TIM2."
+        - key: ocnpolarity
+          name: Complementary output polarity
+          sdk_field: TIM_OCNPolarity
+          type: enum
+          group: Advanced
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCNPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCNPolarity_Low }
+          help: "TIMx_CCER CCxNP. The header marks this valid only for TIM1 and TIM2."
+        - key: ocidlestate
+          name: Idle state
+          sdk_field: TIM_OCIdleState
+          type: enum
+          group: Advanced
+          default: Reset
+          options:
+            - { name: Reset, value: 0, sdk: TIM_OCIdleState_Reset }
+            - { name: Set,   value: 1, sdk: TIM_OCIdleState_Set }
+          help: "TIMx_CTLR2 OISx - the level the pin takes when the outputs are disabled by the break input or by MOE. The header marks it valid ONLY for TIM1, so it is absent from TIM2 rather than offered and ignored."
+        - key: ocnidlestate
+          name: Complementary idle state
+          sdk_field: TIM_OCNIdleState
+          type: enum
+          group: Advanced
+          default: Reset
+          options:
+            - { name: Reset, value: 0, sdk: TIM_OCNIdleState_Reset }
+            - { name: Set,   value: 1, sdk: TIM_OCNIdleState_Set }
+          help: "TIMx_CTLR2 OISxN. TIM1 only, like the member above."
     remaps:
       - name: No remap
         pins: { BKIN: PB5, CH1: PB9, CH1N: PB6, CH2: PB10, CH2N: PB7, CH3: PB11, CH3N: PB8, CH4: PC16, ETR: PC17 }
@@ -785,6 +1228,127 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Activate-Break-Input, signals: [BKIN] }
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIM2_PSC. Counter clock = HCLK / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIM2_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIM2_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIM2_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has NO auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32v00X_tim.h:468."
+        type: bool
+        default: false
+        help: "TIM2_CTLR1 ARPE, bit 7."
+    channel_params:
+      struct: TIM_OCInitTypeDef
+      applies_per: channel
+      sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+      params:
+        - key: ocmode
+          name: Output compare mode
+          sdk_field: TIM_OCMode
+          type: enum
+          group: Basic
+          default: PWM mode 1
+          options:
+            - { name: Frozen,          value: 0, sdk: TIM_OCMode_Timing }
+            - { name: Active on match, value: 1, sdk: TIM_OCMode_Active }
+            - { name: Inactive on match, value: 2, sdk: TIM_OCMode_Inactive }
+            - { name: Toggle,          value: 3, sdk: TIM_OCMode_Toggle }
+            - { name: PWM mode 1,      value: 6, sdk: TIM_OCMode_PWM1 }
+            - { name: PWM mode 2,      value: 7, sdk: TIM_OCMode_PWM2 }
+          help: "TIMx_CHCTLRn OCxM. The option values are the register encodings, so PWM mode 1 is 6 rather than 4 - modes 4 and 5 are the forced-low/forced-high settings, which TIM_ForcedAction* sets rather than this struct."
+        - key: pulse
+          name: Pulse (compare value)
+          sdk_field: TIM_Pulse
+          type: int
+          group: Basic
+          default: 0
+          min: 0
+          max: 65535
+          help: "TIMx_CHnCVR. With PWM mode 1 and an up-counter the output is active while the counter is below this, so duty is pulse / (period + 1)."
+        - key: ocpolarity
+          name: Output polarity
+          sdk_field: TIM_OCPolarity
+          type: enum
+          group: Basic
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCPolarity_Low }
+          help: "TIMx_CHCTLR CCxP. The only member of this struct the header does not mark as TIM1/TIM2 only."
+        - key: outputstate
+          name: Output state
+          sdk_field: TIM_OutputState
+          type: enum
+          group: Basic
+          default: Enable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputState_Enable }
+          help: "TIMx_CCER CCxE - whether the compare unit reaches the pin at all."
+        - key: outputnstate
+          name: Complementary output state
+          sdk_field: TIM_OutputNState
+          type: enum
+          group: Advanced
+          default: Disable
+          options:
+            - { name: Disable, value: 0, sdk: TIM_OutputNState_Disable }
+            - { name: Enable,  value: 1, sdk: TIM_OutputNState_Enable }
+          help: "TIMx_CCER CCxNE. The header marks this valid only for TIM1 and TIM2."
+        - key: ocnpolarity
+          name: Complementary output polarity
+          sdk_field: TIM_OCNPolarity
+          type: enum
+          group: Advanced
+          default: High
+          options:
+            - { name: High, value: 0, sdk: TIM_OCNPolarity_High }
+            - { name: Low,  value: 1, sdk: TIM_OCNPolarity_Low }
+          help: "TIMx_CCER CCxNP. The header marks this valid only for TIM1 and TIM2."
     remaps:
       - name: No remap
         pins: { BKIN: PA20, CH1: PA0, CH1N: PA21, CH2: PA1, CH2N: PA22, CH3: PA2, CH3N: PA23, CH4: PA3, ETR: PA19 }
@@ -820,6 +1384,65 @@ peripherals:
           - { name: Disable }
           - { name: Input Capture direct mode, signals: [CH2] }
           - { name: PWM Generation CH2, signals: [CH2] }
+    params:
+      - key: prescaler
+        name: Prescaler
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        group: Basic
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. The counter is clocked at f_TIM / (prescaler + 1)."
+      - key: period
+        name: Counter period (auto-reload)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        group: Basic
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR. 16-bit, so 65535 is the ceiling."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        group: Basic
+        default: Up
+        options:
+          - { name: Up,               value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down,             value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 4, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 6, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR and CMS. The option values are the register encodings, which is why they run 0/1/2/4/6 rather than 0..4."
+      - key: ckd
+        name: Clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        group: Advanced
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD - the ratio between the timer clock and the digital filter sampling clock."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        group: Advanced
+        default: false
+        help: "Buffers writes to the auto-reload register until the next update event. Not a member of TIM_TimeBaseInitTypeDef - it is a call after TIM_TimeBaseInit (ch32v00X_tim.h:468)."
+
+  # ---------------- Connectivity ----------------
     remaps:
       - name: No remap
         pins: { CH1: PA6, CH2: PA7 }
@@ -859,6 +1482,66 @@ peripherals:
           - { name: IN11, signals: [IN11] }
           - { name: IN12, signals: [IN12] }
           - { name: IN13, signals: [IN13] }
+    params:
+      # CH32V006's macro names DO NOT EXIST HERE, and neither do its cycle counts. That
+      # part spells them ADC_SampleTime_CyclesMode0..7 and means 3.5 .. 239.5 cycles;
+      # CH32X035 spells them ADC_SampleTime_4Cycles .. _11Cycles and means exactly that -
+      # four to eleven, one per code (ch32x035_adc.h). The parameter was ported from
+      # CH32V006 and verify_sdk_names.py rejected all eight options, which is the whole
+      # reason porting behind a gate is acceptable and porting without one is not.
+      - key: sample
+        name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
+        sdk_note: "ADC_InitTypeDef has no sample-time member here either. Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per CHANNEL, not per peripheral."
+        type: enum
+        default: 11 cycles
+        options:
+          - { name: 4 cycles,  value: 0, sdk: ADC_SampleTime_4Cycles }
+          - { name: 5 cycles,  value: 1, sdk: ADC_SampleTime_5Cycles }
+          - { name: 6 cycles,  value: 2, sdk: ADC_SampleTime_6Cycles }
+          - { name: 7 cycles,  value: 3, sdk: ADC_SampleTime_7Cycles }
+          - { name: 8 cycles,  value: 4, sdk: ADC_SampleTime_8Cycles }
+          - { name: 9 cycles,  value: 5, sdk: ADC_SampleTime_9Cycles }
+          - { name: 10 cycles, value: 6, sdk: ADC_SampleTime_10Cycles }
+          - { name: 11 cycles, value: 7, sdk: ADC_SampleTime_11Cycles }
+        help: "Eight codes, 4 to 11 ADC clocks - a much shorter range than the CH32V00x family's 3.5 to 239.5. The names say the count, so there is nothing to convert."
+      - key: lowpower
+        name: Low power mode
+        sdk_none: true
+        sdk_note: "ch32x035_adc.h exposes nothing for the low-power bit - no struct member and no function. Same position as CH32V006, re-checked against THIS header rather than assumed to carry across: codegen writes the register or leaves it alone."
+        type: bool
+        default: false
+        help: "ADC_CTLR3 ADC_LP, bit 0. Changes what three of the sampling-time codes mean - see that row."
+      - key: cont
+        name: Continuous conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ContinuousConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: ADC_CTLR2 CONT, bit 1.
+      - key: scan
+        name: Scan conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ScanConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: ADC_CTLR1 SCAN, bit 8.
+      - key: align
+        name: Data alignment
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_DataAlign
+        type: enum
+        default: Right
+        options:
+          - { name: Right, value: 0, sdk: ADC_DataAlign_Right }
+          - { name: Left , value: 1, sdk: ADC_DataAlign_Left }
+        help: ADC_CTLR2 ALIGN, bit 11.
     remaps:
       - name: No remap
         pins: { IN0: PA0, IN1: PA1, IN10: PC0, IN11: PC1, IN12: PC2, IN13: PC3, IN2: PA2, IN3: PA3, IN4: PA4, IN5: PA5, IN6: PA6, IN7: PA7, IN8: PB0, IN9: PB1 }
@@ -1307,7 +1990,14 @@ codegen:
     enable: ENABLE
 
   init_structs:
-    GPIO_InitTypeDef: { fn: GPIO_Init }
+    GPIO_InitTypeDef:        { fn: GPIO_Init }
+    USART_InitTypeDef:       { fn: USART_Init }
+    SPI_InitTypeDef:         { fn: SPI_Init }
+    I2C_InitTypeDef:         { fn: I2C_Init }
+    ADC_InitTypeDef:         { fn: ADC_Init }
+    DMA_InitTypeDef:         { fn: DMA_Init }
+    TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }
+    TIM_BDTRInitTypeDef:     { fn: TIM_BDTRConfig }
 
   # USBFS has TWO handles at the SAME base address - `USBFSD` for device mode and
   # `USBFSH` for host (ch32x035.h:676-677, both at USBFS_BASE). Which one a call takes
@@ -1315,8 +2005,18 @@ codegen:
   # right for both; the device handle is named here because Device is the common case,
   # and the host case is an open question in CH32X035.notes.md rather than a guess.
   periph_handle:
-    DMA1:  DMA1
-    USBFS: USBFSD
+    DMA1:   DMA1
+    USBFS:  USBFSD
+    USART1: USART1
+    USART2: USART2
+    USART3: USART3
+    USART4: USART4
+    SPI1:   SPI1
+    I2C1:   I2C1
+    TIM1:   TIM1
+    TIM2:   TIM2
+    TIM3:   TIM3
+    ADC1:   ADC1
 
   # RCC_CFGR0 - RM v1.9 3.4.2, offset 0x04, reset 0x00000050.
   #
