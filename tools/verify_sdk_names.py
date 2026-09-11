@@ -493,8 +493,47 @@ def check_nvic(doc: dict, idx: Index, r: Report) -> None:
                 f"declares (searched {idx.label})" + idx.suggest(name, pool))
 
 
+def check_pio(doc: dict, idx: Index, r: Report) -> None:
+    """`mcu.variants[*].pio_board` / `.pio_env` name things outside this repo, so they
+    rot the same way an SPL name does - and for the same reason, silently."""
+    variants = ((doc.get("mcu") or {}).get("variants")) or {}
+    claims_board = any(isinstance(v, dict) and v.get("pio_board") for v in variants.values())
+    claims_env = any(isinstance(v, dict) and v.get("pio_env") for v in variants.values())
+    if not claims_board and not claims_env:
+        return
+
+    boards_dir = pathlib.Path.home() / ".platformio" / "platforms" / "ch32v" / "boards"
+    if claims_board:
+        if not boards_dir.is_dir():
+            r.warn("mcu.variants[*].pio_board",
+                   f"no ch32v platform installed at {boards_dir}, board ids NOT CHECKED")
+        else:
+            have = {f.stem for f in boards_dir.glob("*.json")}
+            for part, v in variants.items():
+                b = (v or {}).get("pio_board")
+                if b and b not in have:
+                    r.error(f"mcu.variants.{part}.pio_board",
+                            f"`{b}` is not a board the ch32v platform ships"
+                            + idx.suggest(str(b), have))
+
+    ini = ROOT / "data" / "firmware" / "platformio.ini"
+    if claims_env:
+        if not ini.exists():
+            r.warn("mcu.variants[*].pio_env",
+                   f"{ini} is missing, environment names NOT CHECKED")
+        else:
+            text = ini.read_text(encoding="utf-8", errors="replace")
+            envs = set(re.findall(r"^\[env:([^\]]+)\]", text, re.M))
+            for part, v in variants.items():
+                e = (v or {}).get("pio_env")
+                if e and e not in envs:
+                    r.error(f"mcu.variants.{part}.pio_env",
+                            f"`{e}` is not an environment in data/firmware/platformio.ini"
+                            + idx.suggest(str(e), envs))
+
+
 CHECKS = (check_header, check_gpio, check_init_structs, check_periph_clock,
-          check_params, check_nvic)
+          check_params, check_nvic, check_pio)
 
 
 def verify_file(path: pathlib.Path) -> Report:

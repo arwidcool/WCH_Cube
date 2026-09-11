@@ -25,14 +25,35 @@ mcu:
   # pins in each package table and fails if the two disagree, which is what catches a
   # dropped or duplicated row in `packages:` below. A pair of internally shorted GPIOs
   # (DS notes 3 and 4) is one physical pin and counts once.
+  # PlatformIO mapping per orderable part, for the Project Manager's Toolchain panel.
+  # AGENT-3 asked for this rather than deriving it, and they were right to: the obvious
+  # derivation prints an environment that does not exist.
+  #
+  #   pio_board  the board id the ch32v platform ships, in ~/.platformio/platforms/ch32v/
+  #              boards/. A checkable fact about the installed platform.
+  #   pio_env    the environment in data/firmware/platformio.ini - present ONLY where one
+  #              is actually defined today. A part with a board but no environment says
+  #              nothing here rather than naming one that would fail to build.
+  #
+  # Why they are not the part number: **the board files are the 85 degC grades and half of
+  # this list is 105 degC.** CH32V006F8P7 builds with `genericCH32V006F8P6`. That is
+  # correct, not a fudge - a board file carries clock, flash, RAM, march/mabi and the -D
+  # flags, and no temperature field at all (genericCH32V006F8P6.json: mcu ch32v006f8p6,
+  # extra_flags -DCH32V006F8, spl_series ch32v00Xx). Temperature grade is a binning
+  # property of the die, not something the compiler is told.
+  #
+  # Two variants map to NOTHING and say so by omission: CH32V006F4U6 (the platform ships
+  # F4P6 and F8U6, but no F4U6) and CH32V006D8U7 (no D8U board at all). The panel should
+  # say the part has no PlatformIO board rather than invent the nearest one - picking a
+  # neighbouring board would hand the user the wrong flash size.
   variants:
-    CH32V006K8U7: { package: QFN32,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 31 }
-    CH32V006E8R6: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 85,  io_count: 22 }
-    CH32V006E8R7: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 105, io_count: 22 }
-    CH32V006F8U7: { package: QFN20,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18 }
-    CH32V006F4U6: { package: QFN20,   flash_kb: 16, sram_kb: 4, temp: 85,  io_count: 18, notes: "no OPA, no TouchKey; DS Table 2-1-2 is its own pin table" }
-    CH32V006F8P7: { package: TSSOP20, flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18 }
-    CH32V006D8U7: { package: QFN12,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 11, notes: "ADC 4+2 channels and TouchKey 4-channel only — the other inputs have no pin" }
+    CH32V006K8U7: { package: QFN32,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 31, pio_board: genericCH32V006K8U6, pio_env: CH32V006K8U6 }
+    CH32V006E8R6: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 85,  io_count: 22, pio_board: genericCH32V006E8R6 }
+    CH32V006E8R7: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 105, io_count: 22, pio_board: genericCH32V006E8R6 }
+    CH32V006F8U7: { package: QFN20,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18, pio_board: genericCH32V006F8U6 }
+    CH32V006F4U6: { package: QFN20,   flash_kb: 16, sram_kb: 4, temp: 85,  io_count: 18, notes: "no OPA, no TouchKey; DS Table 2-1-2 is its own pin table. No PlatformIO board: the platform ships F4P6 and F8U6, neither of which is this part." }
+    CH32V006F8P7: { package: TSSOP20, flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18, pio_board: genericCH32V006F8P6, pio_env: CH32V006F8P6 }
+    CH32V006D8U7: { package: QFN12,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 11, notes: "ADC 4+2 channels and TouchKey 4-channel only — the other inputs have no pin. No PlatformIO board ships for a D8U part." }
 
 # -----------------------------------------------------------------------------
 packages:

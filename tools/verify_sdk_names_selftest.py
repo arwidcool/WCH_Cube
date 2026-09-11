@@ -155,6 +155,14 @@ def build_cases(doc: dict):
          lambda d: set_path(d, "codegen.channel_macros.ADC1.IN0", "ADC_Channel0"),
          "codegen.channel_macros.ADC1.IN0", "ADC_Channel0"),
 
+        ("pio_board naming a board the ch32v platform does not ship",
+         lambda d: set_path(d, "mcu.variants.CH32V006F8P7.pio_board", "genericCH32V006F8P7"),
+         "mcu.variants.CH32V006F8P7.pio_board", "genericCH32V006F8P7"),
+
+        ("pio_env naming an environment platformio.ini does not define",
+         lambda d: set_path(d, "mcu.variants.CH32V006F8P7.pio_env", "CH32V006F8P7"),
+         "mcu.variants.CH32V006F8P7.pio_env", "CH32V006F8P7"),
+
         ("sdk.series unknown -> must WARN 'not checked', never pass silently",
          lambda d: (d["codegen"].pop("sdk"),
                     d["codegen"].__setitem__("sdk", {"series": "ch32vNOPE"})),

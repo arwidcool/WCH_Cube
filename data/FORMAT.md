@@ -61,6 +61,28 @@ mcu:
 `validate_mcu.py` counts the package table and fails if they disagree. That is what
 catches a dropped or duplicated row in `packages:`, so fill it in.
 
+A variant may also carry its build mapping, for the Project Manager's Toolchain panel:
+
+| Key | What it is |
+|---|---|
+| `pio_board` | the board id the `ch32v` PlatformIO platform ships, e.g. `genericCH32V006F8P6` |
+| `pio_env` | the environment in `data/firmware/platformio.ini` — **only where one is actually defined** |
+
+**Do not derive either from the part number.** The board files are the 85 °C grades, and
+plenty of orderable parts are 105 °C: `CH32V006F8P7` builds with `genericCH32V006F8P6`.
+That substitution is correct — a board file carries clock, flash, RAM, `march`/`mabi` and
+the `-D` flags, and **no temperature field at all** — but it is not something a naive
+`"generic" + part` rule would produce, and such a rule prints an environment that does not
+exist. That is the `ch32v00x.h` defect in a different costume.
+
+A variant the platform has no board for says **nothing** rather than naming the nearest
+one: picking a neighbouring board would hand the user the wrong flash size. `pio_env` is
+absent far more often than `pio_board`, because `platformio.ini` defines four
+environments while the platform ships a board for nearly every part.
+
+`tools/verify_sdk_names.py` checks both against the installed platform and against
+`platformio.ini`, and reports NOT CHECKED with a reason when neither is present.
+
 ### `mcu.inherits` and `mcu.remove` — a part defined as a delta
 
 A part that is another part minus some things says so, instead of copying 700 lines that
