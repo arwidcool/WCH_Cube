@@ -162,7 +162,8 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       `GPIOSpeed_TypeDef` has one member, `GPIO_Speed_30MHz` (RM 7.3.1.1: MODEy is a single bit).
       Add a capability key the UI can read; **a one-entry list means the control is not shown.**
       — `gpio.speeds: [{name, macro}]`, documented in FORMAT.md, handed off to AGENT-2/AGENT-3
-- [ ] (AGENT-2) Emit the part's one speed macro; never a Low/Medium/High mapping
+- [x] (AGENT-2) Emit the part's one speed macro; never a Low/Medium/High mapping
+      — driven by `gpio.speeds`; `gpioSpeeds()` / `gpioSpeedIsChoice()` / `gpioSpeedFor()`
 - [ ] (AGENT-3) Remove the GPIO speed select where the data says there is one speed — show the
       fixed value as text, driven by the data, never by a hardcoded part name
 - [x] (AGENT-1) `tools/verify_sdk_names.py` — check every `codegen:` / `params:` / `dma:` /
@@ -210,7 +211,7 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 - [ ] (AGENT-2) NVIC → the enabled vectors with PFIC priorities; claim no register write for the
       nesting switch, which this RM does not document
 - [ ] (AGENT-2) Regenerating after save → close → open produces **byte-identical** C
-- [ ] (AGENT-2) `tools/wchcube_cli.js --pio <dir>` writes the header to `include/` and the source
+- [x] (AGENT-2) `tools/wchcube_cli.js --pio <dir>` writes the header to `include/` and the source
       to `src/`; `--strict` fails on an emitted TODO or `#error`
 - [ ] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1
 - [ ] (AGENT-4) Host-side unit tests for `lib/util` under a `[env:native]`
