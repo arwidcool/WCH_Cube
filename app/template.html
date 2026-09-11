@@ -195,6 +195,14 @@
   table.gpio th:nth-child(5),table.gpio td:nth-child(5){width:88px}
   table.gpio th:nth-child(6),table.gpio td:nth-child(6){width:110px}
   table.gpio td:nth-child(1),table.gpio td:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* A part with ONE output speed states it instead of offering a selector, and a part
+     that states no speeds at all loses the column. Both give the width back to the table,
+     which is the difference between scrolling and not at 1280. */
+  table.gpio.fixedspeed th:nth-child(5),table.gpio.fixedspeed td:nth-child(5){width:80px}
+  table.gpio.fixedspeed{min-width:686px}
+  table.gpio.nospeed{min-width:606px}
+  table.gpio.nospeed th:nth-child(5),table.gpio.nospeed td:nth-child(5){width:110px}
+  td.fixedval{color:var(--text);white-space:nowrap}
   /* Parameter Settings: CubeMX puts a grey band per group and one editor per row */
   table.params{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
   table.params th{background:var(--head);color:var(--on-accent);text-align:left;padding:5px 8px;font-weight:600}
@@ -215,6 +223,47 @@
   table.params .pnote{display:block;color:var(--muted);font-size:11px;margin-top:1px}
   table.params .ro{color:var(--muted)}
   .paramhead{padding:5px 8px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line-soft)}
+  .paramhead code,.mode code{font:11.5px/1.3 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong)}
+  /* DMA channel overview and NVIC vector table (System Core). Both are read-only: what
+     the silicon offers and which of it is live. Sizing follows table.gpio - columns wide
+     enough for the values, header wrapping rather than clipping, #cbody scrolls. */
+  table.dmach,table.nvictab{border-collapse:collapse;width:100%;font-size:12px;table-layout:fixed}
+  table.dmach th,table.nvictab th{background:var(--head);color:var(--on-accent);text-align:left;padding:4px 8px;
+                                  font-weight:600;position:sticky;top:0;white-space:normal;line-height:1.15}
+  table.dmach td,table.nvictab td{padding:3px 8px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  table.dmach tr:hover td,table.nvictab tr:hover td{background:var(--blue-pale)}
+  table.dmach{min-width:430px}
+  table.dmach th:nth-child(1),table.dmach td:nth-child(1){width:66px}
+  table.dmach th:nth-child(3),table.dmach td:nth-child(3){width:110px}
+  /* A request whose peripheral is switched OFF is drawn recessed, not faded: this is a
+     display of what is live, and dimming reads as "you may not have this". */
+  .dreq{display:inline-block;margin:1px 8px 1px 0;padding:1px 5px;border:1px dashed var(--line);border-radius:3px;color:var(--muted)}
+  .dreq.on{border-style:solid;border-color:var(--blue);background:var(--blue-pale);color:var(--text)}
+  .dreq a{color:inherit;text-decoration:underline;cursor:pointer}
+  .dreq small{display:block;font-size:10px;color:var(--muted)}
+  table.dmach tr.clash td{background:var(--res-bg);box-shadow:inset 3px 0 0 var(--res)}
+  table.dmach tr.clash:hover td{background:var(--res-bg)}
+  table.nvictab{min-width:640px}
+  table.nvictab th:nth-child(1),table.nvictab td:nth-child(1){width:44px}
+  table.nvictab th:nth-child(2),table.nvictab td:nth-child(2){width:90px}
+  table.nvictab th:nth-child(3),table.nvictab td:nth-child(3){width:158px}
+  table.nvictab th:nth-child(4),table.nvictab td:nth-child(4){width:176px}
+  table.nvictab th:nth-child(5),table.nvictab td:nth-child(5){width:74px}
+  table.nvictab th:nth-child(6),table.nvictab td:nth-child(6){width:98px}
+  table.nvictab td code{font:11px/1.3 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--ink-strong);
+                        display:block;overflow:hidden;text-overflow:ellipsis}
+  table.nvictab tr.off td{color:var(--muted)}
+  table.nvictab tr.off td code{color:var(--muted)}
+  table.nvictab a{color:var(--link);text-decoration:underline;cursor:pointer}
+  .ro{color:var(--muted)}
+  .mode code{white-space:nowrap}
+  /* NVIC's Mode panel states facts about the silicon, so it does not wear the yellow
+     setting labels the editable rows use. */
+  .nvicfacts{grid-column:1/-1}
+  .nvicfacts p{margin:0 0 8px}
+  .nvicfacts dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0;align-items:baseline}
+  .nvicfacts dt{color:var(--muted);white-space:nowrap}
+  .nvicfacts dd{margin:0}
   /* keyboard shortcut overlay — "?" anywhere outside a text field */
   .keyshelp{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center}
   .keyshelp .sheet{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;
@@ -525,10 +574,10 @@
       <div class="mode" id="mode"><div class="empty">Pick a peripheral on the left, or click a pin on the chip.</div></div>
       <div class="config">
         <div class="section-h">Configuration</div>
-        <div class="ctabs">
-          <button class="ctab active" data-ctab="gpio">GPIO Settings</button>
-          <button class="ctab" data-ctab="param">Parameter Settings</button>
-        </div>
+        <!-- Filled by renderCtabs(): a peripheral only gets the tabs it can actually
+             use, in CubeMX's order. A tab with nothing to put in it is absent, never
+             disabled - round-2's rule about controls that cannot do anything. -->
+        <div class="ctabs" id="ctabs" role="tablist" aria-label="Configuration"></div>
         <div class="cbody" id="cbody"></div>
         <div class="foot">Click a pin to assign a signal · right-click for label &amp; reset · <span class="kbd">←↑↓→</span> move <span class="kbd">Enter</span> open <span class="kbd">L</span> label <span class="kbd">Del</span> reset · drag to pan, wheel to zoom.</div>
       </div>
@@ -1002,7 +1051,8 @@ function placeFloat(d, cx, cy) {
   d.style.top = Math.max(4, Math.min(cy + 4, window.innerHeight - H - 8)) + 'px';
 }
 // setGpioField() is the engine's now (app/engine/engine.js) and records an undo step.
-function selectPeripheral(pid) { if (pid === 'GPIO' || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
+const SYNTHETIC = pid => pid === 'GPIO' || (pid === 'NVIC' && (((M.nvic || {}).vectors || []).length > 0));
+function selectPeripheral(pid) { if (SYNTHETIC(pid) || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
 
 function openPinMenu(pin, cx, cy) {
   closePicker(); closeCtx();
@@ -1402,9 +1452,10 @@ const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedi
 const collapsed = new Set();
 // List options, UI-only: never part of S, never saved into a .wchproj.
 const TREE = { sort: 'cat', enabledOnly: false };
-const isEnabledPeriph = pid => pid === 'GPIO'
-  ? Object.keys(S.manual).length > 0
-  : !!(E.status[pid] && E.status[pid] !== 'na');
+const isEnabledPeriph = pid => pid === 'GPIO' ? Object.keys(S.manual).length > 0
+  // NVIC has no on/off of its own: it is "enabled" while something that owns a vector is.
+  : pid === 'NVIC' ? ((M.nvic || {}).vectors || []).some(v => v.peripheral && isEnabledPeriph(v.peripheral))
+    : !!(E.status[pid] && E.status[pid] !== 'na');
 // "MOSI" should find SPI1, not nothing.
 function periphHasSignal(pid, q) {
   const P = M.peripherals[pid];
@@ -1425,7 +1476,8 @@ function renderTree() {
   for (const r of E.resourceIssues || []) for (const who of new Set(r.owners)) res[who] = (res[who] || 0) + 1;
   const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
   const itemHtml = pid => {
-    const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
+    const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '')
+      : pid === 'NVIC' ? (isEnabledPeriph('NVIC') ? 'ok' : '') : E.status[pid];
     const cn = conf[pid] || 0, rn = res[pid] || 0;
     const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
     const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
@@ -1439,13 +1491,18 @@ function renderTree() {
 
   // A→Z: one flat list, no headings. Same items, same badges, different order.
   if (TREE.sort === 'az') {
-    const all = ['GPIO', ...Object.keys(M.peripherals)].filter(shown).sort((a, b) => a.localeCompare(b));
+    const all = ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : []), ...Object.keys(M.peripherals)]
+      .filter(shown).sort((a, b) => a.localeCompare(b));
     paintTree(all.length ? `<div class="azlist">${all.map(itemHtml).join('')}</div>` : emptyTree(q));
     return;
   }
 
   const cats = {};
-  cats['System Core'] = ['GPIO'];
+  // GPIO and NVIC are synthetic System Core entries: neither is a peripheral with pins
+  // and a mode, and both are things CubeMX puts there. NVIC appears only when the MCU
+  // file actually has an `nvic:` block - never because the code assumes every part has
+  // an interrupt controller worth showing.
+  cats['System Core'] = ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : [])];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
   const order = [...CAT_ORDER.filter(c => cats[c]), ...Object.keys(cats).filter(c => !CAT_ORDER.includes(c))];
   let h = '';
@@ -1532,8 +1589,49 @@ document.getElementById('cats').addEventListener('click', e => {
 document.getElementById('tree-search').addEventListener('input', renderTree);
 
 // ---------- 6. centre panel ---------------------------------------------------
+/**
+ * The Configuration tab strip, in CubeMX's order: Parameter Settings, NVIC Settings,
+ * DMA Settings, GPIO Settings.
+ *
+ * Both tabs used to be drawn for every peripheral, so a part with no `params:` got a
+ * Parameter Settings tab reading "no parameters" and a peripheral with no pins got an
+ * empty GPIO table. `has()` decides per peripheral and a tab that would have nothing in
+ * it is NOT DRAWN - round 2's rule that a control has to be justified by the MCU data.
+ *
+ * NVIC Settings and DMA Settings are C3 and C2. Their `has()` asks the engine for the
+ * setter as well as the data, because a tab whose controls cannot write anywhere is the
+ * same dead control by another route; they appear by themselves the moment AGENT-2's
+ * `setNvicVector` / `setDmaParam` land (requested on the board, 14:30Z). Until then the
+ * read-only overviews live on the NVIC and DMA1 entries in System Core, which need no
+ * state and are already useful.
+ */
+// An engine export the bundle may not define at all: `typeof someName` on a bare
+// identifier throws, so ask the global object, which is where build.py puts them.
+const engineHas = n => typeof globalThis[n] === 'function';
+const CTABS = [
+  { id: 'param', name: 'Parameter Settings', has: pid => pid !== 'GPIO' && paramRows(pid).length > 0 },
+  { id: 'nvic', name: 'NVIC Settings', has: pid => engineHas('setNvicVector') && nvicVectorsOf(pid).length > 0 },
+  { id: 'dma', name: 'DMA Settings', has: pid => engineHas('setDmaParam') && dmaRequestNamesOf(pid).length > 0 },
+  { id: 'gpio', name: 'GPIO Settings', has: pid => pid === 'GPIO' || periphPins(pid).length > 0 },
+];
+const tabsFor = pid => (!pid ? [] : CTABS.filter(t => { try { return t.has(pid); } catch (e) { return false; } }));
 let ctab = 'gpio';
-document.querySelector('.ctabs').addEventListener('click', e => { const b = e.target.closest('.ctab'); if (!b) return; ctab = b.dataset.ctab; document.querySelectorAll('.ctab').forEach(x => x.classList.toggle('active', x === b)); renderCentre(); });
+function renderCtabs(pid) {
+  const bar = document.getElementById('ctabs');
+  const tabs = tabsFor(pid);
+  // The selected tab has to survive selecting another peripheral, but only if that
+  // peripheral has it; otherwise fall to the first one it does have.
+  if (!tabs.some(t => t.id === ctab)) ctab = tabs.length ? tabs[0].id : null;
+  bar.innerHTML = tabs.map(t =>
+    `<button class="ctab${t.id === ctab ? ' active' : ''}" data-ctab="${t.id}" role="tab"`
+    + ` aria-selected="${t.id === ctab}">${esc(t.name)}</button>`).join('');
+  bar.hidden = tabs.length === 0;
+  return ctab;
+}
+document.getElementById('ctabs').addEventListener('click', e => {
+  const b = e.target.closest('.ctab'); if (!b) return;
+  ctab = b.dataset.ctab; renderCentre();
+});
 
 // conflict banner: every claimant is a link that jumps to its peripheral
 function conflictBanner() {
@@ -1566,20 +1664,43 @@ document.getElementById('ptitle').addEventListener('click', e => {
   selectPeripheral(a.dataset.goto);
 });
 
+// ---- who owns what, for the tab strip and the System Core overviews ----------
+/** Pins this peripheral currently claims. */
+const periphPins = pid => Object.entries(E.pins)
+  .filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
+/** The vectors `nvic:` gives this peripheral. `system: true` ones belong to NVIC itself. */
+const nvicVectorsOf = pid => ((M.nvic || {}).vectors || [])
+  .filter(v => (pid === 'NVIC' ? v.system : v.peripheral === pid));
+/** The DMA request names owned by this peripheral, with the channels each can use. */
+function dmaRequestNamesOf(pid) {
+  const reqs = (M.dma || {}).requests || {};
+  const out = [];
+  for (const [ch, list] of Object.entries(reqs)) {
+    for (const r of list || []) {
+      if (r !== pid && String(r).split('_')[0] !== pid) continue;
+      const hit = out.find(o => o.request === r);
+      if (hit) hit.channels.push(+ch); else out.push({ request: r, channels: [+ch] });
+    }
+  }
+  return out;
+}
+
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
   document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral')
     + conflictBanner() + resourceBanner();
+  renderCtabs(pid);
   if (!pid) {
     mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>';
     body.innerHTML = gpioTable([...new Set([...Object.keys(E.pins), ...Object.keys(S.gpio).filter(p => userLabel(p) && pinExists(p))])]);
     return;
   }
+  if (pid === 'NVIC') { renderNvicOverview(mode, body); return; }
   if (pid === 'GPIO') {
     const gres = (E.resourceIssues || []).filter(r => (r.owners || []).includes('GPIO'));
     mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`
       + gres.map(r => `<div class="issue res"><b>EXTI line conflict:</b> ${esc(r.text)}</div>`).join('');
-    body.innerHTML = ctab === 'gpio' ? gpioTable(Object.keys(S.manual)) : '<div class="empty">No parameters for GPIO.</div>';
+    body.innerHTML = gpioTable(Object.keys(S.manual));
     return;
   }
   const P = M.peripherals[pid], st = S.periph[pid];
@@ -1616,13 +1737,116 @@ function renderCentre() {
   mode.querySelectorAll('input[data-s]').forEach(el => el.onchange = () => { toggleSetting(pid, el.dataset.s, el.dataset.c, el.checked); renderAll(); });
   const rs = mode.querySelector('select[data-remap]'); if (rs) rs.onchange = () => { setRemap(pid, +rs.value); renderAll(); };
 
-  if (ctab === 'gpio') {
-    const mine = Object.entries(E.pins).filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
-    body.innerHTML = gpioTable(mine);
-  } else {
-    body.innerHTML = paramTable(pid);
-  }
+  // The DMA controller's own entry is the one place that shows all its channels at
+  // once, so the overview hangs off it whatever tabs it happens to have.
+  const isDmaCtl = !!(M.dma && pid === M.dma.controller);
+  // With no tabs there is nothing to put here, and an empty panel under a "Configuration"
+  // heading reads as something failing to load. Say where the peripheral's settings
+  // actually are instead - which for most of these is the Mode panel just above.
+  const nothing = (P.settings || []).length
+    ? `<div class="empty">Everything ${esc(pid)} has to configure on this part is in the <b>Mode</b> panel above.</div>`
+    : `<div class="empty">${esc(pid)} has nothing to configure on this part.</div>`;
+  body.innerHTML = ctab === 'gpio' ? gpioTable(periphPins(pid))
+    : ctab === 'param' ? paramTable(pid)
+      : isDmaCtl ? '' : nothing;
+  if (isDmaCtl) body.innerHTML += dmaChannelTable();
 }
+
+// ---- DMA1 in System Core: every channel, what wants it, and who owns it -------
+// Read-only on purpose. Which requests the user has ADDED, and how each one is
+// configured, is state the engine does not have yet (requested from AGENT-2 on the
+// board, 14:30Z); this shows what the SILICON offers and which of it is live, which is
+// the half `dma:` can answer today. `dmaState()` is the same engine call the shared-
+// resource warnings come from, so this table and the warning cannot disagree.
+function dmaChannelTable() {
+  const d = M.dma;
+  if (!d || !d.requests) return '';
+  const st = typeof dmaState === 'function' ? dmaState() : null;
+  const defs = d.request_defaults || {};
+  const owner = r => (M.peripherals[r] ? r : String(r).split('_')[0]);
+  const contended = new Set(((E.resourceIssues || []).filter(x => x.kind === 'dma')).map(x => String(x.channel)));
+  const rows = [];
+  for (let ch = 1; ch <= (d.channels || Object.keys(d.requests).length); ch++) {
+    const list = d.requests[ch] || d.requests[String(ch)] || [];
+    const live = (st && st.channels[ch]) ? st.channels[ch].live : [];
+    const cells = list.map(r => {
+      const o = owner(r);
+      const on = live.includes(r);
+      const dir = (defs[r] || {}).dir;
+      const link = M.peripherals[o]
+        ? `<a data-goto="${attr(o)}" title="Go to ${attr(o)}">${esc(r)}</a>` : esc(r);
+      return `<span class="dreq${on ? ' on' : ''}" title="${attr(`${r} — owner ${o}${dir ? `, default direction ${dir}` : ''}${on ? ', that peripheral is switched on' : ', that peripheral is off'}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
+    }).join('');
+    rows.push(`<tr class="${contended.has(String(ch)) ? 'clash' : ''}"><td>${ch}</td><td>${cells || '<span class="ro">no request maps here</span>'}</td>`
+      + `<td>${live.length ? live.map(r => esc(owner(r))).filter((v, i, a) => a.indexOf(v) === i).join(', ') : '<span class="ro">—</span>'}</td></tr>`);
+  }
+  const off = st && !st.enabled
+    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing on it is live yet. Switch it on in its Mode panel above.</div>` : '';
+  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and which of those peripherals is switched on.`
+    + ` A channel two switched-on peripherals both want is outlined; only one of them can drive it.</div>${off}`
+    + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Live owner</th></tr></thead>`
+    + `<tbody>${rows.join('')}</tbody></table>`;
+}
+
+// ---- NVIC in System Core: every vector this part has --------------------------
+// Also read-only, for the same reason: enabling a vector and setting its priority is
+// state the engine does not have yet. What it CAN say without inventing anything is
+// which interrupts exist, what the SDK calls each one (two names, and they differ), who
+// owns it, and whether that owner is switched on. The priority scheme is printed as the
+// fact it is rather than as a control that would not write anywhere - and the numbers
+// come from `nvic.scheme`, never from CubeMX muscle memory: this PFIC implements TWO
+// priority bits, not four.
+function renderNvicOverview(mode, body) {
+  const n = M.nvic || {};
+  const sch = n.scheme || {};
+  const groups = sch.groups || [];
+  const active = groups.find(g => g.default) || groups[0];
+  const ownedLive = v => !v.system && M.peripherals[v.peripheral] && isEnabled(v.peripheral);
+  const vectors = (n.vectors || []).slice().sort((a, b) => (a.vector || 0) - (b.vector || 0));
+  const core = vectors.filter(v => v.system).length;
+  const live = vectors.filter(ownedLive).length;
+
+  // These are FACTS about the silicon, not settings, so they are not drawn with the
+  // yellow setting labels the rest of the Mode panel uses - a read-only value wearing an
+  // editable row's clothes is its own kind of lie.
+  const fact = (k, v) => `<dt>${esc(k)}</dt><dd>${v}</dd>`;
+  let facts = '';
+  if (sch.priority_bits !== undefined) {
+    facts += fact('Priority bits', `${sch.priority_bits} of ${sch.register ? sch.register.bits_per_vector : 8}`
+      + `${sch.register ? ` in <code>${esc(sch.register.name)}</code>` : ''}`
+      + `${sch.priority_lsb !== undefined ? ` — bits [${sch.priority_lsb + sch.priority_bits - 1}:${sch.priority_lsb}]. The rest are reserved and write-invalid.` : ''}`);
+  }
+  if (sch.max_nesting !== undefined) facts += fact('Maximum nesting', sch.max_nesting);
+  if (active) {
+    facts += fact('Priority grouping', esc(active.name)
+      + (groups.length > 1 ? `<br><span class="ro">This part also offers: ${groups.filter(g => g !== active).map(g => esc(g.name)).join('; ')}. Choosing between them arrives with the NVIC Settings tab.</span>` : ''));
+  }
+  mode.innerHTML = `<div class="nvicfacts"><p>${esc(n.controller || 'NVIC')} — ${vectors.length} interrupt vector${vectors.length === 1 ? '' : 's'} on this part:`
+    + ` ${core} belonging to the core itself and ${live} to a peripheral you have switched on.</p>`
+    + (facts ? `<dl>${facts}</dl>` : '') + `</div>`;
+
+  const rows = vectors.map(v => {
+    const on = v.system || ownedLive(v);
+    const who = v.system ? '<span class="ro">core</span>'
+      : M.peripherals[v.peripheral] ? `<a data-goto="${attr(v.peripheral)}" title="Go to ${attr(v.peripheral)}">${esc(v.peripheral)}</a>`
+        : esc(v.peripheral || '—');
+    return `<tr class="${on ? '' : 'off'}"><td>${v.vector}</td><td>${esc(v.name)}</td><td><code>${esc(v.irqn || '')}</code></td>`
+      + `<td><code>${esc(v.handler || '')}</code></td><td>${who}</td>`
+      + `<td>${v.fixed ? '<span class="ro">fixed</span>' : on ? 'available' : '<span class="ro">owner is off</span>'}</td></tr>`;
+  }).join('');
+  body.innerHTML = `<div class="paramhead">Every vector in this part's table. <b>Two names per vector</b>, because the SDK uses two`
+    + ` and they are not interchangeable: <code>IRQn</code> is what <code>NVIC_IRQChannel</code> takes, <code>Handler</code> is the`
+    + ` symbol your ISR must be called to be linked in. Enabling a vector and setting its priority arrives with the NVIC Settings tab.</div>`
+    + `<table class="nvictab"><thead><tr><th>No.</th><th>Interrupt</th><th>IRQn</th><th>Handler</th><th>Owner</th><th>State</th></tr></thead>`
+    + `<tbody>${rows}</tbody></table>`
+    // The MCU file's own note about the scheme. It is here rather than in the Mode panel
+    // because that panel is capped at 42 % of the column and would scroll a paragraph.
+    + (sch.notes ? `<div class="paramhead" style="border:0;border-top:1px solid var(--line-soft);margin-top:6px">${esc(String(sch.notes).trim())}</div>` : '');
+}
+document.getElementById('cbody').addEventListener('click', e => {
+  const a = e.target.closest('a[data-goto]'); if (!a) return;
+  selectPeripheral(a.dataset.goto);
+});
 
 // ---- Parameter Settings ------------------------------------------------------
 // Three shapes are in play while this settles (BOARD 11:20Z): AGENT-2's engine
@@ -1785,18 +2009,43 @@ document.getElementById('cbody').addEventListener('change', e => {
 
 const MODES = ['Input', 'Output Push Pull', 'Output Open Drain', 'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
 const PULLS = ['No pull', 'Pull-up', 'Pull-down'];
-const SPEEDS = ['Low', 'Medium', 'High'];
+/**
+ * The GPIO table.
+ *
+ * The output-speed column is built from the MCU file, never from this file's idea of what
+ * a GPIO has. `gpioSpeeds()` is the part's own list and `gpioSpeedIsChoice()` is false
+ * when it holds one entry, which is the case on CH32V006 and CH32V005: `GPIOx_CFGLR.MODEy`
+ * is a single bit (RM v1.4 7.3.1.1) and `GPIOSpeed_TypeDef` in
+ * data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_gpio.h has exactly one member.
+ * A hardcoded Low/Medium/High here offered a choice the silicon does not have and
+ * generated three macro names that do not compile (round-3 P0, P2 item 8).
+ *
+ * One speed is shown as FIXED TEXT, not a disabled select: greying is for an option the
+ * part has that is unavailable right now, never for one the part does not have. A part
+ * that states no speeds at all gets no column, rather than an invented one.
+ */
 function gpioTable(pinsList) {
+  const speeds = typeof gpioSpeeds === 'function' ? gpioSpeeds() : [];
+  const speedIsChoice = typeof gpioSpeedIsChoice === 'function' ? gpioSpeedIsChoice() : speeds.length > 1;
+  const speedOf = g => (typeof gpioSpeedFor === 'function' ? gpioSpeedFor(g.speed) : g.speed) || (speeds[0] || {}).name || '';
   const rows = pinsList.slice().sort(pinSort).map(pin => {
     const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
     const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
-    const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${o}</option>`).join('') + '</select>';
+    const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
+    const speedCell = !speeds.length ? ''
+      : speedIsChoice ? `<td>${sel(speeds.map(s => s.name), speedOf(g), 'speed')}</td>`
+        : `<td class="fixedval" title="${attr(`${M.mcu.name} has one output speed${speeds[0].macro ? ` (${speeds[0].macro})` : ''}, so there is nothing to choose`)}">${esc(speedOf(g))}</td>`;
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
-      <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td><td>${sel(SPEEDS, g.speed || 'Low', 'speed')}</td>
+      <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td>${speedCell}
       <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';
-  return `<table class="gpio"><thead><tr><th>Pin Name</th><th>Signal on Pin</th><th>GPIO mode</th><th>GPIO Pull-up/Pull-down</th><th>Maximum output speed</th><th>User Label</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const speedHead = !speeds.length ? ''
+    : speedIsChoice ? '<th>Maximum output speed</th>'
+      : `<th title="${attr('This part has one output speed, so the table states it rather than offering a choice')}">Maximum output speed</th>`;
+  return `<table class="gpio${speeds.length ? '' : ' nospeed'}${speedIsChoice ? '' : ' fixedspeed'}">`
+    + `<thead><tr><th>Pin Name</th><th>Signal on Pin</th><th>GPIO mode</th><th>GPIO Pull-up/Pull-down</th>${speedHead}<th>User Label</th></tr></thead>`
+    + `<tbody>${rows}</tbody></table>`;
 }
 document.getElementById('cbody').addEventListener('change', e => {
   const el = e.target; if (!el.dataset.pin) return;
