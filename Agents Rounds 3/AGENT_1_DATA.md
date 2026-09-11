@@ -134,54 +134,67 @@ the compile gate — a data change is now capable of breaking a build.
 
 ---
 
-## Current — round 3, cycle 2
+## Current — round 3, cycle 3
 
-**The EVT packages arrived during cycle 1** and are now the authority for every name.
-Headers at `data/sources/<PART>/Evt/EXAM/SRC/Peripheral/inc/`, startup at `.../Startup/`.
-`00_PROJECT.md` and my own brief both still say those folders are empty.
+### Done since cycle 2
 
-### Done this round so far
-
-- **P0, both defects.** `codegen.header` → `ch32v00X.h`; `codegen.speeds` → the one macro
-  this silicon has. New top-level `gpio.speeds` capability key, with a one-entry list
-  meaning *the control is not shown*. AGENT-3 has already landed the UI half.
-- **`tools/verify_sdk_names.py`** and **`verify_sdk_names_selftest.py`** — 20 planted
-  breaks, 20 caught, re-runnable. Which SDK a part uses is data (`codegen.sdk`), not
-  hardcoded; a synthetic part opts out by declaration; no SDK = "NOT CHECKED", never a
-  silent pass.
-- **C7** — `WCH-DUMMY32-C8` has `gpio` / `dma` / `nvic` / `codegen`, every block
-  deliberately shaped unlike CH32V006 so no assumption can hide.
-- **`params:` → the SDK** — 35 parameters, 64 option macros, all from EVT.
-- **`FORMAT.md`** gained `gpio`, `codegen.sdk`, the `struct`/`sdk_field`/`sdk_call`/
-  `sdk_none` rules, the two-name NVIC rule, and a section on `mcu.inherits`/`mcu.remove`
-  that had never been written at all.
-- **C4 answered** for AGENT-2; the stale comments in `CH32V005.yaml` are gone.
+- **`params:` → the SDK, finished.** 35 parameters and 64 option macros across USART1/2,
+  SPI1, I2C1, TIM1/2, ADC1, then OPA1, TIM3, IWDG and WWDG. Every name from EVT.
+- **Everything AGENT-2's emitter was missing**: `codegen.init_structs`,
+  `codegen.periph_handle`, `codegen.channel_macros`, `sdk_args`, `sdk_repeat`,
+  `sdk_enabled`/`sdk_disabled`, `gpio.modes` / `gpio.input_modes`. Generated C for a
+  fully configured CH32V006 went from 8 TODOs to **zero TODOs and zero `#error`**.
+- **Both Medium-confidence rows settled by EVT**, one of them against us.
+- **EXTEN (RM ch.20)** modelled, with the new `dma.remaps` key.
+- **`mcu.variants[*].pio_board` / `.pio_env`** for AGENT-3's Toolchain panel.
+- **`tools/extract_pins.py` fixed twice** and `data/mcus/CH32X035.notes.md` written.
 
 ### What checking found that reading would not
 
-- The wrong header was not a missing file but **a different part's register map**: the SDK
-  ships `Peripheral/ch32v00Xx` *and* `Peripheral/ch32v00x` side by side, and NTFS resolves
-  the wrong case to the right file.
-- **`nvic` vector 29 claimed `ADC1_IRQn`, which exists nowhere.** EVT has `ADC_IRQn` in the
-  enum and `ADC1_IRQHandler` in the startup table. Vectors now carry both names.
-- **EVT settles the TIM3-vector contradiction**: there is no TIM3 vector, confirmed twice
-  over. The round-2 decision not to invent one was right.
-- **Three `params:` are not init-struct members** (`arpe`, ADC `sample`, SPI `crc`) and one
-  belongs to a different struct (`deadtime`). ADC `lowpower` has no SDK surface at all.
-- Every real part in the repo has ONE GPIO speed, so the multi-speed UI branch had no part
-  behind it until the dummy got three.
+Five defects this cycle, none of which any existing test could see:
+
+1. **`nvic` vector 29 claimed `ADC1_IRQn`, a name that exists nowhere.** EVT has
+   `ADC_IRQn` in the enum and `ADC1_IRQHandler` in the startup table. Vectors now carry
+   both names, because the vendor uses both and they are not interchangeable.
+2. **The OPA positive-input list offered `Polling P0/P1/P2/P3` — four polled channels on
+   silicon whose maximum is three.** And the set was not fixed either: all ten legal
+   two- and three-channel sets are now offered instead of one arbitrary triple.
+3. **Three `params:` are not init-struct members** (`arpe`, ADC `sample`, SPI `crc`) and
+   one belongs to a different struct (`deadtime` → `TIM_BDTRInitTypeDef`). ADC
+   `lowpower` has no SDK surface at all.
+4. **`tools/extract_pins.py` hardcoded `P[A-D][0-7]`** — the 16-bit-port assumption I had
+   spent the afternoon warning everyone else about, in my own tool.
+5. **The same tool read straight past the end of its own table** into CH32X033's, and
+   produced 26 rows of one part's data wearing another part's pin names.
+
+Two smaller ones worth keeping: my `sdk_note` for ADC `lowpower` named `ADC_LowPowerCmd`
+in prose, codegen quotes notes into the C, and AGENT-2's test rightly failed on that
+identifier appearing in generated code — **naming a function that does not exist puts the
+string in the output even when you are saying "do not use this"**. And my own self-test
+had a case that picked "the first parameter with options" as its subject, so adding IWDG
+params silently moved it onto one that already had `sdk_args` and the case stopped
+testing anything.
+
+### The pattern in all of it
+
+Every one of these is the same defect as the round's opening pair: a name or a shape
+borrowed from a part that has it, applied to a part that does not. The V10x GPIO speeds,
+the V003 header, `ADC1_IRQn`, a four-channel poll, 8-bit ports, one datasheet table read
+as another's. **`tools/verify_sdk_names.py` now covers the name half — 32 planted breaks,
+32 caught — and the shape half is still only caught by reading carefully.**
 
 ### Cost
 
-The fixes were small; the checking was most of the work, and it found four defects nobody
-had a test for. That is the right ratio for this round.
+The fixes are minutes each. The checking is the work, and it found five defects nobody
+had a test for. That remains the right ratio.
 
 ### Next, in order
 
-1. The Medium-confidence rows EVT can now settle: TouchKey channel→pin (note there is **no
-   `ch32v00X_tkey.h`** in the EVT header list, which is itself the finding), and the OPA
-   polling set against `ch32v00X_opa.h`.
-2. `params:` for the peripherals that still have none: TIM3, IWDG, WWDG, TKEY, OPA1.
-3. `data/mcus/CH32X035.yaml` — the first part with a compiler from day one, and EVT
-   present from day one too.
-4. Stale `data/sources/` paths in `CH32V006.notes.md` and `tools/extract_remaps.py`.
+1. **CH32X035**, the top of my queue. Groundwork is in `data/mcus/CH32X035.notes.md` and
+   `data/sources/README.md`; all five ambiguous pin rows are now understood. Remaining:
+   close the pin table to 0 differences, the six per-package shorted pairs, then Table 2-3
+   remaps with an independent second parser — the larger half.
+2. Two keys CH32X035 needs that the format cannot express yet, both stated outright by its
+   DS: **a pin that may not be an output** (every shorted pair says so) and **a pin
+   constrained by a peripheral being on** (PC10/PC11 must float in USB applications).
+3. Per-pin drive strength and 5 V tolerance where a DS states them. CH32V006's does not.
