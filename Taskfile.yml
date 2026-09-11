@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+#
+# Taskfile for WCH_CubeMX — https://taskfile.dev  (`task --list`)
+#
+# Adopted rather than left as a stub, because `task` 3.53.1 is installed on this
+# machine and this repository has an unusual number of environment gotchas that
+# are otherwise only written down in prose:
+#
+#   * `python`, never `python3` — python3 does not exist on this box, and CI uses
+#     the other spelling.
+#   * PlatformIO commands run from `data/firmware`, not the repo root.
+#   * `pio test -e native` needs a HOST compiler, and there is no `gcc` on PATH:
+#     MinGW 9.2.0 lives at C:\MinGW. `task firmware:native` puts it there.
+#   * The compile gate builds into `data/firmware/.pio/gate`, deliberately apart
+#     from `.pio/build`, so a manual `pio run` cannot collide with it.
+#
+# This file records the commands; it is not a second build system. `python
+# build.py` and `node tests/run.js` remain the gate, and every task below is a
+# thin wrapper over the thing you would otherwise type.
+
+version: '3'
+
+vars:
+  FW: data/firmware
+  # Every generated-code environment, in the order they are cheapest to fix.
+  ENVS: CH32V006F8P6 CH32V006K8U6 CH32V005F6P6 CH32X035G8U6
+
+tasks:
+  default:
+    desc: What you can run here
+    cmds:
+      - task --list
+    silent: true
+
+  # ---------------------------------------------------------------- the gate
+  build:
+    desc: Build dist/index.html from app/ and data/
+    cmds:
+      - python build.py
+
+  test:
+    desc: The whole suite — engine units, QA suites, browser, compile gate
+    cmds:
+      - node tests/run.js {{.CLI_ARGS}}
+
+  gate:
+    desc: "Build then test: exactly what every commit is gated on"
+    cmds:
+      - task: build
+      - task: test
+
+  validate:
+    desc: Validate every MCU file, and check its SPL names against the EVT headers
+    cmds:
+      - python tools/validate_mcu.py
+      - python tools/verify_sdk_names.py
+
+  # ------------------------------------------------------------- the firmware
+  firmware:
+    desc: Build data/firmware for every environment (needs an EMPTY drop zone)
+    dir: '{{.FW}}'
+    cmds:
+      # The drop zone holds ONE configuration and a bare `pio run` builds every
+      # environment against it, so a CH32V006 file left there fails CH32X035 —
+      # correctly, it is a different register map. Clear it first.
+      - cmd: rm -f lib/wchcube_generated/src/*.c lib/wchcube_generated/include/*.h
+        ignore_error: true
+      - pio run {{range $e := (.ENVS | splitList " ")}}-e {{$e}} {{end}}
+
+  firmware:check:
+    desc: cppcheck over the firmware
+    dir: '{{.FW}}'
+    cmds:
+      - pio check -e CH32V006F8P6
+
+  firmware:native:
+    desc: Host-side unit tests for lib/util (adds MinGW to PATH — there is no gcc on PATH here)
+    dir: '{{.FW}}'
+    env:
+      PATH: 'C:\MinGW\bin;{{.PATH}}'
+    cmds:
+      - pio test -e native
+
+  # ---------------------------------------------------------------- the shell
+  tauri:
+    desc: Compile the desktop shell
+    dir: src-tauri
+    cmds:
+      - cargo build
+
+  tauri:test:
+    desc: The Rust unit tests (safe_relative's path refusals live here)
+    dir: src-tauri
+    cmds:
+      - cargo test
+
+  # ------------------------------------------------------------------ helpers
+  fixtures:
+    desc: Regenerate the compile-gate fixtures after an MCU-data change
+    cmds:
+      - node tests/fixtures/make_fixtures.js
+
+  generate:
+    desc: 'Generate C from a fixture to stdout. Usage: task generate -- tests/fixtures/<f>.wchproj'
+    cmds:
+      - node tools/wchcube_cli.js --project {{.CLI_ARGS}} --format c
+
+  all:
+    desc: Everything a commit could possibly be gated on, in order
+    cmds:
+      - task: validate
+      - task: gate
+      - task: firmware
+      - task: firmware:native
+      - task: tauri:test

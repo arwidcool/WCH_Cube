@@ -313,7 +313,13 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [x] D8 (AGENT-1) RM chapter 20 "Extended Configuration" (EXTEN) on V006 — MODELLED, plus a new
       `dma.remaps` key: TIM2_DMA_REMAP moves TIM2_CH4's request from channel 7 to channel 2.
       AGENT-4: two ABSENT entries and a chapter-map line still needed in completeness.test.js
-- [ ] D9 (AGENT-4) `#m-open` / `#m-openproj` sweep; `Taskfile.yml` adopt-or-leave
+- [~] (AGENT-4) D9 `#m-open` / `#m-openproj` sweep — still open. `Taskfile.yml` **ADOPTED**:
+      `task` 3.53.1 is installed, so the human'''s stub became the real runner — build, test,
+      gate, validate, firmware, firmware:native, firmware:check, tauri, tauri:test, fixtures,
+      generate, all. It records the environment gotchas that were otherwise only in prose
+      (`python` not `python3`; pio runs from data/firmware; `pio test -e native` needs
+      C:\MinGW on PATH; `task firmware` clears the drop zone first, which is the fix for the
+      16:27Z cross-part build failure).
 - [ ] (AGENT-1) **`peripherals.<TIM>.channel_params` needs a `channels:` map** — found by
       `tests/codegen_compile.test.js` minutes after AGENT-2's `TIM_OCInitTypeDef` emitter
       landed. The struct is filled per CHANNEL, and codegen cannot work out WHICH channels a
