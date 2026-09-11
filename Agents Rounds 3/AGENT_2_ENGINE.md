@@ -104,29 +104,31 @@ default configuration assigns nothing and proves nothing.
 
 ---
 
-## Current — round 3, cycle 2
+## Current — round 3, cycle 3
 
-**Closed so far this round**
-- **C4** `mcu.remove` applied to the parent before the merge · **C5** `setSetting()` rejects a
-  `checkboxes` setting. Both with the tests that would have caught them.
-- **P0b item 3** — the emitted GPIO speed comes from `gpio.speeds`; `gpioSpeeds()` /
-  `gpioSpeedIsChoice()` / `gpioSpeedFor()` for the UI, and three places that wrote a
-  Low/Medium/High name into `S` from nowhere are gone.
-- **P1b items 10–12** — `--pio <dir>`, and `--strict` failing on a generated TODO or `#error`
-  via `cComplaints()`.
-- **P2 items 5–8** — `params:` → init structs (including `sdk_call` / `sdk_args` /
-  `sdk_repeat` / `sdk_none` / `no_handle`), DMA → `DMA_InitTypeDef` with a double-booked
-  channel as `#error`, NVIC → the enabled vectors with PFIC priorities and no invented
-  nesting register, byte-identical regeneration. **Compiled on all three fixtures; `--strict`
-  exits 0 on each, so a fully configured CH32V006 emits zero TODOs and zero `#error`.**
-- **Engine state for C2/C3** — `S.dma` / `S.nvic` with the names AGENT-3 asked for, so the
-  DMA and NVIC Settings tabs have something to write to.
-- **P1 items 13–15** — `generateAll()` → `[{name, language, text}]`, `generatorOptions()`
-  (only what the engine honours), and USER CODE sections that survive regeneration.
+**Closed this round** (all compiled, not just green)
+- **C4** `mcu.remove` before the merge · **C5** `setSetting()` rejects a `checkboxes` setting.
+- **P0b** the emitted GPIO speed AND the GPIO mode macros come from `gpio.speeds` /
+  `gpio.modes`; three places that wrote a mode or speed name into `S` from nowhere are gone.
+- **P1b** `--pio <dir>`, `--strict` on a generated TODO or `#error` (`cComplaints()`).
+- **P2** `params:` → init structs with all five `sdk_args` placeholders, `sdk_call`,
+  `sdk_repeat`, `sdk_none` and `no_handle`; DMA → `DMA_InitTypeDef` with a double-booked
+  channel as `#error`; NVIC → the enabled vectors with PFIC priorities and no invented
+  nesting register; byte-identical regeneration. **`--strict` exits 0 on all three
+  fixtures: zero TODOs, zero `#error` for a fully configured part.**
+- **Engine state for C2/C3** — `S.dma`, `S.nvic` and per-channel params, all with
+  AGENT-3's names, round-tripped and undoable.
+- **P1 13–15** `generateAll()` → `[{name, language, text}]`, `generatorOptions()` (three,
+  every one honoured), USER CODE sections that survive regeneration and never drop a block.
+- **The per-peripheral file split**, so that option is offered rather than withheld.
+- **CH32X035 compiles with zero engine changes** — 24-bit ports and a hole in PC included.
 
-**Next, in order**
-1. Answer anything new on the board addressed to me.
-2. The per-peripheral file split, so `generatorOptions()` can offer it honestly.
-3. `TIM_OCInitTypeDef` — the channel modes reach `params:` but not yet a per-channel
-   OC block; check what AGENT-1's data supports before writing a line of it.
-4. Whatever the compile gate turns up on CH32X035 once `data/mcus/CH32X035.yaml` lands.
+**Open, and why**
+1. `TIM_OCInitTypeDef` codegen: written, tested, parked. Waiting on
+   `channel_params.channels` (REQUEST → AGENT-1, 16:44Z). Re-apply and done.
+2. Whatever the board asks for next.
+
+**Rules I have been holding to, worth keeping**
+- Every fix ships with the test that would have caught it, in the same commit.
+- A name the data does not carry becomes a TODO that names the missing key, never a guess.
+- `fresh()` is one engine singleton — read each configuration out before starting the next.
