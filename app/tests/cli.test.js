@@ -126,9 +126,109 @@ test('bad usage explains itself and exits 1', () => {
   assert.match(noValue.err, /--package needs/);
 });
 
+// --pio, AGENT-4's board request 2026-09-11T13:50Z: the firmware README should not
+// have to tell people to `mv` the header after generating.
+function pioProject() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-pio-'));
+  fs.writeFileSync(path.join(dir, 'platformio.ini'), '[env:test]\nplatform = ch32v\n', 'utf8');
+  return dir;
+}
+const gen = (dir, ...rest) => path.join(dir, 'lib', 'wchcube_generated', ...rest);
+
+test('--pio puts the header in include/ and the source in src/', () => {
+  const dir = pioProject();
+  try {
+    const r = run(['CH32V006', '--package', 'TSSOP20', '--pio', dir, '--quiet']);
+    assert.equal(r.code, 0, r.err);
+    assert.ok(fs.existsSync(gen(dir, 'include', 'wchcube_init.h')), 'header in include/');
+    assert.ok(fs.existsSync(gen(dir, 'src', 'wchcube_init.c')), 'source in src/');
+    assert.equal(fs.existsSync(gen(dir, 'src', 'wchcube_init.h')), false, 'and NOT in src/ as well');
+    assert.equal(r.out, '', '--pio must not also print to stdout');
+
+    // byte-identical to --out, so the two destinations cannot drift
+    const flat = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-flat-'));
+    try {
+      run(['CH32V006', '--package', 'TSSOP20', '--format', 'c', '--out', flat, '--quiet']);
+      for (const [f, sub] of [['wchcube_init.h', 'include'], ['wchcube_init.c', 'src']]) {
+        assert.equal(fs.readFileSync(gen(dir, sub, f), 'utf8'), fs.readFileSync(path.join(flat, f), 'utf8'), f);
+      }
+    } finally { fs.rmSync(flat, { recursive: true, force: true }); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--pio implies --format c, and --format still wins', () => {
+  const dir = pioProject();
+  try {
+    run(['CH32V006', '--package', 'TSSOP20', '--pio', dir, '--quiet']);
+    assert.deepEqual(fs.readdirSync(gen(dir)).sort(), ['include', 'src'], 'no pin table by default');
+
+    run(['CH32V006', '--package', 'TSSOP20', '--pio', dir, '--format', 'c,pins-md', '--quiet']);
+    assert.ok(fs.readdirSync(gen(dir)).some(n => n.endsWith('_pinout.md')),
+      'a non-C file goes to the component root, where neither includeDir nor srcDir picks it up');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--pio refuses a directory that is not a PlatformIO project, and writes nothing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-nopio-'));
+  try {
+    const r = run(['CH32V006', '--package', 'TSSOP20', '--pio', dir, '--quiet']);
+    assert.equal(r.code, 1);
+    assert.match(r.err, /is not a PlatformIO project \(no platformio\.ini\)/);
+    assert.match(r.err, /Nothing was written/);
+    assert.deepEqual(fs.readdirSync(dir), [], 'and it really wrote nothing');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--out and --pio together is a usage error, not a guess', () => {
+  const dir = pioProject();
+  try {
+    const r = run(['CH32V006', '--pio', dir, '--out', dir, '--quiet']);
+    assert.equal(r.code, 1);
+    assert.match(r.err, /two destinations/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// --strict on the generator's own complaints, so CI can tell "generated" from
+// "generated an explanation of what is missing".
+test('--strict exits 2 when the generated C carries a TODO', () => {
+  const r = run(['WCH-DUMMY32-C8', '--format', 'c', '--strict', '--out', os.tmpdir() + path.sep + 'wchcube-void']);
+  assert.equal(r.code, 2, 'the fixture part has no codegen: block, so codegen emits a TODO');
+  assert.match(r.err, /the generated C is a complaint, not code/);
+  assert.match(r.err, /TODO/);
+  fs.rmSync(os.tmpdir() + path.sep + 'wchcube-void', { recursive: true, force: true });
+});
+
+test('--strict says nothing about codegen when no C was generated', () => {
+  const r = run(['WCH-DUMMY32-C8', '--format', 'pins-csv', '--strict', '--quiet']);
+  assert.equal(r.code, 0, 'a complaint is about the C; it must not fail a pin table');
+});
+
+test('a fully assigned CH32V006 generates C with no complaint at all', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.compute();
+  const complaints = eng.cComplaints(eng.cFiles());
+  assert.deepEqual(complaints, [], 'complaints on the reference part:\n'
+    + complaints.map(c => `${c.kind} ${c.file}:${c.line} ${c.text}`).join('\n'));
+  assert.ok(e.cSource().includes('GPIO_Init(GPIO'), 'setup: pins really were assigned');
+});
+
+test('cComplaints reports the line and the kind of each one', () => {
+  const e = fresh('WCH-DUMMY32-C8');
+  e.compute();
+  const c = eng.cComplaints(eng.cFiles());
+  assert.ok(c.length, 'the fixture part has no codegen: block');
+  assert.ok(c.every(x => x.file === 'wchcube_init.c' && x.line > 0 && x.text));
+  assert.ok(c.every(x => x.kind === 'todo' || x.kind === 'error'));
+  // and the line number really points at the complaint
+  const lines = e.cSource().split(/\r?\n/);
+  for (const x of c) assert.match(lines[x.line - 1], x.kind === 'error' ? /#error/ : /TODO:/);
+});
+
 test('--help prints usage and exits 0', () => {
   const r = run(['--help']);
   assert.equal(r.code, 0);
   assert.match(r.out, /--project/);
   assert.match(r.out, /--strict/);
+  assert.match(r.out, /--pio/);
 });

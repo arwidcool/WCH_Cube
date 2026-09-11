@@ -12,9 +12,11 @@
 //      node tools/wchcube_cli.js CH32V006 --package TSSOP20 --format pins-md
 //      node tools/wchcube_cli.js --project my.wchproj --format all --out build/
 //      node tools/wchcube_cli.js CH32V006 --format json --strict
+//      node tools/wchcube_cli.js CH32V006 --package TSSOP20 --pio data/firmware
 //
 //  Exit codes:  0 fine · 1 bad usage or a load error · 2 --strict and the
-//  configuration has pin conflicts or unroutable signals.
+//  configuration has pin conflicts, unroutable signals, or the generated C
+//  carries a TODO or an #error.
 // =============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,12 +37,25 @@ Options
   --package <id>       package to use, e.g. TSSOP20 (default: the part's own default)
   --format <list>      comma separated: ${FORMATS.join(', ')}, or all   [default: pins-md]
   --out <dir>          write files there instead of printing to stdout
+  --pio <dir>          write into a PlatformIO project: wchcube_init.h to
+                       <dir>/lib/wchcube_generated/include/, wchcube_init.c to
+                       .../src/, anything else to the component root. Refuses a
+                       directory with no platformio.ini. Implies --format c
+                       unless --format says otherwise.
   --mcu-dir <dir>      where to look for MCU yaml  [default: data/mcus]
   --list               list the MCUs found, with their packages, and exit
-  --strict             exit 2 if the configuration has conflicts or issues
+  --strict             exit 2 if the configuration has conflicts or issues, or
+                       if the generated C carries a TODO or an #error
   --quiet              suppress the summary line on stderr
   -h, --help           this text
 `;
+
+// Where --pio puts each generated file, by extension. The layout is
+// lib/wchcube_generated/{include,src} because that is what its library.json
+// declares as includeDir/srcDir; the header has to be in include/ for
+// `#include "wchcube_init.h"` to resolve from the application layer too.
+const PIO_COMPONENT = ['lib', 'wchcube_generated'];
+const PIO_SUBDIR = { '.h': 'include', '.c': 'src' };
 
 // ---------------------------------------------------------------- arguments
 function parseArgs(argv) {
@@ -60,13 +75,18 @@ function parseArgs(argv) {
     else if (a === '--project') o.project = need('a .wchproj path');
     else if (a === '--package') o.pkg = need('a package id');
     else if (a === '--out') o.out = need('a directory');
+    else if (a === '--pio') o.pio = need('a PlatformIO project directory');
     else if (a === '--mcu-dir') o.mcuDir = need('a directory');
-    else if (a === '--format') o.formats = need('a format list').split(',').map(s => s.trim()).filter(Boolean);
+    else if (a === '--format') { o.formats = need('a format list').split(',').map(s => s.trim()).filter(Boolean); o.formatGiven = true; }
     else if (a.startsWith('-')) fail(`unknown option ${a}`);
     else rest.push(a);
   }
   if (rest.length > 1) fail(`expected one MCU, got ${rest.length}: ${rest.join(' ')}`);
   o.mcu = rest[0];
+  if (o.out && o.pio) fail('--out and --pio are two destinations; pick one');
+  // The only reason to point at a PlatformIO project is to feed it C. Saying so
+  // beats writing a pin table there because the default format happened to be that.
+  if (o.pio && !o.formatGiven) o.formats = ['c'];
   if (o.formats.includes('all')) o.formats = FORMATS.filter(f => f !== 'json');
   const bad = o.formats.filter(f => !FORMATS.includes(f));
   if (bad.length) fail(`unknown format(s): ${bad.join(', ')}. Known: ${FORMATS.join(', ')}, all`);
@@ -175,7 +195,20 @@ function main() {
   const E = eng.compute();
   const files = outputs(o.formats);
 
-  if (o.out) {
+  if (o.pio) {
+    // Refuse before creating anything: a directory that is not a PlatformIO project
+    // must not acquire a lib/ tree because someone typo'd a path.
+    if (!fs.existsSync(path.join(o.pio, 'platformio.ini'))) {
+      fail(`${o.pio} is not a PlatformIO project (no platformio.ini). Nothing was written.`);
+    }
+    for (const [name, text] of Object.entries(files)) {
+      const sub = PIO_SUBDIR[path.extname(name)];
+      const dir = path.join(o.pio, ...PIO_COMPONENT, ...(sub ? [sub] : []));
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, name), text, 'utf8');
+      if (!o.quiet) process.stderr.write(`wrote ${path.join(dir, name)}\n`);
+    }
+  } else if (o.out) {
     fs.mkdirSync(o.out, { recursive: true });
     for (const [name, text] of Object.entries(files)) {
       fs.writeFileSync(path.join(o.out, name), text, 'utf8');
@@ -190,8 +223,22 @@ function main() {
   }
 
   const issueCount = Object.values(E.issues).reduce((n, list) => n + list.length, 0);
+  // Only meaningful when C was actually generated. A complaint is about the MCU
+  // file, not about the configuration, so it is counted separately from conflicts
+  // and issues and reported with the line it sits on.
+  const complaints = o.formats.includes('c') ? eng.cComplaints(eng.cFiles()) : [];
   if (!o.quiet) {
-    process.stderr.write(`${eng.M.mcu.name} ${eng.S.pkg}: ${E.conflictList.length} conflict(s), ${issueCount} issue(s)\n`);
+    process.stderr.write(`${eng.M.mcu.name} ${eng.S.pkg}: ${E.conflictList.length} conflict(s), ${issueCount} issue(s)`
+      + (o.formats.includes('c') ? `, ${complaints.length} codegen complaint(s)` : '') + '\n');
+    for (const c of complaints) {
+      process.stderr.write(`  ${c.kind === 'error' ? '#error' : 'TODO  '} ${c.file}:${c.line}  ${c.text}\n`);
+    }
+  }
+  if (o.strict && complaints.length && !(E.conflictList.length || issueCount)) {
+    const n = k => complaints.filter(c => c.kind === k).length;
+    process.stderr.write('wchcube: --strict and the generated C is a complaint, not code'
+      + ` — ${n('error')} #error, ${n('todo')} TODO. What they name is missing from the MCU file.\n`);
+    return 2;
   }
   if (o.strict && (E.conflictList.length || issueCount)) {
     process.stderr.write('wchcube: --strict and the configuration is not clean\n');

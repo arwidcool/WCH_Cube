@@ -408,3 +408,25 @@ export function cSource() {
 export function cFiles() {
   return { 'wchcube_init.h': cHeader(), 'wchcube_init.c': cSource() };
 }
+
+// ---- complaints ---------------------------------------------------------------
+// "Generated successfully" and "generated a complaint" are different outcomes, and
+// only this module knows the difference. A generator that cannot compute something
+// says so in exactly two spellings, both written above: `#error "..."` at the start
+// of a line, and a `/* TODO: ...` comment block. Scanning our own output is
+// therefore not a heuristic - it reads back what these functions just wrote.
+//
+// `--strict` on the CLI turns a non-empty list into exit 2, so CI can tell a build
+// that generated code from one that generated an explanation of what is missing.
+export function cComplaints(files = cFiles()) {
+  const out = [];
+  for (const [name, text] of Object.entries(files)) {
+    String(text).split(/\r?\n/).forEach((line, i) => {
+      const e = /^\s*#error\s+"?(.*?)"?\s*$/.exec(line);
+      if (e) { out.push({ file: name, line: i + 1, kind: 'error', text: e[1] }); return; }
+      const t = /\/\*\s*TODO:\s*(.*?)\s*$/.exec(line);
+      if (t) out.push({ file: name, line: i + 1, kind: 'todo', text: t[1] });
+    });
+  }
+  return out;
+}
