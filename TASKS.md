@@ -53,7 +53,14 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 - [x] `tools/validate_mcu.py` — schema, pin existence, signal parity across remaps, package numbering, DS I/O counts, EXTI line legality (AGENT-1)
 - [x] Third pass: remap tables cross-checked against the AFIO_PCFR1 register prose (RM 7.3.2.2) — 227/228 confirmed by both, 1 source self-contradiction found (AGENT-1)
 - [~] (AGENT-1) `data/FORMAT.md` — full YAML schema, every field explained, kept in sync with the engine
-- [ ] CH32V005 via `inherits: CH32V006` (drop TKEY + TIM3) — blocked on AGENT-2 answering the `inherits` shape on BOARD
+- [x] (AGENT-1) CH32V005 via `inherits: CH32V006` — drops TKEY, TIM3, the QFN32 package and OPA polling;
+      pinout verified against DS Table 2-2 by `tools/extract_pins.py` (25 I/O rows, 0 differences)
+- [x] (AGENT-1) `codegen:` block for CH32V006 — AFIO_PCFR1 and RCC_CFGR0 encodings read off the RM,
+      plus `analog_signals` and `codegen.periph_clock` (HB/PB2/PB1 enable-register membership)
+- [x] (AGENT-1) `params:` for USART1/2, SPI1, I2C1, TIM1, TIM2, ADC1 — 35 parameters, all 19 enums
+      carrying the RM's register encoding; schema documented in `data/FORMAT.md`
+- [x] (AGENT-1) `tools/extract_pins.py` — re-derives package pin tables from a DS pin table and diffs
+- [ ] CH32V003 and later parts — waiting on their DS/RM markdown in `data/sources/` (HUMAN_TODO 4)
 - [ ] First real part (candidate: CH32V003F4P6 TSSOP20, then CH32V203C8T6 LQFP48)
 - [x] Validate extracted YAML against PDF (spot check every remap group) — AGENT-1: `tools/extract_remaps.py` re-derives RM 7.2.11 independently and diffs; 232 pin assignments, 0 differences
 - [x] Per-pin notes (SWIO/SWCLK, XI/XO, RST-per-package); [-] 5V-tolerance — the V006 DS does not state it per pin, nothing to extract (AGENT-1)
@@ -159,3 +166,13 @@ real combobox with a result list the arrow keys walk. The Parameter Settings tab
 against `app/assets/params.stub.yaml` — grouped, foldable, one editor per type, dependency greying, read-only
 computed rows — and turns editable the moment AGENT-2's setParam() lands. The package selector shows temp
 grades. With AGENT-1's big dummy packages in place, the QFN12→LQFP144 overflow line is now genuinely covered.
+
+**2026-09-11 (AGENT-1 cycle 2)** — Worked the queue in `agents/AGENT_1_DATA.md`. CH32V005 shipped via
+`inherits`, with a new `tools/extract_pins.py` that re-derives package tables from the datasheet and
+refuses to guess when a row's cells cannot be tied to columns. Large dummy packages pasted in, closing
+the QFN12..LQFP144 range. `codegen:` and `params:` blocks written for CH32V006 with every bit position
+read off the reference manual, which caught four errors in the proposals: ADCPRE /6 is 16 not 8 (8
+encodes /4), ADCPRE has no /1 code at all (that is ADC_CLK_MODE at bit 31), SPI has no TI frame format
+on this family, and the ADC sampling-time list was wrong in every middle entry. Also corrected my own
+earlier claim that this part has no PB1/PB2 split — it has one prescaler but three clock enable
+registers. Three tests are red and none needs a data change; verified fixes are on the board.

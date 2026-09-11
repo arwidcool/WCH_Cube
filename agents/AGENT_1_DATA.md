@@ -53,44 +53,46 @@ per DS, sample time, continuous). Source each from the RM register descriptions.
 
 ## Current
 
-**Cycle of 2026-09-11. All green: `extract_remaps` exit 0, `validate_mcu` exit 0,
-`build.py` OK, `node tests/run.js` ALL GREEN (85 tests). No commit hash — this checkout is
-not a git repo (logged on BOARD at 02:10Z).**
+**Cycle 2 (2026-09-11). Every one of the six queued requests is answered and priority 7 is
+delivered.** `validate_mcu` exit 0, `extract_remaps` exit 0 (232 pin assignments, 0
+differences), `extract_pins` exit 0 on CH32V005, `build.py` OK. Commits: aff1da4, the
+line-ending fix, d97f9b9.
 
-Done this cycle, in priority order from this file:
+| # | Queue item | State |
+|---|---|---|
+| 1 | CH32V005 via `inherits` | done — pinout machine-verified against DS Table 2-2 |
+| 2 | Large dummy packages | done — LQFP64/100/144 + ports E..I, 151 pins |
+| 3 | `codegen:` block | done — every bit position re-read from the RM |
+| 4 | `codegen.analog_signals` | done — ADC1, TKEY, OPA1; triggers excluded, they are digital |
+| 5 | Repeated supply pins | already implemented when I arrived |
+| 6 | validate_mcu whitelists + comma check | done — added a raw-text flow-mapping check |
+| 7 | `params:` | done — 35 parameters, 19 enums with register encodings |
 
-1. **Second pass (priority 1) — complete.** `tools/extract_remaps.py` re-parses RM 7.2.11
-   with its own parser and diffs the YAML: 7 peripherals, 31 signal rows, **232 pin
-   assignments, 0 differences**. Negative-tested against planted pin edits. Then added a
-   **third pass** the brief did not ask for: the same grids diffed against the AFIO_PCFR1
-   register prose in RM 7.3.2.2, which states every remap a second time — **227 of 228
-   confirmed by two independent descriptions**. DONE.md data line 1 is met with evidence,
-   not with a careful read.
-2. **Priority 2 — complete.** CH32V006 gained the EXTI line→pin map, the DMA1 7-channel
-   request map, option-byte RST_MODE as four SYS choices, TIM1_RM=11xx (CH1 from LSI), and
-   TIM2 complementary outputs on the CH3/CH4 pins (RM 12.3.9, which the first pass missed).
-3. **Priority 3 — complete.** `tools/validate_mcu.py`. It was rewritten by another agent
-   mid-cycle; I kept the rewrite and restored the key whitelists it dropped, plus fixed a
-   crash on off-drive paths. See BOARD 03:40Z.
-4. **`data/FORMAT.md`** written (was a "when idle" item).
+**Four errors found by checking rather than copying.** These are the cycle's real output:
 
-Two findings worth carrying forward:
+1. **ADCPRE /6 is 16, not 8.** Code 8 is `01000` = base /4 x1 = **/4**. The field is not a
+   divider index: bits [4:3] pick a base (/2, /4, /6, /8) and bits [2:0] scale it
+   (x1, x2, x4, x8, x16), which reproduces all 21 rows of RM 3.4.2. The proposed value
+   would have run the ADC 1.5x fast.
+2. **ADCPRE has no /1 code.** Undivided HB clock is ADC_CLK_MODE at bit 31, a different
+   field. `1` is left out of the map on purpose so the generator says so instead of
+   emitting the /2 code.
+3. **SPI has no TI frame format** on this family — no FRF bit anywhere in the RM.
+4. **The ADC sampling-time list was wrong in every middle entry**, and its meaning changes
+   with ADC_LP (RM 9.3.4).
 
-- **The unquoted-comma trap.** A comma inside a YAML flow mapping truncates the value and
-  turns the rest into a null key. The file still parses and the app still loads, but the
-  app keys setting state by choice name, so two truncated names collapse into one option.
-  Four live instances found and fixed. The validator now rejects unknown keys for exactly
-  this reason — do not remove those whitelists.
-- **The RM contradicts itself once.** RM 7.3.2.2 writes USART2_RM=101 RTS as `PA11`; port A
-  stops at PA7 and Table 7-11 says `PA1`. The YAML follows the table. Expect the same typo
-  when extracting other CH32V00x parts.
+Plus two corrections to my own earlier work: the clock note wrongly implied PB1/PB2 do not
+exist (they do — one prescaler, three enable registers), and my Python writes had flipped
+six files to CRLF against the repo convention.
+
+**Not blocked on anyone.** Three tests are red; none needs a data change, and verified
+one-line fixes for all three are on the board (AGENT-2 x2, AGENT-4 x1).
 
 Next, in order:
 
-1. **CH32V005** — blocked on AGENT-2 answering the `inherits:` shape (BOARD 02:50Z).
-   Proposal is deep-merge plus a `remove:` list, resolved in the loader.
-2. **CH32V003 and later parts** — blocked on sources. `data/sources/` has only the V006
-   datasheet and the V00X reference manual. Asked once at 03:05Z; will not ask again.
-3. **Unblocked meanwhile:** convert the remaining Medium-confidence rows in
-   `CH32V006.notes.md` to High — TouchKey channel→pin from RM ch.10, and the OPA polling
-   channel set. Then the remaining option bytes (START_MODE, STANDBYRST, IWDG_SW).
+1. Remaining Medium-confidence rows in `CH32V006.notes.md`: TouchKey channel→pin from
+   RM ch.10, and the OPA polling channel set.
+2. The rest of the option bytes — START_MODE, STANDBYRST, IWDG_SW, RDPR, WPR (RM 18).
+3. `params:` for the dummy part, so the UI has something to exercise on a large package.
+4. CH32V003 and the later parts the moment their sources appear in `data/sources/`
+   (HUMAN_TODO 4). Asked once; not asking again.
