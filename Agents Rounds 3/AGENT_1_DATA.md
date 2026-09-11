@@ -134,55 +134,54 @@ the compile gate — a data change is now capable of breaking a build.
 
 ---
 
-## Current — round 3, cycle 1
+## Current — round 3, cycle 2
 
-**The EVT packages arrived during this cycle.** `data/sources/V006/Evt/` and
-`data/sources/X035/Evt/` are no longer empty — my brief and `00_PROJECT.md` both still say
-they are. SPL headers are at `<PART>/Evt/EXAM/SRC/Peripheral/inc/`, examples under
-`EXAM/`, board schematics under `PUB/`. Everything below is cited from EVT rather than the
-PlatformIO copy, which is the precedence rule finally doing real work.
+**The EVT packages arrived during cycle 1** and are now the authority for every name.
+Headers at `data/sources/<PART>/Evt/EXAM/SRC/Peripheral/inc/`, startup at `.../Startup/`.
+`00_PROJECT.md` and my own brief both still say those folders are empty.
 
-### Done
+### Done this round so far
 
-- **P0 both defects.** `codegen.header` → `ch32v00X.h`; `codegen.speeds` → the one macro
-  this silicon has. Cited to EVT line numbers in `CH32V006.notes.md`.
-- **`gpio.speeds`** — the new top-level capability key, `[{ name, macro }]`, ordered.
-  `FORMAT.md` defines a one-entry list as *the control is not shown*, not *shown disabled*.
-  Handed off to AGENT-2 and AGENT-3 with the exact shape.
-- **HUMAN_TODO item 5** marked confirmed in the notes with EVT file and line.
-- **AGENT-2's C4 handoff answered**: the stale `mcu.remove` comments in `CH32V005.yaml`
-  are rewritten, and my call is that `dma.requests` stays out of `mcu.remove`.
-- **`FORMAT.md` documented `mcu.inherits` / `mcu.remove` for the first time** — it had
-  nothing at all, despite CH32V005 being built entirely on it.
+- **P0, both defects.** `codegen.header` → `ch32v00X.h`; `codegen.speeds` → the one macro
+  this silicon has. New top-level `gpio.speeds` capability key, with a one-entry list
+  meaning *the control is not shown*. AGENT-3 has already landed the UI half.
+- **`tools/verify_sdk_names.py`** and **`verify_sdk_names_selftest.py`** — 20 planted
+  breaks, 20 caught, re-runnable. Which SDK a part uses is data (`codegen.sdk`), not
+  hardcoded; a synthetic part opts out by declaration; no SDK = "NOT CHECKED", never a
+  silent pass.
+- **C7** — `WCH-DUMMY32-C8` has `gpio` / `dma` / `nvic` / `codegen`, every block
+  deliberately shaped unlike CH32V006 so no assumption can hide.
+- **`params:` → the SDK** — 35 parameters, 64 option macros, all from EVT.
+- **`FORMAT.md`** gained `gpio`, `codegen.sdk`, the `struct`/`sdk_field`/`sdk_call`/
+  `sdk_none` rules, the two-name NVIC rule, and a section on `mcu.inherits`/`mcu.remove`
+  that had never been written at all.
+- **C4 answered** for AGENT-2; the stale comments in `CH32V005.yaml` are gone.
 
 ### What checking found that reading would not
 
-- The wrong header was not a missing file, it was **a different part's register map**: the
-  SDK ships `Peripheral/ch32v00Xx` *and* `Peripheral/ch32v00x` side by side. On NTFS the
-  wrong case resolves to the right file, so 271 tests and a browser were all blind.
-- **AGENT-4's compile gate is red for a reason that is not the C.** PlatformIO's SCons
-  decider is content-hash, not timestamp, so the "Compiling … wchcube_init.o" line the
-  test greps for appears only on the first build of any given content. Measured: run 1
-  prints it, run 2 prints it zero times, `touch` does not help, a one-line content change
-  brings it back. Posted as QA-FAIL(→AGENT-4) with the measurements and three fixes.
-- `FORMAT.md` had no `inherits:` section at all. The contract file was missing the feature
-  most likely to produce a silent wrong answer.
-- There is **no `ch32v00X_tkey.h`** in the EVT `Peripheral/inc/` listing. That is a fact
-  worth settling before `params:` for TKEY is written, not after.
+- The wrong header was not a missing file but **a different part's register map**: the SDK
+  ships `Peripheral/ch32v00Xx` *and* `Peripheral/ch32v00x` side by side, and NTFS resolves
+  the wrong case to the right file.
+- **`nvic` vector 29 claimed `ADC1_IRQn`, which exists nowhere.** EVT has `ADC_IRQn` in the
+  enum and `ADC1_IRQHandler` in the startup table. Vectors now carry both names.
+- **EVT settles the TIM3-vector contradiction**: there is no TIM3 vector, confirmed twice
+  over. The round-2 decision not to invent one was right.
+- **Three `params:` are not init-struct members** (`arpe`, ADC `sample`, SPI `crc`) and one
+  belongs to a different struct (`deadtime`). ADC `lowpower` has no SDK surface at all.
+- Every real part in the repo has ONE GPIO speed, so the multi-speed UI branch had no part
+  behind it until the dummy got three.
 
 ### Cost
 
-Small. The P0 was three edits; the compile and the fixture that makes it mean something
-took longer than the fix, which is the correct ratio.
+The fixes were small; the checking was most of the work, and it found four defects nobody
+had a test for. That is the right ratio for this round.
 
 ### Next, in order
 
-1. `tools/verify_sdk_names.py` against the **EVT** headers, with the PlatformIO package as
-   the fallback — planted-break tested per category, closest-match suggestions, and an
-   explicit "no SDK for series X, not checked" rather than a silent pass.
-2. C7 — `WCH-DUMMY32-C8` gets `dma` / `nvic` / `params` / `codegen`, so every new tab is
-   exercised on more than one part. It must be skipped by name by `verify_sdk_names.py`.
-3. `struct:` / `field:` on `params:`, verified against the EVT init structs.
-4. The Medium-confidence rows EVT can now settle: the TIM3 vector contradiction, TouchKey
-   channel→pin, the OPA polling set.
-5. `CH32X035.yaml`.
+1. The Medium-confidence rows EVT can now settle: TouchKey channel→pin (note there is **no
+   `ch32v00X_tkey.h`** in the EVT header list, which is itself the finding), and the OPA
+   polling set against `ch32v00X_opa.h`.
+2. `params:` for the peripherals that still have none: TIM3, IWDG, WWDG, TKEY, OPA1.
+3. `data/mcus/CH32X035.yaml` — the first part with a compiler from day one, and EVT
+   present from day one too.
+4. Stale `data/sources/` paths in `CH32V006.notes.md` and `tools/extract_remaps.py`.

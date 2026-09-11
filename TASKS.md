@@ -201,8 +201,10 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 ### P2 — configuration must reach the C
 
-- [ ] (AGENT-1) `params:` carry `struct:` and `field:` so codegen does not infer the SDK mapping;
-      every enum option's macro verified against the headers
+- [x] (AGENT-1) `params:` carry `struct:` and `field:` so codegen does not infer the SDK mapping;
+      every enum option's macro verified against the headers — 35 params, 64 option macros,
+      all from EVT and all checked by verify_sdk_names.py. Three are NOT struct members
+      (`sdk_call:`) and ADC lowpower has no SDK surface at all (`sdk_none:`)
 - [ ] (AGENT-2) `params:` → `USART_InitTypeDef` / `SPI_InitTypeDef` / `I2C_InitTypeDef` /
       `TIM_TimeBaseInitTypeDef` / `TIM_OCInitTypeDef` / `ADC_InitTypeDef` + the `*_Init()` call
 - [ ] (AGENT-2) DMA → `DMA_InitTypeDef` + `DMA_Init` + `DMA_Cmd` + the DMA1 clock enable; a
