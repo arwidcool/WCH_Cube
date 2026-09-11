@@ -6,7 +6,7 @@ The MCU YAML is written by hand from the reference manual, so a typo in it looks
 like correct data. This tool reads the manual again, on its own, and compares.
 
     PASS 2   RM section 7.2.11 pin grids (Tables 7-8, 7-9-1, 7-10..7-13-1, 7-14, 7-15)
-             re-parsed from data/sources/CH32V00XRM.md, diffed against the YAML.
+             re-parsed from data/sources/V006/Datasheets/CH32V00XRM.md, diffed against the YAML.
              A difference here is a bug in the YAML. It fails the run.
 
     PASS 3   RM section 7.3.2.2, the AFIO_PCFR1 register description, which spells every
@@ -58,7 +58,7 @@ from pathlib import Path
 PIN_RE = re.compile(r"P[A-D][0-7]")
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_RM = ROOT / "data" / "sources" / "CH32V00XRM.md"
+DEFAULT_RM = ROOT / "data" / "sources" / "V006" / "Datasheets" / "CH32V00XRM.md"
 DEFAULT_YAML = ROOT / "data" / "mcus" / "CH32V006.yaml"
 
 # --------------------------------------------------------------------------------------

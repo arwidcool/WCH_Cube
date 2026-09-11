@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DS = ROOT / "data" / "sources" / "CH32V006DS0.md"
+DEFAULT_DS = ROOT / "data" / "sources" / "V006" / "Datasheets" / "CH32V006DS0.md"
 
 PIN_RE = re.compile(r"^P[A-D][0-7]$")
 # A data row: one cell per package (a pin number or "-"), then the pin name.
