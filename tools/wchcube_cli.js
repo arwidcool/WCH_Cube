@@ -43,6 +43,13 @@ Options
                        directory with no platformio.ini. Implies --format c
                        unless --format says otherwise.
   --mcu-dir <dir>      where to look for MCU yaml  [default: data/mcus]
+  --new-project <dir>  write a WHOLE PlatformIO project there - platformio.ini,
+                       src/main.c, README.md, .gitignore and lib/wchcube_generated/ -
+                       something you open and flash. Refuses a non-empty directory
+                       unless --force. Needs a part number with a PlatformIO board:
+                       pass --variant, or use a project that names one.
+  --variant <part>     the part number to build for, e.g. CH32V006F8P7
+  --force              let --new-project write into a directory that is not empty
   --option <k>=<v>     set a generator option; repeatable. --option list prints the
                        ones this build honours, with their defaults, and exits
   --list               list the MCUs found, with their packages, and exit
@@ -80,13 +87,18 @@ function parseArgs(argv) {
     else if (a === '--pio') o.pio = need('a PlatformIO project directory');
     else if (a === '--mcu-dir') o.mcuDir = need('a directory');
     else if (a === '--option') (o.options ||= []).push(need('key=value, or "list"'));
+    else if (a === '--new-project') o.newProject = need('a directory to create the project in');
+    else if (a === '--variant') o.variant = need('a part number');
+    else if (a === '--force') o.force = true;
     else if (a === '--format') { o.formats = need('a format list').split(',').map(s => s.trim()).filter(Boolean); o.formatGiven = true; }
     else if (a.startsWith('-')) fail(`unknown option ${a}`);
     else rest.push(a);
   }
   if (rest.length > 1) fail(`expected one MCU, got ${rest.length}: ${rest.join(' ')}`);
   o.mcu = rest[0];
-  if (o.out && o.pio) fail('--out and --pio are two destinations; pick one');
+  const dests = ['out', 'pio', 'newProject'].filter(k => o[k]);
+  if (dests.length > 1) fail(`--${dests.join(' and --')} are two destinations or more; pick one`);
+  if (o.force && !o.newProject) fail('--force only means something with --new-project');
   // The only reason to point at a PlatformIO project is to feed it C. Saying so
   // beats writing a pin table there because the default format happened to be that.
   if (o.pio && !o.formatGiven) o.formats = ['c'];
@@ -191,6 +203,52 @@ function report() {
   };
 }
 
+/**
+ * Write a whole PlatformIO project. Refuses a non-empty directory unless --force,
+ * because the one thing worse than not generating is quietly overwriting somebody's
+ * work - and unlike `--pio`, which updates a drop zone inside a project that is
+ * already theirs, this owns the whole folder.
+ *
+ * USER CODE in an existing src/main.c is still carried across, so --force on a
+ * project you generated before is a regeneration rather than a reset.
+ */
+function writeNewProject(o) {
+  let files;
+  try { files = eng.projectFiles(); }
+  catch (e) { process.stderr.write(`wchcube: ${e.message}\n`); return 1; }
+
+  const dir = o.newProject;
+  if (fs.existsSync(dir)) {
+    const inside = fs.readdirSync(dir);
+    if (inside.length && !o.force) {
+      fail(`${dir} is not empty (${inside.length} entr${inside.length === 1 ? 'y' : 'ies'}).`
+        + ' Pass --force to write into it anyway; USER CODE sections in an existing'
+        + ' src/main.c are carried across either way.');
+    }
+  }
+  for (const f of files) {
+    const dest = path.join(dir, ...f.path.split('/'));
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    writeFile(dest, f.text, o);
+  }
+  const E = eng.compute();
+  const t = eng.pioTarget();
+  const complaints = eng.cComplaints(Object.fromEntries(
+    files.filter(f => /[.][ch]$/.test(f.path)).map(f => [f.name, f.text])));
+  if (!o.quiet) {
+    process.stderr.write(`${eng.M.mcu.name} ${eng.S.pkg} -> ${t.variant} on board ${t.board}:`
+      + ` ${files.length} files, ${E.conflictList.length} conflict(s),`
+      + ` ${complaints.length} codegen complaint(s)\n`);
+    process.stderr.write(`  cd ${dir} && pio run -t upload\n`);
+  }
+  const issueCount = Object.values(E.issues).reduce((n, list) => n + list.length, 0);
+  if (o.strict && (E.conflictList.length || issueCount || complaints.length)) {
+    process.stderr.write('wchcube: --strict and the project is not clean\n');
+    return 2;
+  }
+  return 0;
+}
+
 // ---------------------------------------------------------------- main
 function main() {
   const o = parseArgs(process.argv.slice(2));
@@ -235,6 +293,23 @@ function main() {
     const key = pair.slice(0, at), value = pair.slice(at + 1);
     try { eng.setGeneratorOption(key, value); }
     catch (e) { fail(`${e.message}`); }
+  }
+
+  if (o.variant) {
+    const known = Object.keys((eng.M.mcu && eng.M.mcu.variants) || {});
+    if (!known.includes(o.variant)) {
+      fail(`"${o.variant}" is not a part number of ${eng.M.mcu.name}. Known: ${known.join(', ')}`);
+    }
+    eng.setProject({ variant: o.variant });
+  }
+
+  if (o.newProject) {
+    // Name the project after the folder unless the .wchproj already named it - the
+    // banner, the README heading and the ini header all read better than "Untitled".
+    if (!eng.PROJECT.name || eng.PROJECT.name === 'Untitled') {
+      eng.setProject({ name: path.basename(path.resolve(o.newProject)) });
+    }
+    return writeNewProject(o);
   }
 
   const E = eng.compute();

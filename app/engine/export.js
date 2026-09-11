@@ -8,7 +8,13 @@ import { validateParam } from './params.js';
 import { record } from './history.js';
 import { E, compute } from './engine.js';
 import { clockCalc, firstPre } from './clock.js';
-import { cFiles } from './codegen.js';
+// `user` is codegen's: main.c carries the same USER CODE blocks under the same
+// option, and two copies of that helper would be two things to keep in step.
+import { cFiles, gpioPlan, cfg, user } from './codegen.js';
+// project.js imports generatorOptions from here, so this is a cycle. It is safe
+// because neither side reads the other at module-evaluation time - PROJECT is only
+// touched inside functions - and build.py concatenates both into one scope anyway.
+import { PROJECT } from './project.js';
 
 const num = v => (Math.round(v * 1000) / 1000).toString();
 
@@ -278,3 +284,327 @@ export function generateAll() {
   return out;
 }
 
+// ---- a whole PlatformIO project ----------------------------------------------
+//  `generateAll()` hands the user a file pair. They still have to go and find a
+//  project to put it in. `projectFiles()` hands them a folder that builds and
+//  flashes:
+//
+//      <ProjectName>/
+//      ├── platformio.ini
+//      ├── README.md
+//      ├── .gitignore
+//      ├── src/main.c
+//      └── lib/wchcube_generated/{include,src}/…
+//
+//  It mirrors `data/firmware/`, which already works, minus the parts that only
+//  make sense in this repository: no lib/board, no lib/wch_hal, no lib/util. The
+//  generated main.c calls the generated init and the SDK, and nothing else - a
+//  generated project that shipped its own HAL would be a second HAL to maintain.
+//
+//  Every value below comes from the MCU file or the SDK headers. Nothing about a
+//  board, an LED or a pin is invented; see `mainC()` for what that costs and why
+//  it is worth it.
+
+const PIO_COMPONENT_DIR = 'lib/wchcube_generated';
+
+/** The variant (part number) a project is for, and what PlatformIO calls its board. */
+export function pioTarget() {
+  const variants = (M.mcu && M.mcu.variants) || {};
+  const able = Object.entries(variants).filter(([, v]) => v && v.pio_board);
+  let name = PROJECT.variant && variants[PROJECT.variant] ? PROJECT.variant : null;
+  if (!name && !PROJECT.variant) {
+    // No part number chosen, but the PACKAGE is already a choice the user made, and a
+    // package usually identifies exactly one orderable part. Taking it when it is
+    // unambiguous is reading the configuration, not inventing hardware. When two part
+    // numbers share a package they differ in something that matters - F4P6 is 16 KB of
+    // flash against F8P6's 62 KB - so then it really is the user's choice and we ask.
+    const here = able.filter(([, v]) => !v.package || v.package === S.pkg);
+    if (here.length === 1) name = here[0][0];
+    else if (here.length > 1) {
+      return {
+        variant: null, board: null, env: null,
+        missing: `${M.mcu.name} has ${here.length} part numbers in ${S.pkg}`
+          + ` and they are not interchangeable — choose one: ${here.map(([k]) => k).join(', ')}`,
+        generatable: able.map(([k]) => k),
+      };
+    }
+  }
+  if (!name) {
+    return {
+      variant: null, board: null, env: null,
+      missing: PROJECT.variant
+        ? `"${PROJECT.variant}" is not a part number of ${M.mcu.name}`
+        : `no part number of ${M.mcu.name} in ${S.pkg} has a PlatformIO board`,
+      generatable: able.map(([k]) => k),
+    };
+  }
+  const v = variants[name];
+  if (!v.pio_board) {
+    // Deliberate, and it must stay deliberate: CH32V006F4U6 has 16 KB of flash
+    // against F8U6's 62 KB, so substituting the nearest board would lie about the
+    // memory and the link would succeed right up until it did not fit.
+    return {
+      variant: name, board: null, env: null,
+      missing: `the PlatformIO ch32v platform ships no board for ${name}`
+        + (v.notes ? ` — ${v.notes}` : ''),
+      generatable: able.map(([k]) => k),
+    };
+  }
+  // A part number IS a package: CH32V006F8P7 is the TSSOP20 one. Generating pins for
+  // one package and a platformio.ini naming another would be a project whose pinout
+  // and whose board file describe different chips, and it would build.
+  if (v.package && v.package !== S.pkg) {
+    const forThisPkg = able.filter(([, x]) => x.package === S.pkg).map(([k]) => k);
+    return {
+      variant: name, board: null, env: null,
+      missing: `${name} is the ${v.package} part but this configuration is for ${S.pkg}`
+        + (forThisPkg.length
+          ? `. For ${S.pkg}, use ${forThisPkg.join(' or ')}`
+          : `, and no part number with a PlatformIO board uses ${S.pkg}`),
+      generatable: able.map(([k]) => k),
+    };
+  }
+  return {
+    variant: name,
+    board: v.pio_board,
+    env: v.pio_env || v.pio_board,
+    package: v.package || S.pkg,
+    missing: null,
+    generatable: able.map(([k]) => k),
+  };
+}
+
+/** A name safe as a folder and as a PlatformIO env. */
+const safeName = s => String(s || 'wchcube_project').trim().replace(/[^A-Za-z0-9._-]+/g, '_') || 'wchcube_project';
+
+/**
+ * The pins the USER declared as plain GPIO outputs - the only ones main.c may touch.
+ *
+ * Deliberately `S.manual[pin] === 'GPIO_Output'` and not "any pin whose mode macro is
+ * push-pull": a USART TX line is push-pull too, and toggling it from the loop would
+ * fight the peripheral that owns it. "The user pointed at this pin and said GPIO
+ * output" is the only claim strong enough to justify driving it.
+ */
+export function outputPins() {
+  return gpioPlan()
+    .filter(p => (S.manual || {})[p.pin] === 'GPIO_Output')
+    .map(p => ({ pin: p.pin, port: p.port, bit: p.bit, label: p.label, mode: p.mode }));
+}
+
+function iniFile(t) {
+  const r = M.clock ? clockCalc() : null;
+  const L = [
+    '; ' + '='.repeat(74),
+    `;  ${PROJECT.name} — generated by WCHCube. Safe to edit: regeneration writes`,
+    ';  lib/wchcube_generated/ and nothing else.',
+    ';',
+    `;  Part      : ${t.variant}  (${M.mcu.name}, ${t.package})`,
+    `;  Board file: ${t.board} — the platform's own JSON is where the flash size,`,
+    ';              RAM size, march/mabi and the -D flags come from. Not this file.',
+  ];
+  if (r) L.push(`;  Clocks    : SYSCLK ${r.SYSCLK} MHz, HCLK ${r.HCLK} MHz (source ${S.clock.sys})`);
+  L.push(
+    '; ' + '='.repeat(74),
+    '',
+    '[platformio]',
+    `default_envs = ${t.env}`,
+    '',
+    `[env:${t.env}]`,
+    'platform  = ch32v',
+    'framework = noneos-sdk',
+    `board     = ${t.board}`,
+    '',
+    '; The LDF does not evaluate __has_include, so lib/wchcube_generated would never be',
+    '; discovered from an optional include. Naming it puts its include/ on the path.',
+    'lib_ldf_mode = chain+',
+    'lib_deps =',
+    '    wchcube_generated',
+    '',
+    '; printf() over the WCH-Link debug interface. Chosen because it claims NO pin:',
+    '; routing printf to a USART would silently occupy whatever pins that USART is on',
+    '; and fight the configuration in lib/wchcube_generated.',
+    'build_flags =',
+    '    -D SDI_PRINT=1',
+    '',
+    'upload_protocol = wch-link',
+    'debug_tool      = wch-link',
+    'monitor_speed   = 115200',
+    '',
+  );
+  return L.join('\n');
+}
+
+function mainC(t) {
+  const r = M.clock ? clockCalc() : null;
+  const outs = outputPins();
+  const blink = outs[0] || null;
+  const L = [];
+  L.push('/* ' + '-'.repeat(74));
+  L.push(` *  main.c — ${PROJECT.name}`);
+  L.push(' *');
+  L.push(' *  Generated once by WCHCube as a starting point. Unlike');
+  L.push(' *  lib/wchcube_generated/, this file is YOURS: regeneration keeps whatever is');
+  L.push(' *  between the USER CODE markers and leaves the rest alone.');
+  L.push(' *');
+  L.push(' *  It calls the generated initialisation and the vendor SDK, and nothing else.');
+  L.push(' *  It has no HAL of its own on purpose - a generated project that shipped one');
+  L.push(' *  would be a second HAL for you to maintain.');
+  L.push(' * ' + '-'.repeat(74) + ' */');
+  L.push(`#include "${cfg().header || 'debug.h'}"`);
+  L.push('#include "debug.h"      /* Delay_Init, Delay_Ms, SDI_Printf_Enable, printf */');
+  L.push('#include "wchcube_init.h"');
+  L.push('');
+  L.push(...user('Includes'));
+  L.push('');
+  L.push(...user('PV'));
+  L.push('');
+  L.push('int main(void)');
+  L.push('{');
+  L.push('    SystemCoreClockUpdate();');
+  L.push('    Delay_Init();');
+  L.push('    SDI_Printf_Enable();   /* printf goes to the WCH-Link SDI channel; no pin is used */');
+  L.push('');
+  L.push('    /* The board file sets SYSCLK before main() through SystemInit(); the generated');
+  L.push('       WCHCube_RCC_Init() then applies the tree this project asked for and wins. So a');
+  L.push(`       ${r ? r.SYSCLK : '?'} MHz project may boot at the board's rate and change here - which is why`);
+  L.push('       SystemCoreClockUpdate() is called again below, before anything reads the clock. */');
+  L.push('    WCHCube_Init();');
+  L.push('    SystemCoreClockUpdate();');
+  L.push('');
+  L.push(`    printf("\\r\\n${PROJECT.name} — ${t.variant} (${M.mcu.name}, ${t.package})\\r\\n");`);
+  if (r) {
+    L.push(`    printf("configured SYSCLK : ${r.SYSCLK} MHz (source ${S.clock.sys})\\r\\n");`);
+  }
+  L.push('    printf("SystemCoreClock   : %lu Hz\\r\\n", (unsigned long)SystemCoreClock);');
+  L.push('    /* If those two disagree, the configuration did not take - find out now rather');
+  L.push('       than when a baud rate or a delay is silently wrong. */');
+  if (blink) {
+    L.push(`    printf("toggling          : ${blink.pin}${blink.label ? ` \\"${blink.label}\\"` : ''} (${blink.mode})\\r\\n");`);
+  } else {
+    L.push('    printf("toggling          : nothing — no output GPIO is configured in this project\\r\\n");');
+  }
+  L.push('');
+  L.push(...user('Setup', '    '));
+  L.push('');
+  L.push('    for (;;) {');
+  if (blink) {
+    L.push(`        /* ${blink.pin}${blink.label ? ` — "${blink.label}"` : ''} — ${blink.mode} in this project.`);
+    L.push('           This is YOUR pin, from the configuration; nothing here picked it. */');
+    L.push(`        GPIO_WriteBit(GPIO${blink.port}, GPIO_Pin_${blink.bit},`);
+    L.push(`                      GPIO_ReadOutputDataBit(GPIO${blink.port}, GPIO_Pin_${blink.bit}) ? Bit_RESET : Bit_SET);`);
+  } else {
+    L.push('        /* No output GPIO is configured, so there is nothing to toggle. Assign one');
+    L.push('           in WCHCube as an output, regenerate, and a blink appears here. Picking a');
+    L.push('           pin for you would be inventing hardware this project cannot see. */');
+  }
+  L.push('        Delay_Ms(500);');
+  L.push(...user('Loop', '        '));
+  L.push('    }');
+  L.push('}');
+  L.push('');
+  return L.join('\n');
+}
+
+function readmeMd(t) {
+  const r = M.clock ? clockCalc() : null;
+  const outs = outputPins();
+  const rows = pinRows().filter(x => x.signal || x.label);
+  const L = [];
+  L.push(`# ${PROJECT.name}`);
+  L.push('');
+  L.push(`A PlatformIO project for **${t.variant}** (${M.mcu.name}, ${t.package}), generated by WCHCube.`);
+  L.push('');
+  L.push('## Build and flash');
+  L.push('');
+  L.push('```bash');
+  L.push('pio run                 # build');
+  L.push('pio run -t upload       # flash over WCH-Link');
+  L.push('pio device monitor      # read the SDI output (115200)');
+  L.push('```');
+  L.push('');
+  L.push('`printf` goes to the WCH-Link SDI channel, which claims **no pin** — so the startup');
+  L.push('banner works on a bare chip with nothing else wired.');
+  L.push('');
+  L.push('## What is generated, and what is yours');
+  L.push('');
+  L.push('| Path | Owner |');
+  L.push('|---|---|');
+  L.push('| `lib/wchcube_generated/` | **WCHCube.** Regeneration overwrites it. Do not edit by hand — if the code is wrong, the configuration is. |');
+  L.push('| `src/main.c` | **You**, after the first generation. Code between `/* USER CODE BEGIN x */` and `/* USER CODE END x */` survives regeneration. |');
+  L.push('| `platformio.ini` | **You.** Written once. |');
+  L.push('');
+  L.push('## The clock, and why it is set twice');
+  L.push('');
+  L.push('The board file gives `SystemInit()` a SYSCLK before `main()` runs, then');
+  L.push('`WCHCube_RCC_Init()` applies the tree this project asked for and wins. `main.c` calls');
+  L.push('`SystemCoreClockUpdate()` afterwards so `Delay_Ms()` and anything else reading');
+  L.push(`\`SystemCoreClock\` stay honest${r ? `. This project asks for ${r.SYSCLK} MHz from ${S.clock.sys}` : ''}.`);
+  L.push('The banner prints both, so a configuration that did not take is visible on the first run.');
+  L.push('');
+  L.push('## This configuration');
+  L.push('');
+  if (r) {
+    L.push(`- SYSCLK **${r.SYSCLK} MHz** from ${S.clock.sys}, HCLK ${r.HCLK} MHz`);
+  }
+  L.push(`- ${rows.length} pin${rows.length === 1 ? '' : 's'} assigned`);
+  if (outs.length) {
+    L.push(`- output GPIO${outs.length === 1 ? '' : 's'}: ${outs.map(o => `\`${o.pin}\`${o.label ? ` "${o.label}"` : ''}`).join(', ')}`
+      + ` — \`main.c\` toggles ${outs.length === 1 ? 'it' : `the first of them (\`${outs[0].pin}\`)`}`);
+  } else {
+    L.push('- **no output GPIO is configured**, so `main.c` toggles nothing. Assign a pin as an');
+    L.push('  output in WCHCube and regenerate, and the blink appears by itself. WCHCube will not');
+    L.push('  pick a pin for you: on a bare chip there is no LED to pick.');
+  }
+  L.push('');
+  if (rows.length) {
+    L.push('| Pin | Signal | Label |');
+    L.push('|---|---|---|');
+    for (const x of rows) L.push(`| ${x.name} | ${x.signal || ''} | ${x.label || ''} |`);
+    L.push('');
+  }
+  L.push('## Regenerating');
+  L.push('');
+  L.push('```bash');
+  L.push(`node tools/wchcube_cli.js --project ${safeName(PROJECT.name)}.wchproj --pio .`);
+  L.push('```');
+  L.push('');
+  L.push('That rewrites `lib/wchcube_generated/` only, carrying your USER CODE sections across.');
+  L.push('');
+  return L.join('\n');
+}
+
+/**
+ * The whole project, as `[{ path, name, language, text }]`. `path` is relative to the
+ * project folder and is what a writer, a zipper or a Tauri command uses; `name` is the
+ * basename, for a file list in the UI.
+ *
+ * Throws when the selected part number has no PlatformIO board - see pioTarget().
+ */
+export function projectFiles() {
+  const t = pioTarget();
+  if (t.missing) {
+    throw new Error(`Cannot generate a PlatformIO project: ${t.missing}. `
+      + (t.generatable.length
+        ? `Part numbers that can: ${t.generatable.join(', ')}.`
+        : `No part number of ${M.mcu.name} has a pio_board in its MCU file.`));
+  }
+  const out = [
+    { path: 'platformio.ini', language: 'ini', text: iniFile(t) },
+    { path: 'README.md', language: 'markdown', text: readmeMd(t) },
+    { path: '.gitignore', language: 'text', text: '.pio/\n' },
+    { path: 'src/main.c', language: 'c', text: mainC(t) },
+  ];
+  for (const [name, text] of Object.entries(cFiles())) {
+    const sub = name.endsWith('.h') ? 'include' : 'src';
+    out.push({ path: `${PIO_COMPONENT_DIR}/${sub}/${name}`, language: 'c', text });
+  }
+  if (generatorOption('reports')) {
+    const base = `${M.mcu.name}_${S.pkg}`;
+    out.push({ path: `docs/${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
+    out.push({ path: `docs/${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
+  }
+  return out.map(f => ({ ...f, name: f.path.slice(f.path.lastIndexOf('/') + 1) }));
+}
+
+/** The folder name a project should be written into. */
+export const projectFolderName = () => safeName(PROJECT.name);

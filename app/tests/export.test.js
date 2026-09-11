@@ -305,3 +305,162 @@ test('merging twice is stable — regeneration is not a ratchet', () => {
   const twice = eng.mergeUserCode(once, e.cSource()).text;
   assert.equal(twice, once, 'the file converges instead of growing a copy every time');
 });
+
+// =============================================================================
+//  Round 4, deliverable B — a whole PlatformIO project, not a file pair
+// =============================================================================
+
+test('the project is the folder data/firmware proved works, minus what only it needs', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setProject({ name: 'BlinkDemo', variant: 'CH32V006F8P7' });
+  e.compute();
+  const paths = e.projectFiles().map(f => f.path);
+  for (const want of ['platformio.ini', 'README.md', '.gitignore', 'src/main.c',
+    'lib/wchcube_generated/include/wchcube_init.h',
+    'lib/wchcube_generated/src/wchcube_init.c']) {
+    assert.ok(paths.includes(want), `${want} is in the project (${paths.join(', ')})`);
+  }
+  // the header goes to include/ and the source to src/, which is what that component's
+  // library.json declares - the same split --pio writes into an existing project
+  assert.ok(paths.every(p => !p.includes('//')));
+  for (const f of e.projectFiles()) {
+    assert.equal(f.name, f.path.slice(f.path.lastIndexOf('/') + 1), 'name is the basename');
+    assert.ok(f.text.length, `${f.path} has content`);
+    assert.ok(f.language, `${f.path} says what it is, for the preview`);
+  }
+});
+
+test('platformio.ini takes every per-part value from the MCU file', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setProject({ name: 'BlinkDemo', variant: 'CH32V006F8P7' });
+  e.compute();
+  const ini = e.projectFiles().find(f => f.path === 'platformio.ini').text;
+  const v = e.M.mcu.variants.CH32V006F8P7;
+  assert.ok(ini.includes(`board     = ${v.pio_board}`), 'the board is the one the MCU file names');
+  assert.match(ini, /platform {2}= ch32v/);
+  assert.match(ini, /framework = noneos-sdk/);
+  assert.match(ini, /-D SDI_PRINT=1/);
+  assert.match(ini, /upload_protocol = wch-link/);
+  assert.match(ini, /monitor_speed {3}= 115200/);
+  assert.match(ini, /lib_ldf_mode = chain\+/, 'or the generated component is never found');
+  // nothing about the part that the board JSON already knows. Comments may SAY that;
+  // the settings may not contain it.
+  const settings = ini.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith(';'));
+  assert.deepEqual(settings.filter(l => /flash|f_cpu|march|mabi|upload_size/i.test(l)), [],
+    'flash size, clock and ABI come from the platform board file, never from here');
+});
+
+test('a part number with no PlatformIO board is refused by name, never substituted', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const noBoard = Object.entries(e.M.mcu.variants).find(([, v]) => !v.pio_board);
+  if (!noBoard) return;                       // every variant has one on this part
+  e.setProject({ name: 'x', variant: noBoard[0] });
+  const t = e.pioTarget();
+  assert.equal(t.board, null);
+  assert.match(t.missing, /ships no board for/);
+  assert.ok(t.generatable.length, 'and it says which part numbers can');
+  assert.throws(() => e.projectFiles(), new RegExp(`Part numbers that can`));
+  // F4U6 is 16 KB of flash against F8U6's 62 KB: the nearest board would lie
+  assert.equal(t.generatable.includes(noBoard[0]), false);
+});
+
+test('a part number for a different package is refused, not quietly mixed', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const other = Object.entries(e.M.mcu.variants)
+    .find(([, v]) => v.pio_board && v.package && v.package !== 'TSSOP20');
+  if (!other) return;
+  e.setProject({ name: 'x', variant: other[0] });
+  const t = e.pioTarget();
+  assert.equal(t.board, null, 'generating pins for one package and an ini for another would build');
+  assert.match(t.missing, new RegExp(`is the ${other[1].package} part but this configuration is for TSSOP20`));
+});
+
+test('main.c blinks a pin the user configured, and nothing when there is none', () => {
+  const bare = fresh('CH32V006', 'TSSOP20');
+  bare.setProject({ name: 'Bare', variant: 'CH32V006F8P7' });
+  bare.compute();
+  const noPin = bare.projectFiles().find(f => f.path === 'src/main.c').text;
+  assert.equal(/GPIO_WriteBit/.test(noPin), false, 'nothing is toggled');
+  assert.match(noPin, /no output GPIO is configured/);
+  assert.match(noPin, /Picking a\s+pin for you would be inventing hardware/);
+
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setProject({ name: 'Blink', variant: 'CH32V006F8P7' });
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.setGpioField('PC0', 'label', 'STATUS_LED');
+  e.compute();
+  const c = e.projectFiles().find(f => f.path === 'src/main.c').text;
+  assert.ok(c.includes('GPIO_WriteBit(GPIOC, GPIO_Pin_0,'), 'the pin the user configured');
+  assert.match(c, /PC0 — "STATUS_LED" — Output Push Pull in this project/);
+  assert.match(c, /toggling {10}: PC0 \\"STATUS_LED\\"/, 'and the banner names it');
+});
+
+test('main.c prints both clocks, because a configuration that did not take is invisible otherwise', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setProject({ name: 'Clocks', variant: 'CH32V006F8P7' });
+  e.setClock({ sys: 'PLLCLK' });
+  e.compute();
+  const c = e.projectFiles().find(f => f.path === 'src/main.c').text;
+  const r = e.clockCalc();
+  assert.ok(c.includes(`configured SYSCLK : ${r.SYSCLK} MHz`), 'what the configuration asked for');
+  assert.match(c, /SystemCoreClock\s*:\s*%lu Hz/, 'and what the silicon reports back');
+  // the two-clock-owners sentence, and the call that keeps Delay_Ms honest
+  assert.equal((c.match(/SystemCoreClockUpdate\(\);/g) || []).length, 2,
+    'once before WCHCube_Init and once after, or Delay_Ms lies');
+  assert.match(c, /WCHCube_RCC_Init\(\) then applies the tree this project asked for and wins/);
+});
+
+test('main.c has USER CODE sections, so regenerating it is not a reset', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setProject({ name: 'Keep', variant: 'CH32V006F8P7' });
+  e.compute();
+  const first = e.projectFiles().find(f => f.path === 'src/main.c').text;
+  assert.deepEqual([...first.matchAll(/USER CODE BEGIN (\S+)/g)].map(m => m[1]),
+    ['Includes', 'PV', 'Setup', 'Loop']);
+
+  const edited = first.replace('/* USER CODE BEGIN Loop */', '/* USER CODE BEGIN Loop */\n        my_task();');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });      // a different configuration
+  e.compute();
+  const next = e.projectFiles().find(f => f.path === 'src/main.c').text;
+  const merged = eng.mergeUserCode(edited, next);
+  assert.ok(merged.text.includes('my_task();'), 'the user code survives');
+  assert.ok(merged.text.includes('GPIO_WriteBit'), 'and the new configuration arrives');
+  assert.deepEqual(merged.orphaned, []);
+});
+
+test('the README tells the truth about this configuration', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setProject({ name: 'Documented', variant: 'CH32V006F8P7' });
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.setGpioField('PC0', 'label', 'STATUS_LED');
+  e.compute();
+  const md = e.projectFiles().find(f => f.path === 'README.md').text;
+  assert.match(md, /^# Documented/m);
+  assert.match(md, /\*\*CH32V006F8P7\*\* \(CH32V006, TSSOP20\)/);
+  assert.match(md, /pio run -t upload/);
+  assert.match(md, /claims \*\*no pin\*\*/, 'why the banner works on a bare chip');
+  assert.match(md, /`PC0` "STATUS_LED"/);
+  assert.match(md, /Regeneration overwrites it/, 'which folder is machine-owned');
+  assert.ok(md.includes(e.pinRows().filter(r => r.signal || r.label).length + ' pin'),
+    'and it counts the pins this configuration really assigns');
+});
+
+test('every bundled part with a board generates a project that names only its own facts', () => {
+  for (const name of Object.keys(eng.MCU_FILES)) {
+    const e = fresh();
+    e.loadMcu(name);
+    const able = Object.entries((e.M.mcu.variants) || {}).filter(([, v]) => v && v.pio_board);
+    if (!able.length) continue;
+    for (const [variant, v] of able) {
+      if (v.package && e.M.packages[v.package]) e.setPackage(v.package);
+      e.setProject({ name: `t_${variant}`, variant });
+      e.compute();
+      const files = e.projectFiles();
+      const ini = files.find(f => f.path === 'platformio.ini').text;
+      assert.ok(ini.includes(v.pio_board), `${name} ${variant}: its own board`);
+      const main = files.find(f => f.path === 'src/main.c').text;
+      assert.ok(main.includes(`#include "${e.M.codegen.header}"`), `${name}: its own SPL header`);
+      assert.equal(/GPIO_Speed_\w+/.test(main), false, 'main.c sets no GPIO up; the generated init does');
+    }
+  }
+});

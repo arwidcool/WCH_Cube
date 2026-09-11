@@ -81,7 +81,9 @@ function modeMacro(mode, pull) {
   return { missing: `gpio.${mode === 'Input' ? 'input_modes' : 'modes'} has no entry for "${key}"` };
 }
 
-const cfg = () => M.codegen || {};
+// Exported because export.js's project generator needs the part's own SPL header
+// name for the generated main.c, and there must be one place that answers it.
+export const cfg = () => M.codegen || {};
 const bareSignal = claim => claim.signal.slice(claim.who.length + 1);
 
 // Signals that are NOT set up with GPIO_Init: the debug interface and the reset
@@ -245,7 +247,9 @@ const banner = title => `/* ${'='.repeat(74)}\n * ${title}\n * ${'='.repeat(74)}
 // An empty USER CODE block, or nothing at all when the option is off. Off means the
 // markers are ABSENT rather than present-and-ignored: a marker that regeneration does
 // not honour is a promise the file does not keep.
-const user = (tag, indent = '') => (generatorOption('user_code') ? userSection(tag, indent) : []);
+// Exported: export.js's generated main.c carries the same blocks under the same
+// option, and two copies of this would be two things to keep in step.
+export const user = (tag, indent = '') => (generatorOption('user_code') ? userSection(tag, indent) : []);
 
 function headerComment() {
   const r = M.clock ? clockCalc() : null;
