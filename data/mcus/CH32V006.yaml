@@ -291,7 +291,32 @@ peripherals:
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
+    # ORDER IS LOAD-BEARING HERE, and it was wrong until AGENT-2 asked (BOARD 16:30Z).
+    # The generator emits `sdk_call` parameters in the order this list gives them, so
+    # `write_access` MUST come first: IWDG_PSCR and IWDG_RLDR are write-protected until
+    # 0x5555 is written to IWDG_CTLR, and a prescaler or reload written while locked is
+    # discarded with no error anywhere. RM 4.2 says it twice - "Operation method: first
+    # write 0x5555 to the IWDG_CTLR register, and then modify the frequency division
+    # value in the IWDG_PSCR register", and the same sentence again for IWDG_RLDR - and
+    # WCH's own example agrees: EXAM/IWDG/IWDG/User/main.c:83-87 is
+    # IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable) then SetPrescaler then SetReload.
+    #
+    # Listed before `prescaler` rather than given an ordering key, because one list read
+    # top to bottom is easier to keep right than a second mechanism that says when to
+    # ignore it. If a part ever needs a value set both before and after something else,
+    # that is when an explicit key earns its place - not before.
     params:
+      - key: write_access
+        name: Register write access
+        sdk_call: IWDG_WriteAccessCmd
+        sdk_args: [$VALUE]
+        type: enum
+        group: Advanced
+        default: Enable before writing
+        options:
+          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
+          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
+        help: "Unlocks IWDG_PSCR and IWDG_RLDR, and must be written BEFORE either of them - a prescaler or reload written while locked is silently discarded (RM 4.2). The two values are the literal key words 0x5555 and 0x0000, not a flag."
       - key: prescaler
         name: Prescaler
         sdk_call: IWDG_SetPrescaler
@@ -318,17 +343,6 @@ peripherals:
         min: 0
         max: 4095
         help: "12-bit down-counter, so 4095 is the ceiling. Timeout is (prescaler x (reload + 1)) / f_LSI."
-      - key: write_access
-        name: Register write access
-        sdk_call: IWDG_WriteAccessCmd
-        sdk_args: [$VALUE]
-        type: enum
-        group: Advanced
-        default: Enable before writing
-        options:
-          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
-          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
-        help: "The prescaler and reload registers are write-protected until this key is written. The two values are the literal key words 0x5555 and 0x0000, not a flag."
 
   WWDG:
     category: System Core

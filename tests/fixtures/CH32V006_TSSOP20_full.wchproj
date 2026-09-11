@@ -24,9 +24,9 @@ peripherals:
       Mode: Disable
     remap: 0
     params:
+      write_access: Enable before writing
       prescaler: '64'
       reload: 4095
-      write_access: Enable before writing
   WWDG:
     settings:
       Mode: Disable
