@@ -5887,6 +5887,36 @@ peripherals:
           - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
           - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+      # LIN / SmartCard / IrDA: DS ch.1.4.9 mode flags, each set by its own SPL command,
+      # so `sdk_call` rather than a struct member. See CH32X035.notes.md for the two
+      # refinements deliberately not modelled yet.
+      - key: lin
+        name: LIN mode
+        type: bool
+        default: false
+        sdk_call: USART_LINCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR2 LINEN. USART_LINCmd(USARTx, ENABLE) - ch32x035_usart.h:165."
+      - key: smartcard
+        name: SmartCard mode
+        type: bool
+        default: false
+        sdk_call: USART_SmartCardCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 SCEN. USART_SmartCardCmd(USARTx, ENABLE) - ch32x035_usart.h:171."
+      - key: irda
+        name: IrDA mode
+        type: bool
+        default: false
+        sdk_call: USART_IrDACmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 IREN. USART_IrDACmd(USARTx, ENABLE) - ch32x035_usart.h:175."
     remaps:
       - name: No remap
         pins: { CK: PB9, CTS: PC16, RTS: PC17, RX: PB11, TX: PB10 }
@@ -5959,6 +5989,36 @@ peripherals:
           - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
           - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+      # LIN / SmartCard / IrDA: DS ch.1.4.9 mode flags, each set by its own SPL command,
+      # so `sdk_call` rather than a struct member. See CH32X035.notes.md for the two
+      # refinements deliberately not modelled yet.
+      - key: lin
+        name: LIN mode
+        type: bool
+        default: false
+        sdk_call: USART_LINCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR2 LINEN. USART_LINCmd(USARTx, ENABLE) - ch32x035_usart.h:165."
+      - key: smartcard
+        name: SmartCard mode
+        type: bool
+        default: false
+        sdk_call: USART_SmartCardCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 SCEN. USART_SmartCardCmd(USARTx, ENABLE) - ch32x035_usart.h:171."
+      - key: irda
+        name: IrDA mode
+        type: bool
+        default: false
+        sdk_call: USART_IrDACmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 IREN. USART_IrDACmd(USARTx, ENABLE) - ch32x035_usart.h:175."
     remaps:
       - name: No remap
         pins: { CK: PA4, CTS: PA0, RTS: PA1, RX: PA3, TX: PA2 }
@@ -6034,6 +6094,36 @@ peripherals:
           - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
           - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+      # LIN / SmartCard / IrDA: DS ch.1.4.9 mode flags, each set by its own SPL command,
+      # so `sdk_call` rather than a struct member. See CH32X035.notes.md for the two
+      # refinements deliberately not modelled yet.
+      - key: lin
+        name: LIN mode
+        type: bool
+        default: false
+        sdk_call: USART_LINCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR2 LINEN. USART_LINCmd(USARTx, ENABLE) - ch32x035_usart.h:165."
+      - key: smartcard
+        name: SmartCard mode
+        type: bool
+        default: false
+        sdk_call: USART_SmartCardCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 SCEN. USART_SmartCardCmd(USARTx, ENABLE) - ch32x035_usart.h:171."
+      - key: irda
+        name: IrDA mode
+        type: bool
+        default: false
+        sdk_call: USART_IrDACmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 IREN. USART_IrDACmd(USARTx, ENABLE) - ch32x035_usart.h:175."
     remaps:
       - name: No remap
         pins: { CK: PB5, CTS: PB6, RTS: PB7, RX: PB4, TX: PB3 }
@@ -6106,6 +6196,36 @@ peripherals:
           - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
           - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+      # LIN / SmartCard / IrDA: DS ch.1.4.9 mode flags, each set by its own SPL command,
+      # so `sdk_call` rather than a struct member. See CH32X035.notes.md for the two
+      # refinements deliberately not modelled yet.
+      - key: lin
+        name: LIN mode
+        type: bool
+        default: false
+        sdk_call: USART_LINCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR2 LINEN. USART_LINCmd(USARTx, ENABLE) - ch32x035_usart.h:165."
+      - key: smartcard
+        name: SmartCard mode
+        type: bool
+        default: false
+        sdk_call: USART_SmartCardCmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 SCEN. USART_SmartCardCmd(USARTx, ENABLE) - ch32x035_usart.h:171."
+      - key: irda
+        name: IrDA mode
+        type: bool
+        default: false
+        sdk_call: USART_IrDACmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "USART_CTLR3 IREN. USART_IrDACmd(USARTx, ENABLE) - ch32x035_usart.h:175."
     remaps:
       - name: No remap
         pins: { CK: PB2, CTS: PB15, RTS: PA8, RX: PB1, TX: PB0 }
@@ -11049,10 +11169,23 @@ function gpioSection() {
   } else if (!rp.calls.length) {
     // Neither style reaches these: the peripheral is on, has a real choice of remaps,
     // and the data says nothing about how to apply the one that is selected.
+    //
+    // One exclusion, and it is the difference between a TODO and a false TODO: a
+    // peripheral whose pins GPIO_Init must NOT touch needs no AFIO write either. CH32X035
+    // bonds its reset pin to PC3 on TSSOP20 and QSOP28 instead of PA21 (`remap_by_package`,
+    // index 1), SYS carries no `macro:` on either index because the reset pin is
+    // controlled by the option bytes and not by a remap, and SYS's pins are skipped by
+    // `codegen.skip_signals` - so EVERY CH32X035 TSSOP20 configuration used to emit a
+    // spurious TODO naming SYS, and failed --strict for a rule that does not exist.
+    //
+    // The test is read from the data, not from a peripheral name: does any signal this
+    // peripheral requires actually reach a GPIO register?
+    const configured = pid => [...requiredSignals(pid)]
+      .some(sig => !skippedClaim({ who: pid, signal: sigName(pid, sig) }));
     const used = Object.keys(M.peripherals).filter(pid =>
       (M.peripherals[pid].remaps || []).length > 1
-      && requiredSignals(pid).size
-      && (S.periph[pid] || {}).remap);
+      && (S.periph[pid] || {}).remap
+      && configured(pid));
     if (used.length) {
       L.push('    /* TODO: alternate function remap. The MCU file has neither a `macro:` on the');
       L.push('       selected remap nor codegen.remap.fields, so nothing can be applied. Selected:');
