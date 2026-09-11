@@ -101,8 +101,11 @@
     // Browser mode defines window.generateProjectFiles(); if the page has not
     // built it yet this whole block is inert, which is how the bridge has always
     // behaved for a feature that is not there.
-    window.desktopWriteProject = async (name, files, { overwrite = false } = {}) => {
-      const res = await invoke('write_project', { name, files, overwrite });
+    // `subfolder: false` writes loose files straight into the picked folder (the
+    // Project Manager's GENERATE CODE); the default nests a whole project under
+    // `<picked>/<name>/`.
+    window.desktopWriteProject = async (name, files, { overwrite = false, subfolder = true } = {}) => {
+      const res = await invoke('write_project', { name, files, overwrite, subfolder });
       return res;                                     // null when the user cancelled
     };
 

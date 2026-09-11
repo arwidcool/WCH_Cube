@@ -550,6 +550,11 @@
   .pmgen button:focus-visible{outline:2px solid var(--ink-strong);outline-offset:2px}
   .pmgen button[disabled]{opacity:.45;cursor:not-allowed}
   .pmgen p{margin:8px 0 0;color:var(--muted);font-size:11.5px}
+  /* The Output row's small buttons: "Choose folder…" / "Back to downloads". Secondary,
+     so not the big blue generate style. */
+  .pmbtn{background:var(--panel);color:var(--ink-strong);border:1px solid var(--line);padding:5px 10px;border-radius:3px;font-size:12px;cursor:pointer;margin-right:6px}
+  .pmbtn:hover{background:var(--bg)}
+  .pmbtn:focus-visible{outline:2px solid var(--ink-strong);outline-offset:2px}
   .pmprev{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
   .pmprevbody{flex:1;display:grid;grid-template-columns:196px minmax(0,1fr);min-height:0}
   .pmfiles{overflow:auto;border-right:1px solid var(--line);background:var(--panel);padding:6px 0}
@@ -2974,7 +2979,11 @@ const mimeFor = name => name.endsWith('.csv') ? 'text/csv'
 // UI-only, and deliberately not in S: which of the generated files Generate writes, and
 // which one the preview is showing. Neither is a property of the hardware configuration,
 // so neither belongs in a .wchproj.
-const PM = { pick: null, skip: new Set(), written: null };
+// outDir: in a browser with the File System Access API, the FileSystemDirectoryHandle the
+// user chose with "Choose folder…"; both generate buttons write into it. Null means "not
+// chosen", and then a browser can only download — it has no other way to put a file on
+// disk. The desktop build never uses it: its native picker asks on every generate.
+const PM = { pick: null, skip: new Set(), written: null, outDir: null };
 
 /**
  * The generator's own complaints, by file and line. `cComplaints()` reads back what
@@ -3062,9 +3071,20 @@ function renderPmConfig(files) {
       : '<p>This configuration generates nothing.</p>')
     + `</div>`;
 
+  // Where things go. One row, both buttons honour it. In a browser the only way to write
+  // where the user points is the File System Access API, so the "Choose folder…" button
+  // exists exactly when that API does - absent otherwise, with the reason in the text,
+  // never greyed. The desktop build asks natively on every generate and needs no row.
+  const canPick = !pmIsDesktop() && typeof window.showDirectoryPicker === 'function';
+  h += `<div class="pmsec"><h4>Output</h4>`
+    + `<p id="pm-where">${esc(pmWhereText())}</p>`
+    + (canPick ? `<p><button id="pm-outdir" class="pmbtn">${PM.outDir ? 'Change folder…' : 'Choose folder…'}</button>`
+      + (PM.outDir ? ` <button id="pm-outdir-clear" class="pmbtn">Back to downloads</button>` : '') + `</p>` : '')
+    + `</div>`;
+
   h += `<div class="pmgen"><button id="pm-generate"${chosen.length ? '' : ' disabled'}>GENERATE CODE</button>`
-    + `<p>${chosen.length ? `Downloads ${chosen.length} file${chosen.length === 1 ? '' : 's'}.` : 'Nothing selected.'}`
-    + ` In a browser these arrive in your downloads folder; the desktop build writes them straight to the output folder above.</p></div>`;
+    + `<p>${chosen.length ? `${pmIsDesktop() || PM.outDir ? 'Writes' : 'Downloads'} ${chosen.length} file${chosen.length === 1 ? '' : 's'}` : 'Nothing selected'}`
+    + ` — the init code, the pin table and the clock summary, not the project around them.</p></div>`;
 
   const box = document.getElementById('pm-config');
   box.innerHTML = h;
@@ -3085,6 +3105,10 @@ function renderPmConfig(files) {
   // picker. app/template.html contains no Tauri code, by design; it only has to leave a
   // button with a stable id and a working browser behaviour behind it.
   box.querySelector('#pm-generate').onclick = pmGenerate;
+  const od = box.querySelector('#pm-outdir');
+  if (od) od.onclick = pmChooseOutDir;
+  const oc = box.querySelector('#pm-outdir-clear');
+  if (oc) oc.onclick = () => { PM.outDir = null; PM.written = null; renderProjectManager(); };
   const gp = box.querySelector('#pm-genproject');
   if (gp) gp.onclick = pmGenerateProject;
 }
@@ -3133,9 +3157,11 @@ function pmProjectSection(board, files) {
   }
 
   if (canGenerate) {
+    const name = (PROJECT.name || 'WCHCubeProject').replace(/[^\w.-]+/g, '_');
     h += `<div class="pmgen" style="padding:10px 0 0"><button id="pm-genproject">GENERATE PROJECT</button>`
-      + `<p>${pmIsDesktop() ? 'Choose a folder; the project is written into it.'
-        : 'Downloads one .zip with the folder inside it.'}</p></div>`;
+      + `<p>${pmIsDesktop() ? `Asks for a folder, then writes the project into "${esc(name)}/" inside it.`
+        : PM.outDir ? `Writes the project into "${esc(name)}/" inside the folder you chose under Output.`
+        : `Downloads one ${esc(name)}.zip with the folder inside it. Choose a folder under Output to write it there instead.`}</p></div>`;
   }
   return h + pmWrittenHtml() + `</div>`;
 }
@@ -3408,6 +3434,23 @@ async function pmGenerateProject() {
     } catch (e) { toast(String(e && e.message ? e.message : e)); }
     return;
   }
+  if (PM.outDir) {
+    // The project goes under <chosen>/<name>/, the same shape the desktop build writes.
+    // A non-empty <name>/ is refused unless confirmed - the same rule the Rust side has.
+    try {
+      let existing = false;
+      try {
+        const probe = await PM.outDir.getDirectoryHandle(name);
+        for await (const _ of probe.keys()) { existing = true; break; }
+      } catch (e) { if (!e || e.name !== 'NotFoundError') throw e; }
+      if (existing && !window.confirm(`"${name}" already exists in ${PM.outDir.name} and is not empty. Overwrite the generated files in it?`)) return;
+      const root = await PM.outDir.getDirectoryHandle(name, { create: true });
+      const written = await pmWriteToDir(root, files);
+      pmShowWritten(`${PM.outDir.name}/${name}`, written, { nameOnly: true });
+      toast(`Wrote ${written.length} files to ${PM.outDir.name}/${name}`);
+    } catch (e) { toast(`Could not write the project: ${e && e.message ? e.message : e}`); }
+    return;
+  }
   const blob = zipOf(files.map(f => ({ path: `${name}/${f.path}`, text: f.text })));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3424,29 +3467,98 @@ async function pmGenerateProject() {
  * cannot be selected. This is kept in PM.written and re-rendered with the section, so it
  * stays on screen until the next generate.
  */
-function pmShowWritten(root, written) {
-  PM.written = { root, count: written.length };
+function pmShowWritten(root, written, { loose = false, nameOnly = false } = {}) {
+  PM.written = { root, count: written.length, loose, nameOnly };
   renderProjectManager();
 }
 function pmWrittenHtml() {
   const w = PM.written;
   if (!w) return '';
-  return `<div class="pmwritten"><b>Wrote ${w.count} file${w.count === 1 ? '' : 's'} to</b>`
-    + `<code class="pmpath">${esc(w.root)}</code>`
-    + `<b>Then, in a terminal:</b><code class="pmpath">cd "${esc(w.root)}"\npio run\npio run -t upload</code>`
-    + `<p class="ro">The first build downloads the toolchain if PlatformIO has not seen this platform before.</p></div>`;
+  // A browser folder handle exposes only the folder's NAME, never its path - the API is
+  // built that way - so say "the folder you chose" rather than pretend to know more.
+  const where = w.nameOnly ? `${esc(w.root)}  (the folder you chose)` : esc(w.root);
+  let h = `<div class="pmwritten"><b>Wrote ${w.count} file${w.count === 1 ? '' : 's'} to</b>`
+    + `<code class="pmpath">${where}</code>`;
+  if (!w.loose) {
+    h += `<b>Then, in a terminal:</b><code class="pmpath">cd "${esc(w.root)}"\npio run\npio run -t upload</code>`
+      + `<p class="ro">The first build downloads the toolchain if PlatformIO has not seen this platform before.</p>`;
+  }
+  return h + `</div>`;
 }
 
-/** Write the selected files. In a browser that means download; the desktop bridge
- *  replaces this handler with a native folder picker. */
-function pmGenerate() {
+/**
+ * Write the selected files, where the user said. Three ways out, tried in this order:
+ *   desktop  → the shell's native folder picker, files straight into the picked folder;
+ *   browser with a chosen folder (File System Access API) → written into it;
+ *   otherwise → one download per file, which lands wherever the browser puts downloads.
+ * The panel says which of the three will happen BEFORE the click, so "where did it go?"
+ * is never the question.
+ */
+async function pmGenerate() {
   const files = generatedFiles().filter(f => !PM.skip.has(f.name));
   if (!files.length) { toast('Nothing selected to generate'); return; }
-  for (const f of files) downloadText(f.name, f.text, mimeFor(f.name));
   const bad = complaintsByFile(files);
   const errs = Object.values(bad).reduce((n, m) => n + Object.values(m).filter(k => k === 'error').length, 0);
-  toast(errs ? `Generated ${files.length} file(s) — ${errs} #error line(s), see the preview`
-    : `Generated ${files.map(f => f.name).join(', ')}`);
+  const warn = errs ? ` — ${errs} #error line(s), see the preview` : '';
+  const flat = files.map(f => ({ path: f.name, text: f.text }));
+  if (pmIsDesktop()) {
+    try {
+      const res = await window.desktopWriteProject(PROJECT.name || 'WCHCubeProject', flat, { subfolder: false });
+      if (!res) return;                                  // the user cancelled the picker
+      pmShowWritten(res.root, res.written, { loose: true });
+      toast(`Wrote ${res.written.length} file(s)${warn}`);
+    } catch (e) { toast(String(e && e.message ? e.message : e)); }
+    return;
+  }
+  if (PM.outDir) {
+    try {
+      const written = await pmWriteToDir(PM.outDir, flat);
+      pmShowWritten(PM.outDir.name, written, { loose: true, nameOnly: true });
+      toast(`Wrote ${written.length} file(s) to ${PM.outDir.name}${warn}`);
+    } catch (e) { toast(`Could not write to ${PM.outDir.name}: ${e && e.message ? e.message : e}`); }
+    return;
+  }
+  for (const f of files) downloadText(f.name, f.text, mimeFor(f.name));
+  toast(`Downloaded ${files.map(f => f.name).join(', ')}${warn}`);
+}
+
+/**
+ * The browser's only way to write where the user points: the File System Access API
+ * (Edge and Chrome; Firefox and Safari do not have it, and then the panel says so and
+ * downloads instead). The handle lives for this page load — a file:// page cannot keep
+ * the permission across reloads, so the choice is per session, and the panel shows it.
+ */
+async function pmChooseOutDir() {
+  if (typeof window.showDirectoryPicker !== 'function') return;
+  try {
+    PM.outDir = await window.showDirectoryPicker({ id: 'wchcube-output', mode: 'readwrite', startIn: 'documents' });
+    PM.written = null;
+    renderProjectManager();
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;          // cancelled: not an error
+    toast(`Could not open that folder: ${e && e.message ? e.message : e}`);
+  }
+}
+async function pmWriteToDir(dir, files) {
+  const written = [];
+  for (const f of files) {
+    const parts = f.path.split('/').filter(Boolean);
+    let d = dir;
+    for (const seg of parts.slice(0, -1)) d = await d.getDirectoryHandle(seg, { create: true });
+    const fh = await d.getFileHandle(parts[parts.length - 1], { create: true });
+    const w = await fh.createWritable();
+    await w.write(f.text);
+    await w.close();
+    written.push(f.path);
+  }
+  return written;
+}
+/** One sentence for the panel: where a generate will put things, given the current state. */
+function pmWhereText() {
+  if (pmIsDesktop()) return 'The desktop build asks for a folder every time you generate.';
+  if (PM.outDir) return `Writes into the folder you chose, "${PM.outDir.name}".`;
+  if (typeof window.showDirectoryPicker === 'function') return 'No folder chosen — files go to your browser\'s Downloads folder. Choose one to write them where you want.';
+  return 'This browser cannot write into a folder you choose (it has no File System Access API), so files go to its Downloads folder. Edge and Chrome can.';
 }
 
 // GENERATE CODE in the breadcrumb: the same thing the Project Manager's button does, so

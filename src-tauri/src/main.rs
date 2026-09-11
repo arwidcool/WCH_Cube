@@ -260,6 +260,7 @@ fn write_project(
     name: String,
     files: Vec<GeneratedFile>,
     overwrite: bool,
+    subfolder: Option<bool>,
 ) -> Result<Option<WriteResult>, String> {
     if files.is_empty() {
         return Err("nothing to write: the generator produced no files".into());
@@ -270,24 +271,46 @@ fn write_project(
         planned.push((safe_relative(&f.path)?, f));
     }
 
+    // Two callers, two shapes. A whole PROJECT goes into `<picked>/<name>/`, and an
+    // existing non-empty target is refused. Loose generated FILES (`subfolder: false` —
+    // the init pair, the pin table) go straight into the folder the user picked, which
+    // is usually somewhere non-empty on purpose (a firmware project's own
+    // `lib/wchcube_generated/`), so there the refusal is per FILE: nothing that already
+    // exists is overwritten unless the caller says so.
+    let subfolder = subfolder.unwrap_or(true);
     let folder = if name.trim().is_empty() { "WCHCubeProject".to_string() } else { name.trim().to_string() };
     let picked = app
         .dialog()
         .file()
-        .set_title("Generate PlatformIO project into...")
+        .set_title(if subfolder { "Generate PlatformIO project into..." } else { "Write the generated files into..." })
         .blocking_pick_folder();
 
     let Some(parent) = picked else { return Ok(None) };
     let parent = parent.into_path().map_err(|e| e.to_string())?;
-    let root = parent.join(&folder);
+    let root = if subfolder { parent.join(&folder) } else { parent };
 
-    if root.exists() {
-        let mut entries = fs::read_dir(&root).map_err(|e| format!("{}: {e}", root.display()))?;
-        if entries.next().is_some() && !overwrite {
+    if subfolder {
+        if root.exists() {
+            let mut entries = fs::read_dir(&root).map_err(|e| format!("{}: {e}", root.display()))?;
+            if entries.next().is_some() && !overwrite {
+                return Err(format!(
+                    "{} already exists and is not empty. Generating would overwrite files in it; \
+                     choose another folder, or confirm the overwrite.",
+                    root.display()
+                ));
+            }
+        }
+    } else if !overwrite {
+        let clashes: Vec<String> = planned
+            .iter()
+            .filter(|(rel, _)| root.join(rel).exists())
+            .map(|(rel, _)| rel.to_string_lossy().replace('\\', "/"))
+            .collect();
+        if !clashes.is_empty() {
             return Err(format!(
-                "{} already exists and is not empty. Generating would overwrite files in it; \
-                 choose another folder, or confirm the overwrite.",
-                root.display()
+                "{} already contains {}. Nothing was written; choose another folder, or confirm the overwrite.",
+                root.display(),
+                clashes.join(", ")
             ));
         }
     }

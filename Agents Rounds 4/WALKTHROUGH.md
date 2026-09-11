@@ -66,7 +66,11 @@ This is the section round 4 exists to run. CH32X035 has **one** oscillator.
 16.4 Read `platformio.ini` in the preview: `platform = ch32v`, `framework = noneos-sdk`,
      `board = genericCH32X035G8U6`, and an upload protocol. No invented keys.
 16.5 Generate. Desktop: a folder picker, then the path and the next two commands shown in copyable
-     text. Browser: a single `.zip` whose contents match the preview exactly.
+     text. Browser: the **Output** row's *Choose folder…* (Edge/Chrome) makes both buttons write
+     into the folder you picked — the project under `<folder>/<name>/`, GENERATE CODE's files
+     straight into it — and the panel says which will happen *before* the click. With no folder
+     chosen, a single `.zip` whose contents match the preview exactly, to the browser's
+     Downloads folder, and the panel says that too. Nothing is ever written somewhere unstated.
 16.6 **Try to generate for a variant with no board.** Pick CH32V006F4U6 → the button is disabled
      **with the reason visible**: *"no PlatformIO board for this part number"*, and the variants that
      can be generated are listed. It must not silently produce a project for the nearest board —
