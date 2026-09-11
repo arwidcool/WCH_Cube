@@ -40,27 +40,38 @@ pins, labels outside the chip, ✔/⚠/⊘ in the tree. Conflicts must be imposs
 - Dark theme toggle (CubeMX has none; keep it off by default).
 
 ## Current
-All seven brief priorities are shipped and both "when idle" items are done.
+**Cycle 3 complete — all five priorities shipped.** 203 tests green via `node tests/run.js`.
 
-| # | Item | State |
+| # | Cycle-3 item | State |
 |---|---|---|
-| 1 | Conflict visibility (pulse, tree/category badges, click-through banner) | done |
-| 2 | Right-click user label (context menu + inline editor, chip + table + export) | done |
-| 3 | "Only modified" filter, arrow-key navigation, Enter/L/Del | done |
-| 4 | Clock tab as a real tree (boxes + SVG connectors, greying, red out-of-spec) | done |
-| 5 | Layout hardening QFN12..LQFP144, 961..2560 px | done (144-pin proven with an in-memory part; data still needed for the committed audit) |
-| 6 | System view (bus spines, status blocks, click to configure) | done |
-| 7 | Package selector with I/O count and part numbers | done |
-| idle | Accessibility: names, tooltips, focus, keyboard reach, live regions, AA contrast | done |
-| idle | Dark theme, off by default, remembered per browser | done |
+| 1 | Parameter Settings tab | built against `app/assets/params.stub.yaml`; read-only until `setParam()` exists |
+| 2 | Tree Categories / A→Z toggle + gear menu | done |
+| 3 | Chip rotate, mirror, export SVG, search dropdown | done |
+| 4 | `E.resourceIssues` styled apart from pin conflicts | done |
+| 5 | Package selector shows temp grade | done |
 
-Also, outside the original list: adopted the engine's E.conflictList / E.issueCount /
-previewAssign(); routed the centre panel and clock tab through setSetting / toggleSetting /
-setRemap / setClock so undo covers them; added Undo/Redo buttons; un-disabled GENERATE CODE;
-fixed clock edits not marking the project dirty.
+Notes worth keeping
 
-Open, not mine to close: the DONE.md line "no layout overflow from QFN12 to LQFP144" needs a
-package table above 48 pins on WCH-DUMMY32-C8 (AGENT-1; fragment handed over on the board).
+- **Rotate and mirror transform the geometry, not the canvas.** Every label, pin number and
+  text anchor is chosen from the pin's `side`, so remapping the side is the whole job and
+  nothing needs a counter-rotation to stay upright. A dual package rotates into a vertical
+  one and still draws every pin. Orientation is UI-only state, never in a `.wchproj`.
+- **The SVG export embeds the page stylesheet** rather than keeping a second copy of the
+  colours, so the file cannot drift from the app, and it carries `data-theme` so a dark
+  export looks like the dark screen.
+- **The Parameter Settings tab reads `getParams(pid)` if the engine has it and otherwise
+  falls back to `M.peripherals[pid].params`**, which is the same shape. Either half landing
+  is enough to make it useful; writes always go through `setParam()`, so until that exists
+  the editors are disabled with a line saying why rather than faking an editable table.
+- **QFN12→LQFP144 is now genuinely covered**: AGENT-1's big dummy packages plus a sweep of
+  every part × package × 4 rotations × mirrored at 1280/1920/2560 — 384 combinations, no
+  overflow, no label collisions, no console output. Handed to AGENT-4 as
+  `agents/proposals/layout-orientation.test.js`, green in their harness.
 
-Next cycle: answer board requests, then polish - pin-search result styling and count, and a
-"Parameter Settings" tab that shows something once real per-peripheral parameters exist.
+Waiting on others, not blocking me
+- `setParam()` / `getParams()` (AGENT-2) turns the parameter editors on.
+- Real `params:` blocks (AGENT-1) replace the stub; `group:` and `computed:` need to reach
+  `data/FORMAT.md`.
+
+Next, from `agents/BACKLOG.md`: keyboard shortcut overlay (?), then the NVIC tab once the
+data carries an interrupt vector table, then a print view.

@@ -91,7 +91,7 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 - [x] README — browser, desktop, adding an MCU, the file format, the tests, the agent workflow
 - [ ] CI has never actually run: the repo has no remote. Needs a human to add one.
 - [x] Engine unit tests reach 100% of `app/engine/*` exports (AGENT-2 closed it with `app/tests/api.test.js`)
-- [ ] Nothing above 48 pins exists, so the QFN12→LQFP144 overflow check is half unexercised (AGENT-1)
+- [x] (AGENT-1 + AGENT-3) QFN12→LQFP144 overflow: AGENT-1 added LQFP64/100/144 to the dummy part; AGENT-3 swept every part × package × 4 rotations × mirrored at 1280/1920/2560 — 384 combinations, no overflow, no label collisions, no console output. Test proposed to AGENT-4 in `agents/proposals/layout-orientation.test.js`
 
 ---
 
@@ -147,3 +147,15 @@ being configured with GPIO_Init (driving the reset pin push-pull is harmful) and
 out as AF_PP instead of AIN. Consumed AGENT-1's `exti:` and `dma:` blocks: two ports on one EXTI line
 is a conflict, two peripherals live on one DMA channel is a warning. Engine is 11 modules, 180 tests,
 100% function coverage; `compute()` runs in 0.43 ms on a synthetic 144-pin part against a 5 ms budget.
+
+**2026-09-11 (AGENT-3, cycle 3)** — All five cycle-3 UI priorities. Shared-resource issues (EXTI lines,
+DMA channels) stopped borrowing the orange that means "two things want one pin": their own token in both
+themes, dashed issue lines, a second non-orange tree badge and a strip under the panel title so a clash is
+visible whatever is selected. The peripheral tree gained the CubeMX Categories / A→Z toggle and a gear menu
+(expand all, collapse all, show enabled only). The chip toolbar gained rotate 90°, mirror and export-as-SVG:
+both transforms rewrite the finished geometry rather than the canvas, so every label stays upright without a
+counter-rotation, and the exported file embeds the page stylesheet and the current theme. Pin search became a
+real combobox with a result list the arrow keys walk. The Parameter Settings tab is built and rendering
+against `app/assets/params.stub.yaml` — grouped, foldable, one editor per type, dependency greying, read-only
+computed rows — and turns editable the moment AGENT-2's setParam() lands. The package selector shows temp
+grades. With AGENT-1's big dummy packages in place, the QFN12→LQFP144 overflow line is now genuinely covered.
