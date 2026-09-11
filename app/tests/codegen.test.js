@@ -154,19 +154,42 @@ test('unresolved conflicts make the file refuse to compile', () => {
   assert.ok(c.includes('*** CONFLICT ***'), 'and the pin is marked in place');
 });
 
-test('without a codegen block the register sections are an honest TODO', () => {
-  const e = fresh();                        // plain CH32V006, no codegen: yet
+// CH32V006 carries a real codegen: block now, so the "no block" cases need a part that
+// genuinely lacks one. Deriving it with inherits + remove keeps the fixture honest: it is
+// the shipped part minus exactly the thing under test.
+const withoutCodegen = (paths = ['codegen'], name = 'CH32V006-NOCODEGEN') => {
+  const e = fresh();
+  e.registerMcuFile(`mcu:\n  name: ${name}\n  inherits: CH32V006\n  remove: [${paths.join(', ')}]\n`);
+  e.loadMcu(name);
+  return e;
+};
+
+test('a real part with no codegen: block refuses to compile, and says what is missing', () => {
+  const e = withoutCodegen();
   e.setSetting('USART1', 'Mode', 'Asynchronous');
   e.setRemap('USART1', 3);
   e.compute();
   const c = e.cSource();
   assert.equal(e.remapWord(), null);
   assert.equal(e.rccWord(), null);
-  assert.ok(c.includes('TODO: alternate function remap'));
+  assert.equal(e.isFixture(), false, 'a derived CH32V006 is a real part, not a fixture');
+  assert.ok(c.includes('#error "WCHCube: CH32V006-NOCODEGEN has no codegen: block'),
+    'a real part must not silently produce an init that does nothing');
+  assert.ok(c.includes('TODO: alternate function remap'), 'and the sections still say what is missing');
   assert.ok(c.includes('USART1: index 3 — 0011'), 'it still says what was chosen');
   assert.ok(c.includes('TODO: enable the port clocks for GPIOC'));
   assert.ok(c.includes('TODO: the MCU file has no codegen.rcc block'));
   assert.ok(c.includes('GPIO_Init(GPIOC, &GPIO_InitStructure);'), 'the GPIO half is generated regardless');
+});
+
+test('a fixture part with no codegen: block explains itself without refusing to compile', () => {
+  const e = fresh('WCH-DUMMY32-C8');
+  e.compute();
+  assert.equal(e.isFixture(), true, 'the dummy part is a fixture');
+  const c = e.cSource();
+  assert.ok(c.includes('TODO'), 'it should still say what a real part would need');
+  assert.equal(c.includes('has no codegen: block'), false,
+    'a fixture exists to exercise the tool; #error would just break its own tests');
 });
 
 test('the header declares exactly what the source defines', () => {
@@ -270,7 +293,7 @@ test('an ADC trigger pin stays digital, which only the data can tell us', () => 
 });
 
 test('without analog_signals the analog mode is a guess, and says so', () => {
-  const e = fresh();                                   // plain CH32V006, no codegen block
+  const e = withoutCodegen(['codegen.analog_signals'], 'CH32V006-NOANALOG');
   e.toggleSetting('ADC1', 'Channels', 'IN4', true);
   e.compute();
   const row = e.gpioPlan().find(p => p.pin === 'PD3');

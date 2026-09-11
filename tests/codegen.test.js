@@ -17,7 +17,14 @@ import { yaml } from './lib/deps.js';
 suite('generated C');
 
 const mcuDoc = name => yaml().load(fs.readFileSync(path.join(ROOT, 'data', 'mcus', `${name}.yaml`), 'utf8'));
-const hasCodegenBlock = name => Boolean(mcuDoc(name).codegen);
+// Judge the RESOLVED model, not the raw file: CH32V005 inherits CH32V006's codegen
+// block, so its own YAML shows none while the app generates real register words.
+const hasCodegenBlock = name => {
+  const doc = mcuDoc(name);
+  if (doc.codegen) return true;
+  const parent = (doc.mcu || {}).inherits;
+  return parent ? hasCodegenBlock(parent) : false;
+};
 
 /** Every TODO the generator left, one line each. */
 function todosIn(text) {
@@ -68,8 +75,14 @@ test('a missing codegen: block produces a TODO that says what is missing', () =>
 
     const name = withoutBlock[0];
     a.loadMcu(name);
-    const todos = todosIn(a.window.cFiles()['wchcube_init.c']);
+    const c = a.window.cFiles()['wchcube_init.c'];
+    const todos = todosIn(c);
     assert.ok(todos.length, `${name} has no codegen: block, so the C should carry a TODO saying so`);
+    // AGENT-2 06:xx: a real part must also refuse to compile; only a fixture may just warn.
+    const fixture = a.ev('isFixture()');
+    assert.equal(c.includes('has no codegen: block'), !fixture,
+      fixture ? `${name} is a fixture, so no #error is expected`
+              : `${name} is a real part with no codegen: block and must #error`);
     const vague = todos.filter(t => t.length < 40);
     assert.empty(vague, 'TODOs that do not name what is missing');
   } finally { a.close(); }

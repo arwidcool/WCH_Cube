@@ -345,9 +345,24 @@ function rccSection() {
   return L.join('\n');
 }
 
+// A fixture exists to exercise the tool, not to be flashed: it may legitimately have
+// no `codegen:` block and its output stays an explanatory TODO. A real part without one
+// must refuse to compile instead, so nobody flashes a half-generated init.
+// AGENT-1: set `mcu.fixture: true` on the dummy part and the name/vendor sniffing goes away.
+export function isFixture() {
+  const m = (M && M.mcu) || {};
+  return !!(m.fixture || /dummy/i.test(m.vendor || '') || /dummy/i.test(m.name || ''));
+}
+
 export function cSource() {
   const e = E || compute();
   const L = [headerComment(), '', '#include "wchcube_init.h"', ''];
+  if (!M.codegen && !isFixture()) {
+    L.push(`#error "WCHCube: ${M.mcu.name} has no codegen: block, so the AFIO and RCC register `
+      + `words cannot be generated. Add one to its MCU file (see data/FORMAT.md); the sections `
+      + `below name exactly what is missing."`);
+    L.push('');
+  }
   if (e.conflictList.length) {
     L.push(`#error "WCHCube: ${e.conflictList.length} unresolved pin conflict(s) — ${e.conflictList.map(c => c.text).join('; ')}"`);
     L.push('');

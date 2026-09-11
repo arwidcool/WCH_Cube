@@ -1,0 +1,83 @@
+# =============================================================================
+#  params.stub.yaml — a FIXTURE, not data. Never inlined into dist/index.html.
+#
+#  AGENT-3 built the Parameter Settings tab against this while the real
+#  `params:` blocks were still being written (AGENT-1) and the engine's
+#  getParams/setParam were still to come (AGENT-2). Tests and the dev checks
+#  paste these blocks onto M.peripherals[pid].params and render the tab, so the
+#  layout is proven before any real data exists.
+#
+#  Shape, as agreed in AGENT-1's brief plus the two fields the UI needs:
+#    name        label shown in the first column
+#    type        int | float | enum | bool
+#    default     value used when the project has none
+#    min / max   int and float only; the editor clamps to them
+#    options     enum only; a list of strings
+#    unit        shown next to the editor, never inside it
+#    group       Basic (default) | Advanced — which section the row sits in
+#    computed    true = read-only, the engine supplies `display`
+#    depends_on  { setting-or-param-name: value } — row is greyed when unmet
+#    notes       one line of help under the row
+#
+#  The numbers below are plausible CH32V006 values, good enough to lay out a
+#  table with. Do NOT copy them into data/mcus/ — AGENT-1 sources every real
+#  number from the DS/RM.
+# =============================================================================
+
+USART1:
+  - { name: Baud Rate, type: int, default: 115200, min: 110, max: 3000000, unit: Bit/s, group: Basic }
+  - { name: Word Length, type: enum, default: 8 Bits (including Parity), group: Basic,
+      options: [8 Bits (including Parity), 9 Bits (including Parity)] }
+  - { name: Parity, type: enum, default: None, options: [None, Even, Odd], group: Basic }
+  - { name: Stop Bits, type: enum, default: "1", options: ["0.5", "1", "1.5", "2"], group: Basic }
+  - { name: Data Direction, type: enum, default: Receive and Transmit, group: Basic,
+      options: [Receive and Transmit, Receive Only, Transmit Only] }
+  - { name: Over Sampling, type: enum, default: 16 Samples, options: [16 Samples, 8 Samples], group: Advanced }
+  - { name: Actual Baud Rate, type: int, computed: true, unit: Bit/s, group: Advanced,
+      notes: "USARTDIV rounded to the nearest register value, at the current PCLK" }
+  - { name: Baud Rate Error, type: float, computed: true, unit: "%", group: Advanced }
+
+SPI1:
+  - { name: Frame Format, type: enum, default: Motorola, options: [Motorola, TI], group: Basic }
+  - { name: Data Size, type: enum, default: 8 Bits, options: [8 Bits, 16 Bits], group: Basic }
+  - { name: First Bit, type: enum, default: MSB First, options: [MSB First, LSB First], group: Basic }
+  - { name: Prescaler, type: enum, default: "16", options: ["2", "4", "8", "16", "32", "64", "128", "256"],
+      group: Basic, notes: "SPI_CR1 BR[2:0]" }
+  - { name: Baud Rate, type: int, computed: true, unit: Bit/s, group: Basic }
+  - { name: Clock Polarity (CPOL), type: enum, default: Low, options: [Low, High], group: Advanced }
+  - { name: Clock Phase (CPHA), type: enum, default: 1 Edge, options: [1 Edge, 2 Edge], group: Advanced }
+  - { name: CRC Calculation, type: bool, default: false, group: Advanced }
+  - { name: CRC Polynomial, type: int, default: 7, min: 1, max: 65535, group: Advanced,
+      depends_on: { CRC Calculation: true } }
+
+I2C1:
+  - { name: I2C Speed Mode, type: enum, default: Standard Mode, options: [Standard Mode, Fast Mode], group: Basic }
+  - { name: I2C Clock Speed, type: int, default: 100000, min: 1000, max: 400000, unit: Hz, group: Basic }
+  - { name: Fast Mode Duty Cycle, type: enum, default: "2", options: ["2", "16/9"], group: Basic,
+      depends_on: { I2C Speed Mode: Fast Mode } }
+  - { name: Primary Address Length, type: enum, default: 7-bit, options: [7-bit, 10-bit], group: Basic }
+  - { name: Primary Slave Address, type: int, default: 0, min: 0, max: 1023, group: Basic }
+  - { name: General Call Address Detection, type: bool, default: false, group: Advanced }
+  - { name: Clock No Stretch Mode, type: bool, default: false, group: Advanced }
+
+TIM2:
+  - { name: Prescaler (PSC - 1), type: int, default: 0, min: 0, max: 65535, group: Basic }
+  - { name: Counter Mode, type: enum, default: Up, options: [Up, Down, Center Aligned 1, Center Aligned 2, Center Aligned 3],
+      group: Basic }
+  - { name: Counter Period (ARR - 1), type: int, default: 65535, min: 0, max: 65535, group: Basic }
+  - { name: Update Frequency, type: float, computed: true, unit: Hz, group: Basic,
+      notes: "TIM clock / ((PSC + 1) x (ARR + 1))" }
+  - { name: auto-reload preload, type: bool, default: false, group: Advanced }
+  - { name: Internal Clock Division (CKD), type: enum, default: "1", options: ["1", "2", "4"], group: Advanced }
+  - { name: Repetition Counter (RCR - 1), type: int, default: 0, min: 0, max: 255, group: Advanced }
+
+ADC1:
+  - { name: Data Alignment, type: enum, default: Right alignment, options: [Right alignment, Left alignment],
+      group: Basic }
+  - { name: Scan Conversion Mode, type: bool, default: false, group: Basic }
+  - { name: Continuous Conversion Mode, type: bool, default: false, group: Basic }
+  - { name: Number Of Conversion, type: int, default: 1, min: 1, max: 16, group: Basic,
+      depends_on: { Scan Conversion Mode: true } }
+  - { name: Sampling Time, type: enum, default: 11 Cycles, group: Advanced,
+      options: [3 Cycles, 9 Cycles, 15 Cycles, 30 Cycles, 43 Cycles, 57 Cycles, 73 Cycles, 241 Cycles] }
+  - { name: Conversion Time, type: float, computed: true, unit: µs, group: Advanced }

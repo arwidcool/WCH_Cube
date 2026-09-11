@@ -149,6 +149,26 @@
   table.gpio th{background:var(--blue-hdr);color:#fff;font-weight:500;text-align:left;padding:3px 6px;border-right:1px solid #fff;position:sticky;top:0}
   table.gpio td{padding:2px 6px;border-bottom:1px solid var(--line-soft)}
   table.gpio tr:hover td{background:var(--blue-pale)}
+  /* Parameter Settings: CubeMX puts a grey band per group and one editor per row */
+  table.params{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+  table.params th{background:var(--head);color:var(--on-accent);text-align:left;padding:5px 8px;font-weight:600}
+  table.params td{border-bottom:1px solid var(--line-soft);padding:3px 8px;vertical-align:middle}
+  table.params td:first-child{width:46%}
+  table.params tr.grp td{background:var(--tab-off);color:var(--ink-strong);font-weight:600;padding:4px 8px;
+                         border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+  table.params tr.grp td::before{content:"▾ ";color:var(--muted)}
+  table.params tr.grp.closed td::before{content:"▸ "}
+  table.params tr:not(.grp):hover td{background:var(--blue-pale)}
+  table.params tr.off td{opacity:.45}
+  table.params tr.calc td{font-style:italic;color:var(--muted)}
+  table.params tr.calc td .val{font-style:normal;color:var(--ink-strong);font-weight:600}
+  table.params .ed{display:flex;align-items:center;gap:6px}
+  table.params .ed select,table.params .ed input[type=number],table.params .ed input[type=text]{
+    flex:1;min-width:0;padding:2px 5px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text)}
+  table.params .ed .unit{color:var(--muted);font-size:11px;white-space:nowrap}
+  table.params .pnote{display:block;color:var(--muted);font-size:11px;margin-top:1px}
+  table.params .ro{color:var(--muted)}
+  .paramhead{padding:5px 8px;color:var(--muted);font-size:11.5px;border-bottom:1px solid var(--line-soft)}
   table.gpio select,table.gpio input{width:100%;border:1px solid transparent;background:transparent;color:var(--text);padding:1px 2px}
   table.gpio select:hover,table.gpio input:hover,table.gpio input:focus,table.gpio select:focus{border-color:var(--line);background:var(--panel)}
   .foot{padding:6px 10px;color:var(--text);border-top:1px solid var(--line);background:var(--panel);font-size:12px}
@@ -3489,9 +3509,24 @@ function rccSection() {
   return L.join('\n');
 }
 
+// A fixture exists to exercise the tool, not to be flashed: it may legitimately have
+// no `codegen:` block and its output stays an explanatory TODO. A real part without one
+// must refuse to compile instead, so nobody flashes a half-generated init.
+// AGENT-1: set `mcu.fixture: true` on the dummy part and the name/vendor sniffing goes away.
+function isFixture() {
+  const m = (M && M.mcu) || {};
+  return !!(m.fixture || /dummy/i.test(m.vendor || '') || /dummy/i.test(m.name || ''));
+}
+
 function cSource() {
   const e = E || compute();
   const L = [headerComment(), '', '#include "wchcube_init.h"', ''];
+  if (!M.codegen && !isFixture()) {
+    L.push(`#error "WCHCube: ${M.mcu.name} has no codegen: block, so the AFIO and RCC register `
+      + `words cannot be generated. Add one to its MCU file (see data/FORMAT.md); the sections `
+      + `below name exactly what is missing."`);
+    L.push('');
+  }
   if (e.conflictList.length) {
     L.push(`#error "WCHCube: ${e.conflictList.length} unresolved pin conflict(s) — ${e.conflictList.map(c => c.text).join('; ')}"`);
     L.push('');
@@ -4650,9 +4685,124 @@ function renderCentre() {
     const mine = Object.entries(E.pins).filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
     body.innerHTML = gpioTable(mine);
   } else {
-    body.innerHTML = `<div class="empty">Parameter settings (baud rate, prescaler, …) come with real MCU data in Phase 2.</div>`;
+    body.innerHTML = paramTable(pid);
   }
 }
+
+// ---- Parameter Settings ------------------------------------------------------
+// Rows come from the engine when it offers getParams(pid); otherwise straight from
+// the MCU file's `params:` block, which is the same shape. Writes only ever go
+// through the engine's setParam(), so until that lands the table is read-only and
+// says so rather than quietly editing state the engine does not know about.
+const paramsClosed = new Set();          // "PID/Group" sections the user folded away
+const hasParamApi = () => typeof getParams === 'function' && typeof setParam === 'function';
+
+function paramRows(pid) {
+  if (typeof getParams === 'function') {
+    try { return getParams(pid) || []; } catch (e) { console.error('getParams', pid, e); return []; }
+  }
+  const P = M.peripherals[pid] || {};
+  const saved = ((S.periph[pid] || {}).params) || {};
+  return (P.params || []).map(d => Object.assign({}, d, {
+    value: d.name in saved ? saved[d.name] : d.default,
+  }));
+}
+
+// `depends_on: { "Scan Conversion Mode": true }` — met when every named setting or
+// parameter currently holds that value.
+function paramActive(pid, row, byName) {
+  const dep = row.depends_on;
+  if (!dep) return true;
+  const pairs = typeof dep === 'string'
+    ? [[dep.split('=')[0].trim(), dep.split('=').slice(1).join('=').trim()]]
+    : Object.entries(dep);
+  return pairs.every(([k, want]) => {
+    const st = (S.periph[pid] || {}).settings || {};
+    const have = k in byName ? byName[k] : (k in st ? st[k] : undefined);
+    if (have === undefined) return true;                  // unknown dependency: do not hide the row
+    if (have instanceof Set) return have.has(String(want));
+    return String(have) === String(want);
+  });
+}
+
+function paramEditor(pid, row, live) {
+  const key = `data-pp="${attr(pid)}" data-pn="${attr(row.name)}"`;
+  const unit = row.unit ? `<span class="unit">${esc(row.unit)}</span>` : '';
+  if (row.computed) {
+    const has = row.display !== undefined || (row.value !== undefined && row.value !== null);
+    const shown = row.display !== undefined ? row.display : row.value;
+    // no value yet: an em dash on its own, not a stray unit with nothing in front of it
+    return has ? `<span class="val">${esc(shown)}</span> ${unit}`
+      : `<span class="ro" title="the engine has not computed this yet">—</span>`;
+  }
+  const dis = live ? '' : ' disabled';
+  if (row.type === 'bool') {
+    return `<label class="ed"><input type="checkbox" ${key}${row.value ? ' checked' : ''}${dis} style="flex:0 0 auto"> ${esc(row.value ? 'Enabled' : 'Disabled')}</label>`;
+  }
+  if (row.type === 'enum') {
+    const opts = (row.options || []).map(o => `<option${String(row.value) === String(o) ? ' selected' : ''}>${esc(o)}</option>`).join('');
+    return `<div class="ed"><select ${key}${dis}>${opts}</select>${unit}</div>`;
+  }
+  const step = row.type === 'float' ? ' step="any"' : ' step="1"';
+  const mm = (row.min !== undefined ? ` min="${row.min}"` : '') + (row.max !== undefined ? ` max="${row.max}"` : '');
+  return `<div class="ed"><input type="number" ${key} value="${attr(row.value !== undefined ? row.value : '')}"${step}${mm}${dis}>${unit}</div>`;
+}
+
+function paramTable(pid) {
+  const rows = paramRows(pid);
+  if (!rows.length) {
+    return `<div class="empty">${esc(pid)} has no parameters yet.<br>` +
+      `They arrive with the <code>params:</code> block in <code>data/mcus/${esc(M.mcu.name)}.yaml</code>.</div>`;
+  }
+  const live = hasParamApi();
+  const byName = Object.fromEntries(rows.map(r => [r.name, r.value]));
+  const groups = new Map();
+  for (const r of rows) {
+    const g = r.group || (r.advanced ? 'Advanced' : 'Basic');
+    (groups.get(g) || groups.set(g, []).get(g)).push(r);
+  }
+  const order = [...groups.keys()].sort((a, b) => {
+    const rank = n => (n === 'Basic' ? 0 : n === 'Advanced' ? 2 : 1);
+    return rank(a) - rank(b) || a.localeCompare(b);
+  });
+  let h = '';
+  for (const g of order) {
+    const key = `${pid}/${g}`, shut = paramsClosed.has(key);
+    h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g)}</td></tr>`;
+    if (shut) continue;
+    for (const r of groups.get(g)) {
+      const on = paramActive(pid, r, byName);
+      const cls = [on ? '' : 'off', r.computed ? 'calc' : ''].filter(Boolean).join(' ');
+      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(r.name)}${r.notes ? `<span class="pnote">${esc(r.notes)}</span>` : ''}</td>` +
+        `<td>${paramEditor(pid, r, live && on)}</td></tr>`;
+    }
+  }
+  const note = live ? '' :
+    `<div class="paramhead">Read-only for now: the engine's <code>setParam()</code> has not landed yet, and the UI never writes engine state directly.</div>`;
+  return note + `<table class="params"><thead><tr><th>${esc(pid)} parameter</th><th>Value</th></tr></thead><tbody>${h}</tbody></table>`;
+}
+
+document.getElementById('cbody').addEventListener('click', e => {
+  const g = e.target.closest('tr.grp'); if (!g) return;
+  const key = g.dataset.grp;
+  paramsClosed.has(key) ? paramsClosed.delete(key) : paramsClosed.add(key);
+  renderCentre();
+});
+document.getElementById('cbody').addEventListener('change', e => {
+  const el = e.target; if (!el.dataset.pp) return;
+  if (!hasParamApi()) return;
+  const pid = el.dataset.pp, name = el.dataset.pn;
+  const row = paramRows(pid).find(r => r.name === name) || {};
+  let v = el.type === 'checkbox' ? el.checked : el.value;
+  if (row.type === 'int') v = Math.round(Number(v));
+  if (row.type === 'float') v = Number(v);
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    if (row.min !== undefined) v = Math.max(row.min, v);
+    if (row.max !== undefined) v = Math.min(row.max, v);
+  }
+  try { setParam(pid, name, v); } catch (err) { toast(`${name}: ${err.message}`); }
+  renderAll();
+});
 
 const MODES = ['Input', 'Output Push Pull', 'Output Open Drain', 'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
 const PULLS = ['No pull', 'Pull-up', 'Pull-down'];
