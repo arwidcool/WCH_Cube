@@ -248,3 +248,45 @@ test('compute() stays under 5 ms on the biggest bundled package', () => {
   }
   assert.ok(worst < 5, `compute() took ${worst.toFixed(2)} ms on ${worstWhere} (budget 5 ms)`);
 });
+
+// A 144-pin part does not exist in data/ yet (the largest bundled package is 48
+// pins), so the performance budget in agents/AGENT_2_ENGINE.md is checked against
+// a synthetic one built here: 9 ports of 16 pins, 24 peripherals, 6 remaps each.
+function bigPart() {
+  const ports = 'ABCDEFGHI'.split('');
+  const names = ports.flatMap(p => Array.from({ length: 16 }, (_, i) => `P${p}${i}`));
+  const pins = Object.fromEntries(names.map(n => [n, { type: 'io' }]));
+  const packages = { LQFP144: Object.fromEntries(names.map((n, i) => [i + 1, n])) };
+  const peripherals = {};
+  for (let k = 0; k < 24; k++) {
+    const sigs = ['A', 'B', 'C', 'D'];
+    peripherals[`P${k}`] = {
+      category: 'Timers',
+      settings: [{
+        name: 'Mode',
+        choices: [{ name: 'Disable' }, { name: 'On', signals: sigs }],
+      }],
+      remaps: Array.from({ length: 6 }, (_, r) => ({
+        name: `remap ${r}`,
+        pins: Object.fromEntries(sigs.map((s, si) => [s, names[(k * 7 + r * 37 + si * 13) % names.length]])),
+      })),
+    };
+  }
+  return { mcu: { name: 'BIG144', default_package: 'LQFP144' }, packages, pins, peripherals };
+}
+
+test('compute() stays under 5 ms on a 144-pin part with everything switched on', () => {
+  const e = fresh();
+  e.loadMcu(bigPart());
+  assert.equal(Object.keys(e.pkgPins()).length, 144);
+  for (const pid of Object.keys(e.M.peripherals)) e.S.periph[pid].settings.Mode = 'On';
+  const E = e.compute();
+  assert.ok(Object.keys(E.pins).length > 50, 'the part is actually loaded up');
+  assert.ok(E.conflicts.length > 0, 'and contended, which is the expensive path');
+
+  for (let i = 0; i < 5; i++) e.compute();                 // warm up
+  const t0 = performance.now();
+  for (let i = 0; i < 50; i++) e.compute();
+  const per = (performance.now() - t0) / 50;
+  assert.ok(per < 5, `compute() took ${per.toFixed(2)} ms on a 144-pin part (budget 5 ms)`);
+});

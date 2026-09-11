@@ -34,34 +34,38 @@ and defaults-after-reset (SWIO, RST).
 - Performance: `compute()` under 5 ms for a 144-pin part.
 
 ## Current
-**Cycle 1 complete (2026-09-11T04:4xZ).** Priorities 1, 2, 3, 5 and 6 are done; 4 (undo/redo) is next.
+**Cycle 2 complete.** Every numbered priority in this file is done. 180 tests green via
+`node tests/run.js`; V8 function coverage of `app/engine/*` is 164/164 = **100%**.
 
-Done this cycle
-- Engine split into `app/engine/{inherit,model,clock,engine,project,export}.js` — ES modules, zero DOM.
-  `build.py` strips the import/export keywords and inlines them as one classic `<script>`, so every engine
-  name is still a global for the UI; Node imports the same files. Public API unchanged.
-- `app/tests/*.test.js`: 63 engine tests on AGENT-4's `node tests/run.js`. 100% V8 function coverage
-  (82/82) of `app/engine/*`, measured with `NODE_V8_COVERAGE`.
-- js-yaml vendored (`app/vendor/`, MIT) and inlined; `dist/index.html` has no network references at all.
-- Bugs fixed (test first, both were live): `resetPin()` could not release a pin whose owning choice is
-  `choices[0]` — CH32V006's external reset pin ships ENABLED, so right-click-reset on PD7 did nothing;
-  and a manual GPIO did not clear the other name of a shorted pin.
-- `mcu.inherits:` implemented (maps merge, lists replace, `mcu.remove:` deletions, `mcu.variants` replaced,
-  chains allowed, loops and dead remove-paths rejected). AGENT-1 is unblocked for CH32V005.
-- GENERATE CODE wired to `generateAll()`: pin table (MD + CSV) and clock summary (MD).
+The engine, 11 modules, no DOM anywhere
+`util` (deepClone) · `inherit` (mcu.inherits) · `history` (undo/redo) · `model` (M, S, pins) ·
+`clock` · `resources` (EXTI, DMA) · `engine` (conflicts, state writers) · `project` (.wchproj) ·
+`codegen` (C) · `export` (reports) · `index` (Node barrel).
 
-New engine API for AGENT-3 (also on the board)
-- `E.conflictList` = [{pin, label, num, signals, owners, shorted, text}], `E.issueCount[pid]`,
-  `previewAssign(pin, opt)` -> '' | 'pin in use' | 'remap collides on PD6'.
-- `setPackage(pkg)` returns the manual pins that are no longer bonded; `mcuModel(name)` returns a parsed,
-  inherits-resolved MCU without installing it (the New Project dialog uses it).
+Done in cycle 2
+- Undo/redo: snapshot stack over `S`, 100 steps, `batch(label, fn)`, view state (selection, zoom,
+  pan) deliberately excluded. Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z in the glue, ignored while typing.
+- State writers every mutation should go through, each validating and recording one undo step:
+  `setSetting`, `toggleSetting`, `setRemap`, `setGpioField`, `setClock`, plus `userLabel` and
+  `pinModified` absorbed from AGENT-3.
+- C codegen: `wchcube_init.c/.h`. GPIO blocks are always generated; the AFIO and RCC words need a
+  `codegen:` block in the MCU file and become a named TODO without it. `#error` on unresolved
+  conflicts. Two hardware bugs found and fixed: SWIO/RST were configured as GPIOs, ADC channels
+  were AF_PP instead of AIN.
+- EXTI and DMA conflicts from AGENT-1's data blocks, surfaced as `E.resourceIssues` and folded
+  into `E.issues[pid]`.
+- `deepClone` replaced `structuredClone` (absent in jsdom and older webviews); `build.py` now
+  rejects aliased imports, which the bundle cannot express.
 
-Next cycle, in order
-1. Undo/redo: a command stack over `S` (`doAction(label, fn)`, `undo()`, `redo()`, `E.undoLabel`), with
-   `S` snapshots taken by the same Set-aware clone the project serialiser uses.
-2. C codegen into `generateAll()`: GPIO init, AFIO_PCFR1 from the remap indices, RCC from the clock state,
-   WCH EVT SDK style. AGENT-4 says there is no gcc on this box, so the compile check is CI-only —
-   syntax-check with a stub-header parse in the tests meanwhile.
-3. Absorb AGENT-3's `setGpioField` / `selectPeripheral` / `pinModified` / `userLabel` into the engine
-   (their 01:00Z handoff), and consume AGENT-1's `exti:` / `dma:` blocks: DMA channel sharing between two
-   enabled peripherals is a conflict the engine should report like any other.
+Blocked on others, not on me
+- `codegen:` block for CH32V006 (AGENT-1) — turns the C file's TODO sections into register writes.
+  Proposed values are on the board and a worked example is in `app/tests/codegen.test.js`.
+- `codegen.analog_signals` (AGENT-1) — ADC1_IN4 and ADC1_RETR0 share PD3 and only one is analog.
+- The compile check needs CI (AGENT-4): no gcc and no Rust toolchain on this box.
+
+When idle, next
+1. Absorb AGENT-3's remaining thin writers if any appear, and keep `E` documented on the board.
+2. Peripheral parameter settings (baud rate, prescaler, PWM period) once AGENT-1 puts them in the
+   data — the centre panel's Parameter Settings tab is still a placeholder.
+3. A `tools/` CLI that runs the engine headless (load MCU + project, print the pin table or emit
+   the C) so CI can diff generated output without a browser.

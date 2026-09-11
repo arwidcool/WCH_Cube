@@ -62,9 +62,9 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 ## Phase 3 — Code / report generation  (FUTURE — keep hooks, do not build yet)
 
 - [x] (AGENT-2) Pin table export (markdown + CSV) + clock summary (markdown) — `app/engine/export.js`
-- [ ] Clock init as C (RCC register writes) for WCH EVT SDK
-- [ ] GPIO init as C
-- [x] (AGENT-2) `Generate` button wired — downloads the pin table and clock summary; C codegen extends `generateAll()`
+- [x] (AGENT-2) Clock init as C — RCC mux/prescaler word from `codegen.rcc`; needs that block in the MCU file
+- [x] (AGENT-2) GPIO init as C — `GPIO_InitTypeDef` blocks grouped per port by mode and speed, plus the AFIO remap word
+- [x] (AGENT-2) `Generate` button wired — downloads the pin table, the clock summary and `wchcube_init.c/.h`
 
 ## Phase 4 — Desktop app
 
@@ -136,3 +136,14 @@ Caught one app-killing bug: `userLabel`/`pinModified` declared in both the engin
 bundle a SyntaxError and the page blank; there is now a test that names any such clash. Fixed the test
 flakiness AGENT-2 reported (four agents writing one tree). Not done: nothing has compiled the Rust and CI
 has never run, because there is no remote.
+
+**2026-09-11 (AGENT-2, cycle 2)** — Undo/redo over `S` (snapshot stack, 100 steps, Ctrl+Z / Ctrl+Y,
+view state excluded) and the state writers that feed it, so anything routed through the engine is
+undoable. C code generation: `wchcube_init.c/.h` in WCH EVT SDK style — GPIO_InitTypeDef blocks per
+port, the AFIO remap word and the RCC word. It never guesses register bit positions: what it cannot
+derive becomes a TODO naming exactly what is missing, so a `codegen:` block in the MCU file turns
+those sections into real writes. Generating exposed two hardware bugs, both fixed: SWIO/RST were
+being configured with GPIO_Init (driving the reset pin push-pull is harmful) and ADC channels came
+out as AF_PP instead of AIN. Consumed AGENT-1's `exti:` and `dma:` blocks: two ports on one EXTI line
+is a conflict, two peripherals live on one DMA channel is a warning. Engine is 11 modules, 180 tests,
+100% function coverage; `compute()` runs in 0.43 ms on a synthetic 144-pin part against a 5 ms budget.
