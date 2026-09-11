@@ -816,3 +816,63 @@ mcu:
   assert.match(c, /GPIOMode_TypeDef is per family/);
   assert.ok(e.cComplaints().some(x => x.kind === 'todo' && /GPIO mode/.test(x.text)), '--strict sees it');
 });
+
+// data/FORMAT.md documents five sdk_args placeholders and AGENT-1's verify_sdk_names
+// rejects any other spelling, so all five have to resolve here. $INDEX is the only one
+// no MCU file uses yet, which is exactly why it is worth a test: a documented
+// placeholder the generator does not know becomes a TODO in somebody's build.
+test('every sdk_args placeholder FORMAT.md documents actually resolves', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-PLACEHOLDERS
+  inherits: CH32V006
+peripherals:
+  ADC1:
+    params:
+      - key: sample
+        name: Sampling time
+        sdk_call: My_ChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $INDEX, $VALUE, 0]
+        sdk_repeat: channels
+        type: enum
+        default: fast
+        options:
+          - { name: fast, value: 0, sdk: MY_FAST }
+`);
+  e.loadMcu('CH32V006-PLACEHOLDERS');
+  e.toggleSetting('ADC1', 'Channels', 'IN0', true);
+  e.toggleSetting('ADC1', 'Channels', 'IN4', true);
+  e.compute();
+  const calls = [...e.cSource().matchAll(/My_ChannelConfig\((.*?)\);/g)].map(m => m[1]);
+  assert.deepEqual(calls, [
+    'ADC1, ADC_Channel_0, 1, 0, MY_FAST, 0',
+    'ADC1, ADC_Channel_4, 2, 1, MY_FAST, 0',
+  ], '$RANK is 1-based, $INDEX is 0-based, and a non-placeholder is passed through literally');
+});
+
+test('a placeholder the generator does not know is named, not written as text', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-BADPLACEHOLDER
+  inherits: CH32V006
+peripherals:
+  SPI1:
+    params:
+      - key: crc
+        name: CRC calculation
+        sdk_call: SPI_CalculateCRC
+        sdk_args: [$HANDEL, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+`);
+  e.loadMcu('CH32V006-BADPLACEHOLDER');
+  e.setSetting('SPI1', 'Mode', 'Full-Duplex Master');
+  e.compute();
+  const c = e.cSource();
+  assert.equal(/$HANDEL/.test(c), false, 'a typo must never reach generated C as text');
+  assert.match(c, /is not a placeholder this generator knows/);
+});

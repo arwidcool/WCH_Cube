@@ -579,6 +579,7 @@ export function initPlan(pid) {
  *     $VALUE    the option's sdk: macro, the bool's sdk_enabled/sdk_disabled, or a number
  *     $CHANNEL  codegen.channel_macros[pid][signal], with sdk_repeat: channels
  *     $RANK     1-based position in that repeat
+ *     $INDEX    0-based position in that repeat
  * Anything else, or a placeholder that cannot be filled, becomes a TODO naming it.
  */
 function sdkCalls(pid, d, handle) {
@@ -595,7 +596,7 @@ function sdkCalls(pid, d, handle) {
     if (!macros) return [{ ...base, missing: `codegen.channel_macros.${pid} — no macro for any channel` }];
     const chosen = selectedChannels(pid);
     if (!chosen.length) return [];                 // nothing selected, nothing to configure
-    repeats = chosen.map((sig, i) => ({ sig, macro: macros[sig], rank: i + 1 }));
+    repeats = chosen.map((sig, i) => ({ sig, macro: macros[sig], rank: i + 1, index: i }));
     const unknown = repeats.filter(r => !r.macro).map(r => r.sig);
     if (unknown.length) return [{ ...base, missing: `codegen.channel_macros.${pid} has no macro for ${unknown.join(', ')}` }];
   } else if (d.sdk_repeat) {
@@ -612,6 +613,7 @@ function sdkCalls(pid, d, handle) {
       else if (token === '$HANDLE') { if (!handle) missing = `codegen.periph_handle.${pid}`; else filled.push(handle); }
       else if (token === '$CHANNEL') { if (!r) missing = '$CHANNEL without sdk_repeat: channels'; else filled.push(r.macro); }
       else if (token === '$RANK') { if (!r) missing = '$RANK without sdk_repeat: channels'; else filled.push(String(r.rank)); }
+      else if (token === '$INDEX') { if (!r) missing = '$INDEX without sdk_repeat: channels'; else filled.push(String(r.index)); }
       else if (/^[$]/.test(token)) missing = `${token} is not a placeholder this generator knows`;
       else filled.push(token);                      // a literal argument, written as given
       if (missing) break;
