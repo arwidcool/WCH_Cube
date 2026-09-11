@@ -832,6 +832,11 @@ peripherals:
   # ---------------- Analog ----------------
   ADC1:
     category: Analog
+    # 12-bit, fixed in silicon: RM 9.2 says "12-bit data" and "the actual converted 12-bit
+    # digital value", and ADC_RDATAR is DATA[11:0]. The CH32V006 datasheet heading 3.3.14
+    # still reads "10-bit ADC Characteristics" — that is a stale heading left from another
+    # part; its own body text and all three other mentions say 12-bit. Do not "correct" it.
+    notes: 12-bit SAR, up to 3 Msps, 8 external channels plus Vrefint and the OPA output (DS 1.4.11).
     settings:
       - name: Channels
         type: checkboxes
@@ -860,44 +865,48 @@ peripherals:
       - name: Default
         pins: { IN0: PA2, IN1: PA1, IN2: PC4, IN3: PD2, IN4: PD3, IN5: PD5, IN6: PD6, IN7: PD4,
                 RETR0: PD3, RETR1: PC2, IETR0: PD1, IETR1: PA2 }
-    # Parameters - RM 9.3 (ADC_CTLR1 / CTLR2 / CTLR3, ADC_SAMPTRx).
+
+    # Parameters - RM 9.3 (ADC_CTLR1 / CTLR2 / CTLR3, ADC_SAMPTR1/2).
+    # Resolution is not a parameter: it is fixed at 12 bits in silicon and the schema has
+    # no read-only flag, so it is stated in `notes` above instead of offered as a choice.
     params:
-      - { name: Resolution, type: int, default: 12, unit: bits, group: Basic, readonly: true,
-          register: "ADC_RDATAR DATA[11:0]",
-          notes: "Fixed in silicon, shown so it is not guessed at. RM 9.2 says 12-bit twice; the
-                  CH32V006 DS heading 3.3.14 still reads '10-bit ADC Characteristics', which is a
-                  stale heading - its own body text and every other mention say 12-bit." }
-      - name: Sampling Time
+      - key: sample
+        name: Sampling time
         type: enum
         default: 11.5 cycles
-        group: Basic
-        register: "ADC_SAMPTR1/2 SMPx[2:0]"
-        notes: "Cycle counts are for normal mode. In LOW-POWER mode codes 010/011/100 mean
-                13.5/28.5/41.5 cycles instead (RM 9.3.4). Total conversion = sampling + 12.5 cycles."
         options:
-          - { name: 3.5 cycles,   value: 0 }
-          - { name: 7.5 cycles,   value: 1 }
-          - { name: 11.5 cycles,  value: 2 }
-          - { name: 19.5 cycles,  value: 3 }
-          - { name: 35.5 cycles,  value: 4 }
-          - { name: 55.5 cycles,  value: 5 }
-          - { name: 71.5 cycles,  value: 6 }
+          - { name: 3.5 cycles  , value: 0 }
+          - { name: 7.5 cycles  , value: 1 }
+          - { name: 11.5 cycles , value: 2 }
+          - { name: 19.5 cycles , value: 3 }
+          - { name: 35.5 cycles , value: 4 }
+          - { name: 55.5 cycles , value: 5 }
+          - { name: 71.5 cycles , value: 6 }
           - { name: 239.5 cycles, value: 7 }
-      - { name: Low Power Mode, type: bool, default: false, group: Advanced,
-          register: "ADC_CTLR3 ADC_LP (bit 0)",
-          notes: Changes what three of the Sampling Time codes mean - see that row }
-      - { name: Continuous Conversion, type: bool, default: false, group: Basic,
-          register: "ADC_CTLR2 CONT (bit 1)" }
-      - { name: Scan Conversion, type: bool, default: false, group: Basic,
-          register: "ADC_CTLR1 SCAN (bit 8)" }
-      - name: Data Alignment
+        help: "ADC_SAMPTR1/2 SMPx[2:0], codes 000..111 in this order. These are the NORMAL-mode figures; in low-power mode codes 010/011/100 mean 13.5/28.5/41.5 cycles instead (RM 9.3.4). Total conversion = sampling + 12.5 ADC clocks."
+      - key: lowpower
+        name: Low power mode
+        type: bool
+        default: false
+        help: "ADC_CTLR3 ADC_LP, bit 0. Changes what three of the sampling-time codes mean - see that row."
+      - key: cont
+        name: Continuous conversion
+        type: bool
+        default: false
+        help: ADC_CTLR2 CONT, bit 1.
+      - key: scan
+        name: Scan conversion
+        type: bool
+        default: false
+        help: ADC_CTLR1 SCAN, bit 8.
+      - key: align
+        name: Data alignment
         type: enum
         default: Right
-        group: Advanced
-        register: "ADC_CTLR2 ALIGN (bit 11)"
         options:
           - { name: Right, value: 0 }
-          - { name: Left,  value: 1 }
+          - { name: Left , value: 1 }
+        help: ADC_CTLR2 ALIGN, bit 11.
 
 
   TKEY:
@@ -1008,41 +1017,62 @@ peripherals:
       - { name: "0111 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
       - { name: "1000 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PA3, CH2N: PB0, CH3N: PB1 } }
       - { name: "1001 Partial",  pins: { ETR: PB4, CH1: PA0, CH2: PA1, CH3: PA2, CH4: PA3, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
-    # Parameters - RM timer chapter; the control bits are all in TIM1_CTLR1.
+
+    # Parameters - RM timer chapter. The control bits are all in TIM1_CTLR1.
     params:
-      - { name: Prescaler, type: int, default: 0, min: 0, max: 65535, group: Basic,
-          register: TIM1_PSC, notes: "Counter clock = HCLK / (Prescaler + 1)" }
-      - { name: Counter Period, type: int, default: 65535, min: 0, max: 65535, group: Basic,
-          register: TIM1_ATRLR, notes: "Auto-reload; one period is (Counter Period + 1) counter ticks" }
-      - name: Counter Mode
+      - key: prescaler
+        name: Prescaler (PSC)
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIM1_PSC. Counter clock = HCLK / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIM1_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
         type: enum
         default: Up
-        group: Basic
-        register: "TIM1_CTLR1 DIR (bit 4), CMS[6:5]"
         options:
-          - { name: Up,               value: 0 }
-          - { name: Down,             value: 1 }
-          - { name: Center-aligned 1, value: 2 }
-          - { name: Center-aligned 2, value: 3 }
-          - { name: Center-aligned 3, value: 4 }
-      - name: Internal Clock Division
+          - { name: Up              , value: 0 }
+          - { name: Down            , value: 1 }
+          - { name: Center aligned 1, value: 2 }
+          - { name: Center aligned 2, value: 3 }
+          - { name: Center aligned 3, value: 4 }
+        help: "TIM1_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
         type: enum
         default: "1"
-        group: Advanced
-        register: "TIM1_CTLR1 CKD[9:8]"
-        notes: Divides the clock feeding the digital filters and the dead-time generator, not the counter
         options:
           - { name: "1", value: 0 }
           - { name: "2", value: 1 }
           - { name: "4", value: 2 }
-      - { name: Auto-Reload Preload, type: bool, default: false, group: Advanced,
-          register: "TIM1_CTLR1 ARPE (bit 7)" }
-      - { name: Repetition Counter, type: int, default: 0, min: 0, max: 255, group: Advanced,
-          register: TIM1_RPTCR,
-          notes: "Update event every (Repetition Counter + 1) cycles - advanced timer only" }
-      - { name: Dead Time, type: int, default: 0, min: 0, max: 255, group: Advanced,
-          register: "TIM1_BDTR DTG[7:0]",
-          notes: Inserted between a channel and its complementary output }
+        help: "TIM1_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        type: bool
+        default: false
+        help: "TIM1_CTLR1 ARPE, bit 7."
+      - key: rcr
+        name: Repetition counter (RPTCR)
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: TIM1_RPTCR. An update event happens every (value + 1) counter cycles. Advanced timer only.
+      - key: deadtime
+        name: Dead time
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: "TIM1_BDTR DTG[7:0], inserted between a channel and its complementary output."
 
 
   TIM2:
@@ -1098,35 +1128,48 @@ peripherals:
       - { name: "101 Full",    pins: { CH1_ETR: PA0, CH2: PA1, CH3: PA2, CH4: PA3 } }
       - { name: "110 Full",    pins: { CH1_ETR: PB1, CH2: PA1, CH3: PA2, CH4: PA3 } }
       - { name: "111 Full",    pins: { CH1_ETR: PD3, CH2: PD4, CH3: PA2, CH4: PA3 } }
-    # Parameters - RM timer chapter; the control bits are all in TIM2_CTLR1.
+
+    # Parameters - RM timer chapter. The control bits are all in TIM2_CTLR1.
     params:
-      - { name: Prescaler, type: int, default: 0, min: 0, max: 65535, group: Basic,
-          register: TIM2_PSC, notes: "Counter clock = HCLK / (Prescaler + 1)" }
-      - { name: Counter Period, type: int, default: 65535, min: 0, max: 65535, group: Basic,
-          register: TIM2_ATRLR, notes: "Auto-reload; one period is (Counter Period + 1) counter ticks" }
-      - name: Counter Mode
+      - key: prescaler
+        name: Prescaler (PSC)
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIM2_PSC. Counter clock = HCLK / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIM2_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
         type: enum
         default: Up
-        group: Basic
-        register: "TIM2_CTLR1 DIR (bit 4), CMS[6:5]"
         options:
-          - { name: Up,               value: 0 }
-          - { name: Down,             value: 1 }
-          - { name: Center-aligned 1, value: 2 }
-          - { name: Center-aligned 2, value: 3 }
-          - { name: Center-aligned 3, value: 4 }
-      - name: Internal Clock Division
+          - { name: Up              , value: 0 }
+          - { name: Down            , value: 1 }
+          - { name: Center aligned 1, value: 2 }
+          - { name: Center aligned 2, value: 3 }
+          - { name: Center aligned 3, value: 4 }
+        help: "TIM2_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
         type: enum
         default: "1"
-        group: Advanced
-        register: "TIM2_CTLR1 CKD[9:8]"
-        notes: Divides the clock feeding the digital filters and the dead-time generator, not the counter
         options:
           - { name: "1", value: 0 }
           - { name: "2", value: 1 }
           - { name: "4", value: 2 }
-      - { name: Auto-Reload Preload, type: bool, default: false, group: Advanced,
-          register: "TIM2_CTLR1 ARPE (bit 7)" }
+        help: "TIM2_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        type: bool
+        default: false
+        help: "TIM2_CTLR1 ARPE, bit 7."
 
 
   TIM3:
@@ -1166,39 +1209,47 @@ peripherals:
       - { name: "0111",         pins: { TX: PB5, RX: PB6, CTS: PC7, RTS: PB4 } }
       - { name: "1000",         pins: { TX: PA0, RX: PA1, CTS: PD2, RTS: PD3 } }
       - { name: "1001",         pins: { TX: PA0, RX: PC4, CTS: PD5, RTS: PD4 } }
-    # Parameters - RM USART chapter. Every row cites the register field it drives.
+
+    # Parameters - RM 15 (USART). Schema: app/assets/params.stub.yaml.
+    # `flow` is deliberately NOT a parameter: hardware flow control decides whether CTS
+    # and RTS claim pins, so it is a `settings` entry above. A parameter must never move
+    # a pin - that separation is what lets the conflict engine ignore this block.
     params:
-      - { name: Baud Rate, type: int, default: 115200, min: 300, max: 3000000, unit: bps,
-          group: Basic, register: "USART_BRR (12-bit mantissa + 4-bit fraction)",
-          notes: "Ceiling is HCLK/16 at the 48 MHz maximum; the achievable rate is quantised by BRR" }
-      - name: Word Length
+      - key: baud
+        name: Baud rate
+        type: int
+        default: 115200
+        min: 110
+        max: 3000000
+        unit: Bd
+        help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
+      - key: word
+        name: Word length
         type: enum
         default: 8 bits
-        group: Basic
-        register: "USART_CTLR1 M (bit 12)"
-        notes: With parity on, the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word
         options:
           - { name: 8 bits, value: 0 }
           - { name: 9 bits, value: 1 }
-      - name: Parity
+        help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
+      - key: parity
+        name: Parity
         type: enum
         default: "None"
-        group: Basic
-        register: "USART_CTLR1 PCE (bit 10), PS (bit 9)"
         options:
           - { name: "None", value: 0 }
-          - { name: Even,   value: 2 }
-          - { name: Odd,    value: 3 }
-      - name: Stop Bits
+          - { name: Even  , value: 2 }
+          - { name: Odd   , value: 3 }
+        help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
+      - key: stop
+        name: Stop bits
         type: enum
         default: "1"
-        group: Basic
-        register: "USART_CTLR2 STOP[13:12]"
         options:
-          - { name: "1",   value: 0 }
+          - { name: "1"  , value: 0 }
           - { name: "0.5", value: 1 }
-          - { name: "2",   value: 2 }
+          - { name: "2"  , value: 2 }
           - { name: "1.5", value: 3 }
+        help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
 
 
   USART2:
@@ -1227,39 +1278,47 @@ peripherals:
       - { name: "100",         pins: { TX: PB0, RX: PB1, CTS: PB6, RTS: PA1 } }
       - { name: "101",         pins: { TX: PC4, RX: PD1, CTS: PA4, RTS: PA1 } }
       - { name: "110",         pins: { TX: PA6, RX: PA5, CTS: PA7, RTS: PB3 } }
-    # Parameters - RM USART chapter. Every row cites the register field it drives.
+
+    # Parameters - RM 15 (USART). Schema: app/assets/params.stub.yaml.
+    # `flow` is deliberately NOT a parameter: hardware flow control decides whether CTS
+    # and RTS claim pins, so it is a `settings` entry above. A parameter must never move
+    # a pin - that separation is what lets the conflict engine ignore this block.
     params:
-      - { name: Baud Rate, type: int, default: 115200, min: 300, max: 3000000, unit: bps,
-          group: Basic, register: "USART_BRR (12-bit mantissa + 4-bit fraction)",
-          notes: "Ceiling is HCLK/16 at the 48 MHz maximum; the achievable rate is quantised by BRR" }
-      - name: Word Length
+      - key: baud
+        name: Baud rate
+        type: int
+        default: 115200
+        min: 110
+        max: 3000000
+        unit: Bd
+        help: "Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum and 1.5 MBd at the 24 MHz reset clock. USART_BRR."
+      - key: word
+        name: Word length
         type: enum
         default: 8 bits
-        group: Basic
-        register: "USART_CTLR1 M (bit 12)"
-        notes: With parity on, the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word
         options:
           - { name: 8 bits, value: 0 }
           - { name: 9 bits, value: 1 }
-      - name: Parity
+        help: "USART_CTLR1 M, bit 12. With parity enabled the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word."
+      - key: parity
+        name: Parity
         type: enum
         default: "None"
-        group: Basic
-        register: "USART_CTLR1 PCE (bit 10), PS (bit 9)"
         options:
           - { name: "None", value: 0 }
-          - { name: Even,   value: 2 }
-          - { name: Odd,    value: 3 }
-      - name: Stop Bits
+          - { name: Even  , value: 2 }
+          - { name: Odd   , value: 3 }
+        help: "USART_CTLR1 PCE (bit 10) and PS (bit 9): None = PCE 0; Even = PCE 1, PS 0; Odd = PCE 1, PS 1."
+      - key: stop
+        name: Stop bits
         type: enum
         default: "1"
-        group: Basic
-        register: "USART_CTLR2 STOP[13:12]"
         options:
-          - { name: "1",   value: 0 }
+          - { name: "1"  , value: 0 }
           - { name: "0.5", value: 1 }
-          - { name: "2",   value: 2 }
+          - { name: "2"  , value: 2 }
           - { name: "1.5", value: 3 }
+        help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
 
 
   SPI1:
@@ -1290,59 +1349,62 @@ peripherals:
       - { name: "100",         pins: { NSS: PD3, SCK: PD4, MISO: PD5, MOSI: PD6 } }
       - { name: "101",         pins: { NSS: PC1, SCK: PA1, MISO: PB5, MOSI: PA2 } }
       - { name: "110",         pins: { NSS: PC4, SCK: PB5, MISO: PC7, MOSI: PB4 } }
-    # Parameters - RM SPI chapter; all of these live in SPI_CTLR1.
+
+    # Parameters - RM 16 (SPI). Every one of these is a field of SPI_CTLR1.
+    # There is no `mode: [Motorola, TI]` here: the CH32V00X RM has no FRF bit and no
+    # mention of TI frame format, so this family cannot do it.
     params:
-      - name: Baud Rate Prescaler
+      - key: prescaler
+        name: Baud rate prescaler
         type: enum
-        default: "/16"
-        group: Basic
-        register: "SPI_CTLR1 BR[5:3]"
-        notes: Divides HCLK directly - this family has one bus frequency, there is no separate peripheral clock
+        default: "16"
         options:
-          - { name: "/2",   value: 0 }
-          - { name: "/4",   value: 1 }
-          - { name: "/8",   value: 2 }
-          - { name: "/16",  value: 3 }
-          - { name: "/32",  value: 4 }
-          - { name: "/64",  value: 5 }
-          - { name: "/128", value: 6 }
-          - { name: "/256", value: 7 }
-      - name: Clock Polarity (CPOL)
+          - { name: "2"  , value: 0 }
+          - { name: "4"  , value: 1 }
+          - { name: "8"  , value: 2 }
+          - { name: "16" , value: 3 }
+          - { name: "32" , value: 4 }
+          - { name: "64" , value: 5 }
+          - { name: "128", value: 6 }
+          - { name: "256", value: 7 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111 in this order. Divides HCLK - this family has one bus frequency, not a separate peripheral clock."
+      - key: cpol
+        name: Clock polarity (CPOL)
         type: enum
         default: Low
-        group: Basic
-        register: "SPI_CTLR1 CPOL (bit 1)"
         options:
-          - { name: Low,  value: 0 }
+          - { name: Low , value: 0 }
           - { name: High, value: 1 }
-      - name: Clock Phase (CPHA)
+        help: SPI_CTLR1 CPOL, bit 1.
+      - key: cpha
+        name: Clock phase (CPHA)
         type: enum
         default: 1 Edge
-        group: Basic
-        register: "SPI_CTLR1 CPHA (bit 0)"
         options:
           - { name: 1 Edge, value: 0 }
           - { name: 2 Edge, value: 1 }
-      - name: Data Size
+        help: SPI_CTLR1 CPHA, bit 0.
+      - key: datasize
+        name: Data size
         type: enum
         default: 8 bits
-        group: Basic
-        register: "SPI_CTLR1 DFF (bit 11)"
         options:
-          - { name: 8 bits,  value: 0 }
+          - { name: 8 bits , value: 0 }
           - { name: 16 bits, value: 1 }
-      - name: First Bit
+        help: SPI_CTLR1 DFF, bit 11.
+      - key: firstbit
+        name: First bit
         type: enum
         default: MSB First
-        group: Basic
-        register: "SPI_CTLR1 LSBFIRST (bit 7)"
         options:
           - { name: MSB First, value: 0 }
           - { name: LSB First, value: 1 }
-      - { name: CRC Calculation, type: bool, default: false, group: Advanced,
-          register: "SPI_CTLR1 CRCEN (bit 13)" }
-      - { name: CRC Polynomial, type: int, default: 7, min: 1, max: 65535, group: Advanced,
-          register: SPI_CRCR, depends_on: { param: CRC Calculation, equals: true } }
+        help: SPI_CTLR1 LSBFIRST, bit 7.
+      - key: crc
+        name: CRC calculation
+        type: bool
+        default: false
+        help: SPI_CTLR1 CRCEN, bit 13. The polynomial lives in SPI_CRCR and defaults to 7.
 
 
   I2C1:
@@ -1359,30 +1421,40 @@ peripherals:
       - { name: "010",         pins: { SCL: PC5, SDA: PC6 } }
       - { name: "011",         pins: { SCL: PB5, SDA: PB6 } }
       - { name: "1xx",         pins: { SCL: PB3, SDA: PD1 } }
-    # Parameters - RM I2C chapter.
+
+    # Parameters - RM 17 (I2C).
     params:
-      - { name: Clock Speed, type: int, default: 100000, min: 1000, max: 400000, unit: Hz,
-          group: Basic, register: "I2C_CKCFGR CCR[11:0] with F/S (bit 15)",
-          notes: "Above 100 kHz the peripheral must run in fast mode (F/S = 1)" }
-      - name: Fast Mode Duty Cycle
+      - key: speed
+        name: Clock speed
+        type: int
+        default: 100000
+        min: 1000
+        max: 400000
+        unit: Hz
+        help: "I2C_CKCFGR CCR[11:0] together with F/S (bit 15). Above 100 kHz the peripheral must be in fast mode."
+      - key: duty
+        name: Fast-mode duty cycle
         type: enum
         default: "2:1"
-        group: Advanced
-        register: "I2C_CKCFGR DUTY (bit 14)"
-        notes: Ignored in standard mode
         options:
-          - { name: "2:1",  value: 0 }
+          - { name: "2:1" , value: 0 }
           - { name: "16:9", value: 1 }
-      - name: Addressing Mode
+        help: "I2C_CKCFGR DUTY, bit 14. Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
         type: enum
         default: 7-bit
-        group: Basic
-        register: "I2C_OAR1 ADDMODE (bit 15)"
         options:
-          - { name: 7-bit,  value: 0 }
+          - { name: 7-bit , value: 0 }
           - { name: 10-bit, value: 1 }
-      - { name: Own Address, type: int, default: 0, min: 0, max: 1023, group: Basic,
-          register: "I2C_OAR1 ADD[9:0]" }
+        help: I2C_OAR1 ADDMODE, bit 15.
+      - key: addr
+        name: Own address
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0]. Only the low 7 bits are used in 7-bit addressing mode."
 
 
 # -----------------------------------------------------------------------------
@@ -3018,20 +3090,63 @@ function setPackage(pkg) {
 // export.js already owns the name `num` at top level, and the browser bundle is one scope.
 const toNumber = v => (typeof v === 'number' ? v : Number(String(v).trim()));
 
+// Identity of a parameter. `key:` if the file gives one, otherwise the display name.
+// This matches the UI's derivation exactly (app/template.html): both sides have to
+// agree, because this string is what a .wchproj stores.
+const paramKey = d => String(d.key !== undefined ? d.key : d.name);
+
+// An option is either a plain string or { name, value } where value is the register
+// encoding. The stored value is always the NAME - it is what a human reads in a
+// .wchproj - and codegen asks paramRegisterValue() for the number.
+function normOptions(list) {
+  if (!Array.isArray(list)) return null;
+  return list.map(o => (o && typeof o === 'object')
+    ? { name: String(o.name), value: o.value }
+    : { name: String(o), value: o });
+}
+
+// `when: { Mode: Asynchronous }` (a settings dependency) and
+// `depends_on: { param: 'CRC Calculation', equals: true }` (a parameter dependency)
+// both mean "this only applies while ...". Normalise them to one list.
+function normDeps(d) {
+  const out = [];
+  if (d.when && typeof d.when === 'object') {
+    for (const [name, equals] of Object.entries(d.when)) out.push({ kind: 'setting', name, equals });
+  }
+  const dep = d.depends_on;
+  if (dep) {
+    if (typeof dep === 'string') {
+      const [name, ...rest] = dep.split('=');
+      out.push({ kind: 'any', name: name.trim(), equals: rest.join('=').trim() });
+    } else if (dep.param !== undefined) {
+      out.push({ kind: 'param', name: String(dep.param), equals: dep.equals !== undefined ? dep.equals : true });
+    } else if (dep.setting !== undefined) {
+      out.push({ kind: 'setting', name: String(dep.setting), equals: dep.equals !== undefined ? dep.equals : true });
+    } else {
+      for (const [name, equals] of Object.entries(dep)) out.push({ kind: 'any', name, equals });
+    }
+  }
+  return out;
+}
+
 /** The definitions for one peripheral, normalised and in display order. */
 function paramDefs(pid) {
   const P = (M && M.peripherals && M.peripherals[pid]) || null;
   const list = P && Array.isArray(P.params) ? P.params : [];
-  return list.filter(d => d && d.key).map(d => ({
-    key: String(d.key),
-    name: d.name || String(d.key),
+  return list.filter(d => d && (d.key !== undefined || d.name !== undefined)).map(d => ({
+    key: paramKey(d),
+    name: d.name !== undefined ? String(d.name) : paramKey(d),
     type: d.type || (Array.isArray(d.options) ? 'enum' : typeof d.default === 'boolean' ? 'bool' : 'number'),
     default: d.default,
     min: d.min, max: d.max, step: d.step,
     unit: d.unit || '',
-    options: Array.isArray(d.options) ? d.options.map(String) : null,
-    help: d.help || '',
-    when: d.when || null,
+    options: normOptions(d.options),
+    group: d.group || '',
+    register: d.register || '',
+    notes: d.notes || '',
+    readonly: !!(d.readonly || d.computed),
+    help: d.help || d.notes || '',
+    deps: normDeps(d),
   }));
 }
 
@@ -3039,9 +3154,19 @@ function paramDefs(pid) {
 function paramDefaults(P) {
   const out = {};
   for (const d of (P && Array.isArray(P.params) ? P.params : [])) {
-    if (d && d.key !== undefined) out[String(d.key)] = d.default;
+    if (d && (d.key !== undefined || d.name !== undefined)) out[paramKey(d)] = d.default;
   }
   return out;
+}
+
+/** The register encoding behind the chosen option, for codegen. */
+function paramRegisterValue(pid, key) {
+  const d = paramDefs(pid).find(x => x.key === key);
+  if (!d) return undefined;
+  const v = paramValue(pid, key);
+  if (!d.options) return v;
+  const hit = d.options.find(o => String(o.name) === String(v));
+  return hit ? hit.value : undefined;
 }
 
 const defOf = (pid, key) => paramDefs(pid).find(d => d.key === key);
@@ -3061,9 +3186,8 @@ function validateParam(def, value, where) {
   }
   if (def.type === 'enum') {
     const v = String(value);
-    if (!def.options || !def.options.includes(v)) {
-      throw new Error(`${at}: "${value}" is not one of ${(def.options || []).join(', ')}`);
-    }
+    const names = (def.options || []).map(o => String(o.name));
+    if (!names.includes(v)) throw new Error(`${at}: "${value}" is not one of ${names.join(', ')}`);
     return v;
   }
   const n = toNumber(value);
@@ -3074,15 +3198,25 @@ function validateParam(def, value, where) {
   return n;
 }
 
-/** Does this param apply with the peripheral's current settings? */
+/**
+ * Does this parameter apply right now? A dependency may name a setting or another
+ * parameter. A dependency on something that does not exist is ignored rather than
+ * treated as false: a typo in the data must not silently hide a field.
+ */
 function paramApplies(pid, def) {
-  if (!def.when) return true;
-  const st = S.periph[pid] && S.periph[pid].settings;
-  if (!st) return true;
-  return Object.entries(def.when).every(([setting, want]) => {
-    const have = st[setting];
-    if (have instanceof Set) return have.has(String(want));
-    return String(have) === String(want);
+  const deps = def.deps || [];
+  if (!deps.length) return true;
+  const st = (S.periph[pid] && S.periph[pid].settings) || {};
+  const ps = (S.periph[pid] && S.periph[pid].params) || {};
+  return deps.every(dep => {
+    let have;
+    if (dep.kind === 'setting') have = st[dep.name];
+    else if (dep.kind === 'param') have = ps[dep.name];
+    else have = dep.name in ps ? ps[dep.name] : st[dep.name];
+    if (have === undefined) return true;
+    if (have instanceof Set) return have.has(String(dep.equals));
+    if (typeof dep.equals === 'boolean') return Boolean(have) === dep.equals;
+    return String(have) === String(dep.equals);
   });
 }
 
@@ -3111,6 +3245,7 @@ function setParam(pid, key, value) {
     const known = paramDefs(pid).map(x => x.key).join(', ');
     throw new Error(`${pid} has no parameter "${key}"${known ? ` (has: ${known})` : ' (it has none)'}`);
   }
+  if (d.readonly) throw new Error(`${pid}.${d.name} is fixed by the hardware and cannot be set`);
   const v = validateParam(d, value, `${pid}.${d.name}`);
   record(`${pid} ${d.name}`);
   (S.periph[pid].params ||= {})[key] = v;
@@ -3598,7 +3733,8 @@ function projectObject() {
     const settings = {};
     for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
     periph[pid] = { settings, remap: st.remap };
-    if (st.params && Object.keys(st.params).length) periph[pid].params = { ...st.params };
+    const params = paramsObject(pid);
+    if (Object.keys(params).length) periph[pid].params = params;
   }
   return {
     wchproj: 1,
@@ -5194,7 +5330,8 @@ function renderCentre() {
 // hand it a setter for.
 const paramsClosed = new Set();          // "PID/Group" bands the user folded away
 
-const paramKey = d => String(d.key !== undefined ? d.key : d.name);
+// paramKey() is the engine's now (app/engine/params.js) - identical rule, one owner,
+// and two top-level consts of the same name would be a fatal SyntaxError in the bundle.
 const paramLabel = d => String(d.name !== undefined ? d.name : d.key);
 const paramNote = d => d.help || d.notes || '';
 const paramReadonly = d => !!(d.readonly || d.computed);

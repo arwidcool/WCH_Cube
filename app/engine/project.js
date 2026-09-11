@@ -6,7 +6,7 @@
 import {
   M, S, MCU_FILES, loadMcu, applyPackageRemaps, yamlDump, yamlLoad,
 } from './model.js';
-import { applyParams } from './params.js';
+import { applyParams, paramsObject } from './params.js';
 import { clearHistory } from './history.js';
 
 export const PROJECT = { name: 'Untitled', variant: null, dirty: false };
@@ -19,7 +19,8 @@ export function projectObject() {
     const settings = {};
     for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
     periph[pid] = { settings, remap: st.remap };
-    if (st.params && Object.keys(st.params).length) periph[pid].params = { ...st.params };
+    const params = paramsObject(pid);
+    if (Object.keys(params).length) periph[pid].params = params;
   }
   return {
     wchproj: 1,

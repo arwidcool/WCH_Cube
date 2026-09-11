@@ -16,20 +16,63 @@ import { record } from './history.js';
 // export.js already owns the name `num` at top level, and the browser bundle is one scope.
 const toNumber = v => (typeof v === 'number' ? v : Number(String(v).trim()));
 
+// Identity of a parameter. `key:` if the file gives one, otherwise the display name.
+// This matches the UI's derivation exactly (app/template.html): both sides have to
+// agree, because this string is what a .wchproj stores.
+export const paramKey = d => String(d.key !== undefined ? d.key : d.name);
+
+// An option is either a plain string or { name, value } where value is the register
+// encoding. The stored value is always the NAME - it is what a human reads in a
+// .wchproj - and codegen asks paramRegisterValue() for the number.
+function normOptions(list) {
+  if (!Array.isArray(list)) return null;
+  return list.map(o => (o && typeof o === 'object')
+    ? { name: String(o.name), value: o.value }
+    : { name: String(o), value: o });
+}
+
+// `when: { Mode: Asynchronous }` (a settings dependency) and
+// `depends_on: { param: 'CRC Calculation', equals: true }` (a parameter dependency)
+// both mean "this only applies while ...". Normalise them to one list.
+function normDeps(d) {
+  const out = [];
+  if (d.when && typeof d.when === 'object') {
+    for (const [name, equals] of Object.entries(d.when)) out.push({ kind: 'setting', name, equals });
+  }
+  const dep = d.depends_on;
+  if (dep) {
+    if (typeof dep === 'string') {
+      const [name, ...rest] = dep.split('=');
+      out.push({ kind: 'any', name: name.trim(), equals: rest.join('=').trim() });
+    } else if (dep.param !== undefined) {
+      out.push({ kind: 'param', name: String(dep.param), equals: dep.equals !== undefined ? dep.equals : true });
+    } else if (dep.setting !== undefined) {
+      out.push({ kind: 'setting', name: String(dep.setting), equals: dep.equals !== undefined ? dep.equals : true });
+    } else {
+      for (const [name, equals] of Object.entries(dep)) out.push({ kind: 'any', name, equals });
+    }
+  }
+  return out;
+}
+
 /** The definitions for one peripheral, normalised and in display order. */
 export function paramDefs(pid) {
   const P = (M && M.peripherals && M.peripherals[pid]) || null;
   const list = P && Array.isArray(P.params) ? P.params : [];
-  return list.filter(d => d && d.key).map(d => ({
-    key: String(d.key),
-    name: d.name || String(d.key),
+  return list.filter(d => d && (d.key !== undefined || d.name !== undefined)).map(d => ({
+    key: paramKey(d),
+    name: d.name !== undefined ? String(d.name) : paramKey(d),
     type: d.type || (Array.isArray(d.options) ? 'enum' : typeof d.default === 'boolean' ? 'bool' : 'number'),
     default: d.default,
     min: d.min, max: d.max, step: d.step,
     unit: d.unit || '',
-    options: Array.isArray(d.options) ? d.options.map(String) : null,
-    help: d.help || '',
-    when: d.when || null,
+    options: normOptions(d.options),
+    group: d.group || '',
+    register: d.register || '',
+    notes: d.notes || '',
+    readonly: !!(d.readonly || d.computed),
+    help: d.help || d.notes || '',
+    deps: normDeps(d),
   }));
 }
 
@@ -37,9 +80,19 @@ export function paramDefs(pid) {
 export function paramDefaults(P) {
   const out = {};
   for (const d of (P && Array.isArray(P.params) ? P.params : [])) {
-    if (d && d.key !== undefined) out[String(d.key)] = d.default;
+    if (d && (d.key !== undefined || d.name !== undefined)) out[paramKey(d)] = d.default;
   }
   return out;
+}
+
+/** The register encoding behind the chosen option, for codegen. */
+export function paramRegisterValue(pid, key) {
+  const d = paramDefs(pid).find(x => x.key === key);
+  if (!d) return undefined;
+  const v = paramValue(pid, key);
+  if (!d.options) return v;
+  const hit = d.options.find(o => String(o.name) === String(v));
+  return hit ? hit.value : undefined;
 }
 
 const defOf = (pid, key) => paramDefs(pid).find(d => d.key === key);
@@ -59,9 +112,8 @@ export function validateParam(def, value, where) {
   }
   if (def.type === 'enum') {
     const v = String(value);
-    if (!def.options || !def.options.includes(v)) {
-      throw new Error(`${at}: "${value}" is not one of ${(def.options || []).join(', ')}`);
-    }
+    const names = (def.options || []).map(o => String(o.name));
+    if (!names.includes(v)) throw new Error(`${at}: "${value}" is not one of ${names.join(', ')}`);
     return v;
   }
   const n = toNumber(value);
@@ -72,15 +124,25 @@ export function validateParam(def, value, where) {
   return n;
 }
 
-/** Does this param apply with the peripheral's current settings? */
+/**
+ * Does this parameter apply right now? A dependency may name a setting or another
+ * parameter. A dependency on something that does not exist is ignored rather than
+ * treated as false: a typo in the data must not silently hide a field.
+ */
 export function paramApplies(pid, def) {
-  if (!def.when) return true;
-  const st = S.periph[pid] && S.periph[pid].settings;
-  if (!st) return true;
-  return Object.entries(def.when).every(([setting, want]) => {
-    const have = st[setting];
-    if (have instanceof Set) return have.has(String(want));
-    return String(have) === String(want);
+  const deps = def.deps || [];
+  if (!deps.length) return true;
+  const st = (S.periph[pid] && S.periph[pid].settings) || {};
+  const ps = (S.periph[pid] && S.periph[pid].params) || {};
+  return deps.every(dep => {
+    let have;
+    if (dep.kind === 'setting') have = st[dep.name];
+    else if (dep.kind === 'param') have = ps[dep.name];
+    else have = dep.name in ps ? ps[dep.name] : st[dep.name];
+    if (have === undefined) return true;
+    if (have instanceof Set) return have.has(String(dep.equals));
+    if (typeof dep.equals === 'boolean') return Boolean(have) === dep.equals;
+    return String(have) === String(dep.equals);
   });
 }
 
@@ -109,6 +171,7 @@ export function setParam(pid, key, value) {
     const known = paramDefs(pid).map(x => x.key).join(', ');
     throw new Error(`${pid} has no parameter "${key}"${known ? ` (has: ${known})` : ' (it has none)'}`);
   }
+  if (d.readonly) throw new Error(`${pid}.${d.name} is fixed by the hardware and cannot be set`);
   const v = validateParam(d, value, `${pid}.${d.name}`);
   record(`${pid} ${d.name}`);
   (S.periph[pid].params ||= {})[key] = v;

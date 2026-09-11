@@ -162,3 +162,15 @@ test('resource issues survive a project round-trip', () => {
   e.compute();
   assert.equal(issuesOf(e, 'exti').length, 1);
 });
+
+test('extiState, dmaState and resourceState are the three views of shared resources', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const exti = e.extiState();
+  const dma = e.dmaState();
+  const all = e.resourceState();
+  assert.ok(exti && exti.lines, 'CH32V006 declares exti lines');
+  assert.ok(dma && dma.channels, 'CH32V006 declares dma requests');
+  assert.deepEqual(all.issues, [...exti.issues, ...dma.issues],
+    'resourceState is exactly the two of them, concatenated');
+  assert.deepEqual(all.issues, [], 'a default configuration shares nothing yet');
+});

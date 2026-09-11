@@ -1441,7 +1441,8 @@ function renderCentre() {
 // hand it a setter for.
 const paramsClosed = new Set();          // "PID/Group" bands the user folded away
 
-const paramKey = d => String(d.key !== undefined ? d.key : d.name);
+// paramKey() is the engine's now (app/engine/params.js) - identical rule, one owner,
+// and two top-level consts of the same name would be a fatal SyntaxError in the bundle.
 const paramLabel = d => String(d.name !== undefined ? d.name : d.key);
 const paramNote = d => d.help || d.notes || '';
 const paramReadonly = d => !!(d.readonly || d.computed);

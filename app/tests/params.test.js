@@ -38,18 +38,23 @@ test('a fresh part starts at the defaults from its file', () => {
 
 test('a peripheral with no params block simply has none', () => {
   const e = withParams();
-  assert.deepEqual(e.paramDefs('SPI1'), []);
-  assert.deepEqual(e.getParams('SPI1'), []);
-  assert.throws(() => e.setParam('SPI1', 'baud', 9600), /SPI1 has no parameter "baud" \(it has none\)/);
+  // WWDG carries no params: in the data file; if that ever changes, pick another.
+  const bare = Object.keys(e.M.peripherals).find(pid => !(e.M.peripherals[pid].params || []).length);
+  assert.ok(bare, 'every peripheral now has params - this test needs a new subject');
+  assert.deepEqual(e.paramDefs(bare), []);
+  assert.deepEqual(e.getParams(bare), []);
+  assert.throws(() => e.setParam(bare, 'baud', 9600), /has no parameter "baud" \(it has none\)/);
 });
 
 test('getParams hands the UI everything it needs, in file order', () => {
   const e = withParams();
   const p = e.getParams('USART1');
-  assert.deepEqual(p.map(x => x.key), ['baud', 'parity', 'invert', 'trim']);
+  assert.deepEqual(p.map(x => x.key), ['baud', 'parity', 'invert', 'trim'],
+    "a child params: list replaces the parent's wholesale, it never merges");
   assert.equal(p[0].unit, 'Bd');
   assert.equal(p[0].min, 110);
-  assert.deepEqual(p[1].options, ['None', 'Even', 'Odd']);
+  // options normalise to { name, value } whether the file writes strings or objects
+  assert.deepEqual(p[1].options.map(o => o.name), ['None', 'Even', 'Odd']);
   assert.equal(p[2].type, 'bool');
 });
 
@@ -210,4 +215,107 @@ test('timerFrequency turns prescaler and period into a real frequency', () => {
   const t = e.timerFrequency('TIM1');
   assert.equal(t.hz, 1000);
   assert.equal(t.periodUs, 1000);
+});
+
+// ---------------------------------------------------------------- the shipped data
+// These run against data/mcus/CH32V006.yaml itself, so a schema drift in the data
+// file fails here instead of quietly emptying the Parameter Settings tab.
+
+test('the shipped CH32V006 exposes its parameters through the engine', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const withParams = Object.keys(e.M.peripherals).filter(pid => e.getParams(pid).length);
+  assert.ok(withParams.length >= 5, `only ${withParams.length} peripherals expose params`);
+
+  for (const pid of withParams) {
+    for (const p of e.getParams(pid)) {
+      assert.ok(p.key, `${pid}: a parameter with no key`);
+      assert.ok(['int', 'number', 'enum', 'bool'].includes(p.type), `${pid}.${p.key}: odd type ${p.type}`);
+      assert.notEqual(p.value, undefined, `${pid}.${p.key} has no value`);
+      if (p.type === 'enum') {
+        assert.ok(p.options && p.options.length, `${pid}.${p.key} is an enum with no options`);
+        assert.ok(p.options.some(o => String(o.name) === String(p.value)),
+          `${pid}.${p.key} defaults to "${p.value}", which is not one of its options`);
+      }
+      if (p.type === 'int' || p.type === 'number') {
+        if (p.min !== undefined) assert.ok(p.value >= p.min, `${pid}.${p.key} default is below its own minimum`);
+        if (p.max !== undefined) assert.ok(p.value <= p.max, `${pid}.${p.key} default is above its own maximum`);
+      }
+    }
+  }
+});
+
+test('the shipped USART carries a baud rate the readout can use', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  assert.notEqual(e.paramValue('USART1', 'baud'), undefined, 'USART1 should have a baud parameter');
+  const b = e.usartBaud('USART1');
+  assert.ok(b, 'usartBaud should return a readout for the shipped part');
+  assert.equal(b.clockMhz, 24);
+  assert.ok(b.brr > 0);
+  assert.ok(Math.abs(b.errorPct) < 1, `115200 on 24 MHz should be close, got ${b.errorPct}%`);
+});
+
+test('every shipped parameter survives a project round trip', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setParam('USART1', 'baud', 9600);
+  e.setParam('SPI1', 'prescaler', '64');
+  const before = JSON.parse(JSON.stringify(Object.fromEntries(
+    Object.keys(e.M.peripherals).map(pid => [pid, e.S.periph[pid].params]))));
+  const yaml = e.projectSerialize();
+  e.loadMcu('CH32V006');
+  e.projectApply(yaml);
+  const after = Object.fromEntries(Object.keys(e.M.peripherals).map(pid => [pid, e.S.periph[pid].params]));
+  assert.deepEqual(after, before);
+  assert.deepEqual(e.PROJECT.warnings, []);
+});
+
+// ---------------------------------------------------------------- direct API surface
+// The pieces above exercise these through setParam/projectApply; these call them by
+// name, so the coverage check can see them and a signature change breaks a test.
+
+test('paramKey, paramDefaults and paramsObject are the identity and default helpers', () => {
+  const e = withParams();
+  assert.equal(e.paramKey({ key: 'baud', name: 'Baud rate' }), 'baud', 'an explicit key wins');
+  assert.equal(e.paramKey({ name: 'Baud rate' }), 'Baud rate', 'otherwise the display name is the identity');
+  assert.deepEqual(e.paramDefaults(e.M.peripherals.TIM1), { prescaler: 0, period: 999 });
+  assert.deepEqual(e.paramDefaults({}), {}, 'a peripheral with no params has no defaults');
+
+  e.setParam('TIM1', 'period', 42);
+  assert.deepEqual(e.paramsObject('TIM1'), { prescaler: 0, period: 42 });
+});
+
+test('validateParam is the single gate every value passes', () => {
+  const e = withParams();
+  const [baud, parity, invert] = e.paramDefs('USART1');
+  assert.equal(e.validateParam(baud, '9600'), 9600);
+  assert.equal(e.validateParam(parity, 'Even'), 'Even');
+  assert.equal(e.validateParam(invert, 'yes'), true);
+  assert.throws(() => e.validateParam(baud, 1), /below the minimum/);
+  assert.throws(() => e.validateParam(invert, 'maybe'), /expected true or false/);
+});
+
+test('paramApplies answers the dependency question on its own', () => {
+  const e = withParams();
+  const baud = e.paramDefs('USART1').find(d => d.key === 'baud');
+  assert.equal(e.paramApplies('USART1', baud), false, 'USART1 is disabled out of reset');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  assert.equal(e.paramApplies('USART1', baud), true);
+});
+
+test('paramRegisterValue hands codegen the encoding behind the choice', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const sample = e.getParams('ADC1').find(p => p.type === 'enum');
+  assert.ok(sample, 'ADC1 should have an enum parameter');
+  const encoded = e.paramRegisterValue('ADC1', sample.key);
+  assert.notEqual(encoded, undefined);
+  // plain-string options encode as themselves; { name, value } options give the number
+  const opt = sample.options.find(o => String(o.name) === String(sample.value));
+  assert.equal(String(encoded), String(opt.value));
+});
+
+test('applyParams reports rather than throws when a stored value no longer fits', () => {
+  const e = withParams();
+  const dropped = e.applyParams('USART1', { baud: 19200, parity: 'Mark', ghost: 1 });
+  assert.equal(e.paramValue('USART1', 'baud'), 19200);
+  assert.equal(dropped.length, 2);
+  assert.deepEqual(e.applyParams('USART1', null), [], 'nothing to apply is not an error');
 });
