@@ -844,6 +844,45 @@ peripherals:
       - name: Default
         pins: { IN0: PA2, IN1: PA1, IN2: PC4, IN3: PD2, IN4: PD3, IN5: PD5, IN6: PD6, IN7: PD4,
                 RETR0: PD3, RETR1: PC2, IETR0: PD1, IETR1: PA2 }
+    # Parameters - RM 9.3 (ADC_CTLR1 / CTLR2 / CTLR3, ADC_SAMPTRx).
+    params:
+      - { name: Resolution, type: int, default: 12, unit: bits, group: Basic, readonly: true,
+          register: "ADC_RDATAR DATA[11:0]",
+          notes: "Fixed in silicon, shown so it is not guessed at. RM 9.2 says 12-bit twice; the
+                  CH32V006 DS heading 3.3.14 still reads '10-bit ADC Characteristics', which is a
+                  stale heading - its own body text and every other mention say 12-bit." }
+      - name: Sampling Time
+        type: enum
+        default: 11.5 cycles
+        group: Basic
+        register: "ADC_SAMPTR1/2 SMPx[2:0]"
+        notes: "Cycle counts are for normal mode. In LOW-POWER mode codes 010/011/100 mean
+                13.5/28.5/41.5 cycles instead (RM 9.3.4). Total conversion = sampling + 12.5 cycles."
+        options:
+          - { name: 3.5 cycles,   value: 0 }
+          - { name: 7.5 cycles,   value: 1 }
+          - { name: 11.5 cycles,  value: 2 }
+          - { name: 19.5 cycles,  value: 3 }
+          - { name: 35.5 cycles,  value: 4 }
+          - { name: 55.5 cycles,  value: 5 }
+          - { name: 71.5 cycles,  value: 6 }
+          - { name: 239.5 cycles, value: 7 }
+      - { name: Low Power Mode, type: bool, default: false, group: Advanced,
+          register: "ADC_CTLR3 ADC_LP (bit 0)",
+          notes: Changes what three of the Sampling Time codes mean - see that row }
+      - { name: Continuous Conversion, type: bool, default: false, group: Basic,
+          register: "ADC_CTLR2 CONT (bit 1)" }
+      - { name: Scan Conversion, type: bool, default: false, group: Basic,
+          register: "ADC_CTLR1 SCAN (bit 8)" }
+      - name: Data Alignment
+        type: enum
+        default: Right
+        group: Advanced
+        register: "ADC_CTLR2 ALIGN (bit 11)"
+        options:
+          - { name: Right, value: 0 }
+          - { name: Left,  value: 1 }
+
 
   TKEY:
     category: Analog
@@ -953,6 +992,42 @@ peripherals:
       - { name: "0111 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
       - { name: "1000 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PA3, CH2N: PB0, CH3N: PB1 } }
       - { name: "1001 Partial",  pins: { ETR: PB4, CH1: PA0, CH2: PA1, CH3: PA2, CH4: PA3, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
+    # Parameters - RM timer chapter; the control bits are all in TIM1_CTLR1.
+    params:
+      - { name: Prescaler, type: int, default: 0, min: 0, max: 65535, group: Basic,
+          register: TIM1_PSC, notes: "Counter clock = HCLK / (Prescaler + 1)" }
+      - { name: Counter Period, type: int, default: 65535, min: 0, max: 65535, group: Basic,
+          register: TIM1_ATRLR, notes: "Auto-reload; one period is (Counter Period + 1) counter ticks" }
+      - name: Counter Mode
+        type: enum
+        default: Up
+        group: Basic
+        register: "TIM1_CTLR1 DIR (bit 4), CMS[6:5]"
+        options:
+          - { name: Up,               value: 0 }
+          - { name: Down,             value: 1 }
+          - { name: Center-aligned 1, value: 2 }
+          - { name: Center-aligned 2, value: 3 }
+          - { name: Center-aligned 3, value: 4 }
+      - name: Internal Clock Division
+        type: enum
+        default: "1"
+        group: Advanced
+        register: "TIM1_CTLR1 CKD[9:8]"
+        notes: Divides the clock feeding the digital filters and the dead-time generator, not the counter
+        options:
+          - { name: "1", value: 0 }
+          - { name: "2", value: 1 }
+          - { name: "4", value: 2 }
+      - { name: Auto-Reload Preload, type: bool, default: false, group: Advanced,
+          register: "TIM1_CTLR1 ARPE (bit 7)" }
+      - { name: Repetition Counter, type: int, default: 0, min: 0, max: 255, group: Advanced,
+          register: TIM1_RPTCR,
+          notes: "Update event every (Repetition Counter + 1) cycles - advanced timer only" }
+      - { name: Dead Time, type: int, default: 0, min: 0, max: 255, group: Advanced,
+          register: "TIM1_BDTR DTG[7:0]",
+          notes: Inserted between a channel and its complementary output }
+
 
   TIM2:
     category: Timers
@@ -1007,6 +1082,36 @@ peripherals:
       - { name: "101 Full",    pins: { CH1_ETR: PA0, CH2: PA1, CH3: PA2, CH4: PA3 } }
       - { name: "110 Full",    pins: { CH1_ETR: PB1, CH2: PA1, CH3: PA2, CH4: PA3 } }
       - { name: "111 Full",    pins: { CH1_ETR: PD3, CH2: PD4, CH3: PA2, CH4: PA3 } }
+    # Parameters - RM timer chapter; the control bits are all in TIM2_CTLR1.
+    params:
+      - { name: Prescaler, type: int, default: 0, min: 0, max: 65535, group: Basic,
+          register: TIM2_PSC, notes: "Counter clock = HCLK / (Prescaler + 1)" }
+      - { name: Counter Period, type: int, default: 65535, min: 0, max: 65535, group: Basic,
+          register: TIM2_ATRLR, notes: "Auto-reload; one period is (Counter Period + 1) counter ticks" }
+      - name: Counter Mode
+        type: enum
+        default: Up
+        group: Basic
+        register: "TIM2_CTLR1 DIR (bit 4), CMS[6:5]"
+        options:
+          - { name: Up,               value: 0 }
+          - { name: Down,             value: 1 }
+          - { name: Center-aligned 1, value: 2 }
+          - { name: Center-aligned 2, value: 3 }
+          - { name: Center-aligned 3, value: 4 }
+      - name: Internal Clock Division
+        type: enum
+        default: "1"
+        group: Advanced
+        register: "TIM2_CTLR1 CKD[9:8]"
+        notes: Divides the clock feeding the digital filters and the dead-time generator, not the counter
+        options:
+          - { name: "1", value: 0 }
+          - { name: "2", value: 1 }
+          - { name: "4", value: 2 }
+      - { name: Auto-Reload Preload, type: bool, default: false, group: Advanced,
+          register: "TIM2_CTLR1 ARPE (bit 7)" }
+
 
   TIM3:
     category: Timers
@@ -1045,6 +1150,40 @@ peripherals:
       - { name: "0111",         pins: { TX: PB5, RX: PB6, CTS: PC7, RTS: PB4 } }
       - { name: "1000",         pins: { TX: PA0, RX: PA1, CTS: PD2, RTS: PD3 } }
       - { name: "1001",         pins: { TX: PA0, RX: PC4, CTS: PD5, RTS: PD4 } }
+    # Parameters - RM USART chapter. Every row cites the register field it drives.
+    params:
+      - { name: Baud Rate, type: int, default: 115200, min: 300, max: 3000000, unit: bps,
+          group: Basic, register: "USART_BRR (12-bit mantissa + 4-bit fraction)",
+          notes: "Ceiling is HCLK/16 at the 48 MHz maximum; the achievable rate is quantised by BRR" }
+      - name: Word Length
+        type: enum
+        default: 8 bits
+        group: Basic
+        register: "USART_CTLR1 M (bit 12)"
+        notes: With parity on, the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word
+        options:
+          - { name: 8 bits, value: 0 }
+          - { name: 9 bits, value: 1 }
+      - name: Parity
+        type: enum
+        default: "None"
+        group: Basic
+        register: "USART_CTLR1 PCE (bit 10), PS (bit 9)"
+        options:
+          - { name: "None", value: 0 }
+          - { name: Even,   value: 2 }
+          - { name: Odd,    value: 3 }
+      - name: Stop Bits
+        type: enum
+        default: "1"
+        group: Basic
+        register: "USART_CTLR2 STOP[13:12]"
+        options:
+          - { name: "1",   value: 0 }
+          - { name: "0.5", value: 1 }
+          - { name: "2",   value: 2 }
+          - { name: "1.5", value: 3 }
+
 
   USART2:
     category: Connectivity
@@ -1072,6 +1211,40 @@ peripherals:
       - { name: "100",         pins: { TX: PB0, RX: PB1, CTS: PB6, RTS: PA1 } }
       - { name: "101",         pins: { TX: PC4, RX: PD1, CTS: PA4, RTS: PA1 } }
       - { name: "110",         pins: { TX: PA6, RX: PA5, CTS: PA7, RTS: PB3 } }
+    # Parameters - RM USART chapter. Every row cites the register field it drives.
+    params:
+      - { name: Baud Rate, type: int, default: 115200, min: 300, max: 3000000, unit: bps,
+          group: Basic, register: "USART_BRR (12-bit mantissa + 4-bit fraction)",
+          notes: "Ceiling is HCLK/16 at the 48 MHz maximum; the achievable rate is quantised by BRR" }
+      - name: Word Length
+        type: enum
+        default: 8 bits
+        group: Basic
+        register: "USART_CTLR1 M (bit 12)"
+        notes: With parity on, the parity bit takes the last data bit, so 8 data bits plus parity needs a 9-bit word
+        options:
+          - { name: 8 bits, value: 0 }
+          - { name: 9 bits, value: 1 }
+      - name: Parity
+        type: enum
+        default: "None"
+        group: Basic
+        register: "USART_CTLR1 PCE (bit 10), PS (bit 9)"
+        options:
+          - { name: "None", value: 0 }
+          - { name: Even,   value: 2 }
+          - { name: Odd,    value: 3 }
+      - name: Stop Bits
+        type: enum
+        default: "1"
+        group: Basic
+        register: "USART_CTLR2 STOP[13:12]"
+        options:
+          - { name: "1",   value: 0 }
+          - { name: "0.5", value: 1 }
+          - { name: "2",   value: 2 }
+          - { name: "1.5", value: 3 }
+
 
   SPI1:
     category: Connectivity
@@ -1101,6 +1274,60 @@ peripherals:
       - { name: "100",         pins: { NSS: PD3, SCK: PD4, MISO: PD5, MOSI: PD6 } }
       - { name: "101",         pins: { NSS: PC1, SCK: PA1, MISO: PB5, MOSI: PA2 } }
       - { name: "110",         pins: { NSS: PC4, SCK: PB5, MISO: PC7, MOSI: PB4 } }
+    # Parameters - RM SPI chapter; all of these live in SPI_CTLR1.
+    params:
+      - name: Baud Rate Prescaler
+        type: enum
+        default: "/16"
+        group: Basic
+        register: "SPI_CTLR1 BR[5:3]"
+        notes: Divides HCLK directly - this family has one bus frequency, there is no separate peripheral clock
+        options:
+          - { name: "/2",   value: 0 }
+          - { name: "/4",   value: 1 }
+          - { name: "/8",   value: 2 }
+          - { name: "/16",  value: 3 }
+          - { name: "/32",  value: 4 }
+          - { name: "/64",  value: 5 }
+          - { name: "/128", value: 6 }
+          - { name: "/256", value: 7 }
+      - name: Clock Polarity (CPOL)
+        type: enum
+        default: Low
+        group: Basic
+        register: "SPI_CTLR1 CPOL (bit 1)"
+        options:
+          - { name: Low,  value: 0 }
+          - { name: High, value: 1 }
+      - name: Clock Phase (CPHA)
+        type: enum
+        default: 1 Edge
+        group: Basic
+        register: "SPI_CTLR1 CPHA (bit 0)"
+        options:
+          - { name: 1 Edge, value: 0 }
+          - { name: 2 Edge, value: 1 }
+      - name: Data Size
+        type: enum
+        default: 8 bits
+        group: Basic
+        register: "SPI_CTLR1 DFF (bit 11)"
+        options:
+          - { name: 8 bits,  value: 0 }
+          - { name: 16 bits, value: 1 }
+      - name: First Bit
+        type: enum
+        default: MSB First
+        group: Basic
+        register: "SPI_CTLR1 LSBFIRST (bit 7)"
+        options:
+          - { name: MSB First, value: 0 }
+          - { name: LSB First, value: 1 }
+      - { name: CRC Calculation, type: bool, default: false, group: Advanced,
+          register: "SPI_CTLR1 CRCEN (bit 13)" }
+      - { name: CRC Polynomial, type: int, default: 7, min: 1, max: 65535, group: Advanced,
+          register: SPI_CRCR, depends_on: { param: CRC Calculation, equals: true } }
+
 
   I2C1:
     category: Connectivity
@@ -1116,6 +1343,31 @@ peripherals:
       - { name: "010",         pins: { SCL: PC5, SDA: PC6 } }
       - { name: "011",         pins: { SCL: PB5, SDA: PB6 } }
       - { name: "1xx",         pins: { SCL: PB3, SDA: PD1 } }
+    # Parameters - RM I2C chapter.
+    params:
+      - { name: Clock Speed, type: int, default: 100000, min: 1000, max: 400000, unit: Hz,
+          group: Basic, register: "I2C_CKCFGR CCR[11:0] with F/S (bit 15)",
+          notes: "Above 100 kHz the peripheral must run in fast mode (F/S = 1)" }
+      - name: Fast Mode Duty Cycle
+        type: enum
+        default: "2:1"
+        group: Advanced
+        register: "I2C_CKCFGR DUTY (bit 14)"
+        notes: Ignored in standard mode
+        options:
+          - { name: "2:1",  value: 0 }
+          - { name: "16:9", value: 1 }
+      - name: Addressing Mode
+        type: enum
+        default: 7-bit
+        group: Basic
+        register: "I2C_OAR1 ADDMODE (bit 15)"
+        options:
+          - { name: 7-bit,  value: 0 }
+          - { name: 10-bit, value: 1 }
+      - { name: Own Address, type: int, default: 0, min: 0, max: 1023, group: Basic,
+          register: "I2C_OAR1 ADD[9:0]" }
+
 
 # -----------------------------------------------------------------------------
 # External interrupts — RM 6.4.4 Table 6-2, register AFIO_EXTICR (RM 7.3.2.1).
@@ -1167,6 +1419,7 @@ dma:
     and the TIM3 CH4 event only channel 4. The wider TIM3 fan-out in the table
     (channels 1-3 and 4-6) applies to CH32M007, not to this part.
     TIM1_TRIG, TIM1_COM and TIM1_CH4 share channel 4 as one hardware request line.
+
 
 # -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.
@@ -2626,7 +2879,10 @@ function initState(m) {
     zoom: 1, panX: 0, panY: 0,
   };
   for (const [pid, P] of Object.entries(m.peripherals)) {
-    const ps = { settings: {}, remap: 0 };
+    // params are values (baud, period); settings decide pins. Separate maps on purpose.
+    const params = {};
+    for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
+    const ps = { settings: {}, remap: 0, params };
     for (const s of P.settings || []) {
       const def = s.choices.find(c => c.default);
       ps.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;
@@ -2727,11 +2983,163 @@ function setPackage(pkg) {
   return Object.keys(S.manual).filter(p => !pinExists(p));
 }
 
+// ===== app/engine/params.js ===================================================
+// =============================================================================
+//  params.js — peripheral parameter settings: baud rate, prescaler, period, the
+//  numbers CubeMX puts under "Parameter Settings".
+//
+//  A `settings:` entry decides which SIGNALS a peripheral needs, so it changes the
+//  pinout. A `params:` entry never touches a pin — it is a value the generated code
+//  carries. That is why they are separate maps in S and separate tabs in the UI.
+//
+//  Schema, defaults and a worked CH32V006 example: app/assets/params.stub.yaml.
+//  Every value is validated on the way in, so nothing downstream (codegen, export,
+//  .wchproj) ever has to re-check a range.
+// =============================================================================
+
+
+
+// export.js already owns the name `num` at top level, and the browser bundle is one scope.
+const toNumber = v => (typeof v === 'number' ? v : Number(String(v).trim()));
+
+/** The definitions for one peripheral, normalised and in display order. */
+function paramDefs(pid) {
+  const P = (M && M.peripherals && M.peripherals[pid]) || null;
+  const list = P && Array.isArray(P.params) ? P.params : [];
+  return list.filter(d => d && d.key).map(d => ({
+    key: String(d.key),
+    name: d.name || String(d.key),
+    type: d.type || (Array.isArray(d.options) ? 'enum' : typeof d.default === 'boolean' ? 'bool' : 'number'),
+    default: d.default,
+    min: d.min, max: d.max, step: d.step,
+    unit: d.unit || '',
+    options: Array.isArray(d.options) ? d.options.map(String) : null,
+    help: d.help || '',
+    when: d.when || null,
+  }));
+}
+
+/** Defaults for a peripheral, for initState(). Pure: no S, no undo. */
+function paramDefaults(P) {
+  const out = {};
+  for (const d of (P && Array.isArray(P.params) ? P.params : [])) {
+    if (d && d.key !== undefined) out[String(d.key)] = d.default;
+  }
+  return out;
+}
+
+const defOf = (pid, key) => paramDefs(pid).find(d => d.key === key);
+
+/**
+ * Coerce and check one value against its definition.
+ * Returns the value to store; throws a sentence a user can act on.
+ */
+function validateParam(def, value, where) {
+  const at = where || def.name;
+  if (def.type === 'bool') {
+    if (typeof value === 'boolean') return value;
+    const s = String(value).toLowerCase();
+    if (s === 'true' || s === '1' || s === 'yes') return true;
+    if (s === 'false' || s === '0' || s === 'no') return false;
+    throw new Error(`${at}: expected true or false, got "${value}"`);
+  }
+  if (def.type === 'enum') {
+    const v = String(value);
+    if (!def.options || !def.options.includes(v)) {
+      throw new Error(`${at}: "${value}" is not one of ${(def.options || []).join(', ')}`);
+    }
+    return v;
+  }
+  const n = toNumber(value);
+  if (!Number.isFinite(n)) throw new Error(`${at}: "${value}" is not a number`);
+  if (def.type === 'int' && !Number.isInteger(n)) throw new Error(`${at}: ${n} must be a whole number`);
+  if (def.min !== undefined && n < def.min) throw new Error(`${at}: ${n} is below the minimum ${def.min}${def.unit ? ' ' + def.unit : ''}`);
+  if (def.max !== undefined && n > def.max) throw new Error(`${at}: ${n} is above the maximum ${def.max}${def.unit ? ' ' + def.unit : ''}`);
+  return n;
+}
+
+/** Does this param apply with the peripheral's current settings? */
+function paramApplies(pid, def) {
+  if (!def.when) return true;
+  const st = S.periph[pid] && S.periph[pid].settings;
+  if (!st) return true;
+  return Object.entries(def.when).every(([setting, want]) => {
+    const have = st[setting];
+    if (have instanceof Set) return have.has(String(want));
+    return String(have) === String(want);
+  });
+}
+
+/** Everything the UI needs to draw the Parameter Settings tab for one peripheral. */
+function getParams(pid) {
+  const store = (S.periph[pid] && S.periph[pid].params) || {};
+  return paramDefs(pid).map(d => ({
+    ...d,
+    value: store[d.key] !== undefined ? store[d.key] : d.default,
+    applicable: paramApplies(pid, d),
+  }));
+}
+
+function paramValue(pid, key) {
+  const store = (S.periph[pid] && S.periph[pid].params) || {};
+  if (store[key] !== undefined) return store[key];
+  const d = defOf(pid, key);
+  return d ? d.default : undefined;
+}
+
+/** Set one parameter. Validates, coerces, and records exactly one undo step. */
+function setParam(pid, key, value) {
+  if (!M.peripherals[pid]) throw new Error(`No such peripheral: ${pid}`);
+  const d = defOf(pid, key);
+  if (!d) {
+    const known = paramDefs(pid).map(x => x.key).join(', ');
+    throw new Error(`${pid} has no parameter "${key}"${known ? ` (has: ${known})` : ' (it has none)'}`);
+  }
+  const v = validateParam(d, value, `${pid}.${d.name}`);
+  record(`${pid} ${d.name}`);
+  (S.periph[pid].params ||= {})[key] = v;
+  return v;
+}
+
+/** Back to the file's defaults, as one undo step. */
+function resetParams(pid) {
+  if (!M.peripherals[pid]) throw new Error(`No such peripheral: ${pid}`);
+  record(`${pid} parameters reset`);
+  S.periph[pid].params = paramDefaults(M.peripherals[pid]);
+  return S.periph[pid].params;
+}
+
+/**
+ * Apply a { key: value } map from a .wchproj. Unknown keys and values that no
+ * longer validate are dropped and reported, never applied: a project saved
+ * against an older MCU file must still open.
+ */
+function applyParams(pid, obj) {
+  const dropped = [];
+  if (!obj || typeof obj !== 'object' || !S.periph[pid]) return dropped;
+  const defs = paramDefs(pid);
+  const store = (S.periph[pid].params ||= {});
+  for (const [key, value] of Object.entries(obj)) {
+    const d = defs.find(x => x.key === key);
+    if (!d) { dropped.push(`${pid}.${key}: no such parameter any more`); continue; }
+    try { store[key] = validateParam(d, value, `${pid}.${d.name}`); }
+    catch (e) { dropped.push(e.message); }
+  }
+  return dropped;
+}
+
+/** Serialisable copy for .wchproj — only keys that differ from nothing. */
+function paramsObject(pid) {
+  const store = (S.periph[pid] && S.periph[pid].params) || {};
+  return { ...store };
+}
+
 // ===== app/engine/clock.js ====================================================
 // =============================================================================
 //  clock.js — clock tree maths. No DOM, no rendering: renderClock() (UI) draws
 //  whatever clockCalc() returns, so a new MCU's tree needs no UI change.
 // =============================================================================
+
 
 
 // Initial clock state for an MCU's `clock:` block (null when the file has none).
@@ -2783,6 +3191,69 @@ function clockCalc(m = M, s = S) {
   for (const d of c.derived || []) out[d.name] = out.HCLK / d.div;
   if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) out.over.push('HSE');
   return out;
+}
+
+// ---------------------------------------------------------------------------
+//  Derived numbers a peripheral's parameters imply. These belong with the clock
+//  maths because they all start from "which clock actually feeds this block".
+// ---------------------------------------------------------------------------
+
+/** MHz on the bus that feeds `pid`, from the MCU file's clock.buses. */
+function periphClockMhz(pid, m = M, s = S) {
+  if (!m.clock) return null;
+  const r = clockCalc(m, s);
+  const buses = m.clock.buses || {};
+  for (const [bus, list] of Object.entries(buses)) {
+    if (!Array.isArray(list) || !list.includes(pid)) continue;
+    if (r[bus] !== undefined) return r[bus];
+    if (bus === firstPre(m.clock)) return r.HCLK;
+    return r.HCLK;
+  }
+  return r.HCLK !== undefined ? r.HCLK : r.SYSCLK;
+}
+
+/**
+ * What the USART will actually do with the requested baud rate.
+ *
+ * Oversampling by 16 puts USARTDIV = fCK / (16 * baud) in BRR as a 12-bit mantissa
+ * and a 4-bit sixteenth, so the register value is simply round(fCK / baud) and the
+ * achievable rate is fCK / that. Returns null when the part has no such parameter.
+ */
+function usartBaud(pid, m = M, s = S) {
+  const want = paramValue(pid, 'baud');
+  if (want === undefined || want === null) return null;
+  const mhz = periphClockMhz(pid, m, s);
+  if (!mhz) return null;
+  const fck = mhz * 1e6;
+  const requested = Number(want);
+  const brr = Math.round(fck / requested);
+  if (!Number.isFinite(brr) || brr < 1) {
+    return { requested, clockMhz: mhz, brr: null, actual: null, errorPct: null,
+             note: `${requested} Bd is faster than this clock can divide down to` };
+  }
+  const actual = fck / brr;
+  const errorPct = ((actual - requested) / requested) * 100;
+  return {
+    requested, clockMhz: mhz, brr,
+    actual: Math.round(actual * 100) / 100,
+    errorPct: Math.round(errorPct * 1000) / 1000,
+    mantissa: brr >> 4, fraction: brr & 0xf,
+    note: Math.abs(errorPct) > 2.5
+      ? `${errorPct.toFixed(2)}% error — most receivers need better than 2.5%`
+      : '',
+  };
+}
+
+/** Update frequency a timer's prescaler and period imply, in Hz. */
+function timerFrequency(pid, m = M, s = S) {
+  const psc = paramValue(pid, 'prescaler');
+  const arr = paramValue(pid, 'period');
+  if (psc === undefined || arr === undefined) return null;
+  const mhz = periphClockMhz(pid, m, s);
+  if (!mhz) return null;
+  const hz = (mhz * 1e6) / ((Number(psc) + 1) * (Number(arr) + 1));
+  return { clockMhz: mhz, prescaler: Number(psc), period: Number(arr),
+           hz: Math.round(hz * 1000) / 1000, periodUs: Math.round((1e6 / hz) * 1000) / 1000 };
 }
 
 // ===== app/engine/resources.js ================================================
@@ -3100,6 +3571,7 @@ function setClock(patch) {
 
 
 
+
 const PROJECT = { name: 'Untitled', variant: null, dirty: false };
 
 function setProject(p) { Object.assign(PROJECT, p); }
@@ -3110,6 +3582,7 @@ function projectObject() {
     const settings = {};
     for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
     periph[pid] = { settings, remap: st.remap };
+    if (st.params && Object.keys(st.params).length) periph[pid].params = { ...st.params };
   }
   return {
     wchproj: 1,
@@ -3142,6 +3615,7 @@ function projectApply(src) {
   if (obj.package in M.packages) S.pkg = obj.package;
   applyPackageRemaps();
 
+  const dropped = [];
   for (const [pid, st] of Object.entries(obj.peripherals || {})) {
     if (!S.periph[pid]) continue;
     const P = M.peripherals[pid];
@@ -3152,12 +3626,17 @@ function projectApply(src) {
       else if (s.choices.some(c => c.name === v)) S.periph[pid].settings[s.name] = v;
     }
     if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
+    dropped.push(...applyParams(pid, st.params));
   }
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
+  // A project saved against an older MCU file may name parameters that no longer
+  // exist or values now out of range. Those are dropped, never applied, and listed
+  // here so the UI can say so instead of opening a file that silently lost settings.
+  PROJECT.warnings = dropped;
   return PROJECT;
 }
 
@@ -4690,28 +5169,41 @@ function renderCentre() {
 }
 
 // ---- Parameter Settings ------------------------------------------------------
-// Rows come from the engine when it offers getParams(pid); otherwise straight from
-// the MCU file's `params:` block, which is the same shape. Writes only ever go
-// through the engine's setParam(), so until that lands the table is read-only and
-// says so rather than quietly editing state the engine does not know about.
-const paramsClosed = new Set();          // "PID/Group" sections the user folded away
-const hasParamApi = () => typeof getParams === 'function' && typeof setParam === 'function';
+// Three shapes are in play while this settles (BOARD 11:20Z): AGENT-2's engine
+// (`key`, `help`, `when`, plain-string options), AGENT-1's data (`name`, `notes`,
+// `group`, `readonly`, `register`, options as {name, value}) and the stub this tab
+// was built against. The table normalises all three rather than showing an empty
+// panel while they converge, and it never writes anything the engine did not
+// hand it a setter for.
+const paramsClosed = new Set();          // "PID/Group" bands the user folded away
+
+const paramKey = d => String(d.key !== undefined ? d.key : d.name);
+const paramLabel = d => String(d.name !== undefined ? d.name : d.key);
+const paramNote = d => d.help || d.notes || '';
+const paramReadonly = d => !!(d.readonly || d.computed);
+// options are either ['A','B'] or [{name:'A',value:0}]
+const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object' ? String(o.name) : String(o)));
 
 function paramRows(pid) {
+  let rows = [];
   if (typeof getParams === 'function') {
-    try { return getParams(pid) || []; } catch (e) { console.error('getParams', pid, e); return []; }
+    try { rows = getParams(pid) || []; } catch (e) { console.error('getParams', pid, e); }
   }
-  const P = M.peripherals[pid] || {};
-  const saved = ((S.periph[pid] || {}).params) || {};
-  return (P.params || []).map(d => Object.assign({}, d, {
-    value: d.name in saved ? saved[d.name] : d.default,
-  }));
+  if (!rows.length) {                      // engine has nothing for this shape: read the file
+    const P = M.peripherals[pid] || {};
+    const saved = ((S.periph[pid] || {}).params) || {};
+    rows = (P.params || []).map(d => Object.assign({}, d, {
+      value: paramKey(d) in saved ? saved[paramKey(d)] : d.default,
+    }));
+  }
+  return rows;
 }
 
-// `depends_on: { "Scan Conversion Mode": true }` — met when every named setting or
-// parameter currently holds that value.
+// `when` / `depends_on`: met when every named setting or parameter holds that value.
+// The engine answers this itself as `applicable` when it owns the definition.
 function paramActive(pid, row, byName) {
-  const dep = row.depends_on;
+  if (row.applicable !== undefined) return row.applicable !== false;
+  const dep = row.when || row.depends_on;
   if (!dep) return true;
   const pairs = typeof dep === 'string'
     ? [[dep.split('=')[0].trim(), dep.split('=').slice(1).join('=').trim()]]
@@ -4726,59 +5218,96 @@ function paramActive(pid, row, byName) {
 }
 
 function paramEditor(pid, row, live) {
-  const key = `data-pp="${attr(pid)}" data-pn="${attr(row.name)}"`;
+  const key = `data-pp="${attr(pid)}" data-pn="${attr(paramKey(row))}"`;
   const unit = row.unit ? `<span class="unit">${esc(row.unit)}</span>` : '';
-  if (row.computed) {
-    const has = row.display !== undefined || (row.value !== undefined && row.value !== null);
-    const shown = row.display !== undefined ? row.display : row.value;
-    // no value yet: an em dash on its own, not a stray unit with nothing in front of it
-    return has ? `<span class="val">${esc(shown)}</span> ${unit}`
-      : `<span class="ro" title="the engine has not computed this yet">—</span>`;
+  if (paramReadonly(row)) {
+    const has = row.value !== undefined && row.value !== null && row.value !== '';
+    return has ? `<span class="val">${esc(row.value)}</span> ${unit}`
+      : `<span class="ro" title="fixed in silicon, or not computed yet">—</span>`;
   }
   const dis = live ? '' : ' disabled';
   if (row.type === 'bool') {
     return `<label class="ed"><input type="checkbox" ${key}${row.value ? ' checked' : ''}${dis} style="flex:0 0 auto"> ${esc(row.value ? 'Enabled' : 'Disabled')}</label>`;
   }
-  if (row.type === 'enum') {
-    const opts = (row.options || []).map(o => `<option${String(row.value) === String(o) ? ' selected' : ''}>${esc(o)}</option>`).join('');
+  if (row.type === 'enum' || row.options) {
+    const opts = paramOptions(row).map(o => `<option${String(row.value) === String(o) ? ' selected' : ''}>${esc(o)}</option>`).join('');
     return `<div class="ed"><select ${key}${dis}>${opts}</select>${unit}</div>`;
   }
-  const step = row.type === 'float' ? ' step="any"' : ' step="1"';
+  const step = row.step !== undefined ? ` step="${attr(row.step)}"` : (row.type === 'int' ? ' step="1"' : ' step="any"');
   const mm = (row.min !== undefined ? ` min="${row.min}"` : '') + (row.max !== undefined ? ` max="${row.max}"` : '');
   return `<div class="ed"><input type="number" ${key} value="${attr(row.value !== undefined ? row.value : '')}"${step}${mm}${dis}>${unit}</div>`;
 }
 
+// Numbers the engine derives from the parameters plus the clock tree. Shown
+// read-only under the table they come from: the UI displays them, never computes them.
+function computedRows(pid) {
+  const out = [];
+  const add = (name, value, unit, note) => out.push({ name, value, unit, note });
+  try {
+    if (typeof usartBaud === 'function') {
+      const b = usartBaud(pid);
+      if (b) {
+        add('Actual baud rate', b.actual === null ? '—' : b.actual, 'Bit/s',
+          b.note || `BRR ${b.brr} at ${b.clockMhz} MHz`);
+        if (b.errorPct !== null) add('Baud rate error', `${b.errorPct > 0 ? '+' : ''}${b.errorPct}`, '%', '');
+      }
+    }
+    if (typeof timerFrequency === 'function') {
+      const f = timerFrequency(pid);
+      if (f) {
+        add('Update frequency', f.hz, 'Hz', `${f.clockMhz} MHz / ((${f.prescaler} + 1) × (${f.period} + 1))`);
+        add('Update period', f.periodUs, 'µs', '');
+      }
+    }
+  } catch (e) { console.error('computed parameters', pid, e); }
+  return out;
+}
+
 function paramTable(pid) {
   const rows = paramRows(pid);
-  if (!rows.length) {
+  const calc = computedRows(pid);
+  if (!rows.length && !calc.length) {
     return `<div class="empty">${esc(pid)} has no parameters yet.<br>` +
       `They arrive with the <code>params:</code> block in <code>data/mcus/${esc(M.mcu.name)}.yaml</code>.</div>`;
   }
-  const live = hasParamApi();
-  const byName = Object.fromEntries(rows.map(r => [r.name, r.value]));
+  // Writes need a setter the engine actually accepts for THESE definitions.
+  const live = typeof setParam === 'function' && typeof getParams === 'function'
+    && (() => { try { return (getParams(pid) || []).length > 0; } catch (e) { return false; } })();
+
+  const byName = Object.fromEntries(rows.map(r => [paramLabel(r), r.value]));
+  const grouped = rows.some(r => r.group);
   const groups = new Map();
   for (const r of rows) {
-    const g = r.group || (r.advanced ? 'Advanced' : 'Basic');
+    const g = grouped ? (r.group || (r.advanced ? 'Advanced' : 'Basic')) : '';
     (groups.get(g) || groups.set(g, []).get(g)).push(r);
   }
   const order = [...groups.keys()].sort((a, b) => {
     const rank = n => (n === 'Basic' ? 0 : n === 'Advanced' ? 2 : 1);
     return rank(a) - rank(b) || a.localeCompare(b);
   });
+
   let h = '';
   for (const g of order) {
-    const key = `${pid}/${g}`, shut = paramsClosed.has(key);
-    h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g)}</td></tr>`;
+    const key = `${pid}/${g}`, shut = g && paramsClosed.has(key);
+    if (g) h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g)}</td></tr>`;
     if (shut) continue;
     for (const r of groups.get(g)) {
       const on = paramActive(pid, r, byName);
-      const cls = [on ? '' : 'off', r.computed ? 'calc' : ''].filter(Boolean).join(' ');
-      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(r.name)}${r.notes ? `<span class="pnote">${esc(r.notes)}</span>` : ''}</td>` +
+      const cls = [on ? '' : 'off', paramReadonly(r) ? 'calc' : ''].filter(Boolean).join(' ');
+      const note = [paramNote(r), r.register ? `register: ${r.register}` : ''].filter(Boolean).join(' — ');
+      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${note ? `<span class="pnote">${esc(note)}</span>` : ''}</td>` +
         `<td>${paramEditor(pid, r, live && on)}</td></tr>`;
     }
   }
-  const note = live ? '' :
-    `<div class="paramhead">Read-only for now: the engine's <code>setParam()</code> has not landed yet, and the UI never writes engine state directly.</div>`;
+  if (calc.length) {
+    h += `<tr class="grp" data-grp="${attr(pid)}/Calculated"><td colspan="2">Calculated</td></tr>`;
+    for (const c of calc) {
+      h += `<tr class="calc"><td>${esc(c.name)}${c.note ? `<span class="pnote">${esc(c.note)}</span>` : ''}</td>` +
+        `<td><span class="val">${esc(c.value)}</span> <span class="unit">${esc(c.unit)}</span></td></tr>`;
+    }
+  }
+  const note = live || !rows.length ? '' :
+    `<div class="paramhead">Read-only: the engine has no setter for these definitions yet, and the UI never writes engine state directly.</div>`;
   return note + `<table class="params"><thead><tr><th>${esc(pid)} parameter</th><th>Value</th></tr></thead><tbody>${h}</tbody></table>`;
 }
 
@@ -4790,17 +5319,10 @@ document.getElementById('cbody').addEventListener('click', e => {
 });
 document.getElementById('cbody').addEventListener('change', e => {
   const el = e.target; if (!el.dataset.pp) return;
-  if (!hasParamApi()) return;
-  const pid = el.dataset.pp, name = el.dataset.pn;
-  const row = paramRows(pid).find(r => r.name === name) || {};
-  let v = el.type === 'checkbox' ? el.checked : el.value;
-  if (row.type === 'int') v = Math.round(Number(v));
-  if (row.type === 'float') v = Number(v);
-  if (typeof v === 'number' && Number.isFinite(v)) {
-    if (row.min !== undefined) v = Math.max(row.min, v);
-    if (row.max !== undefined) v = Math.min(row.max, v);
-  }
-  try { setParam(pid, name, v); } catch (err) { toast(`${name}: ${err.message}`); }
+  if (typeof setParam !== 'function') return;
+  const pid = el.dataset.pp, key = el.dataset.pn;
+  const v = el.type === 'checkbox' ? el.checked : el.value;
+  try { setParam(pid, key, v); } catch (err) { toast(err.message); }
   renderAll();
 });
 

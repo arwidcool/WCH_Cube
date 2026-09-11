@@ -1,83 +1,172 @@
 # =============================================================================
-#  params.stub.yaml — a FIXTURE, not data. Never inlined into dist/index.html.
+#  params.stub.yaml — AGENT-2 -> AGENT-1: the shape the engine reads for
+#  peripheral parameter settings (CubeMX's "Parameter Settings" tab).
 #
-#  AGENT-3 built the Parameter Settings tab against this while the real
-#  `params:` blocks were still being written (AGENT-1) and the engine's
-#  getParams/setParam were still to come (AGENT-2). Tests and the dev checks
-#  paste these blocks onto M.peripherals[pid].params and render the tab, so the
-#  layout is proven before any real data exists.
+#  This file is NOT loaded by the app. It is the schema the engine implements
+#  (app/engine/params.js) plus a worked CH32V006 example to paste into
+#  data/mcus/CH32V006.yaml under each peripheral. Once it is in the data file,
+#  delete the peripheral blocks here and keep the schema section as reference.
 #
-#  Shape, as agreed in AGENT-1's brief plus the two fields the UI needs:
-#    name        label shown in the first column
-#    type        int | float | enum | bool
-#    default     value used when the project has none
-#    min / max   int and float only; the editor clamps to them
-#    options     enum only; a list of strings
-#    unit        shown next to the editor, never inside it
-#    group       Basic (default) | Advanced — which section the row sits in
-#    computed    true = read-only, the engine supplies `display`
-#    depends_on  { setting-or-param-name: value } — row is greyed when unmet
-#    notes       one line of help under the row
-#
-#  The numbers below are plausible CH32V006 values, good enough to lay out a
-#  table with. Do NOT copy them into data/mcus/ — AGENT-1 sources every real
-#  number from the DS/RM.
+#  Every value below still needs a DS/RM citation in CH32V006.notes.md before it
+#  ships — I filled in the register-level facts I could verify from the RM and
+#  marked the rest. Do not take my defaults on trust.
 # =============================================================================
 
-USART1:
-  - { name: Baud Rate, type: int, default: 115200, min: 110, max: 3000000, unit: Bit/s, group: Basic }
-  - { name: Word Length, type: enum, default: 8 Bits (including Parity), group: Basic,
-      options: [8 Bits (including Parity), 9 Bits (including Parity)] }
-  - { name: Parity, type: enum, default: None, options: [None, Even, Odd], group: Basic }
-  - { name: Stop Bits, type: enum, default: "1", options: ["0.5", "1", "1.5", "2"], group: Basic }
-  - { name: Data Direction, type: enum, default: Receive and Transmit, group: Basic,
-      options: [Receive and Transmit, Receive Only, Transmit Only] }
-  - { name: Over Sampling, type: enum, default: 16 Samples, options: [16 Samples, 8 Samples], group: Advanced }
-  - { name: Actual Baud Rate, type: int, computed: true, unit: Bit/s, group: Advanced,
-      notes: "USARTDIV rounded to the nearest register value, at the current PCLK" }
-  - { name: Baud Rate Error, type: float, computed: true, unit: "%", group: Advanced }
+# --- schema -----------------------------------------------------------------
+# A peripheral may carry `params:`, a LIST (order is the display order):
+#
+#   params:
+#     - key: baud            # identifier: .wchproj key, codegen key. Stable forever.
+#       name: Baud rate      # label shown to the user
+#       type: int            # int | number | enum | bool
+#       default: 115200      # required; must satisfy its own constraints
+#       min: 110             # int/number only
+#       max: 4500000         # int/number only
+#       step: 1              # int/number only, advisory for the UI spinner
+#       unit: Bd             # shown after the value
+#       options: [A, B]      # enum only; the value must be one of these exactly
+#       help: one sentence   # tooltip
+#       when: { Mode: Asynchronous }   # optional: only applies while these
+#                                      # `settings` hold. The engine reports it as
+#                                      # applicable:false rather than hiding it.
+#
+# Engine contract (app/engine/params.js):
+#   getParams(pid)            -> [{ key, name, type, value, unit, min, max, step,
+#                                   options, help, applicable }]
+#   setParam(pid, key, value) -> validates, coerces, records ONE undo step
+#   paramValue(pid, key)      -> the raw value
+#   resetParams(pid)          -> every param back to its default, one undo step
+# State: S.periph[pid].params = { key: value }; round-trips in .wchproj.
+# Unknown keys in a .wchproj are dropped with a warning, never applied.
 
-SPI1:
-  - { name: Frame Format, type: enum, default: Motorola, options: [Motorola, TI], group: Basic }
-  - { name: Data Size, type: enum, default: 8 Bits, options: [8 Bits, 16 Bits], group: Basic }
-  - { name: First Bit, type: enum, default: MSB First, options: [MSB First, LSB First], group: Basic }
-  - { name: Prescaler, type: enum, default: "16", options: ["2", "4", "8", "16", "32", "64", "128", "256"],
-      group: Basic, notes: "SPI_CR1 BR[2:0]" }
-  - { name: Baud Rate, type: int, computed: true, unit: Bit/s, group: Basic }
-  - { name: Clock Polarity (CPOL), type: enum, default: Low, options: [Low, High], group: Advanced }
-  - { name: Clock Phase (CPHA), type: enum, default: 1 Edge, options: [1 Edge, 2 Edge], group: Advanced }
-  - { name: CRC Calculation, type: bool, default: false, group: Advanced }
-  - { name: CRC Polynomial, type: int, default: 7, min: 1, max: 65535, group: Advanced,
-      depends_on: { CRC Calculation: true } }
+# --- CH32V006 example -------------------------------------------------------
+peripherals:
 
-I2C1:
-  - { name: I2C Speed Mode, type: enum, default: Standard Mode, options: [Standard Mode, Fast Mode], group: Basic }
-  - { name: I2C Clock Speed, type: int, default: 100000, min: 1000, max: 400000, unit: Hz, group: Basic }
-  - { name: Fast Mode Duty Cycle, type: enum, default: "2", options: ["2", "16/9"], group: Basic,
-      depends_on: { I2C Speed Mode: Fast Mode } }
-  - { name: Primary Address Length, type: enum, default: 7-bit, options: [7-bit, 10-bit], group: Basic }
-  - { name: Primary Slave Address, type: int, default: 0, min: 0, max: 1023, group: Basic }
-  - { name: General Call Address Detection, type: bool, default: false, group: Advanced }
-  - { name: Clock No Stretch Mode, type: bool, default: false, group: Advanced }
+  USART1:
+    params:
+      - key: baud
+        name: Baud rate
+        type: int
+        default: 115200
+        min: 110
+        max: 4500000           # RM 15.3: USARTDIV must stay >= 1, so fCK/16 is the ceiling
+        unit: Bd
+        help: The engine shows the achievable rate and the error, from BRR = round(fCK / baud).
+        when: { Mode: Asynchronous }
+      - key: word
+        name: Word length
+        type: enum
+        default: 8 bits
+        options: [8 bits, 9 bits]     # RM 15.4.4 CTLR1.M
+      - key: parity
+        name: Parity
+        type: enum
+        default: None
+        options: [None, Even, Odd]    # RM 15.4.4 CTLR1.PCE/PS
+      - key: stop
+        name: Stop bits
+        type: enum
+        default: "1"
+        options: ["0.5", "1", "1.5", "2"]   # RM 15.4.5 CTLR2.STOP
+      - key: flow
+        name: Hardware flow control
+        type: enum
+        default: None
+        options: [None, RTS, CTS, RTS/CTS]
+        help: Needs the matching signals routed; the pin picker will show them.
 
-TIM2:
-  - { name: Prescaler (PSC - 1), type: int, default: 0, min: 0, max: 65535, group: Basic }
-  - { name: Counter Mode, type: enum, default: Up, options: [Up, Down, Center Aligned 1, Center Aligned 2, Center Aligned 3],
-      group: Basic }
-  - { name: Counter Period (ARR - 1), type: int, default: 65535, min: 0, max: 65535, group: Basic }
-  - { name: Update Frequency, type: float, computed: true, unit: Hz, group: Basic,
-      notes: "TIM clock / ((PSC + 1) x (ARR + 1))" }
-  - { name: auto-reload preload, type: bool, default: false, group: Advanced }
-  - { name: Internal Clock Division (CKD), type: enum, default: "1", options: ["1", "2", "4"], group: Advanced }
-  - { name: Repetition Counter (RCR - 1), type: int, default: 0, min: 0, max: 255, group: Advanced }
+  USART2:
+    params: { inherits_note: same list as USART1 — AGENT-1, copy it or add a YAML anchor }
 
-ADC1:
-  - { name: Data Alignment, type: enum, default: Right alignment, options: [Right alignment, Left alignment],
-      group: Basic }
-  - { name: Scan Conversion Mode, type: bool, default: false, group: Basic }
-  - { name: Continuous Conversion Mode, type: bool, default: false, group: Basic }
-  - { name: Number Of Conversion, type: int, default: 1, min: 1, max: 16, group: Basic,
-      depends_on: { Scan Conversion Mode: true } }
-  - { name: Sampling Time, type: enum, default: 11 Cycles, group: Advanced,
-      options: [3 Cycles, 9 Cycles, 15 Cycles, 30 Cycles, 43 Cycles, 57 Cycles, 73 Cycles, 241 Cycles] }
-  - { name: Conversion Time, type: float, computed: true, unit: µs, group: Advanced }
+  SPI1:
+    params:
+      - key: mode
+        name: Frame format
+        type: enum
+        default: Motorola
+        options: [Motorola, TI]
+      - key: datasize
+        name: Data size
+        type: enum
+        default: 8 bits
+        options: [8 bits, 16 bits]     # RM 16.4.1 CTLR1.DFF
+      - key: cpol
+        name: Clock polarity (CPOL)
+        type: enum
+        default: Low
+        options: [Low, High]
+      - key: cpha
+        name: Clock phase (CPHA)
+        type: enum
+        default: 1 Edge
+        options: [1 Edge, 2 Edge]
+      - key: prescaler
+        name: Baud rate prescaler
+        type: enum
+        default: "8"
+        options: ["2", "4", "8", "16", "32", "64", "128", "256"]   # RM 16.4.1 CTLR1.BR
+        help: SPI clock = the peripheral bus clock divided by this.
+
+  I2C1:
+    params:
+      - key: speed
+        name: Clock speed
+        type: int
+        default: 100000
+        min: 1000
+        max: 400000                    # RM 17: standard 100 kHz, fast 400 kHz
+        unit: Hz
+      - key: duty
+        name: Fast-mode duty cycle
+        type: enum
+        default: 2:1
+        options: ["2:1", "16:9"]       # RM 17.4.x CKCFGR.DUTY
+        when: { Mode: I2C }
+      - key: addr
+        name: Own address
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: 7-bit unless the addressing mode says otherwise.
+
+  TIM1:
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+      - key: period
+        name: Counter period (ATRLR)
+        type: int
+        default: 999
+        min: 0
+        max: 65535
+        help: The engine shows the resulting update frequency from the timer's bus clock.
+      - key: counter
+        name: Counter mode
+        type: enum
+        default: Up
+        options: [Up, Down, Center aligned 1, Center aligned 2, Center aligned 3]
+      - key: rcr
+        name: Repetition counter (RPTCR)
+        type: int
+        default: 0
+        min: 0
+        max: 255
+
+  ADC1:
+    params:
+      - key: sample
+        name: Sampling time
+        type: enum
+        default: "11"
+        options: ["3", "9", "15", "30", "43", "57", "73", "241"]   # RM 11: SMPR cycles - VERIFY
+        unit: cycles
+        help: Conversion time = (sampling + 11) / ADC clock. AGENT-1, confirm the cycle list.
+      - key: cont
+        name: Continuous conversion
+        type: bool
+        default: false

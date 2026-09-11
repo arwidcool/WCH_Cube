@@ -1416,28 +1416,41 @@ function renderCentre() {
 }
 
 // ---- Parameter Settings ------------------------------------------------------
-// Rows come from the engine when it offers getParams(pid); otherwise straight from
-// the MCU file's `params:` block, which is the same shape. Writes only ever go
-// through the engine's setParam(), so until that lands the table is read-only and
-// says so rather than quietly editing state the engine does not know about.
-const paramsClosed = new Set();          // "PID/Group" sections the user folded away
-const hasParamApi = () => typeof getParams === 'function' && typeof setParam === 'function';
+// Three shapes are in play while this settles (BOARD 11:20Z): AGENT-2's engine
+// (`key`, `help`, `when`, plain-string options), AGENT-1's data (`name`, `notes`,
+// `group`, `readonly`, `register`, options as {name, value}) and the stub this tab
+// was built against. The table normalises all three rather than showing an empty
+// panel while they converge, and it never writes anything the engine did not
+// hand it a setter for.
+const paramsClosed = new Set();          // "PID/Group" bands the user folded away
+
+const paramKey = d => String(d.key !== undefined ? d.key : d.name);
+const paramLabel = d => String(d.name !== undefined ? d.name : d.key);
+const paramNote = d => d.help || d.notes || '';
+const paramReadonly = d => !!(d.readonly || d.computed);
+// options are either ['A','B'] or [{name:'A',value:0}]
+const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object' ? String(o.name) : String(o)));
 
 function paramRows(pid) {
+  let rows = [];
   if (typeof getParams === 'function') {
-    try { return getParams(pid) || []; } catch (e) { console.error('getParams', pid, e); return []; }
+    try { rows = getParams(pid) || []; } catch (e) { console.error('getParams', pid, e); }
   }
-  const P = M.peripherals[pid] || {};
-  const saved = ((S.periph[pid] || {}).params) || {};
-  return (P.params || []).map(d => Object.assign({}, d, {
-    value: d.name in saved ? saved[d.name] : d.default,
-  }));
+  if (!rows.length) {                      // engine has nothing for this shape: read the file
+    const P = M.peripherals[pid] || {};
+    const saved = ((S.periph[pid] || {}).params) || {};
+    rows = (P.params || []).map(d => Object.assign({}, d, {
+      value: paramKey(d) in saved ? saved[paramKey(d)] : d.default,
+    }));
+  }
+  return rows;
 }
 
-// `depends_on: { "Scan Conversion Mode": true }` — met when every named setting or
-// parameter currently holds that value.
+// `when` / `depends_on`: met when every named setting or parameter holds that value.
+// The engine answers this itself as `applicable` when it owns the definition.
 function paramActive(pid, row, byName) {
-  const dep = row.depends_on;
+  if (row.applicable !== undefined) return row.applicable !== false;
+  const dep = row.when || row.depends_on;
   if (!dep) return true;
   const pairs = typeof dep === 'string'
     ? [[dep.split('=')[0].trim(), dep.split('=').slice(1).join('=').trim()]]
@@ -1452,59 +1465,96 @@ function paramActive(pid, row, byName) {
 }
 
 function paramEditor(pid, row, live) {
-  const key = `data-pp="${attr(pid)}" data-pn="${attr(row.name)}"`;
+  const key = `data-pp="${attr(pid)}" data-pn="${attr(paramKey(row))}"`;
   const unit = row.unit ? `<span class="unit">${esc(row.unit)}</span>` : '';
-  if (row.computed) {
-    const has = row.display !== undefined || (row.value !== undefined && row.value !== null);
-    const shown = row.display !== undefined ? row.display : row.value;
-    // no value yet: an em dash on its own, not a stray unit with nothing in front of it
-    return has ? `<span class="val">${esc(shown)}</span> ${unit}`
-      : `<span class="ro" title="the engine has not computed this yet">—</span>`;
+  if (paramReadonly(row)) {
+    const has = row.value !== undefined && row.value !== null && row.value !== '';
+    return has ? `<span class="val">${esc(row.value)}</span> ${unit}`
+      : `<span class="ro" title="fixed in silicon, or not computed yet">—</span>`;
   }
   const dis = live ? '' : ' disabled';
   if (row.type === 'bool') {
     return `<label class="ed"><input type="checkbox" ${key}${row.value ? ' checked' : ''}${dis} style="flex:0 0 auto"> ${esc(row.value ? 'Enabled' : 'Disabled')}</label>`;
   }
-  if (row.type === 'enum') {
-    const opts = (row.options || []).map(o => `<option${String(row.value) === String(o) ? ' selected' : ''}>${esc(o)}</option>`).join('');
+  if (row.type === 'enum' || row.options) {
+    const opts = paramOptions(row).map(o => `<option${String(row.value) === String(o) ? ' selected' : ''}>${esc(o)}</option>`).join('');
     return `<div class="ed"><select ${key}${dis}>${opts}</select>${unit}</div>`;
   }
-  const step = row.type === 'float' ? ' step="any"' : ' step="1"';
+  const step = row.step !== undefined ? ` step="${attr(row.step)}"` : (row.type === 'int' ? ' step="1"' : ' step="any"');
   const mm = (row.min !== undefined ? ` min="${row.min}"` : '') + (row.max !== undefined ? ` max="${row.max}"` : '');
   return `<div class="ed"><input type="number" ${key} value="${attr(row.value !== undefined ? row.value : '')}"${step}${mm}${dis}>${unit}</div>`;
 }
 
+// Numbers the engine derives from the parameters plus the clock tree. Shown
+// read-only under the table they come from: the UI displays them, never computes them.
+function computedRows(pid) {
+  const out = [];
+  const add = (name, value, unit, note) => out.push({ name, value, unit, note });
+  try {
+    if (typeof usartBaud === 'function') {
+      const b = usartBaud(pid);
+      if (b) {
+        add('Actual baud rate', b.actual === null ? '—' : b.actual, 'Bit/s',
+          b.note || `BRR ${b.brr} at ${b.clockMhz} MHz`);
+        if (b.errorPct !== null) add('Baud rate error', `${b.errorPct > 0 ? '+' : ''}${b.errorPct}`, '%', '');
+      }
+    }
+    if (typeof timerFrequency === 'function') {
+      const f = timerFrequency(pid);
+      if (f) {
+        add('Update frequency', f.hz, 'Hz', `${f.clockMhz} MHz / ((${f.prescaler} + 1) × (${f.period} + 1))`);
+        add('Update period', f.periodUs, 'µs', '');
+      }
+    }
+  } catch (e) { console.error('computed parameters', pid, e); }
+  return out;
+}
+
 function paramTable(pid) {
   const rows = paramRows(pid);
-  if (!rows.length) {
+  const calc = computedRows(pid);
+  if (!rows.length && !calc.length) {
     return `<div class="empty">${esc(pid)} has no parameters yet.<br>` +
       `They arrive with the <code>params:</code> block in <code>data/mcus/${esc(M.mcu.name)}.yaml</code>.</div>`;
   }
-  const live = hasParamApi();
-  const byName = Object.fromEntries(rows.map(r => [r.name, r.value]));
+  // Writes need a setter the engine actually accepts for THESE definitions.
+  const live = typeof setParam === 'function' && typeof getParams === 'function'
+    && (() => { try { return (getParams(pid) || []).length > 0; } catch (e) { return false; } })();
+
+  const byName = Object.fromEntries(rows.map(r => [paramLabel(r), r.value]));
+  const grouped = rows.some(r => r.group);
   const groups = new Map();
   for (const r of rows) {
-    const g = r.group || (r.advanced ? 'Advanced' : 'Basic');
+    const g = grouped ? (r.group || (r.advanced ? 'Advanced' : 'Basic')) : '';
     (groups.get(g) || groups.set(g, []).get(g)).push(r);
   }
   const order = [...groups.keys()].sort((a, b) => {
     const rank = n => (n === 'Basic' ? 0 : n === 'Advanced' ? 2 : 1);
     return rank(a) - rank(b) || a.localeCompare(b);
   });
+
   let h = '';
   for (const g of order) {
-    const key = `${pid}/${g}`, shut = paramsClosed.has(key);
-    h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g)}</td></tr>`;
+    const key = `${pid}/${g}`, shut = g && paramsClosed.has(key);
+    if (g) h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g)}</td></tr>`;
     if (shut) continue;
     for (const r of groups.get(g)) {
       const on = paramActive(pid, r, byName);
-      const cls = [on ? '' : 'off', r.computed ? 'calc' : ''].filter(Boolean).join(' ');
-      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(r.name)}${r.notes ? `<span class="pnote">${esc(r.notes)}</span>` : ''}</td>` +
+      const cls = [on ? '' : 'off', paramReadonly(r) ? 'calc' : ''].filter(Boolean).join(' ');
+      const note = [paramNote(r), r.register ? `register: ${r.register}` : ''].filter(Boolean).join(' — ');
+      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${note ? `<span class="pnote">${esc(note)}</span>` : ''}</td>` +
         `<td>${paramEditor(pid, r, live && on)}</td></tr>`;
     }
   }
-  const note = live ? '' :
-    `<div class="paramhead">Read-only for now: the engine's <code>setParam()</code> has not landed yet, and the UI never writes engine state directly.</div>`;
+  if (calc.length) {
+    h += `<tr class="grp" data-grp="${attr(pid)}/Calculated"><td colspan="2">Calculated</td></tr>`;
+    for (const c of calc) {
+      h += `<tr class="calc"><td>${esc(c.name)}${c.note ? `<span class="pnote">${esc(c.note)}</span>` : ''}</td>` +
+        `<td><span class="val">${esc(c.value)}</span> <span class="unit">${esc(c.unit)}</span></td></tr>`;
+    }
+  }
+  const note = live || !rows.length ? '' :
+    `<div class="paramhead">Read-only: the engine has no setter for these definitions yet, and the UI never writes engine state directly.</div>`;
   return note + `<table class="params"><thead><tr><th>${esc(pid)} parameter</th><th>Value</th></tr></thead><tbody>${h}</tbody></table>`;
 }
 
@@ -1516,17 +1566,10 @@ document.getElementById('cbody').addEventListener('click', e => {
 });
 document.getElementById('cbody').addEventListener('change', e => {
   const el = e.target; if (!el.dataset.pp) return;
-  if (!hasParamApi()) return;
-  const pid = el.dataset.pp, name = el.dataset.pn;
-  const row = paramRows(pid).find(r => r.name === name) || {};
-  let v = el.type === 'checkbox' ? el.checked : el.value;
-  if (row.type === 'int') v = Math.round(Number(v));
-  if (row.type === 'float') v = Number(v);
-  if (typeof v === 'number' && Number.isFinite(v)) {
-    if (row.min !== undefined) v = Math.max(row.min, v);
-    if (row.max !== undefined) v = Math.min(row.max, v);
-  }
-  try { setParam(pid, name, v); } catch (err) { toast(`${name}: ${err.message}`); }
+  if (typeof setParam !== 'function') return;
+  const pid = el.dataset.pp, key = el.dataset.pn;
+  const v = el.type === 'checkbox' ? el.checked : el.value;
+  try { setParam(pid, key, v); } catch (err) { toast(err.message); }
   renderAll();
 });
 
