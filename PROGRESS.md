@@ -3,16 +3,47 @@
 The ongoing source of truth for where this project stands. Keep it current: if a
 statement here stops being true, change it here first.
 
-- **Last updated:** 2026-09-11T22:40Z (round 5, AGENT-3 cycle 1 — the pack, the constraint
-  mechanism's QA, and this file)
+- **Last updated:** 2026-09-12 (round 5, AGENT-3 cycle 2 — CI made publish-ready, and the
+  case-sensitivity defects that preparing it exposed)
 - **Branch:** `main` (no remote). **One shared working tree**, three agents, one working
   directory (`agents/`); rounds 1–4 are archived under `agents/history/`.
-- **Verified this pass:** `python build.py` → OK · `node tests/run.js` → **510 green,
-  0 skipped** · `python tools/validate_mcu.py` → 0 errors, 5 warnings ·
+- **Verified this pass:** `python build.py` → OK · `node tests/run.js` → **ALL GREEN, 0
+  skipped** · `python tools/validate_mcu.py` → 0 errors, 5 warnings ·
   `python tools/verify_sdk_names.py` → 0 errors · `node tools/wchcube_cli.js --project
-  <fixture> --strict` → exit 0 on all four fixtures, in both the default format and
-  `--format c`.
-- **Also new this pass: a FOURTH part arrived mid-cycle, and every gate it touched was
+  <fixture> --strict` → exit 0 on all five fixtures, in both the default format and
+  `--format c` · `git archive` → 1.7 MB with no vendor material in it.
+- **New this pass: the repository is ready to publish, and getting it there found two real
+  defects — one of them the class this repo exists to catch.** The workflows had never been
+  read by anything, because there is no remote. `ci.yml` did not install PlatformIO
+  anywhere, so `codegen_compile`, `generated_project` and `firmware_native` all **skipped**
+  — and a skipped gate reads as a green job, which is how "the generated C compiles" stood
+  unproven for a whole round once before. Its `desktop` job asked for
+  `libappindicator3-dev`, which does not exist on a current Ubuntu runner. Both fixed, plus
+  a `release.yml` that publishes on a `v*` tag, and `tests/release.test.js` now checks the
+  plumbing the way everything else here is checked — including that the workflow which
+  installs PlatformIO is the same one that runs the compile gate, and that a *commented-out*
+  `pip install platformio` does not satisfy it, which the first version of that check
+  wrongly accepted.
+- **Also new this pass, and this is the interesting one: `data/sources/V003/` had landed
+  with the wrong capitalisation, and every gate in the repo passed anyway.**
+  `evt/` and `datasheets/` where the other two parts, `data/sources/README.md` and
+  `tools/verify_sdk_names.py` all say `Evt/` and `Datasheets/`. On Windows — this box — the
+  lookup resolves case-insensitively and 23 headers were checked. On the Linux runner the
+  same lookup would have found nothing, reported CH32V003 **NOT CHECKED**, and exited **0**:
+  a green tick over a part that was never checked. Renamed (not deleted) with the dangling
+  citations in `CH32V003.yaml` and `CH32V003.notes.md` repaired in the same write, and
+  `tests/source_paths.test.js` now resolves every `data/sources/...` path any tracked file
+  cites **against the case the filesystem actually has**, with both a wrong-case path and a
+  wrong-case `codegen.sdk.evt` planted to prove it bites. It is the same defect as
+  `codegen.header: ch32v00x.h` one field over, and it was found by preparing CI rather than
+  by running it.
+- **Also new this pass:** the issue chooser's three `contact_links` pointed at
+  `https://github.com/OWNER/REPO/...` — three buttons that would 404 the moment the
+  repository was published. Removed, with the guidance moved into the templates as relative
+  markdown (which is correct in a fork and after a rename), and a check that fails if that
+  placeholder ever comes back.
+- **Verified this pass (previous cycle):** `node tests/run.js` → **510 green, 0 skipped**.
+- **Also new (previous cycle): a FOURTH part arrived mid-cycle, and every gate it touched was
   already wide enough to catch it.** `data/mcus/CH32V003.yaml` landed (DATA, whose brief
   did not include it). `tests/strict.test.js`'s coverage check failed immediately, which is
   what it is for — a shipped part with no `.wchproj` behind the `--strict` gate has
@@ -431,6 +462,27 @@ the assumption note in `CH32V006.notes.md` can be marked confirmed.
 ### Environment
 
 - **No git remote.** CI has never run. `HUMAN_TODO` item 1.
+  **The workflow side is ready as of 2026-09-12** and is now checked by
+  `tests/release.test.js` rather than only by reading it: `ci.yml` has three jobs
+  (`test` with no PlatformIO; `firmware`, which installs PlatformIO, builds all five
+  environments and then generates every fixture's project and builds it; and
+  `desktop` for the Tauri shell), and `release.yml` publishes on a `v*` tag. Two real
+  defects were found by writing that file and preparing this: `ci.yml` never installed
+  PlatformIO at all, so the compile suites **skipped**, and the `desktop` job asked for
+  `libappindicator3-dev`, which does not exist on a current Ubuntu runner (Tauri 2 needs
+  `libayatana-appindicator3-dev` plus `libxdo-dev`). Both are fixed. **What remains
+  unproven is that the workflows run** — they have never executed, and no local check can
+  substitute for that.
+- **Case-sensitive filesystems, found by preparing the above.** `data/sources/V003/` had
+  landed as `evt/` and `datasheets/` while the other two parts and the tools say `Evt/`
+  and `Datasheets/`. Everything passed here, because this box is case-insensitive; on the
+  Linux runner the CH32V003 SDK lookup would have resolved nothing, degraded to
+  "NOT CHECKED", and exited 0 — a green tick over a part nobody checked, which is
+  precisely the defect class this repo keeps finding. Renamed (not deleted) and the
+  citations in `CH32V003.yaml` and `CH32V003.notes.md` repaired with it;
+  `tests/source_paths.test.js` now resolves every `data/sources/...` path a tracked file
+  cites **against the case the filesystem actually has**, and plants both a wrong-case
+  path and a wrong-case `codegen.sdk.evt` to prove it bites.
 - **The repo is on a Google Drive mount.** `npm install` fails with EBADF; test
   deps live in `%LOCALAPPDATA%\wchcube-deps`. `HUMAN_TODO` item 3.
 - **`agents/README.md` "Environment facts" is stale.** It says there is no

@@ -1,19 +1,47 @@
 name: CI
 
+# Three jobs, in increasing cost, because the cheapest one catches most things:
+#
+#   test      ubuntu, no PlatformIO — data gates, build, the whole suite.
+#   firmware  ubuntu + PlatformIO — really compiles the generated C. The `test`
+#             job SKIPS the compile gate (there is no `pio` there), and a skip is
+#             not a pass, so this job exists to make those checks run for real.
+#   desktop   ubuntu + Rust — the Tauri shell builds and its unit tests pass.
+#
+# The `test` job runs on LINUX, and that is load-bearing rather than incidental.
+# This repo is developed on Windows, where the filesystem is case-insensitive, so
+# a path or an include spelled with the wrong capitals works locally and is dead
+# here. Two defects of exactly that class have shipped: `codegen.header:
+# ch32v00x.h` for a part whose header is `ch32v00X.h`, and `data/sources/V003/evt/`
+# where the other parts and the tools say `Evt/`. `tests/source_paths.test.js` is
+# the guard, and this filesystem is what makes it a guard rather than a formality.
+
 on:
   push:
     branches: ['**']
   pull_request:
   workflow_dispatch:
 
+# Read-only by default. Nothing here writes to the repository, and no step needs a
+# token with more reach than that.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # PlatformIO is chatty and its progress bars are megabytes of ANSI in a log.
+  PLATFORMIO_SETTING_ENABLE_TELEMETRY: 'false'
+  PYTHONIOENCODING: utf-8
+
 jobs:
+  # ---------------------------------------------------------------------------
   test:
     name: build + tests
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -32,8 +60,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyyaml
 
+      # The MCU files are the product's data, and this is the gate that reads them
+      # for internal consistency: geometry, pin existence, remap parity, I/O counts,
+      # EXTI legality, HSE coupling, codegen names, DMA and NVIC.
       - name: Validate MCU data
         run: python tools/validate_mcu.py
+
+      # A different question from the one above: does every SPL macro, function,
+      # struct field and enum member an MCU file CLAIMS exist in that part's OWN
+      # headers? A file that passes validate_mcu.py can still name a real,
+      # correctly-spelled identifier belonging to a different chip — that is the
+      # round-2 defect, and only this catches it. EVT first, PlatformIO as fallback.
+      - name: Check every SDK name each part claims
+        run: python tools/verify_sdk_names.py
 
       - name: Build dist/index.html
         run: python build.py
@@ -47,14 +86,106 @@ jobs:
             exit 1
           fi
 
+      # The real-browser suites need a browser and SKIP loudly without one. Say
+      # which one was found, rather than leaving a green run that quietly skipped
+      # every layout, legibility and clock check.
+      - name: Which browser the real-browser suites will use
+        run: |
+          for b in google-chrome chromium chromium-browser; do
+            if command -v "$b" >/dev/null 2>&1; then
+              echo "found: $(command -v "$b") ($("$b" --version 2>/dev/null || echo 'version unknown'))"
+              exit 0
+            fi
+          done
+          echo "::warning::no Chrome or Chromium on this runner - the real-browser suites will SKIP. They are not a pass."
+
+      # PlatformIO is deliberately absent here, so `tests/codegen_compile.test.js`,
+      # `tests/generated_project.test.js` and `tests/firmware_native.test.js` SKIP
+      # with a printed reason and the runner counts them. The `firmware` job below
+      # runs the same suite with PlatformIO installed, which is where they run for
+      # real. Every other suite is green here or the build fails.
       - name: Run tests
         run: node tests/run.js
 
+  # ---------------------------------------------------------------------------
+  firmware:
+    name: firmware + generated project
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          pip install pyyaml
+          pip install platformio
+
+      # ~/.platformio holds the ch32v platform, the WCH RISC-V toolchain and the
+      # noneos-sdk framework — a few hundred MB. Without the cache every run
+      # re-downloads all of it.
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('data/firmware/platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: PlatformIO version and the toolchain it will install
+        run: pio --version
+
+      - name: Build the firmware for every part
+        working-directory: data/firmware
+        run: pio run
+
+      # `pio run` builds every environment against the ONE configuration sitting in
+      # the drop zone, so a file left there by a previous step fails each other
+      # environment — correctly, and confusingly. Clear it before the gate below.
+      - name: Empty the generated-code drop zone
+        run: |
+          rm -f data/firmware/lib/wchcube_generated/include/wchcube_init.h \
+                data/firmware/lib/wchcube_generated/src/wchcube_init.c
+
+      # Each fixture generates a whole standalone project and builds it with its own
+      # environment. This is the half the `test` job cannot do.
+      - name: Generate each fixture's project and build it
+        run: |
+          set -e
+          for f in tests/fixtures/*.wchproj; do
+            name="$(basename "$f" .wchproj)"
+            out="$RUNNER_TEMP/gen/$name"
+            rm -rf "$out"
+            echo "=== $name ==="
+            node tools/wchcube_cli.js --project "$f" --new-project "$out"
+            ( cd "$out" && pio run )
+          done
+
+      # Build dist (the suite needs it) and run EVERYTHING, now with PlatformIO
+      # present, so the compile-gate suites execute instead of skipping. This is the
+      # only run in CI where "the generated C compiles" is a measured claim, and a
+      # skip here would be the silence that let that claim stand unproven once before.
+      - name: Build dist/index.html
+        run: python build.py
+
+      - name: Run the tests with PlatformIO available
+        run: node tests/run.js
+
+  # ---------------------------------------------------------------------------
   desktop:
     name: tauri shell (linux)
     runs-on: ubuntu-latest
-    # Only once the shell exists; keeps CI green for everyone else until then.
-    if: ${{ hashFiles('src-tauri/Cargo.toml') != '' }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -66,10 +197,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Tauri 2's Linux prerequisites. `libappindicator3-dev` was renamed to
+      # `libayatana-appindicator3-dev` when Ubuntu moved to the ayatana fork, so the
+      # old name is not installable on 24.04; `libxdo-dev` is needed by
+      # tauri-plugin-dialog's file picker; `patchelf` and `file` are needed to bundle.
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential curl wget file libssl-dev libgtk-3-dev
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev libgtk-3-dev \
+            build-essential curl wget file patchelf
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -82,22 +220,13 @@ jobs:
           pip install pyyaml
           python build.py
 
-      # No Cargo.lock is committed (there is no Rust toolchain on the dev box to
-      # generate one), so cargo resolves on first build. Do not add --locked until
-      # a lock file is checked in.
+      # Cargo.lock IS committed (cargo 1.98.1 is on the dev box), so `--locked` is
+      # what makes this a reproducible build rather than "resolve whatever is
+      # current today". A dependency bump then has to be a deliberate commit.
       - name: Build the desktop app
         working-directory: src-tauri
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Run the Rust unit tests
         working-directory: src-tauri
-        run: cargo test --release
-
-      # The lock file cannot be generated on the dev box; take it from the first
-      # green build so later runs resolve the same versions.
-      - name: Upload Cargo.lock
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-lock
-          path: src-tauri/Cargo.lock
-          if-no-files-found: warn
+        run: cargo test --release --locked

@@ -1,7 +1,7 @@
 # =============================================================================
 #  CH32V003 — extracted from CH32V003 Datasheet V1.3 (DS) and CH32V003
-#  Reference Manual V1.6 (RM), both in data/sources/V003/datasheets/, and from the
-#  EVT package in data/sources/V003/evt/.  Sources are noted next to each block and
+#  Reference Manual V1.6 (RM), both in data/sources/V003/Datasheets/, and from the
+#  EVT package in data/sources/V003/Evt/.  Sources are noted next to each block and
 #  in data/mcus/CH32V003.notes.md.
 #
 #  THIS PART IS NOT A DELTA OF CH32V006 AND DOES NOT `inherits:` IT.  They are
@@ -249,7 +249,7 @@ peripherals:
     # this list gives them, and IWDG_PSCR and IWDG_RLDR are write-protected until
     # 0x5555 reaches IWDG_CTLR (RM 5.2) — a prescaler or reload written while locked
     # is discarded with no error anywhere. WCH's own example agrees:
-    # data/sources/V003/evt/EXAM/IWDG/IWDG/User/main.c enables write access first.
+    # data/sources/V003/Evt/EXAM/IWDG/IWDG/User/main.c enables write access first.
     params:
       - key: write_access
         name: Register write access
@@ -1542,8 +1542,8 @@ dma:
 # -----------------------------------------------------------------------------
 # Interrupts — the vector table. Both names for every vector are taken mechanically
 # from the EVT package rather than transcribed:
-#   irqn     IRQn_Type in data/sources/V003/evt/EXAM/SRC/Peripheral/inc/ch32v00x.h
-#   handler  the .word table in data/sources/V003/evt/EXAM/SRC/Startup/startup_ch32v00x.S
+#   irqn     IRQn_Type in data/sources/V003/Evt/EXAM/SRC/Peripheral/inc/ch32v00x.h
+#   handler  the .word table in data/sources/V003/Evt/EXAM/SRC/Startup/startup_ch32v00x.S
 #
 # THE TWO NAMES ARE NOT INTERCHANGEABLE and this part proves it harder than CH32V006
 # does. Vector 3 is `EXC_IRQn` in the enum and `HardFault_Handler` in the startup
@@ -1624,7 +1624,7 @@ nvic:
 # constant in the engine.
 #
 # The names below follow the EVT enum, not the manual: `GPIOSpeed_TypeDef` in
-# data/sources/V003/evt/EXAM/SRC/Peripheral/inc/ch32v00x_gpio.h:22-27 is
+# data/sources/V003/Evt/EXAM/SRC/Peripheral/inc/ch32v00x_gpio.h:22-27 is
 # three members in this order - GPIO_Speed_10MHz = 1, then GPIO_Speed_2MHz, then
 # GPIO_Speed_30MHz - and line 29 adds
 # `#define GPIO_Speed_50MHz GPIO_Speed_30MHz`. The RM calls code 11 "50MHz" and the

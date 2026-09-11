@@ -1,18 +1,34 @@
 # Issue-template chooser.
 #
-# ACTION REQUIRED when this repository is pushed to GitHub: replace OWNER/REPO in
-# the three links below with the real `owner/repo`. GitHub requires absolute URLs
-# here, so they cannot be relative and cannot be interpolated. Until they are
-# replaced these three links 404 — which is why they sit in one block, at the top,
-# saying so, rather than being scattered where nobody would notice.
+# `contact_links` is deliberately NOT used here, and this note says why so nobody
+# adds it back half-done.
+#
+# GitHub requires an ABSOLUTE url for a contact link, so every entry needs the real
+# `https://github.com/<owner>/<repo>/...` — which cannot be known before the
+# repository is published, cannot be derived at runtime, and is wrong the moment a
+# fork or a rename happens. Three such links shipped in this file as
+# `https://github.com/OWNER/REPO/...`, which means the issue chooser offered three
+# buttons that 404'd. That is worse than not offering them.
+#
+# The same pointers live in the templates themselves as RELATIVE markdown
+# references (`docs/ADDING-A-PART.md`), which GitHub resolves against whatever
+# repository the template is rendered in — so they are correct in a fork, after a
+# rename, and before the first push. `tests/release.test.js` fails if an
+# `OWNER/REPO` placeholder appears anywhere under `.github/`, because that string is
+# always a defect and never a placeholder worth keeping.
+#
+# If you do want the button-style contact links, add them here WITH the real URL:
+#
+#   contact_links:
+#     - name: How the project works, and how much to trust it
+#       url: https://github.com/<owner>/<repo>/blob/main/docs/HOW-IT-WORKS.md
+#       about: Read this first — it is honest about what is verified and what has never been tested.
+#     - name: Adding a microcontroller
+#       url: https://github.com/<owner>/<repo>/blob/main/docs/ADDING-A-PART.md
+#       about: The whole process, from dropping the vendor files in to seeing generated C compile.
+#     - name: Where the project actually stands
+#       url: https://github.com/<owner>/<repo>/blob/main/PROGRESS.md
+#       about: Known-broken, known-untested, and what is next. Check here before filing a bug.
+
 blank_issues_enabled: true
-contact_links:
-  - name: How the project works, and how much to trust it
-    url: https://github.com/OWNER/REPO/blob/main/docs/HOW-IT-WORKS.md
-    about: Read this first — it is honest about what is verified and what has never been tested.
-  - name: Adding a microcontroller
-    url: https://github.com/OWNER/REPO/blob/main/docs/ADDING-A-PART.md
-    about: The whole process, from dropping the vendor files in to seeing generated C compile.
-  - name: Where the project actually stands
-    url: https://github.com/OWNER/REPO/blob/main/PROGRESS.md
-    about: Known-broken, known-untested, and what is next. Check here before filing a bug.
+

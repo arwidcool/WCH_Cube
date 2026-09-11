@@ -22,8 +22,11 @@ version: '3'
 
 vars:
   FW: data/firmware
-  # Every generated-code environment, in the order they are cheapest to fix.
-  ENVS: CH32V006F8P6 CH32V006K8U6 CH32V005F6P6 CH32X035G8U6
+  # Every generated-code environment, in the order they are cheapest to fix. A new
+  # part is one line here AND one `[env:*]` in data/firmware/platformio.ini — the
+  # `firmware` task names these explicitly, so an environment missing from this list
+  # is an environment `task firmware` silently does not build.
+  ENVS: CH32V006F8P6 CH32V006K8U6 CH32V005F6P6 CH32V003F4P6 CH32X035G8U6
 
 tasks:
   default:

@@ -71,12 +71,20 @@ those words, until a human runs `pio run -t upload` and reports the SDI banner.
       → **the compile half is DONE and is no longer human-blocked** — the old note here said
         there was no compiler on this box, and that was wrong. PlatformIO ships WCH's RISC-V
         GCC 12.2.0, and `tests/codegen_compile.test.js` generates from a fixture that assigns
-        pins and runs a real `pio run`: CH32V006 TSSOP20 (`CH32V006F8P6`), CH32V006 QFN32
-        (`CH32V006K8U6`) and CH32V005 TSSOP20 (`CH32V005F6P6`) all compile AND link.
-        What is left is literally the two words "in CI": the workflow has never run, because
-        the repo has no remote. **Human-blocked for that half only** (`HUMAN_TODO` item 1).
-        Not ticked, because the line says "in CI" and it is not true yet — see the Round 3
-        section for the local gate, which is ticked on its own terms.
+        pins and runs a real `pio run`: five fixtures across four parts and three families, all
+        of which compile AND link.
+        **The "in CI" half is now WIRED but not yet OBSERVED** (2026-09-12). The old workflow
+        never installed PlatformIO, so on the runner these suites would have SKIPPED — a green
+        job over a gate that did not run, which is the failure this line has been about since
+        round 3. `ci.yml` now has a `firmware` job that installs PlatformIO, builds all five
+        environments in `data/firmware`, empties the drop zone, generates **every** fixture's
+        project with `tools/wchcube_cli.js --new-project` and builds each one, and then runs the
+        whole suite with `pio` present so the compile suites execute instead of skipping.
+        `tests/release.test.js` asserts exactly that — the job that installs PlatformIO must be
+        the job that runs the compile gate, and a commented-out `pip install platformio` must NOT
+        satisfy it (the first version of that check accepted one, which is why the planted break
+        is part of the suite). **Still not ticked: no workflow has ever executed**, because there
+        is no remote. `HUMAN_TODO` item 1. This is now the only thing between the line and a tick.
 - [ ] `params:` schema in FORMAT.md, filled for CH32V006 USART/SPI/I2C/TIM/ADC, consumed by the engine and a Parameter Settings tab, round-trips in `.wchproj`
 
 ## UI
@@ -124,10 +132,16 @@ those words, until a human runs `pio run -t upload` and reports the SDI banner.
         Not ticked: the line says **on Linux**, and nothing in this repo has ever been built
         on Linux. That half needs the remote (`HUMAN_TODO` item 1).
 - [ ] `npm test` / `node tests/run.js` green; GitHub Actions workflow runs build + tests on every push
-      → `node tests/run.js` is **green: 333 tests**, and `.github/workflows/ci.yml` is written
-        (Node 22, Python 3.12, validate → build → stale-dist check → tests, plus a Linux
-        desktop job). Half of this line is therefore done; the workflow itself has never run
-        because the repo has no remote, so it cannot be ticked.
+      → `node tests/run.js` is **ALL GREEN, 0 skipped**, and the workflow now does what this line
+        describes rather than what it did before (2026-09-12): a `test` job runs
+        `validate_mcu.py`, `verify_sdk_names.py`, the build and a stale-`dist` check, then the
+        whole suite; a `firmware` job adds PlatformIO and really compiles; a `desktop` job builds
+        the Tauri shell with `--locked` against the committed `Cargo.lock`. Every job is bounded
+        by `timeout-minutes`, the workflow is `permissions: contents: read`, and
+        `tests/release.test.js` fails if a workflow stops parsing, loses its trigger, is unbounded,
+        or loses the PlatformIO install that makes the compile gate real. **Still not ticked:**
+        the workflow has never executed — no remote — so "runs build + tests on every push" is a
+        description of a file, not of an observed run. `HUMAN_TODO` item 1.
 - [x] README documents: run in browser, run desktop, add an MCU, file format, agent workflow
       → `README.md`: run in a browser, run and build the desktop app, projects, add an MCU
         (with the remap-table idea and `tools/validate_mcu.py`), running the tests including
@@ -143,6 +157,36 @@ those words, until a human runs `pio run -t upload` and reports the SDI banner.
         produce no console output at all. Also `tests/data.test.js` ("the app can load every
         bundled MCU on every one of its packages").
 - [ ] TASKS.md has no `[~]` left and no `[ ]` in Phase 1–4
+
+## Release plumbing — added round 5
+
+- [x] **CI is ready to publish, and the two defects that preparing it found are closed.**
+      → `tests/release.test.js`, 7 checks, all green in the suite. What it asserts: every
+        workflow under `.github/workflows/` parses, has a trigger, and every job has
+        `runs-on`, steps and a `timeout-minutes`; **the job that installs PlatformIO is the job
+        that runs the compile gate** (the real defect — the old `ci.yml` installed nothing, so
+        `codegen_compile`, `generated_project` and `firmware_native` would all have SKIPPED on
+        the runner while the job went green); no `OWNER/REPO` placeholder survives anywhere under
+        `.github/`; the Taskfile's `ENVS` list equals the `[env:*]` sections of
+        `data/firmware/platformio.ini` (a part in one and not the other is a build nobody runs);
+        and `git archive` output carries no vendor material while still carrying `dist/index.html`,
+        `build.py` and `app/engine/` — a redistribution claim about WCH's files, checked rather
+        than asserted in a comment. Three of those carry a planted break that runs every time,
+        including one that exists because the first version of the PlatformIO check **could not
+        fail**: it matched raw step text, so a commented `# pip install platformio` satisfied it.
+- [x] **The case-sensitivity defect, which is the one that matters.** `data/sources/V003/` held
+      `evt/` and `datasheets/` where the other two parts, `data/sources/README.md` and
+      `tools/verify_sdk_names.py` all say `Evt/` and `Datasheets/`. On Windows every gate passed
+      and 23 headers were checked; on the Linux runner the same lookup finds nothing, reports
+      CH32V003 **NOT CHECKED** and exits **0** — a green tick over a part nobody checked.
+      → renamed (never deleted) and the dangling citations in `CH32V003.yaml` and
+        `CH32V003.notes.md` repaired with it. `tests/source_paths.test.js`, 5 checks, resolves
+        every `data/sources/...` path any tracked file cites **against the case the filesystem
+        actually has** — separating "wrong case, here is the real spelling" from "missing
+        entirely", because they need different fixes — and requires each part's
+        `codegen.sdk.evt` to build a real `<evt>/Evt` with headers in it. Planted breaks both
+        ways, confirmed red and restored. It is `codegen.header: ch32v00x.h` one field over, and
+        it was found by *preparing* CI rather than by running it.
 
 ---
 

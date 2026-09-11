@@ -660,6 +660,32 @@ Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT
       three parts and would catch a typo. `[env:CH32V003F4P6]` exists as of this cycle; add
       `pio_env: CH32V003F4P6` (or deliberately none, as `CH32X035D8U6` does) so it becomes a
       checked claim. Minor: `params:` for `CH32V003 OPA1` is still open and prints every run.
+- [x] (AGENT-3) **CI made publish-ready, and the two defects that preparing it found.** `ci.yml`
+      never installed PlatformIO, so the compile suites would have SKIPPED on the runner under a
+      green job; its `desktop` job asked for `libappindicator3-dev`, which does not exist on a
+      current Ubuntu runner; and its comments claimed `Cargo.lock` was uncommitted when it is not.
+      All fixed, plus `permissions: contents: read`, per-job timeouts, and a new
+      `.github/workflows/release.yml` that publishes `dist/index.html` and a vendor-free source
+      archive on a `v*` tag. `tests/release.test.js` (7 checks, 3 with planted breaks) now asserts
+      the plumbing — including that the PlatformIO install and the compile gate are the same job.
+- [x] (AGENT-3) **`data/sources/V003/` had the wrong capitalisation and every gate passed anyway** —
+      `evt/`/`datasheets/` where the other parts and the tools say `Evt/`/`Datasheets/`. On Windows
+      the lookup resolves and 23 headers were checked; on Linux it resolves nothing, reports
+      CH32V003 **NOT CHECKED**, and exits 0. Renamed (never deleted), the dangling citations in
+      `CH32V003.yaml`/`CH32V003.notes.md` repaired, and `tests/source_paths.test.js` (5 checks) now
+      resolves every cited `data/sources/...` path against the case the filesystem actually has.
+      Decision and rationale: `agents/BOARD.md` 2026-09-11T23:06Z.
+- [ ] (AGENT-1) **`tools/verify_sdk_names.py` degrades a wrong-case EVT folder to a WARNING and
+      then to NOT CHECKED, and still exits 0** — which is what made the defect above invisible to
+      every gate. It should be an ERROR: the path the tool builds is a claim like any other, and
+      `data/sources/<evt>/Evt` not existing (with the case the tool spells) is the difference
+      between a part that was checked and a part that was not. `tests/source_paths.test.js` catches
+      this from the outside now; the tool should catch it from the inside too.
+- [ ] (AGENT-3) **The workflows have never executed.** `ci.yml` (3 jobs) and `release.yml` are
+      written and checked structurally, but no local check can substitute for a run on a real
+      runner — expect the first one to shake out a package name or a cache path. Unblocks on
+      `HUMAN_TODO` item 1. Also deferred: `pio check` in CI, and `tests/perf.test.js`, both from
+      `agents/BACKLOG.md`.
 - [x] (AGENT-1) **The constraint mechanism, DATA half.** Schema posted on the board BEFORE any
       entry was filled; `data/FORMAT.md` gains `## constraints` (mechanism, key table, the rules
       the validator enforces, how the three consumers read it, and why "must be a floating input"

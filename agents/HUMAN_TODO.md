@@ -3,6 +3,18 @@
 1. **Add a git remote and push**: `git remote add origin <url> && git push -u origin main`.
    Unblocks: CI has never run, the worktree model, and a second machine. AGENT-3 takes over the
    moment it exists. The repo has been local-only for five rounds.
+   **The workflow side is now ready for it** (2026-09-12, AGENT-3): `.github/workflows/ci.yml` has
+   three jobs — `test` (data gates, build, the whole suite, no PlatformIO), `firmware` (installs
+   PlatformIO, builds all five environments, then generates every fixture's project and builds it,
+   then runs the whole suite with `pio` present so the compile suites execute instead of skipping)
+   and `desktop` (Tauri 2's Linux packages, `cargo build --locked`). `.github/workflows/release.yml`
+   publishes on a `v*` tag: the gate runs first, then `dist/index.html` and a source archive built
+   with `git archive` (which honours the `export-ignore` rules that keep the vendor SDK and
+   datasheets out of it) are attached to the release. Every part of that is checked from
+   `tests/release.test.js`, including that no `OWNER/REPO` placeholder survives. **Still unverified
+   by construction: the workflows have never executed.** Expect the first run to shake something
+   out — most likely a runner-image package name — and post it on the board rather than fixing it
+   quietly.
 2. ~~**Rust toolchain on the dev box**~~ — **not needed.** `cargo` 1.98.1 is on PATH and
    `src-tauri/` compiles here. Kept as a line only so nobody re-adds it. The remaining desktop
    gap is item 7.
