@@ -110,6 +110,14 @@ const ABSENT = {
   'TKEY.nvic': 'TouchKey raises the ADC vector, which is declared with peripheral: ADC1. No TKEY_IRQn in the enum',
   'EXTEN.nvic': 'the extended-configuration unit raises no interrupt: IRQn_Type in ch32v00X.h:45-82 '
     + 'ends at OPCM_IRQn = 40 and contains no EXTEN entry. LKUPRST is a polled status flag, not a vector',
+  // --- per-part: true on THIS part and not on its siblings
+  'CH32X035.RCC.nvic': 'CH32X035 has no RCC interrupt AT ALL. `IRQn_Type` in '
+    + 'data/sources/X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035.h jumps FLASH_IRQn = 18 straight to '
+    + 'EXTI7_0_IRQn = 20, and Startup/startup_ch32x035.S has `.word 0` in that slot — two '
+    + 'independent sources agreeing on an absence. CH32V006 has RCC_IRQn = 19, which is exactly '
+    + 'why this key is per-part: "every family has an RCC interrupt" is the kind of assumption '
+    + 'round 4 exists to break (AGENT-1, round-4 board 16:44Z)',
+
   'TIM3.nvic': 'THE RECORDED CONTRADICTION, and it survived the EVT drop: this part HAS a TIM3, and there is no TIM3 vector. '
     + 'RM Table 6-1 omits it, IRQn_Type ends at OPCM_IRQn = 40, and startup_ch32v00X.S agrees. Two independent sources, '
     + 'so it is recorded rather than invented. See CH32V006.notes.md',
@@ -126,6 +134,8 @@ const ABSENT = {
  * here and then quietly dropped from the backlog.
  */
 const OPEN = {
+  'CH32X035.USBFS.params': ['AGENT-1', 'CH32X035 extraction: `params:` for the peripherals that have none'],
+  'CH32X035.USBPD.params': ['AGENT-1', 'CH32X035 extraction: `params:` for the peripherals that have none'],
   'TIM3.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
   'IWDG.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
   'WWDG.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
@@ -133,8 +143,24 @@ const OPEN = {
   'OPA1.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
 };
 
-const excused = (pid, cell) =>
-  process.env.WCHCUBE_NO_EXEMPTIONS ? false : (ABSENT[`${pid}.${cell}`] || ABSENT[`${pid}.*`]);
+/**
+ * Look a cell up in one of the tables, most specific key first.
+ *
+ * Keys may be `<PART>.<PID>.<cell>` or `<PID>.<cell>`, and `*` stands in for the
+ * cell. The per-part form exists because **CH32X035 proved that an absence is
+ * not a property of a peripheral, it is a property of a peripheral ON A PART**:
+ * `RCC` has a vector on CH32V006 (`RCC_IRQn = 19`) and none at all on CH32X035,
+ * where the enum jumps 18 → 20 and the startup table has a `.word 0` in that
+ * slot. A table keyed only by peripheral cannot say that, and until the second
+ * family landed nothing here needed it to. That is the round's whole thesis
+ * arriving in a test file.
+ */
+const lookup = (table, part, pid, cell) =>
+  table[`${part}.${pid}.${cell}`] || table[`${part}.${pid}.*`]
+  || table[`${pid}.${cell}`] || table[`${pid}.*`];
+
+const excused = (part, pid, cell) =>
+  process.env.WCHCUBE_NO_EXEMPTIONS ? false : lookup(ABSENT, part, pid, cell);
 
 // ---------------------------------------------------------------- the matrix
 test('every peripheral of every real part has settings, params, a clock bit, and vectors', () => {
@@ -157,9 +183,9 @@ test('every peripheral of every real part has settings, params, a clock bit, and
     }
 
     const say = (pid, cell, why) => {
-      if (excused(pid, cell)) return;
-      const open = OPEN[`${pid}.${cell}`];
-      if (open) { stillOpen.add(`${pid}: ${cell} — ${open[0]} owns it, TASKS.md: ${open[1]}`); return; }
+      if (excused(part, pid, cell)) return;
+      const open = lookup(OPEN, part, pid, cell);
+      if (open) { stillOpen.add(`${part}  ${pid}: ${cell} — ${open[0]} owns it, TASKS.md: ${open[1]}`); return; }
       missing.push(`${part}  ${pid}: ${cell} — ${why}`);
     };
 

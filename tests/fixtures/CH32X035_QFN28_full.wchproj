@@ -1,0 +1,88 @@
+wchproj: 1
+name: compile-gate CH32X035 QFN28
+saved: fixture
+mcu: CH32X035
+variant: null
+package: QFN28
+peripherals:
+  SYS:
+    settings:
+      Debug interface: Serial Wire (SDI)
+    remap: 0
+  RCC:
+    settings:
+      Master Clock Output (MCO): Disable
+    remap: 0
+  DMA1:
+    settings:
+      Mode: Disable
+    remap: 0
+  IWDG:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      write_access: Enable before writing
+      prescaler: '64'
+      reload: 4095
+  WWDG:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      prescaler: '1'
+      window: 127
+      counter: 127
+  USBFS:
+    settings:
+      Mode: Disable
+    remap: 0
+  USBPD:
+    settings:
+      Mode: Disable
+    remap: 0
+gpio_manual:
+  PA0: GPIO_Output
+  PA5: GPIO_Input
+  PB3: GPIO_Output
+  PB12: GPIO_Output
+  PC0: GPIO_Output
+  PC16: GPIO_Input
+gpio_settings:
+  PA0:
+    mode: Output Push Pull
+    pull: No pull
+    speed: 50 MHz
+    label: STATUS_LED
+  PA5:
+    mode: Input
+    pull: Pull-up
+    speed: 50 MHz
+    label: ''
+  PB3:
+    mode: Output Push Pull
+    pull: No pull
+    speed: 50 MHz
+    label: ''
+  PB12:
+    mode: Output Push Pull
+    pull: No pull
+    speed: 50 MHz
+    label: ''
+  PC0:
+    mode: Output Push Pull
+    pull: No pull
+    speed: 50 MHz
+    label: ''
+  PC16:
+    mode: Input
+    pull: No pull
+    speed: 50 MHz
+    label: ''
+clock:
+  hse: 8
+  pllIn: 0
+  pllMul: 1
+  sys: HSI
+  pre:
+    HB: 1

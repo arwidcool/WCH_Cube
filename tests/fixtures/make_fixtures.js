@@ -159,6 +159,37 @@ export const FIXTURES = [
       eng.setGpioField('PC0', 'label', 'LED');
     },
   },
+  {
+    file: 'CH32X035_QFN28_full.wchproj',
+    name: 'compile-gate CH32X035 QFN28',
+    mcu: 'CH32X035',
+    pkg: 'QFN28',
+    env: 'CH32X035G8U6',
+    build() {
+      // The SECOND FAMILY, and the whole point of round 4. Nothing in this
+      // function knows it is a different part: the same engine calls, and the
+      // data decides that the clock enable is RCC_APB2PeriphClockCmd rather than
+      // RCC_PB2PeriphClockCmd, that the one GPIO speed is GPIO_Speed_50MHz
+      // rather than 30, and that there is no HSE to select.
+      //
+      // Pins on THREE ports including port C, which on this part is 24 bits wide
+      // (GPIO_Pin_0..GPIO_Pin_23, uint32_t) and has two holes — PC8, PC9, PC12
+      // and PC13 do not exist. PC10/PC11 are shorted to PC16/PC17 in this
+      // package, so assigning PC16 exercises the shorted-pin path on a part that
+      // is not CH32V006.
+      //
+      // PC18 and PC19 are the SDI debug pins and are deliberately left alone:
+      // claiming them is a real conflict, which the fixture generator refuses.
+      eng.assignSignal('PA0', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PA5', { gpio: 'GPIO_Input' });
+      eng.assignSignal('PB3', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PB12', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PC0', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PC16', { gpio: 'GPIO_Input' });
+      eng.setGpioField('PA0', 'label', 'STATUS_LED');
+      eng.setGpioField('PA5', 'pull', 'Pull-up');
+    },
+  },
 ];
 
 /** Build one fixture and return its serialised .wchproj text. */

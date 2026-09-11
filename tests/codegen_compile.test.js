@@ -332,7 +332,22 @@ test('the header the generated C includes is a file that exists in the SPL for t
   assert.empty(bad, 'generated C includes a header this part does not have');
 });
 
-test('every GPIO_Speed_* the generated C names is a member of this part\'s GPIOSpeed_TypeDef', () => {
+/**
+ * The two GPIO enums, checked by one loop rather than by two copies.
+ *
+ * `GPIOSpeed_TypeDef` gave round 3 its second P0 — `GPIO_Speed_50MHz` on a part
+ * whose only member is 30 MHz. CH32X035 then turned out to have the identical
+ * problem one field over: its `GPIOMode_TypeDef` has SIX members and **no
+ * open-drain at all**, so `GPIO_Mode_Out_OD` and `GPIO_Mode_AF_OD` do not exist
+ * on it. Writing this as a table rather than as a second copy of the speed check
+ * is the difference between fixing an instance and fixing the class.
+ */
+const GPIO_ENUMS = [
+  { prefix: 'GPIO_Speed_', enumName: 'GPIOSpeed_TypeDef' },
+  { prefix: 'GPIO_Mode_', enumName: 'GPIOMode_TypeDef' },
+];
+
+test('every GPIO_Speed_* and GPIO_Mode_* the generated C names exists in that part\'s enums', () => {
   const bad = [], saved = saveDropZone();
   let checked = 0;
   try {
@@ -341,14 +356,24 @@ test('every GPIO_Speed_* the generated C names is a member of this part\'s GPIOS
       if (!spl) continue;
       const gpioH = Object.entries(spl.files).find(([n]) => /_gpio\.h$/.test(n));
       if (!gpioH) { bad.push(`${fixture.mcu}: no *_gpio.h in ${spl.from}`); continue; }
-      // The members of the enum, read out of the header rather than remembered.
-      const known = new Set(gpioH[1].match(/GPIO_Speed_\w+/g) || []);
-      if (!known.size) { bad.push(`${fixture.mcu}: no GPIO_Speed_* members in ${spl.from}/${gpioH[0]}`); continue; }
-      checked++;
       const { c } = generate(fixture);
-      for (const used of new Set(c.match(/GPIO_Speed_\w+/g) || [])) {
-        if (!known.has(used)) {
-          bad.push(`${fixture.mcu}: generated C names ${used}; ${spl.from}/${gpioH[0]} declares only ${[...known].join(', ')}`);
+      for (const { prefix, enumName } of GPIO_ENUMS) {
+        const re = new RegExp(prefix + '\\w+', 'g');
+        // Members read out of the header rather than remembered. Taken from the
+        // whole file rather than from inside the enum block, because the SDK
+        // also spells some of these as #defines — a name that appears anywhere
+        // in the part's own gpio header is a name that will compile.
+        const known = new Set(gpioH[1].match(re) || []);
+        if (!known.size) {
+          bad.push(`${fixture.mcu}: no ${prefix}* members at all in ${spl.from}/${gpioH[0]} (${enumName})`);
+          continue;
+        }
+        checked++;
+        for (const used of new Set(c.match(re) || [])) {
+          if (!known.has(used)) {
+            bad.push(`${fixture.mcu}: generated C names ${used}, which is not in ${enumName}. `
+              + `${spl.from}/${gpioH[0]} declares only ${[...known].sort().join(', ')}`);
+          }
         }
       }
     }
@@ -356,7 +381,7 @@ test('every GPIO_Speed_* the generated C names is a member of this part\'s GPIOS
     restoreDropZone(saved);
   }
   if (!checked && !bad.length) skip(`no SPL headers found for any fixture part — neither data/sources/<PART>/Evt/ nor ${SDK}`);
-  assert.empty(bad, 'generated C names a GPIO speed this part does not have');
+  assert.empty(bad, 'generated C names a GPIO mode or speed this part does not have');
 });
 
 test('the compile gate builds each fixture for the part it claims, not a family default', () => {
@@ -493,4 +518,35 @@ test('generated C contains no TODO or #error that is not a tracked data gap', as
   assert.empty(untracked,
     'generated C explains what it could not do instead of doing it, and this KIND of gap is not '
     + 'tracked by anyone. Either fix the data or add it to TRACKED_TODOS with its TASKS.md line');
+});
+
+test('the GPIO enum check can actually catch a macro this part does not have', () => {
+  // The check above is green, and it is worth being precise about WHY: the
+  // CH32X035 fixture does not select an open-drain mode, so `GPIO_Mode_Out_OD`
+  // never reaches the generated C even though `gpio.modes` currently offers it.
+  // That is the honest limit of an output-side check — it only sees macros a
+  // configuration actually uses — and it is exactly why `verify_sdk_names.py`
+  // checks the DATA as well, whether or not anything emits it yet.
+  //
+  // So rather than leave "it passed" ambiguous, plant the macro and insist the
+  // comparison bites. Same argument as the wrong-case header: a check that
+  // cannot go red is not a pass.
+  const spl = splHeaders('CH32X035') || splHeaders('CH32V006');
+  if (!spl) skip('no SPL headers on this machine, so the comparison cannot be exercised');
+  const gpioH = Object.entries(spl.files).find(([n]) => /_gpio\.h$/.test(n));
+  assert.ok(gpioH, `no *_gpio.h in ${spl.from}`);
+
+  const known = new Set(gpioH[1].match(/GPIO_Mode_\w+/g) || []);
+  assert.ok(known.size >= 4, `only ${known.size} GPIO_Mode_* in ${gpioH[0]} — the header format changed`);
+
+  const planted = 'GPIO_Mode_Out_NONSENSE_OD';
+  assert.notOk(known.has(planted), 'the planted macro is somehow real, so this test proves nothing');
+  const fakeC = `GPIO_InitStructure.GPIO_Mode = ${planted};\n`;
+  const caught = [...new Set(fakeC.match(/GPIO_Mode_\w+/g) || [])].filter(u => !known.has(u));
+  assert.deep(caught, [planted], 'the comparison did not flag a macro absent from the header');
+
+  // And the inverse: a macro that IS in the header must not be flagged.
+  const real = [...known][0];
+  const falsePositives = [...new Set(`x = ${real};`.match(/GPIO_Mode_\w+/g) || [])].filter(u => !known.has(u));
+  assert.deep(falsePositives, [], `${real} is in ${gpioH[0]} but the comparison flagged it`);
 });
