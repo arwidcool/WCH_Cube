@@ -30,6 +30,13 @@ IMPORT_RE = re.compile(r"^import\s[\s\S]*?from\s+['\"][^'\"]+['\"];[ \t]*$", re.
 EXPORT_RE = re.compile(r"^export\s+(?=(?:const|let|var|function|class|async))", re.M)
 BAD_EXPORT_RE = re.compile(r"^export\s*[{*]", re.M)
 
+# A top-level declaration: at column 0, optionally exported. This catches the one
+# failure the bundle cannot survive - the same const/let/class declared twice. Every
+# script in the page shares one global lexical scope, so a second declaration is a
+# SyntaxError that blanks the whole app rather than breaking one feature.
+DECL_RE = re.compile(r"^(?:export\s+)?(?:async\s+)?(const|let|var|function|class)\s+([A-Za-z_$][\w$]*)", re.M)
+FATAL_KINDS = {"const", "let", "class"}
+
 
 def js_safe(text: str) -> str:
     """Never let file content close the <script> that wraps it."""
@@ -58,6 +65,51 @@ def bundle_engine() -> str:
             + js_safe(body) + "</script>")
 
 
+def top_level_decls(src, origin):
+    """(name, kind, origin, line) for every declaration at column 0.
+
+    Anything inside a template literal is skipped: codegen.js emits C source whose
+    lines legitimately start with `const`.
+    """
+    out = []
+    for m in DECL_RE.finditer(src):
+        if src.count("`", 0, m.start()) % 2:
+            continue
+        out.append((m.group(2), m.group(1), origin, src.count("\n", 0, m.start()) + 1))
+    return out
+
+
+def page_scripts(tpl):
+    """The page's own <script> blocks (the ones with no attributes)."""
+    return [(m.group(1), m.start()) for m in re.finditer(r"<script>([\s\S]*?)</script>", tpl)]
+
+
+def check_no_duplicate_declarations(tpl):
+    # scan the RAW modules, not the bundle, so the line numbers point at real files
+    decls = []
+    for name in ENGINE_MODULES:
+        src = (ROOT / "app" / "engine" / name).read_text(encoding="utf-8")
+        decls += top_level_decls(src, "app/engine/" + name)
+    for body, off in page_scripts(tpl):
+        base = tpl.count("\n", 0, off)
+        decls += [(n, k, "app/template.html", base + ln) for n, k, _, ln in top_level_decls(body, "")]
+    seen, clashes = {}, []
+    for name, kind, origin, line in decls:
+        if name in seen:
+            if kind in FATAL_KINDS or seen[name][0] in FATAL_KINDS:
+                clashes.append((name, seen[name], (kind, origin, line)))
+        else:
+            seen[name] = (kind, origin, line)
+    if clashes:
+        msg = ["build: the same name is declared twice at the top level of the bundle.",
+               "       Every script in the page shares one global scope, so this is a fatal",
+               "       SyntaxError in the browser: the app would not start at all.", ""]
+        for name, a, b in clashes:
+            msg.append("       {}: {} at {}:{}  and  {} at {}:{}".format(name, a[0], a[1], a[2], b[0], b[1], b[2]))
+        msg += ["", "       Delete one of them - usually the copy left behind after moving a function."]
+        sys.exit("\n".join(msg))
+
+
 def vendor() -> str:
     p = ROOT / "app" / "vendor" / "js-yaml.js"
     return "<script>\n" + js_safe(p.read_text(encoding="utf-8")) + "\n</script>"
@@ -78,6 +130,7 @@ def data() -> str:
 
 def main() -> None:
     tpl = (ROOT / "app" / "template.html").read_text(encoding="utf-8")
+    check_no_duplicate_declarations(tpl)
     for token, builder in (("<!--@@VENDOR@@-->", vendor),
                            ("<!--@@ENGINE@@-->", bundle_engine),
                            ("<!--@@DATA@@-->", data)):

@@ -73,12 +73,17 @@ class Report:
         self.path = path
         self.errors: list[str] = []
         self.warns: list[str] = []
+        self.infos: list[str] = []
 
     def error(self, where: str, msg: str) -> None:
         self.errors.append(f"{where}: {msg}")
 
     def warn(self, where: str, msg: str) -> None:
         self.warns.append(f"{where}: {msg}")
+
+    def info(self, where: str, msg: str) -> None:
+        """Worth saying once; never a failure, not even under --strict."""
+        self.infos.append(f"{where}: {msg}")
 
     @staticmethod
     def _safe(text: str) -> str:
@@ -93,15 +98,17 @@ class Report:
             rel = os.path.relpath(self.path, ROOT).replace("\\", "/")
         except ValueError:
             rel = str(self.path)
-        if not self.errors and not self.warns:
+        if not self.errors and not self.warns and not self.infos:
             if not quiet:
                 print(f"  OK    {rel}")
             return
-        print(f"  {'FAIL' if self.errors else 'warn'}  {rel}")
+        print(f"  {'FAIL' if self.errors else 'warn' if self.warns else 'info'}  {rel}")
         for e in self.errors:
             print(f"          ERROR  {self._safe(e)}")
         for w in self.warns:
             print(f"          warn   {self._safe(w)}")
+        for i in self.infos:
+            print(f"          info   {self._safe(i)}")
 
 
 def load_geometries() -> dict:
@@ -205,16 +212,17 @@ def check_packages(doc: dict, geom: dict, r: Report) -> dict:
                     r.error(where, f"pin {num} is `{n}`, which is not declared in `pins:`")
                 seen.setdefault(n, []).append(num)
 
-        # the engine keys state by pin NAME, so a name on two physical pins is ambiguous
+        # The engine keys state by pin NAME, so a name on two physical pins is ambiguous —
+        # but only for pins you can actually configure. HUMAN decision 2026-09-11T11:30Z:
+        # repeated VSS/VDD stay exactly as the datasheet lists them, and the engine treats
+        # non-io pins as labels that are never addressed by name. Report io duplicates only.
         for name, nums in seen.items():
-            if len(nums) > 1:
-                kind = (pins_map.get(name) or {}).get("type", "io")
-                msg = (f"`{name}` is on {len(nums)} physical pins {sorted(nums)} - the app keys pins by name, "
-                       f"so only pin {sorted(nums)[0]} is reachable")
-                if kind == "io":
-                    r.error(where, msg)
-                else:
-                    r.warn(where, msg)
+            if len(nums) < 2:
+                continue
+            if (pins_map.get(name) or {}).get("type", "io") != "io":
+                continue
+            r.error(where, f"`{name}` is on {len(nums)} physical pins {sorted(nums)} - the app keys "
+                           f"io pins by name, so only pin {sorted(nums)[0]} is reachable")
 
     return out
 
@@ -327,9 +335,12 @@ def check_peripherals(doc: dict, r: Report) -> None:
                 for sig in c.get("signals") or []:
                     wanted.add(str(sig))
             # the engine treats choices[0] as the off state (isEnabled/resetPin rely on it)
+            # HUMAN decision 2026-09-11T11:30Z: a first choice that carries signals is correct
+            # where the reset state really does hold the pin (CH32V006 SYS: factory RST_MODE).
+            # Say it once so it is visible, but never fail on it, and never reorder the choices.
             if stype == "choice" and isinstance(choices[0], dict) and choices[0].get("signals"):
-                r.warn(sw, f"first choice `{choices[0].get('name')}` carries signals; the engine treats "
-                           f"choices[0] as the off state, so the peripheral will look permanently enabled")
+                r.info(sw, f"first choice `{choices[0].get('name')}` carries signals, so this peripheral "
+                           f"reads as enabled from reset - correct when the reset state holds the pin")
 
         for sig in sorted(wanted - routed):
             if remaps:
