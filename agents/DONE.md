@@ -3,6 +3,11 @@
 Every `[x]` names the evidence, so anyone can re-check it. `npm test` runs all of it.
 QA does not tick a line on a claim — only on something that runs.
 
+**12 of 21 done.** The nine open lines are: three parts not yet extracted (V005, V003, the
+V006 second pass), C code generation, packages above 48 pins, a clean TASKS.md, and the two
+release lines that need a human — there is no git remote, so CI has never run, and no Rust
+toolchain here, so `src-tauri/` has never been compiled.
+
 ## Data
 - [ ] CH32V006.yaml spot-checked: every remap table re-derived from RM by a second pass and diffed (0 differences)
 - [x] EXTI line mapping and DMA channel table added for CH32V006
@@ -19,13 +24,12 @@ QA does not tick a line on a claim — only on something that runs.
         remain, all reported on the board; none is an error.
 
 ## Engine
-- [ ] Engine split out of template.html into `app/engine/*.js` modules with unit tests (≥ 90% of functions covered)
-      → the split is done (model, clock, engine, project, export, inherit, history, util).
-        Coverage is **78%**: the unit tests reach 52 of 67 exports.
-        `tests/features.test.js` fails on this and names the 15 that nothing references —
-        PACKAGES, yamlLoad, yamlDump, deriveMcu, initState, mcuModel, sigName,
-        applyPackageRemaps, neutralChoice, isEnabled, defaultClock, projectObject,
-        resolveInherits, clearHistory, record. AGENT-2.
+- [x] Engine split out of template.html into `app/engine/*.js` modules with unit tests (≥ 90% of functions covered)
+      → split into model, clock, engine, project, export, inherit, history, util.
+        Coverage is **100%**: all 67 exports are referenced by `app/tests/*`, and
+        `app/tests/api.test.js` calls each one directly rather than only through the app.
+        Enforced at 90% by `tests/features.test.js` ("the engine unit tests reach at least
+        90% of what the engine exports"), which names any export that falls out of cover.
 - [x] Conflict engine: shorted pins, exposed pad, remap collision preview, package switch re-check — all covered by tests
       → `app/tests/engine.test.js` ("shorted pins collide with each other and say so",
         "previewAssign warns before the click", "previewAssign warns when the remap switch
@@ -35,9 +39,11 @@ QA does not tick a line on a claim — only on something that runs.
       → `app/tests/project.test.js` (7 tests, round-trip + rejection cases); native dialogs
         proven by `tests/desktop.test.js` ("Ctrl+S and the Save button both go through the
         native dialog", "opening a project through the native dialog restores it")
-- [ ] Undo/redo for pin and mode changes
-      → `app/engine/history.js` and `app/tests/history.test.js` exist, but the suite is red:
-        "undo does not move the selection, the zoom or the pan". AGENT-2.
+- [x] Undo/redo for pin and mode changes
+      → `app/engine/history.js` + `app/tests/history.test.js`, all green: pin assign/reset,
+        mode and checkbox settings restored as real Sets, a package switch including the
+        pins it dropped, `batch()` collapsing several changes into one step, and undo
+        leaving the selection, zoom and pan alone.
 - [x] Pin table export (Markdown + CSV) and clock summary export (Markdown) — the Generate button's first real output
       → `app/engine/export.js` + `app/tests/export.test.js` (6 tests: row per physical pin in
         pin order, exposed pad last, signal/mode/user label carried, conflicts marked and

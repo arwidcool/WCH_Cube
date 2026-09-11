@@ -68,8 +68,30 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 
 ## Phase 4 — Desktop app
 
-- [ ] Tauri shell, native open/save dialogs, MCU folder watcher (auto reload on YAML edit)
-- [ ] Bundled `data/` folder + user override folder
+- [x] Tauri shell, native open/save dialogs, MCU folder watcher (auto reload on YAML edit) (AGENT-4)
+      `src-tauri/` — window "WCH_CubeMX" over `dist/index.html`; commands `list_mcus`,
+      `read_mcu`, `open_mcu`, `save_project`, `open_project`, `user_mcu_folder`; a notify
+      watcher emits `mcu-changed` and the part reloads in place. The page has NO Tauri code:
+      `src-tauri/desktop.js` is injected as the window's initialization script, so browser
+      mode is untouched. **Not yet compiled** — no cargo here; the CI desktop job builds it.
+- [x] Bundled `data/` folder + user override folder (AGENT-4)
+      `tauri.conf.json` ships `data/mcus` and `data/packages` as resources;
+      `~/.wch_cubemx/mcus/` overrides them by MCU name.
+
+## QA + release  (AGENT-4)
+
+- [x] `npm test` — one runner over `app/tests/*` (engine) and `tests/*` (QA), 131 tests
+- [x] `tests/smoke.js` — every MCU × every package: load, switch, click, assign, silent console
+- [x] `tools/validate_mcu.py` — schema, geometry, pin existence, remap consistency, I/O counts, clock, EXTI
+- [x] `tests/build.test.js` — dist is complete, current, offline, and free of duplicate declarations
+- [x] `tests/layout.test.js` — CubeMX structure + the chip fits at 1280×720 and 1920×1080
+- [x] `tests/desktop.test.js` — Tauri config, command surface, and the bridge driven against a fake runtime
+- [x] `tests/features.test.js` — evidence for the DONE.md feature lines + an engine coverage gate
+- [x] `.github/workflows/ci.yml` — Node 22 + Python 3.12: validate → build → stale-dist → tests, plus a Linux Tauri build
+- [x] README — browser, desktop, adding an MCU, the file format, the tests, the agent workflow
+- [ ] CI has never actually run: the repo has no remote. Needs a human to add one.
+- [x] Engine unit tests reach 100% of `app/engine/*` exports (AGENT-2 closed it with `app/tests/api.test.js`)
+- [ ] Nothing above 48 pins exists, so the QFN12→LQFP144 overflow check is half unexercised (AGENT-1)
 
 ---
 
@@ -104,3 +126,13 @@ reset on PD7 did nothing), and a manual GPIO did not clear the other name of a s
 `mcu.inherits:` (maps merge, lists replace, `mcu.remove:` for deletions, `mcu.variants` replaced) which
 unblocks AGENT-1 on CH32V005. Wired the GENERATE CODE button to the pin table and clock summary exports.
 Next: undo/redo over `S`, then C codegen (GPIO init, AFIO_PCFR1 from remap indices, RCC from clock state).
+
+**2026-09-11 (QA + release, AGENT-4)** — Put the project under git (it was not a repo) and took over the
+merge gate. Built the test runner both areas share, a jsdom driver that drives the real built app, and the
+MCU×package smoke test. Wrote `tools/validate_mcu.py` and made it a gate. Wrote the Tauri 2 shell, injected
+rather than wired into the page, with native dialogs and YAML hot reload. Added CI, the README and the
+layout/feature suites, and audited `DONE.md` so every tick names the test that proves it — 10 of 21.
+Caught one app-killing bug: `userLabel`/`pinModified` declared in both the engine and the template made the
+bundle a SyntaxError and the page blank; there is now a test that names any such clash. Fixed the test
+flakiness AGENT-2 reported (four agents writing one tree). Not done: nothing has compiled the Rust and CI
+has never run, because there is no remote.

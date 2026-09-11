@@ -5,7 +5,7 @@
 //  are one physical pin, so PD7 and PA4 on QFN20 collide with each other.
 //
 //  E = {
-//    pins:         { canonPin: { state:'set'|'conflict', label, claims:[{who,signal}] } },
+//    pins:         { canonPin: { state, label, claims:[{who, signal, via}] } }  via = real pin name
 //    issues:       { periphId: [message, ...] },
 //    status:       { periphId: 'ok'|'warn'|'na'|'' },
 //    issueCount:   { periphId: n },
@@ -24,7 +24,9 @@ export let E = null;
 export function compute() {
   const claims = {};                     // canonical pin -> [{who, signal}]
   const issues = {};                     // pid -> [message]
-  const add = (pin, who, signal) => (claims[pin] ||= []).push({ who, signal });
+  // `via` is the name the signal actually uses: on a shorted pair the claim sits
+  // under the canonical pin (PD7) but the register to configure may be PA4's.
+  const add = (pin, who, signal, via) => (claims[pin] ||= []).push({ who, signal, via });
 
   for (const [pid, P] of Object.entries(M.peripherals)) {
     const req = requiredSignals(pid);
@@ -34,10 +36,10 @@ export function compute() {
       const pin = r.pins[sig];
       if (!pin) { (issues[pid] ||= []).push(`${sig}: not routed in "${r.name}"`); continue; }
       if (!pinExists(pin)) { (issues[pid] ||= []).push(`${sig} needs ${pin}, which is not bonded on ${S.pkg}`); continue; }
-      add(canon(pin), pid, sigName(pid, sig));
+      add(canon(pin), pid, sigName(pid, sig), pin);
     }
   }
-  for (const [pin, sig] of Object.entries(S.manual)) if (pinExists(pin)) add(canon(pin), 'GPIO', sig);
+  for (const [pin, sig] of Object.entries(S.manual)) if (pinExists(pin)) add(canon(pin), 'GPIO', sig, pin);
 
   const pins = {}, conflictList = [];
   for (const [pin, cl] of Object.entries(claims)) {

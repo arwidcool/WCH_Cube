@@ -223,6 +223,14 @@
   .clock .issues{color:var(--bad);font-weight:500}
   /* misc */
   .kbd{display:inline-block;border:1px solid #bbb;border-bottom-width:2px;border-radius:3px;padding:0 4px;font-size:11px;background:#fafafa}
+  /* keyboard focus: visible everywhere, never on plain mouse clicks */
+  button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-visible,.item:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+  .tabs .tab:focus-visible,.crumbs button:focus-visible,.menubar .menu:focus-visible{outline-color:#0b57a4}
+  .tab:focus-visible{outline:2px solid #fff;outline-offset:-3px}
+  .item:focus-visible{outline-offset:-2px}
+  .canvas:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+  .sysblk:focus-visible rect{stroke:var(--blue);stroke-width:2.5}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   #fileinput{display:none}
   .modal{position:fixed;inset:0;background:rgba(3,35,75,.55);display:none;align-items:center;justify-content:center;z-index:200}
   .modal.show{display:flex}
@@ -2048,7 +2056,7 @@ function clockCalc(m = M, s = S) {
 //  are one physical pin, so PD7 and PA4 on QFN20 collide with each other.
 //
 //  E = {
-//    pins:         { canonPin: { state:'set'|'conflict', label, claims:[{who,signal}] } },
+//    pins:         { canonPin: { state, label, claims:[{who, signal, via}] } }  via = real pin name
 //    issues:       { periphId: [message, ...] },
 //    status:       { periphId: 'ok'|'warn'|'na'|'' },
 //    issueCount:   { periphId: n },
@@ -2064,7 +2072,9 @@ let E = null;
 function compute() {
   const claims = {};                     // canonical pin -> [{who, signal}]
   const issues = {};                     // pid -> [message]
-  const add = (pin, who, signal) => (claims[pin] ||= []).push({ who, signal });
+  // `via` is the name the signal actually uses: on a shorted pair the claim sits
+  // under the canonical pin (PD7) but the register to configure may be PA4's.
+  const add = (pin, who, signal, via) => (claims[pin] ||= []).push({ who, signal, via });
 
   for (const [pid, P] of Object.entries(M.peripherals)) {
     const req = requiredSignals(pid);
@@ -2074,10 +2084,10 @@ function compute() {
       const pin = r.pins[sig];
       if (!pin) { (issues[pid] ||= []).push(`${sig}: not routed in "${r.name}"`); continue; }
       if (!pinExists(pin)) { (issues[pid] ||= []).push(`${sig} needs ${pin}, which is not bonded on ${S.pkg}`); continue; }
-      add(canon(pin), pid, sigName(pid, sig));
+      add(canon(pin), pid, sigName(pid, sig), pin);
     }
   }
-  for (const [pin, sig] of Object.entries(S.manual)) if (pinExists(pin)) add(canon(pin), 'GPIO', sig);
+  for (const [pin, sig] of Object.entries(S.manual)) if (pinExists(pin)) add(canon(pin), 'GPIO', sig, pin);
 
   const pins = {}, conflictList = [];
   for (const [pin, cl] of Object.entries(claims)) {
@@ -2423,9 +2433,9 @@ function generateAll() {
     <button class="gen" title="Export the pin table (Markdown + CSV) and the clock summary (Markdown)">GENERATE CODE</button>
   </div>
 
-  <div class="tabs">
-    <button class="tab active" data-view="pinout">Pinout &amp; Configuration</button>
-    <button class="tab" data-view="clock">Clock Configuration</button>
+  <div class="tabs" role="tablist" aria-label="Views">
+    <button class="tab active" data-view="pinout" role="tab" aria-selected="true">Pinout &amp; Configuration</button>
+    <button class="tab" data-view="clock" role="tab" aria-selected="false">Clock Configuration</button>
     <button class="tab" disabled title="Future">Project Manager</button>
     <button class="tab" disabled title="Future">Tools</button>
   </div>
@@ -2435,7 +2445,7 @@ function generateAll() {
     <div class="subbar"><span>Software Packs</span><span>Pinout</span></div>
 
     <div class="tree">
-      <div class="search"><input id="tree-search" placeholder="🔍 search peripherals"></div>
+      <div class="search"><label class="sr" for="tree-search">Search peripherals</label><input id="tree-search" placeholder="🔍 search peripherals"></div>
       <div class="cats" id="cats"></div>
     </div>
 
@@ -2456,14 +2466,14 @@ function generateAll() {
 
     <div class="chipwrap">
       <div class="chiptabs"><button class="on" data-cview="pinout">▦ Pinout view</button><button data-cview="system">☰ System view</button></div>
-      <div class="canvas" id="canvas"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="canvas" id="canvas" tabindex="0" role="application" aria-label="Chip pinout. Arrow keys move between pins, Enter opens the signal picker, L sets a user label, Delete resets the pin."><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
       <div class="canvas" id="syscanvas" hidden><svg id="syssvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
       <div class="chipbar">
         <button class="ic" id="z-in" title="Zoom in">⊕</button>
         <button class="ic" id="z-fit" title="Fit">⛶</button>
         <button class="ic" id="z-out" title="Zoom out">⊖</button>
-        <select id="pkgsel" title="Package"></select>
-        <input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px">
+        <label class="sr" for="pkgsel">Package</label><select id="pkgsel" title="Package"></select>
+        <label class="sr" for="pin-search">Find a pin or signal</label><input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px">
         <label class="flt" title="Hide pins that have no signal and no user label"><input type="checkbox" id="only-mod">Only modified</label>
         <div class="spacer"></div>
         <div class="unused">Unused GPIOs:<b id="unused">0 / 0</b></div>
@@ -2477,7 +2487,7 @@ function generateAll() {
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="fileinput" accept=".yaml,.yml">
 <input type="file" id="projinput" accept=".wchproj,.yaml,.yml" style="display:none">
 
@@ -2613,7 +2623,11 @@ function renderChip() {
     if (U.focus === name) cls += ' focused';
     if (hidden) cls += ' dim';
     const w = vert(p) ? PITCH - 3 : PLEN, h = vert(p) ? PLEN : PITCH - 3;
-    g.push(`<g class="${cls}" data-pin="${esc(name)}" data-num="${p.num}">`);
+    const notes = grp.map(n => (M.pins[n] || {}).notes).filter(Boolean).join('; ');
+    const tip = `${grp.join('/')} \u2014 pin ${p.num}`
+      + (info ? ` \u2014 ${info.label}${info.state === 'conflict' ? ' (CONFLICT)' : ''}` : t === 'io' ? ' \u2014 unassigned' : ` \u2014 ${t}`)
+      + (ul ? ` \u2014 "${ul}"` : '') + (notes ? ` \u2014 ${notes}` : '');
+    g.push(`<g class="${cls}" data-pin="${esc(name)}" data-num="${p.num}" role="${t === 'io' ? 'button' : 'img'}" aria-label="${attr(tip)}"><title>${esc(tip)}</title>`);
     g.push(`<rect x="${p.x}" y="${p.y}" width="${w}" height="${h}" rx="2"/>`);
     const cx = p.x + w / 2, cy = p.y + h / 2;
     const fs = shown.length > 4 ? ` font-size="${Math.max(6, 9.5 - (shown.length - 4) * 0.9)}"` : '';
@@ -2752,7 +2766,8 @@ function openPicker(pin, cx, cy) {
     // the engine decides whether picking this would collide (AGENT-2's previewAssign)
     const why = previewAssign(pin, s);          // engine decides; '' means no collision
     const warn = why ? '⚠ ' + why : '';
-    h += opt(sigName(s.periph, s.signal), s, (warn ? `<span style="color:var(--bad)">${warn}</span> ` : '') + rn + (grp.length > 1 ? ` <i>via ${s.via}</i>` : ''), isCur, !isAvailable(s.periph));
+    const bits = [warn ? `<span style="color:var(--bad)">${warn}</span>` : '', rn, grp.length > 1 ? `<i>via ${esc(s.via)}</i>` : ''].filter(Boolean);
+    h += opt(sigName(s.periph, s.signal), s, bits.join(' \u00b7 '), isCur, !isAvailable(s.periph));
   }
   d.innerHTML = h;
   d.addEventListener('click', e => {
@@ -2948,16 +2963,17 @@ function renderSystem() {
       const known = !!M.peripherals[p];
       const st = known ? (E.status[p] || '') : 'na';
       const conf = known ? Object.values(E.pins).filter(v => v.state === 'conflict' && v.claims.some(c => c.who === p)).length : 0;
-      const pins = known ? Object.values(E.pins).filter(v => v.claims.some(c => c.who === p)).length : 0;
-      g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}"` : ''}>`);
-      g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
-      g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
       const iss = known ? ((E.issueCount || {})[p] || 0) : 0;
       const note = !known ? 'fabric'
         : st === 'na' ? 'not on this package'
         : conf ? `${conf} conflict${conf > 1 ? 's' : ''}`
         : iss ? `${iss} issue${iss > 1 ? 's' : ''}`
         : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
+      const pins = known ? Object.values(E.pins).filter(v => v.claims.some(c => c.who === p)).length : 0;
+      const blkTip = `${p}${known ? ` \u2014 ${note}` : ' \u2014 not a configurable peripheral'}`;
+      g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}" role="button" tabindex="0"` : ' role="img"'} aria-label="${attr(blkTip)}"><title>${esc(blkTip)}</title>`);
+      g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
+      g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
       g.push(`<text x="${x + 8}" y="${by + 25}" fill="${FG[st]}" font-size="9.5" opacity=".85">${esc(note)}</text>`);
       g.push(`</g>`);
     });
@@ -2971,6 +2987,12 @@ function renderSystem() {
 }
 document.getElementById('syssvg').addEventListener('click', e => {
   const b = e.target.closest('.sysblk[data-p]'); if (!b) return;
+  selectPeripheral(b.dataset.p);
+});
+document.getElementById('syssvg').addEventListener('keydown', e => {
+  const b = e.target.closest && e.target.closest('.sysblk[data-p]');
+  if (!b || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
   selectPeripheral(b.dataset.p);
 });
 document.querySelector('.chiptabs').addEventListener('click', e => {
@@ -3004,12 +3026,25 @@ function renderTree() {
     for (const pid of items) {
       const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
       const cn = conf[pid] || 0;
-      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" title="${cn ? cn + ' pin conflict(s)' : ''}"><span class="st ${st}">${ST[st]}</span>${pid}${cn ? `<span class="cnt">${cn}</span>` : ''}</div>`;
+      const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cn} pin conflict${cn > 1 ? 's' : ''}` : ''}`;
+      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr(cn ? cn + ' pin conflict' + (cn > 1 ? 's' : '') : pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${cn ? `<span class="cnt">${cn}</span>` : ''}</div>`;
     }
     h += '</div></div>';
   }
+  const hadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('item')
+    ? document.activeElement.dataset.p : null;
   document.getElementById('cats').innerHTML = h;
+  if (hadFocus) {                                   // innerHTML threw the focused item away
+    const back = document.querySelector(`.item[data-p="${window.CSS && CSS.escape ? CSS.escape(hadFocus) : hadFocus}"]`);
+    if (back) back.focus();
+  }
 }
+document.getElementById('cats').addEventListener('keydown', e => {
+  const it = e.target.closest && e.target.closest('.item');
+  if (!it || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  selectPeripheral(it.dataset.p);
+});
 document.getElementById('cats').addEventListener('click', e => {
   const cb = e.target.closest('button[data-cat]'); if (cb) { const c = cb.dataset.cat; collapsed.has(c) ? collapsed.delete(c) : collapsed.add(c); renderTree(); return; }
   const it = e.target.closest('.item'); if (it) { S.sel = it.dataset.p; renderAll(); }
@@ -3028,7 +3063,7 @@ function conflictBanner() {
     `<span class="cf"><b>${esc(c.label)}</b>${c.shorted ? '<span title="these pins are shorted inside the package"> ⧉</span>' : ''}: ` +
     c.signals.map((sig, i) => `<a data-goto="${attr(c.owners[i] || c.owners[0])}" title="Go to ${attr(c.owners[i] || c.owners[0])}">${esc(sig)}</a>`).join(' ↔ ') +
     `</span>`).join('');
-  return `<div class="conflicts">⚠ ${rows.length} pin conflict${rows.length > 1 ? 's' : ''} — click a signal to open its peripheral<br>${items}</div>`;
+  return `<div class="conflicts" role="status" aria-live="polite">⚠ ${rows.length} pin conflict${rows.length > 1 ? 's' : ''} — click a signal to open its peripheral<br>${items}</div>`;
 }
 document.getElementById('ptitle').addEventListener('click', e => {
   const a = e.target.closest('a[data-goto]'); if (!a) return;

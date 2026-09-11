@@ -82,10 +82,22 @@ jobs:
           pip install pyyaml
           python build.py
 
+      # No Cargo.lock is committed (there is no Rust toolchain on the dev box to
+      # generate one), so cargo resolves on first build. Do not add --locked until
+      # a lock file is checked in.
       - name: Build the desktop app
         working-directory: src-tauri
-        run: cargo build --release --locked
+        run: cargo build --release
 
-      - name: Check it packages
+      - name: Run the Rust unit tests
         working-directory: src-tauri
-        run: cargo tauri build --no-bundle || cargo build --release
+        run: cargo test --release
+
+      # The lock file cannot be generated on the dev box; take it from the first
+      # green build so later runs resolve the same versions.
+      - name: Upload Cargo.lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: src-tauri/Cargo.lock
+          if-no-files-found: warn
