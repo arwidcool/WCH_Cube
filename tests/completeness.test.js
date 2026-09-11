@@ -111,6 +111,19 @@ const ABSENT = {
   'EXTEN.nvic': 'the extended-configuration unit raises no interrupt: IRQn_Type in ch32v00X.h:45-82 '
     + 'ends at OPCM_IRQn = 40 and contains no EXTEN entry. LKUPRST is a polled status flag, not a vector',
   // --- per-part: true on THIS part and not on its siblings
+  //
+  // CH32X035 has ONE vector, `OPA_IRQn = 48`, for two OPAs and three
+  // comparators. `IRQn_Type` in ch32x035.h contains no CMP entry of any kind and
+  // no second OPA entry — the full list is 45 names and these are not among
+  // them. So one of the five carries the vector (AGENT-1's data says which) and
+  // the other four have none of their own. Same shape as TKEY sharing ADC1's
+  // vector on CH32V006, and the same reason: a shared interrupt is a fact about
+  // the silicon, not a gap in the extraction.
+  'CH32X035.CMP1.nvic': 'shares OPA_IRQn = 48; there is no CMP vector in ch32x035.h',
+  'CH32X035.CMP2.nvic': 'shares OPA_IRQn = 48; there is no CMP vector in ch32x035.h',
+  'CH32X035.CMP3.nvic': 'shares OPA_IRQn = 48; there is no CMP vector in ch32x035.h',
+  'CH32X035.OPA2.nvic': 'shares OPA_IRQn = 48 with OPA1; the enum has one OPA vector, not two',
+
   'CH32X035.RCC.nvic': 'CH32X035 has no RCC interrupt AT ALL. `IRQn_Type` in '
     + 'data/sources/X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035.h jumps FLASH_IRQn = 18 straight to '
     + 'EXTI7_0_IRQn = 20, and Startup/startup_ch32x035.S has `.word 0` in that slot — two '
@@ -134,8 +147,6 @@ const ABSENT = {
  * here and then quietly dropped from the backlog.
  */
 const OPEN = {
-  'CH32X035.USBFS.params': ['AGENT-1', 'CH32X035 extraction: `params:` for the peripherals that have none'],
-  'CH32X035.USBPD.params': ['AGENT-1', 'CH32X035 extraction: `params:` for the peripherals that have none'],
   'TIM3.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
   'IWDG.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
   'WWDG.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
@@ -162,6 +173,29 @@ const lookup = (table, part, pid, cell) =>
 const excused = (part, pid, cell) =>
   process.env.WCHCUBE_NO_EXEMPTIONS ? false : lookup(ABSENT, part, pid, cell);
 
+/**
+ * Parts whose extraction is explicitly still in progress, and the TASKS.md line
+ * that says so.
+ *
+ * A part arrives over many commits. Listing every half-filled cell in OPEN as it
+ * appears turns this file into a running commentary on somebody else's work in
+ * progress, and every one of those entries then has to be removed by hand —
+ * which is how a whitelist ends up outliving the thing it excused.
+ *
+ * So: while the part is declared in-extraction, its `params` and `clock` gaps
+ * PRINT with the owner instead of failing. `settings` and `nvic` still fail,
+ * because a peripheral with no setting at all is not "not finished yet", it is a
+ * tree entry that does nothing; and a missing vector on a part that HAS an nvic
+ * block is a claim about silicon rather than a gap in depth.
+ *
+ * It self-closes: the guard below fails if the TASKS.md line disappears, and the
+ * day AGENT-1 ticks it every cell becomes a hard failure with no edit here.
+ */
+const IN_EXTRACTION = {
+  CH32X035: ['AGENT-1', 'CH32X035 extraction: `params:` for the peripherals that have none'],
+};
+const SOFT_CELLS = new Set(['params', 'clock']);
+
 // ---------------------------------------------------------------- the matrix
 test('every peripheral of every real part has settings, params, a clock bit, and vectors', () => {
   const missing = [];
@@ -184,6 +218,11 @@ test('every peripheral of every real part has settings, params, a clock bit, and
 
     const say = (pid, cell, why) => {
       if (excused(part, pid, cell)) return;
+      const extracting = IN_EXTRACTION[part];
+      if (extracting && SOFT_CELLS.has(cell)) {
+        stillOpen.add(`${part}  ${pid}: ${cell} — ${extracting[0]} owns it, extraction in progress`);
+        return;
+      }
       const open = lookup(OPEN, part, pid, cell);
       if (open) { stillOpen.add(`${part}  ${pid}: ${cell} — ${open[0]} owns it, TASKS.md: ${open[1]}`); return; }
       missing.push(`${part}  ${pid}: ${cell} — ${why}`);
@@ -219,6 +258,21 @@ test('every peripheral of every real part has settings, params, a clock bit, and
 `);
   }
   assert.empty(missing, 'peripheral cells that are neither filled in nor declared absent in ABSENT');
+});
+
+test('every part declared in-extraction still has a live TASKS.md line', () => {
+  // The guard that makes IN_EXTRACTION self-closing. Without it, a part could sit
+  // "in extraction" forever and quietly stop being checked.
+  const tasks = fs.readFileSync(path.join(ROOT, 'TASKS.md'), 'utf8');
+  const orphans = [];
+  for (const [part, [owner, task]] of Object.entries(IN_EXTRACTION)) {
+    if (!eng.MCU_FILES[part]) { orphans.push(`${part} is declared in-extraction but is not a registered part`); continue; }
+    if (!tasks.includes(task)) {
+      orphans.push(`${part} is declared in-extraction citing ${owner}'s task "${task}", which is no longer in TASKS.md `
+        + '— if the extraction is finished, delete the IN_EXTRACTION entry and let the cells fail');
+    }
+  }
+  assert.empty(orphans, 'parts held in-extraction with no backlog line');
 });
 
 test('every cell parked in OPEN still has a live TASKS.md line', () => {

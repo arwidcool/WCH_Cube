@@ -241,7 +241,8 @@ const SVG_TEXT = `
       }
     }
   }
-  return { count: boxes.length, outside, low, overlaps, unmeasured };`;
+  const longest = boxes.reduce((n, b) => Math.max(n, b.s.length), 0);
+  return { count: boxes.length, longest, outside, low, overlaps, unmeasured };`;
 
 // ---------------------------------------------------------------- the checks
 test('no text anywhere in the chrome is cut off by its own box', async () => {
@@ -374,4 +375,64 @@ test('the clipping and overflow measurements can actually fail', async () => {
   assert.ok(r.over.some(s => s.includes('PLANTED_WIDE')),
     'an element placed past the right edge of the viewport was NOT reported — '
     + `the overflow check is measuring nothing. It reported: ${JSON.stringify(r.over)}`);
+});
+
+test('every part on every package draws labels that are inside, legible and not overlapping', async () => {
+  if (!browserAvailable()) skip(why);
+  // The checks above run on whatever the app boots with — CH32V006 on TSSOP20,
+  // twenty short names like `PD4` and `SYS_SWIO`. That is the easy case, and it
+  // was the only case until a second family landed.
+  //
+  // This sweeps every registered part on every one of its packages. CH32X035's
+  // LQFP64M is the first genuinely hostile input this test has had: 64 pins, and
+  // signal names like `USBPD_CC1` and `USBFS_UDM` that are half again as long as
+  // anything CH32V006 has. The dummy part was built to be well-behaved, so its
+  // large packages stress the GEOMETRY without stressing the TEXT.
+  const problems = [];
+  const combos = await withPage(async page => {
+    const parts = await page.eval(`return [...document.getElementById('mcusel').options].map(o => o.value)`);
+    const out = [];
+    for (const part of parts) {
+      await page.setValue('#mcusel', part);
+      const pkgs = await page.eval(`return [...document.getElementById('pkgsel').options].map(o => o.value)`);
+      for (const pkg of pkgs) out.push([part, pkg]);
+    }
+    return out;
+  }, { width: 1280, height: 720 });
+
+  assert.ok(combos.length >= 10, `only ${combos.length} part/package combinations found — the selectors moved`);
+
+  let widest = 0, mostLabels = 0;
+  for (const [part, pkg] of combos) {
+    const r = await withPage(async page => {
+      await page.setValue('#mcusel', part);
+      await page.setValue('#pkgsel', pkg);
+      return page.eval(SVG_TEXT);
+    }, { width: 1280, height: 720 });
+
+    const at = `${part} ${pkg}`;
+    mostLabels = Math.max(mostLabels, r.count || 0);
+    widest = Math.max(widest, r.longest || 0);
+    if (r.error) { problems.push(`${at}  ${r.error}`); continue; }
+    if (!r.count) { problems.push(`${at}  the chip SVG has no <text> at all — nothing was measured`); continue; }
+    for (const f of r.unmeasured) problems.push(`${at}  UNMEASURED ${f}`);
+    for (const f of r.outside) problems.push(`${at}  ${f}`);
+    for (const f of r.low) problems.push(`${at}  ${f}`);
+    for (const f of r.overlaps) problems.push(`${at}  ${f}`);
+  }
+  // Coverage, asserted rather than assumed. A selector rename or a part that
+  // stops registering would quietly shrink this sweep to the easy cases and
+  // still report green — which is the failure mode the whole file is about.
+  // Both numbers are part-agnostic on purpose: naming CH32X035 here would be the
+  // same smell `tests/no_part_names.test.js` exists to stop.
+  assert.ok(mostLabels >= 60,
+    `the widest package swept drew only ${mostLabels} labels. A sweep that never reaches a large `
+    + 'package is not testing what this test is for — check #mcusel / #pkgsel still switch parts');
+  assert.ok(widest >= 8,
+    `the longest signal label swept was ${widest} characters. Long names are the hard case `
+    + '(USBPD_CC1, USBFS_UDM); if the sweep only saw short ones it proves little');
+
+  assert.empty(problems.filter(p => p.includes('UNMEASURED')),
+    'chip labels the contrast check could not measure — it is blind, not passing');
+  report(problems, 'chip labels clipped, unreadable or overlapping on some part/package combination');
 });
