@@ -99,7 +99,8 @@ See `Agents Rounds 2/00_PROJECT.md`. Data lines only; the other three areas trac
       planted breaks, 14 caught
 - [ ] (AGENT-1) WCH-DUMMY32-C8 has no `dma` / `nvic` / `params` / `codegen` blocks, so the
       new tabs have nothing to render on a large package
-- [ ] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1
+- [~] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1 — OPA1 done (6 params from EVT);
+      TKEY needs none of its own, being an ADC mode; TIM3/IWDG/WWDG still open
 - [ ] (AGENT-1) Medium-confidence rows: TouchKey channel→pin (RM ch.10), OPA polling set
 
 ### Firmware / project setup  (AGENT-4) — done; the follow-ups are round-3 lines below
@@ -245,9 +246,11 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       changes the `dma.requests` map this app renders. Model it or declare it absent with a
       reason; `CH32V006.notes.md` currently says the RM chapter list is covered bar four
       deliberate absences, and this is an undeclared fifth.
-- [ ] (AGENT-1) Medium-confidence rows still open: TouchKey channel→pin (RM ch.10), the OPA
+- [x] (AGENT-1) Medium-confidence rows still open: TouchKey channel→pin (RM ch.10), the OPA
       polling set, and the RM Table 6-1 TIM3-vector contradiction — all first in the queue the day
-      EVT arrives
+      EVT arrives — **all three settled.** TouchKey confirmed (it is a MODE OF THE ADC, not a
+      peripheral); OPA polling corrected (max 3 channels, not 4, and the set is not fixed);
+      no TIM3 vector, confirmed twice over
 
 ### Housekeeping
 
