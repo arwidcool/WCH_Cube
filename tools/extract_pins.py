@@ -39,7 +39,7 @@ DEFAULT_DS = ROOT / "data" / "sources" / "CH32V006DS0.md"
 
 PIN_RE = re.compile(r"^P[A-D][0-7]$")
 # A data row: one cell per package (a pin number or "-"), then the pin name.
-ROW_RE = re.compile(r"^((?:(?:\d+|-)\s+){2,8})(P[A-D][0-7])\b")
+ROW_RE = re.compile(r"^((?:(?:\d+|-)\s+){1,8})(P[A-D][0-7])\b")
 # Pieces of a row the conversion split onto their own lines.
 CELLS_ONLY_RE = re.compile(r"^(?:\d+|-)(?:\s+(?:\d+|-))*$")
 NAME_ONLY_RE = re.compile(r"^(P[A-D][0-7])\s*(?:\(\d+\))?\s*$")
@@ -225,10 +225,12 @@ def main():
                 elif have != num:
                     problems.append(pkg + " " + name + ": DS says pin " + str(num)
                                     + ", YAML says pin " + str(have))
+        unchecked = {a[0] for a in ambiguous}
         for name, num in sorted(where.items()):
-            if name not in ds_names:
-                problems.append(pkg + ": YAML bonds " + name + " on pin " + str(num)
-                                + ", the DS table does not list it")
+            if name in ds_names or name in unchecked:
+                continue
+            problems.append(pkg + ": YAML bonds " + name + " on pin " + str(num)
+                            + ", the DS table does not list it")
 
     if problems:
         print("DIFFERENCES: " + str(len(problems)))

@@ -29,6 +29,8 @@ on arrows and box characters.
 """
 from __future__ import annotations
 
+import copy
+
 import argparse
 import glob
 import os
@@ -442,6 +444,85 @@ def check_exti(doc: dict, r: Report) -> None:
                 r.error(f"exti.lines.{line}", f"`{bits}` selects `{pin}`, which is not declared in `pins:`")
 
 
+# --- `mcu.inherits:` ---------------------------------------------------------
+# A derived part (CH32V005 = CH32V006 minus TouchKey and TIM3) names its parent and
+# lists what it drops. Resolution has to happen BEFORE validation, or every check
+# below fires on keys the child legitimately does not carry.
+#
+# The rules are app/engine/inherit.js's - that module is the source of truth and the
+# app resolves the same way at load time:
+#     maps merge key by key and the child wins
+#     lists REPLACE wholesale, never concatenate (a remaps[] index is the AFIO_PCFR1
+#         field value, so appending would silently re-number every mapping)
+#     scalars replace; mcu.variants replaces; mcu.remove takes dotted paths and it is
+#         an error for one to match nothing
+def _deep_merge(base, over):
+    if not isinstance(base, dict) or not isinstance(over, dict):
+        return copy.deepcopy(over)
+    out = {}
+    for k in set(base) | set(over):
+        if k not in over:
+            out[k] = copy.deepcopy(base[k])
+        elif k not in base:
+            out[k] = copy.deepcopy(over[k])
+        else:
+            out[k] = _deep_merge(base[k], over[k])
+    return out
+
+
+def _remove_path(obj, path):
+    parts = str(path).split(".")
+    node = obj
+    for p in parts[:-1]:
+        if not isinstance(node, dict) or p not in node:
+            return False
+        node = node[p]
+    last = parts[-1]
+    if isinstance(node, dict) and last in node:
+        del node[last]
+        return True
+    return False
+
+
+def _mcu_files_by_name(folder):
+    """mcu.name -> parsed document, for every sibling MCU file."""
+    out = {}
+    for f in sorted(folder.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(f.read_text(encoding="utf-8"))
+        except yaml.YAMLError:
+            continue
+        if isinstance(doc, dict) and isinstance(doc.get("mcu"), dict) and doc["mcu"].get("name"):
+            out[doc["mcu"]["name"]] = doc
+    return out
+
+
+def resolve_inherits(doc, folder, r, seen=None):
+    """Merged document, or the original plus errors on `r` if it cannot be resolved."""
+    seen = list(seen or [])
+    parent_name = (doc.get("mcu") or {}).get("inherits")
+    if not parent_name:
+        return doc
+    me = (doc.get("mcu") or {}).get("name", "(unnamed)")
+    if parent_name in seen:
+        r.error("mcu.inherits", "loop: " + " -> ".join(seen + [me, parent_name]))
+        return doc
+    parents = _mcu_files_by_name(folder)
+    if parent_name not in parents:
+        r.error("mcu.inherits", f"`{parent_name}` is not an MCU file in {folder.name}/")
+        return doc
+    base = resolve_inherits(parents[parent_name], folder, r, seen + [me])
+    merged = _deep_merge(base, doc)
+    if (doc.get("mcu") or {}).get("variants"):
+        merged["mcu"]["variants"] = copy.deepcopy(doc["mcu"]["variants"])   # never inherit part numbers
+    for path in (doc.get("mcu") or {}).get("remove", []) or []:
+        if not _remove_path(merged, path):
+            r.error("mcu.remove", f"`{path}` matches nothing in the merged document")
+    merged.get("mcu", {}).pop("inherits", None)
+    merged.get("mcu", {}).pop("remove", None)
+    return merged
+
+
 def validate_file(path: pathlib.Path, geom: dict) -> Report:
     r = Report(path)
     try:
@@ -451,6 +532,10 @@ def validate_file(path: pathlib.Path, geom: dict) -> Report:
         return r
     if not isinstance(doc, dict):
         r.error("yaml", "top level must be a mapping")
+        return r
+
+    doc = resolve_inherits(doc, path.parent, r)
+    if r.errors:
         return r
 
     for key in ("mcu", "packages", "pins", "peripherals"):
