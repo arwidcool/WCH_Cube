@@ -24,7 +24,7 @@
        both themes, so the TEXT on them cannot come from --text (which flips) — it is a
        fixed near-black that clears 4.5:1 on every one of them. --warn-ink is the amber
        status glyph darkened until it passes on a white panel. */
-    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#8a6200; --on-res:#ffffff;
+    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#8a6200; --ok-ink:#157a1e; --on-res:#ffffff;
     /* shared-resource issues (EXTI lines, DMA channels) - never orange, they are not pin conflicts */
     --res:#5a4fcf; --res-bg:#efedfc;
     --chip-text:#ffffff; --chip-sub:#ffffff; --chip-dot:#d0d4d8;
@@ -92,7 +92,9 @@
   .item:hover{background:var(--blue-pale)}
   .item.selected{background:var(--blue);color:#fff}
   .item .st{width:14px;text-align:center;font-size:12px}
-  .st.ok{color:var(--ok)} .st.warn{color:var(--warn-ink)} .st.na{color:var(--bad)}
+  /* the status glyphs are text: --ok/--warn are the CubeMX badge colours and are too
+     light on a white panel (3.55:1 and 2.28:1), so the GLYPHS use an ink that passes. */
+  .st.ok{color:var(--ok-ink)} .st.warn{color:var(--warn-ink)} .st.na{color:var(--bad)}
   .item.selected .st{color:#fff}
   .item.na{color:var(--muted)}
 
@@ -349,7 +351,7 @@
     --chip-text:#f2f5f7; --chip-sub:#f2f5f7; --chip-dot:#aeb5bc;
     --sys-na:#2b3138; --sys-na-fg:#7d868f; --sys-off:#2b3138; --sys-off-fg:#c3cad1;
     --shadow:rgba(0,0,0,.6); --ink-strong:#cfe2f2; --blue-hdr:#1c6f9f;
-    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#e0a000; --on-res:#1a1e23;
+    --on-pin:#141414; --on-badge:#1c1c1c; --warn-ink:#e0a000; --ok-ink:#4cc85a; --on-res:#1a1e23;
   }
   :root[data-theme="dark"] .mode label{background:#c9a92b;color:#1a1e23}
   :root[data-theme="dark"] .gen:hover{background:var(--blue)}
