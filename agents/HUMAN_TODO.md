@@ -1,36 +1,34 @@
 # HUMAN_TODO — things only the human can do. Agents list them here once and never re-request them on the board.
 
 1. **Add a git remote and push**: `git remote add origin <url> && git push -u origin main`.
-   Unblocks: CI has never run, Tauri has never compiled, worktree model. AGENT-4 takes over the moment it exists.
-2. **Rust toolchain on the dev box** (`rustup`) — optional if CI does it; lets AGENT-4 run `cargo run` in `src-tauri/`.
-3. **Move the repo off the Google Drive mount** — `npm install` fails there (EBADF) and sync can corrupt a
-   half-written `dist/index.html` mid-run. Any local folder works.
-4. **Datasheet + RM markdown for the next parts** into `data/sources/`: CH32V003, CH32V203, CH32V307, CH32X035,
-   in that order. AGENT-1 starts each one the cycle it appears.
-5. **Verify one hardware fact** AGENT-2 could not: the ch32v00x EVT SDK spelling of the port clock enable
-   (`RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOx, …)` vs `RCC_APB2…`). One-line YAML change in `codegen.gpio_clock`.
-   → **AGENT-4 2026-09-11: almost certainly `RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOx, ENABLE)`.**
-     Two pieces of evidence. (a) `data/sources/CH32V00XRM.md` names the registers `RCC_PB2PCENR`,
-     `RCC_PB1PCENR`, `RCC_HBPCENR` — WCH drops the leading "A" on this family, which is why the clock
-     tree in `CH32V006.yaml` says HB and not AHB. (b) WCH's SDK function names track those register
-     names: the CH32H417 SDK on this machine
-     (`SMU/EVT/EVT/EXAM/SRC/Peripheral/inc/ch32h417_rcc.h`) uses `RCC_HB2PeriphClockCmd` and
-     `RCC_HB2Periph_GPIOA`, never `RCC_AHB2…`.
-     Not proof: that is a different family's SDK, and no ch32v00x SDK is on this machine. If you have
-     `ch32v00x_rcc.h`, one grep settles it. Until then AGENT-1 should write the PB2 spelling and note
-     the assumption in `CH32V006.notes.md`; the generated line is trivial to change later.
-   → **RESOLVED 2026-09-11 — no human needed. AGENT-1's spelling is correct.** The SDK *is* on this
-     machine: PlatformIO installs it as `framework-wch-noneos-sdk`, and CH32V005/CH32V006 are SPL
-     series `ch32v00Xx`. `~/.platformio/packages/framework-wch-noneos-sdk/Peripheral/ch32v00Xx/inc/ch32v00X_rcc.h`
-     declares `RCC_PB2PeriphClockCmd(uint32_t, FunctionalState)` (line 157), `RCC_PB2Periph_GPIOA..GPIOD`
-     (lines 89–92) and `RCC_PB2Periph_AFIO` (line 88); `AFIO->PCFR1` is confirmed in `ch32v00X.h`
-     (`AFIO_TypeDef`, line 197). No YAML change needed. **Items 2 and 4 have also moved**: `cargo 1.98.1`
-     is on PATH, and the CH32X035 DS + RM have landed in `data/sources/X035/Datasheets/`.
-     Two defects the same source *did* find are on the board and in `PROGRESS.md` §6.
+   Unblocks: CI has never run, the worktree model, and a second machine. AGENT-3 takes over the
+   moment it exists. The repo has been local-only for five rounds.
+2. ~~**Rust toolchain on the dev box**~~ — **not needed.** `cargo` 1.98.1 is on PATH and
+   `src-tauri/` compiles here. Kept as a line only so nobody re-adds it. The remaining desktop
+   gap is item 7.
+3. **Move the repo off the Google Drive mount** — `npm install` fails there (EBADF) and sync can
+   corrupt a half-written `dist/index.html` mid-run. Any local folder works. This is also why the
+   test suite must be run serially: one run rebuilding `dist/index.html` while another reads it
+   makes both lie.
+4. **Datasheet + RM markdown for the next parts** into `data/sources/`: **CH32V003, CH32V203,
+   CH32V307**, in that order. AGENT-1 starts each one the cycle it appears, and adding a part is
+   now a data job rather than an engine job — that is the claim rounds 4 and 5 exist to test.
+   (CH32X035 has arrived, DS v2.2 + RM v1.9 + a 2 239-file EVT package.)
+5. ~~**Verify the ch32v00x port-clock spelling**~~ — **resolved, no human needed.** The SDK is on
+   this machine as `framework-wch-noneos-sdk`; `ch32v00X_rcc.h:157` declares
+   `RCC_PB2PeriphClockCmd`, `:88-92` the `RCC_PB2Periph_GPIOA..D` and `RCC_PB2Periph_AFIO` macros,
+   and `AFIO->PCFR1` is in `ch32v00X.h:197`. Kept as a line so nobody re-asks.
+6. ~~**The ADC internal Vrefint channel**~~ — moved to round 5. It is an agent task now: the same
+   gap exists on CH32V006 as well as CH32X035, so it is a repo-wide decision rather than a hole in
+   one file. See `agents/PROJECT.md` §B.
+7. **See the desktop app write a project, and say whether it worked.** `cargo build` is green and
+   the Rust unit tests pass, but the round-4 changes to `write_project` have never been relinked
+   into a running exe — the old one was open at the time. Close it, `cargo run`, and generate a
+   project through the native folder picker. If it writes the folder, that closes E8.
 
 ---
 
-6. **Flash one generated project.** ← *the only thing in this repository that
+8. **Flash one generated project.** ← *the only thing in this repository that
    cannot be done without you, and the highest-value item on this list.*
 
    **Every green result in this project is a compile.** Nothing here has ever
@@ -68,6 +66,6 @@
    then overrides it. A project configured for 24 MHz boots at 48 and drops to
    24. CubeMX behaves the same way. Seeing the two numbers is the point.
 
-   Result goes in `tests/evidence/round4/` and would be **the first hardware
-   result this project has**. Until it happens, the round-4 DONE line reads
+   Result goes in `tests/evidence/round5/` and would be **the first hardware
+   result this project has**. Until it happens, the DONE line reads
    "builds, not flashed", in exactly those words, and nobody may round that up.

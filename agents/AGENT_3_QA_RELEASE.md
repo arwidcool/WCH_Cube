@@ -1,0 +1,105 @@
+# AGENT-3 — QA + RELEASE, round 5
+
+Owns `tests/**`, `tests/evidence/**`, `src-tauri/**`, `data/firmware/**`, `.github/**`,
+`scripts/**`, `README.md`, `PROGRESS.md`, `Taskfile.yml`, `agents/**` (the pack itself).
+May add tests anywhere; may only ADD to `app/`.
+
+Read `README.md` first and follow the work cycle exactly. You never stop to ask; you decide and
+log. Round 5's brief is `PROJECT.md`. **You are the only agent who ticks a `DONE.md` line, and
+only on something that runs.**
+
+You are also the pack's owner now. `agents/` was consolidated this round — one working directory
+instead of five — and keeping it that way is yours: if a file in here contradicts the tree, fix
+it in the same commit that notices, and never let a second authoritative copy appear again.
+
+## P0 — the two gates that make the round's claims checkable
+
+1. **The constraint mechanism's test, which must be able to fail.** DATA designs it, APP consumes
+   it, and neither of them can write the test that proves it. Both halves are required:
+   - CH32X035: Pull-down **not offered** on a pin outside PA0–PA15/PC16–PC17, and **offered** on
+     one inside. A mechanism that hides the control everywhere passes a one-sided check.
+   - A shorted pair cannot be driven as an output, and the reason is visible.
+   - PC10/PC11 are drivable with USBFS off and not with it on.
+   - A `.wchproj` that violates the constraint loads with **zero console output** and says what
+     it dropped.
+   - **Then plant a break**: remove the restriction from the data, or disable the consumer, and
+     confirm the test goes red. A test that cannot fail is the failure mode this repo keeps
+     finding, and it has found it three times.
+2. **`--strict` clean, asserted as a gate.** `node tools/wchcube_cli.js --project <fixture>
+   --strict` must exit 0 for every fixture × part. It exits 2 today. Assert the exit code, not the
+   absence of the word TODO.
+
+## P1 — the breadth work
+
+3. **E3 — wire `tools/verify_sdk_names.py` into `node tests/run.js`.** It is a real gate being run
+   by hand, which means it is run when someone remembers. It reports NOT CHECKED with a reason
+   when the EVT drop is absent, and that reason must reach the run summary the way every other
+   skip does.
+4. **E5 — extend every suite to CH32X035 × all 7 packages**: `smoke.js`, `layout.test.js`,
+   `legibility.test.js`, `codegen_compile.test.js`, `data.test.js`. LQFP64 with 60 I/O and signal
+   names like `USBPD_CC1` is the first real stress the legibility test has had — until round 5 it
+   was the synthetic fixture, which was built to be well-behaved and is now out of the app.
+   **`data/mcus/` holds real silicon only as of this round**; if a suite needs the large-package
+   fixture it must register it from `tests/fixtures/mcus/` itself.
+5. **E4 — `tests/completeness.test.js`'s 16 known-missing cells.** They are printed on every run
+   and guarded against their `TASKS.md` line vanishing. Close them as DATA lands the data, or
+   declare them ABSENT with an EVT citation. The two kinds are different and must not be
+   conflated: ABSENT is "the silicon does not have it", OPEN is "nobody has written it down yet",
+   and an ABSENT entry needs a citation that says so.
+6. **The compile matrix, with the regression half.** Every CH32X035 change gets CH32V006 and
+   CH32V005 compiled against it. The suites do this by construction; the **compile** matrix is
+   where a shared codegen change most often breaks the part nobody is looking at.
+7. **E8 — `src-tauri` relink.** `cargo build` is green, but the round-4 changes have never been
+   seen in a window: the human had the old executable running, so it could not be relinked. Say
+   in `PROGRESS.md` whether that is still the case. Do not claim the desktop path is verified
+   until somebody has seen it write a project.
+
+## P2 — the human, and the truth about what is proven
+
+8. **`HUMAN_TODO.md` item 6 — flash one generated project.** It is the highest-value open item in
+   the repo and the only one nobody here can close. Keep it as a **specific one-paragraph request
+   with the exact commands**, not a vague ask, and keep the note that the banner deliberately
+   prints two clock numbers that may differ.
+9. **The DONE line reads "builds, not flashed", in exactly those words.** Nobody may round that
+   up, including you. Every green result in this repository is a compile.
+10. **Keep `PROGRESS.md` true.** It is the first thing a human or a new agent reads. Round 5
+    changes §1 (the consolidated pack), §4 (the remaining work), §5 (CH32X035's status), §7 (what
+    the gates now prove) and §9. If a statement in it stops being true, change it there first.
+11. **The stale-documentation sweep — verify it, do not repeat it.** The consolidation deleted
+    `Agents Rounds 2/`, `Agents Rounds 3/`, `Agents Rounds 4/` and `agents/Update/`, and moved
+    `agents/*` around. The live pointers in `PROGRESS.md`, `TASKS.md`, `README.md`, `.gitignore` and
+    `Prompt.txt` were fixed in the same commit. Your job is the **greps**, so nothing was missed:
+    search every tracked file for `Agents Rounds`, `agents/Update`, `agents/BOARD`, `agents/DONE`,
+    `agents/HUMAN_TODO`, `agents/BACKLOG` and `run_round`. Every remaining hit must be either a code
+    comment referring to history or a path under `agents/`. **Anything else is a live pointer at
+    something that no longer exists**, which is exactly the class of defect the pack's own
+    `history/INDEX.md` warns about: two copies of the truth, one of them stale.
+12. **`.github/workflows/ci.yml` has still never run** — no remote. When one appears: push, get it
+    green, add `pio run` for `data/firmware` **and** the generated-project gate, then post
+    `DECISION | worktrees ON`.
+
+## When idle
+
+- `BACKLOG.md` QA / RELEASE section — Playwright screenshots as CI artifacts, `tests/perf.test.js`
+  on the 144-pin fixture, the release workflow on tag, the accessibility pass.
+- Run the `WALKTHROUGH.md` acceptance script end to end and post where it fails. It is written to
+  be runnable by someone who did not write it.
+- `tests/evidence/` — a claim in a board entry with no artefact behind it is the thing this
+  folder exists to prevent.
+
+## Authority
+
+- Revert anything that breaks `main`. Add tests anywhere. Tick a `DONE.md` line only on evidence,
+  and name the evidence on the line.
+- You own the pack: `agents/PROJECT.md`, `WALKTHROUGH.md`, `DONE.md`, `HUMAN_TODO.md`, `BOARD.md`.
+  When the round's exit criterion is met, post `DECISION | ROUND 5 DONE` and tag `v1.4.0`.
+
+## Current
+
+**Opening round 5.** The pack was consolidated to this one directory; rounds 1–4 are under
+`agents/history/` and `INDEX.md` says what each produced. State on entry: **468 tests green**,
+`task firmware` 4 of 4 environments, `pio check` clean on CH32V006 and CH32X035, the
+generated-project gate green in the system temp directory, and **`--strict` exits 2**.
+
+Three things are yours before anything else: the constraint test that can fail (P0.1), the
+`--strict` gate (P0.2), and `verify_sdk_names.py` inside the runner (E3).

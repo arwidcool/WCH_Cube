@@ -1,26 +1,18 @@
-# Definition of Done — QA (AGENT-4) checks each line; project is DONE when all are [x].
+# Definition of Done — QA (AGENT-3) checks each line; project is DONE when all are [x].
 
-Every `[x]` names the evidence, so anyone can re-check it. `npm test` runs all of it.
-QA does not tick a line on a claim — only on something that runs.
+Every `[x]` names the evidence, so anyone can re-check it. `python build.py && node tests/run.js`
+runs all of it. **QA does not tick a line on a claim — only on something that runs.**
 
-**15 of 24 done** (re-audited against the tree, cycle 3). The nine open lines:
+**The authoritative open list is the Round 5 section at the end of this file.** The round-1
+section below still carries its `[ ]`/`[x]` marks and its "15 of 24" count, last audited in
+round 3; most of what it calls open has since closed, and re-auditing it is a round-5 task
+rather than something to trust. Read it for a line's evidence, not for the project's status —
+`PROGRESS.md` §4 is where the remaining work is listed, and the round-5 section is what gates
+the round.
 
-| Open line | Owner | What is missing |
-|---|---|---|
-| CH32V006 remap second pass | AGENT-1 | a re-derivation from the RM, diffed against the file |
-| CH32V003 extraction | AGENT-1 | the part, or a BOARD note that the sources are absent |
-| C with no TODO sections | AGENT-1 | the `codegen:` + `analog_signals` blocks; the generator is done |
-| `params:` schema and tab | AGENT-1 / AGENT-2 / AGENT-3 | schema, data, engine, and the UI tab |
-| Overflow up to LQFP144 | AGENT-1 | a package above 48 pins; nothing larger exists to test |
-| TASKS.md fully clean | everyone | the last Phase 1–3 boxes |
-| Generated C compiles | **human** | no remote, so no CI, and no compiler on this box |
-| Tauri builds on Linux CI | **human** | no Rust toolchain here and no remote, so it has never compiled |
-| CI runs on every push | **human** | the workflow is written but the repo has no remote |
-
-Five of the six agent-owned lines are AGENT-1's, and four of those are just data extraction.
-The three human ones are not code problems: add a git remote and push, and the workflow builds,
-validates, tests, and compiles both the generated C and the desktop shell on Linux
-(see `agents/HUMAN_TODO.md`).
+Round 4's rule still binds and is not repeated below: **every green result in this repository is
+a compile.** Nothing has been flashed. The hardware line reads "builds, not flashed", in exactly
+those words, until a human runs `pio run -t upload` and reports the SDI banner.
 
 ## Data
 - [ ] CH32V006.yaml spot-checked: every remap table re-derived from RM by a second pass and diffed (0 differences)
@@ -156,7 +148,7 @@ validates, tests, and compiles both the generated C and the desktop shell on Lin
 
 # Round 3 — "the generated code is the product"
 
-From `Agents Rounds 3/00_PROJECT.md`. Same rule as above: **QA ticks a line on
+From `agents/history/round3/00_PROJECT.md`. Same rule as above: **QA ticks a line on
 something that runs, never on a claim.** Every `[x]` names the test.
 
 Status at 2026-09-11T16:05Z: **5 of 13.**
@@ -262,7 +254,7 @@ Status at 2026-09-11T16:05Z: **5 of 13.**
 
 # Round 4 — "a second family, and a project you can flash"
 
-From `Agents Rounds 4/00_PROJECT.md`. Same rule: **QA ticks on something that
+From `agents/history/round4/00_PROJECT.md`. Same rule: **QA ticks on something that
 runs, never on a claim.** Every `[x]` names the test.
 
 Status at 2026-09-11T17:12Z: **6 of 21.**
@@ -374,3 +366,94 @@ Status at 2026-09-11T17:12Z: **6 of 21.**
       → §5 has the second family, §6 the five live X035 findings, §7 the second
         family in the compile table. `data/firmware/{ARCHITECTURE,README}.md`
         corrected; `data/sources/README.md` is AGENT-1's.
+
+---
+
+# Round 5 — "every choice the app offers must be one the silicon can honour"
+
+From `agents/PROJECT.md`. Same rule as every section above: **QA ticks a line on something that
+runs.** A line whose evidence is a sentence in a board entry is not ticked.
+
+## Deliverable A — the data can state a constraint
+
+- [ ] The constraint schema is documented in `data/FORMAT.md` as a real block, with the rules
+      `tools/validate_mcu.py` enforces stated in prose.  (AGENT-1)
+- [ ] It is filled for CH32X035's three documented cases: the pull-down allow-list
+      (PA0–PA15, PC16–PC17 — `ch32x035_gpio.h`), output functions prohibited on shorted pins
+      (DS notes 4–7), and PC10/PC11 floating-only while USBFS is enabled (DS note 4).
+      (AGENT-1)
+- [ ] CH32V006 and CH32V005 were **audited** for the same class of constraint, and the result is
+      recorded either way — "no instances, checked in RM ch.7" is a valid result.  (AGENT-1)
+- [ ] `validate_mcu.py` checks the block (pins exist on the named package; restrict+allow on one
+      option is an error), with planted breaks confirmed caught.  (AGENT-1)
+- [ ] The **GPIO table** honours it **per row** — the option is absent on the rows it does not
+      apply to, not greyed for the whole column.  (AGENT-2)
+- [ ] The **conflict engine** reports a claim that violates a constraint as an issue naming the
+      constraint, the way an EXTI or DMA clash is reported today.  (AGENT-2)
+- [ ] **codegen** never emits a combination the data forbids, and emits a `TODO` naming the
+      constraint if it somehow reaches one.  (AGENT-2)
+- [ ] A `.wchproj` that violates a constraint — or predates it — loads with **zero console
+      output** and says what it dropped, through the same path `gpioSpeedFor()` already uses for
+      a saved speed the part no longer offers.  (AGENT-2)
+- [ ] **A test that can fail**: with the restriction removed from the data or the consumer
+      disabled, the test goes red. Both halves of the pull-down check are present — not offered
+      **outside** the allow-list AND offered **inside** it.  (AGENT-3)
+- [ ] **Regression**: CH32V006 and CH32V005 byte-identical — every existing test unchanged, and
+      generated C for the checked-in fixtures byte-identical without regenerating them.
+      (AGENT-3)
+
+## Deliverable B — every part generates C with no TODO and no `#error`
+
+- [ ] `node tools/wchcube_cli.js --project <fixture> --strict` exits **0** for **every** fixture
+      × part. It exits **2** today.  (AGENT-1 + AGENT-2, asserted by AGENT-3)
+- [ ] `codegen.nvic` — an enabled vector emits an `NVIC_Init` call, not a comment. `NVIC_Init`
+      takes no handle.  (AGENT-1 + AGENT-2)
+- [ ] `channel_params.channels` — the `TIM_OCInitTypeDef` emitter is no longer parked: the
+      channel index comes from the data, not from reading the digit out of `"Channel1"`.
+      (AGENT-1 + AGENT-2)
+- [ ] CH32X035's five partial peripherals are modelled or declared ABSENT with a citation:
+      OPA, CMP1/2/3, TKEY, USBFS/USBPD params. `codegen.periph_handle.USBFS` must stop naming
+      `USBFS_DEVICE`, which does not exist — the headers define `USBFSD` and `USBFSH`.
+      (AGENT-1)
+- [ ] The ADC internal Vrefint channel is modelled — and the decision is applied to **CH32V006
+      too**, where the same gap exists.  (AGENT-1)
+- [ ] USART LIN / SmartCard / IrDA modelled as `params:` with `sdk_call`.  (AGENT-1)
+- [ ] Every generated project still **compiles**: `pio run` for all four firmware environments
+      and for the generated-project gate in the system temp directory.  (AGENT-3)
+- [ ] Save → close → open → regenerate is **byte-identical including DMA and NVIC**.  (AGENT-2)
+
+## Carried over from round 4 — E1–E9
+
+- [ ] E1 `codegen.nvic`  (DATA + APP) — also a Deliverable B line above
+- [ ] E2 `channel_params.channels`  (DATA + APP) — also a Deliverable B line above
+- [ ] E3 `tools/verify_sdk_names.py` runs inside `node tests/run.js`, and its NOT CHECKED reasons
+      reach the run summary the way every other skip does  (AGENT-3)
+- [ ] E4 the 16 known-missing cells in `tests/completeness.test.js`, each filled or declared
+      ABSENT with an EVT citation — the two are different and must not be conflated  (all three)
+- [ ] E5 `smoke.js`, `layout.test.js`, `legibility.test.js`, `codegen_compile.test.js`,
+      `data.test.js` all cover **CH32X035 × 7 packages**  (AGENT-3)
+- [ ] E6 `CH32X033F8P6` modelled as its own part (DS Table 2-2 is a separate pin table),
+      most likely `inherits: CH32X035`  (AGENT-1)
+- [ ] E7 QFN28 / QFN20 / QFN12 on CH32X035: an answer on whether they have an external reset,
+      or a recorded BLOCKED. Filling it by analogy is banned  (AGENT-1)
+- [ ] E8 `src-tauri` relinked and the desktop write path **verified in a window** — or
+      `PROGRESS.md` says plainly that it is still unverified  (AGENT-3)
+- [ ] E9 the round-3/4 DONE lines still open: `--strict` clean, and the `.wchproj` round-trip
+      for DMA and NVIC  (all three)
+
+## Round-5 housekeeping
+
+- [ ] `PROGRESS.md` current: §1 the consolidated pack, §4 the remaining work, §5 CH32X035's
+      status, §7 what the gates now prove, §9 next steps  (AGENT-3)
+- [ ] The stale-path greps in `AGENT_3_QA_RELEASE.md` item 11 come back clean  (AGENT-3)
+- [ ] `WALKTHROUGH.md` run end to end, with the QA-PASS line posted including what failed
+      (AGENT-3)
+- [ ] The round-1 section at the top of this file is re-audited against the tree, or explicitly
+      superseded — it must not keep claiming a status nobody has checked  (AGENT-3)
+
+## Not in this round, and the line that must not be rounded up
+
+- [ ] **A human has flashed one generated project.**  (human)
+      → Until then: **"builds, not flashed."** Every green result here is a compile.
+        `agents/HUMAN_TODO.md` item 6 is the specific request, with the exact commands
+        and what to send back; the result goes in `tests/evidence/round5/`.

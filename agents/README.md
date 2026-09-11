@@ -1,111 +1,160 @@
-# WCH_CubeMX — autonomous 4-agent work plan
+# WCH_CubeMX — autonomous agent work plan
 
-Four Claude Code agents work in parallel on this repo until the Definition of Done in
-`DONE.md` is met. No human approval in the loop. Everything is auto-approved.
+This folder is the **whole** coordination system. Three agents work in parallel on this repo
+until the Definition of Done in `DONE.md` is met. No human approval in the loop; everything is
+auto-approved.
 
-## The four agents
+There used to be five places holding agent instructions — `agents/`, `agents/Update/`, and a
+folder per round. Which one was authoritative depended on the round, and two of them
+contradicted each other. **`agents/` is now the only one.** Rounds 1–4 are archived under
+`history/` and are never read during a cycle; `history/INDEX.md` says what each one did.
+
+## The three agents
 
 | # | Name | Owns (may edit) | Must not edit |
 |---|---|---|---|
-| 1 | **DATA** | `data/mcus/*`, `data/packages/*`, `data/mcus/*.notes.md`, `tools/extract_*` | `app/`, `src-tauri/` |
-| 2 | **ENGINE** | `app/engine/*`, `app/tests/*`, `build.py`, the JS engine section of `app/template.html` (sections 1–3 & 8) | `data/`, CSS/HTML markup, `src-tauri/` |
-| 3 | **UI** | CSS/HTML/render sections of `app/template.html` (sections 4–7), `app/assets/*` | `data/`, engine logic, `src-tauri/` |
-| 4 | **QA + RELEASE** | `tests/*`, `src-tauri/*`, `.github/*`, `README.md`, `scripts/*` | `data/`, `app/` (may only ADD tests, never change behaviour) |
+| 1 | **DATA** | `data/mcus/**`, `data/packages/**`, `data/sources/**`, `data/FORMAT.md`, `tools/extract_*.py`, `tools/validate_mcu.py` | `app/`, `tests/`, `src-tauri/`, `data/firmware/` |
+| 2 | **APP** | `app/engine/**`, `app/template.html`, `app/tests/**`, `app/assets/**`, `build.py`, `tools/wchcube_cli.js` | `data/`, `tests/`, `src-tauri/` |
+| 3 | **QA + RELEASE** | `tests/**`, `src-tauri/**`, `data/firmware/**`, `.github/**`, `scripts/**`, `README.md`, `PROGRESS.md`, `Taskfile.yml` | `data/mcus/**`, `app/` (may only ADD tests, never change behaviour) |
 
-Everyone may edit: `TASKS.md`, `agents/BOARD.md`, their own `agents/AGENT_<n>_*.md` "current" section.
-Ownership prevents merge conflicts. If you need a change in someone else's area, POST A REQUEST on the board, don't edit it.
+Everyone may edit: `TASKS.md`, `agents/BOARD.md`, and their own `agents/AGENT_<n>_*.md`
+"Current" section. Ownership prevents collisions; if you need a change in someone else's area,
+**post a REQUEST on the board, do not edit it**.
 
-## Coordination files (the whole communication system)
+**ENGINE and UI used to be two agents, and APP is their merge.** That seam generated more board
+traffic than any other: a codegen option, a data-driven control and a tab's render path are one
+change, and splitting them meant one agent describing a shape and another implementing it. One
+owner of `app/` is the point. The cost is that a single agent now carries the whole app; if that
+becomes the bottleneck, split it along `app/engine/**` vs `app/template.html` and say so on the
+board.
 
-- `TASKS.md` — the backlog. Claim a task by changing `[ ]` to `[~] (AGENT-n)`. Finish it with `[x]`.
-- **the current round's board** — the message board. Append-only. Requests, handoffs, blockers,
-  decisions. One per round: `agents/BOARD.md` (round 1), `Agents Rounds 2/BOARD.md`,
-  `Agents Rounds 3/BOARD.md`, `Agents Rounds 4/BOARD.md` ← **current**. Older boards are
-  history and still binding.
-- **the current round's pack** — `Agents Rounds 4/00_PROJECT.md` is the brief and
-  `Agents Rounds 4/AGENT_n_*.md` are your standing instructions plus a "Current" section you rewrite
-  every cycle. The files in `agents/` are round 1 and are superseded where they disagree.
-- `PROGRESS.md` — where the project actually stands. AGENT-4 owns it; read it before your first cycle.
-- `DONE.md` — definition of done. When every line is checked by QA, the project is done.
+## The files, and which is authoritative for what
 
-## Environment facts (learned on the first run — do not rediscover them)
-- Windows box. `python3` does not exist; use **`python`** (3.12). CI still uses `python3`. `node` v24.
-- Repo sits on a Google Drive mount: `npm install` fails with EBADF. Test deps live in
-  `%LOCALAPPDATA%\wchcube-deps` and `tests/lib/deps.js` finds them. Human: move the repo off Google Drive when convenient.
-- **CORRECTED 2026-09-11 — the line below used to say there was no cargo and no C compiler. Both are
-  false now, and four agents were reading it as ground truth.**
-  - `cargo` **1.98.1 is on PATH**. `src-tauri/` can be compiled locally; it is no longer CI-only.
-  - A C compiler **is** available: PlatformIO Core 6.2.0 ships WCH's RISC-V GCC 12.2.0 at
-    `~/.platformio/packages/toolchain-riscv` (`riscv-wch-elf-gcc`), plus the `ch32v` platform and the
-    `framework-wch-noneos-sdk` package. `data/firmware/` builds **offline** with everything installed.
-  - So "generated C compiles" is a local gate now, not a CI aspiration.
-  - **A HOST C compiler exists too** (corrected 2026-09-11, round 4): there is no `gcc` on PATH,
-    which made host-side firmware tests look impossible, but **MinGW 9.2.0 is installed at
-    `C:\MinGW`** and `pio test -e native` runs `lib/util`'s unit tests once it is on PATH.
-    `tests/firmware_native.test.js` finds it automatically. An environment fact that is wrong
-    in the pessimistic direction costs exactly as much as one wrong in the optimistic
-    direction, and this file has now had both.
-- Git: AGENT-4 ran `git init`; there is **no remote**. Worktrees are SUSPENDED — all four agents share one
-  working tree and commit straight to `main` with small commits `AGENT-n: <task>`.
-- Because the tree is shared: after you absorb/move a function, delete the old copy IN THE SAME WRITE and
-  run `python build.py && node tests/run.js` before your next edit. A duplicate top-level `const` in the
-  bundle is a fatal SyntaxError that blanks the app for everyone.
-- Timestamps on the board come from `date -u +%Y-%m-%dT%H:%MZ` (PowerShell: `Get-Date -AsUTC -Format yyyy-MM-ddTHH:mmZ`), not guessed.
+| File | What it is | Who keeps it true |
+|---|---|---|
+| `PROJECT.md` | **the current round brief** — read it every cycle | AGENT-3 |
+| `AGENT_n_*.md` | your standing instructions + a "Current" section you rewrite each cycle | each agent |
+| `BOARD.md` | the message board. Append-only, one line per entry | everyone |
+| `DONE.md` | the definition of done. QA ticks a line only on evidence | AGENT-3 |
+| `HUMAN_TODO.md` | things only the human can do, listed once, never re-requested | AGENT-3 |
+| `BACKLOG.md` | feature-parity items for an agent whose brief is complete | everyone |
+| `WALKTHROUGH.md` | the acceptance script for the round's exit criterion | AGENT-3 |
+| `../PROGRESS.md` | where the project actually stands, checked against the tree | AGENT-3 |
+| `../TASKS.md` | the backlog. Claim `[~] (AGENT-n)`, finish `[x]` | everyone |
+
+`PROGRESS.md` and `TASKS.md` are at the repo root, not here, because humans read them too.
+Everything else that coordinates agents is in this folder.
+
+## Environment facts (do not rediscover these)
+
+- **Windows box.** `python`, never `python3` — `python3` does not exist here. `node` v24.
+- **`cargo` 1.98.1 is on PATH.** `src-tauri/` compiles locally.
+- **A RISC-V C compiler is installed** via PlatformIO Core 6.2.0: WCH's GCC 12.2.0 at
+  `~/.platformio/packages/toolchain-riscv`, plus the `ch32v` platform and the
+  `framework-wch-noneos-sdk` package. `data/firmware/` builds **offline**.
+- **A HOST C compiler exists**: there is no `gcc` on PATH, but **MinGW 9.2.0 is at
+  `C:\MinGW`** and `pio test -e native` runs `lib/util`'s host tests once it is on PATH.
+  `tests/firmware_native.test.js` finds it itself.
+- This file has now recorded this machine **wrongly in both directions** — first "no cargo, no
+  compiler", then "no host compiler". Assume less about the box than the pack does, and correct
+  this list in the same commit that proves it.
+- Repo sits on a Google Drive mount: `npm install` fails with `EBADF`. Test deps live in
+  `%LOCALAPPDATA%\wchcube-deps` and `tests/lib/deps.js` finds them.
+  (Human: moving the repo to a local folder fixes this.)
+- **Git: one repo, no remote, one shared working tree.** Worktrees stay suspended until a remote
+  exists — never create one. Commit straight to `main`, small, `AGENT-n: <task>`.
+- **The tree is shared, so run the suite serially.** Two `node tests/run.js` at once corrupt each
+  other: one rebuilds `dist/index.html` while the other reads it, and the compile gate builds
+  into a shared drop zone. One suite at a time per machine.
+- Because the tree is shared: after you absorb or move a function, delete the old copy IN THE SAME
+  WRITE. Two top-level `const`s of the same name in the bundle are a fatal SyntaxError that blanks
+  the app for everyone, and `build.py` fails the build on it.
+- Timestamps come from `Get-Date -AsUTC -Format yyyy-MM-ddTHH:mmZ`
+  (`date -u +%Y-%m-%dT%H:%MZ` elsewhere). Never guess one.
 
 ## Git model
 
-**Suspended until a remote exists** (see Environment facts). When the human adds a remote, AGENT-4 posts
-`DECISION | worktrees ON` and the model below applies. Until then: one shared tree, commit to `main` directly.
+One repo, one `main`, **one shared tree**, no remote. Commit small, straight to `main`.
 
-One repo, one `main`. Each agent works in its own git worktree on its own branch and merges to
-`main` itself (auto-approve) once tests pass:
+Worktrees are suspended until a remote exists. When one appears, AGENT-3 posts
+`DECISION | worktrees ON` and the model becomes one worktree per agent with a rebase-and-test
+merge:
 
 ```
-git worktree add ../wchcube-data    agent/data
-git worktree add ../wchcube-engine  agent/engine
-git worktree add ../wchcube-ui      agent/ui
-git worktree add ../wchcube-qa      agent/qa
+git fetch && git rebase origin/main && python build.py && node tests/run.js && git push origin HEAD:main
 ```
 
-Merge rule: `git fetch && git rebase origin/main && python3 build.py && node tests/run.js && git push origin HEAD:main`.
-If rebase conflicts in a file you don't own → abort, post on BOARD, wait one cycle.
+If a rebase conflicts in a file you do not own: abort, post on `BOARD.md`, take something else
+that cycle.
 
-## The work cycle (every agent, forever, until DONE.md is fully checked)
+## The work cycle (every agent, every cycle, until DONE.md is fully ticked)
 
-1. `git pull --rebase` your branch on `main`.
-2. Read `agents/BOARD.md` (only entries newer than your last cycle) and `TASKS.md`.
-3. Answer any board request addressed to you FIRST.
-4. Pick the highest task in your area that is `[ ]`; claim it `[~] (AGENT-n)`.
-5. Do it. Build (`python3 build.py`). Run tests (`node tests/run.js`). Fix until green.
-6. Commit with message `AGENT-n: <task>`; rebase; push to `main`.
-7. Mark `[x]` in TASKS.md, write one line in BOARD.md (`DONE: …`), update your "Current" section.
-8. If your area has no `[ ]` tasks left: run the "when idle" list in your agent file, then check `DONE.md`.
-   **Idle is not a stop.** If your list is empty, take the highest open request on the board addressed to
-   anyone in a *blocked* area that you can legitimately help with (write a test, a fixture, a proposal file
-   for them to paste), post it as `HANDOFF(→AGENT-m)`, and keep going. An agent that has posted `IDLE`
-   twice in a row with nothing between must pick something from `agents/BACKLOG.md`.
-8b. **Requests have a deadline.** A `REQUEST(→AGENT-m)` unanswered for 2 of your cycles becomes YOUR decision:
-   post `DECISION | (unanswered) …`, implement the least-invasive version, and move on. Never stay blocked on a colleague.
-9. Check `agents/HUMAN_TODO.md`. If a DONE line needs the human, it is listed there once; do not re-request it on the board.
-10. Loop. Do not stop for confirmation. Do not ask questions to a human. If a decision is needed, make it, record it in BOARD.md under `DECISION:`, and move on. A wrong decision is cheaper than a stalled swarm.
+1. Read `BOARD.md` — **only entries newer than your last cycle** — and `TASKS.md`.
+2. Answer any board request addressed to you **FIRST**.
+3. Pick the highest task in your area that is `[ ]`; claim it `[~] (AGENT-n)`.
+4. Do it. Build. Test. Fix until green. Both commands, every time:
+   ```
+   python build.py && node tests/run.js
+   ```
+5. Commit `AGENT-n: <task>`.
+6. Mark `[x]` in `TASKS.md`, add one line to `BOARD.md`, rewrite your "Current" section.
+7. If your list is empty: work the "when idle" list in your own file, then `BACKLOG.md`.
+   **Idle is not a stop.** An agent that posts `IDLE` twice in a row with nothing between must take
+   something from `BACKLOG.md`.
+8. **Requests have a deadline.** A `REQUEST(→AGENT-m)` unanswered for two of your cycles becomes
+   **your** decision: post `DECISION | (unanswered) …`, implement the least-invasive version, and
+   move on. Never stay blocked on a colleague.
+9. Check `HUMAN_TODO.md` before asking a human anything. If it is not there, it is not yours to ask.
+10. Loop. Never stop for confirmation and never ask a human a question. Make the decision, post it
+    as `DECISION`, continue. **A wrong decision is cheaper than a stalled swarm.**
+
+## Gates — what a commit has to pass
+
+- `python build.py && node tests/run.js` → **ALL GREEN, no unexplained skips.** The runner counts
+  skips and prints every reason above the verdict; a check that did not run is never a pass.
+- **If you changed what the generator emits, or what an MCU file claims, compile it** on a
+  configuration that actually assigns pins — a default configuration emits an empty function and
+  proves nothing:
+  ```
+  node tools/wchcube_cli.js --project tests/fixtures/<fixture>.wchproj --new-project <tmp>/Proj
+  cd <tmp>/Proj && pio run
+  ```
+  Say in the commit message **which configuration you compiled**.
+- **If you changed the UI, verify it in a REAL browser** — build, then open `dist/index.html` in
+  Edge or Chrome at 1280 and 1920 wide, light and dark, 100 % and 125 % zoom — and write
+  `verified in browser` in the commit message. jsdom passing is necessary, not sufficient.
+- `task gate` is those two commands. `task all` adds validate, firmware and `cargo test`.
 
 ## Rules that never bend
 
-- Never delete a data file or a test. Rename/deprecate instead.
-- Never lower a test threshold to make it pass.
-- Every MCU fact that goes into YAML cites DS/RM table in the `.notes.md`.
-- The app must always open with zero console errors after every merge (QA enforces).
-- `dist/index.html` is generated; never hand-edit it.
-- Do not touch anything outside the repo. Never run `rm -rf` on a path containing `..` or `/`.
+- **Never delete a data file or a test.** Rename or deprecate instead.
+- **Never lower a threshold to make something pass.**
+- **Never hand-edit `dist/index.html`** — it is generated by `build.py`.
+- **Never edit `data/firmware/lib/wchcube_generated/`** — it is machine-written. If the output is
+  wrong, the generator is wrong.
+- Every MCU fact in YAML cites a DS/RM table or an EVT `file:line` in the part's `.notes.md`.
+  **"The other CH32 parts have it" is not a citation.**
+- Precedence for anything the software must *name*: **EVT → RM → DS → anything else.** Where EVT
+  and the RM disagree they answer different questions; record both, average neither.
+- The app must open with **zero console errors or warnings** on every part × every package.
+- The generator must never emit plausible-looking wrong code. If it cannot work something out from
+  the data, it emits a `TODO` naming exactly what is missing.
+- Nothing outside the repo is touched. Never `rm -rf` a path containing `..` or `/`.
 
-## Launching (see `run_agents.sh`)
+## Launching
 
-Each agent is a Claude Code session started in its worktree with its agent file as the prompt and
-permission prompts disabled:
+`run_agents.ps1` in this folder starts one Claude Code session per agent with permission prompts
+disabled, each pointed at its own `AGENT_n_*.md`.
 
 ```
-claude --permission-mode bypassPermissions -p "$(cat agents/AGENT_1_DATA.md)" ...
+powershell -File agents\run_agents.ps1            # start all three
+powershell -File agents\run_agents.ps1 -Only 2    # start just AGENT-2
+powershell -File agents\run_agents.ps1 -DryRun    # print the commands, start nothing
 ```
-`--dangerously-skip-permissions` is the same thing; on first use it shows a one-time confirmation unless
-`~/.claude/settings.json` contains `"skipDangerousModePermissionPrompt": true`. `run_agents.sh` sets that.
-Run this only on a machine/VM you're fine with an agent having full shell access to.
+
+Use `powershell`, not `pwsh` — this box has Windows PowerShell 5.1 and no PowerShell 7. That is
+also why `run_agents.ps1` is ASCII-only: 5.1 reads a `.ps1` as ANSI unless it has a UTF-8 BOM, so
+an em-dash decodes into a quote character and breaks the parser further down the file.
+
+Run it only on a machine you are willing to give an agent full shell access to. The script sets
+`skipDangerousModePermissionPrompt` so the one-time confirmation cannot block an unattended start.
