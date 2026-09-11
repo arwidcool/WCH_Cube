@@ -45,6 +45,15 @@ if (fs.existsSync(enginePath)) {
 }
 const { REG, AssertionError } = await imp(path.join(ROOT, 'tests', 'lib', 'harness.js'));
 
+// Four agents write this tree at once. If dist/index.html is rebuilt while the suite
+// is running, tests read two different apps and fail for reasons nobody introduced.
+// Stamp it so the report can say that instead of blaming the code.
+const DIST = path.join(ROOT, 'dist', 'index.html');
+const stampDist = () => {
+  try { const s = fs.statSync(DIST); return `${s.size}:${s.mtimeMs}`; } catch { return 'missing'; }
+};
+const distAtStart = stampDist();
+
 const t0 = Date.now();
 let pass = 0, filtered = 0;
 const failures = [];
@@ -90,6 +99,11 @@ console.log('\n' + '-'.repeat(64));
 if (failures.length) {
   console.log(C.r(`${failures.length} FAILED`) + `, ${pass} passed` + (filtered ? `, ${filtered} filtered out` : '') + `  (${secs}s)`);
   for (const f of failures) console.log('  ' + C.r('x') + ` ${f.where}  ${f.name}`);
+  if (stampDist() !== distAtStart) {
+    console.log('\n' + C.y('NOTE: dist/index.html was rebuilt while these tests ran.'));
+    console.log(C.y('      Tests before and after the rebuild ran against different apps, so some of'));
+    console.log(C.y('      these failures may not be real. Re-run when the tree is quiet:  npm test'));
+  }
   process.exit(1);
 }
 console.log(C.g('ALL GREEN') + ` — ${pass} tests` + (filtered ? `, ${filtered} filtered out` : '') + `  (${secs}s)`);

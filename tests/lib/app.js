@@ -19,9 +19,22 @@ export const VIEWPORT = { width: 1280, height: 720 };
 
 const CDN_YAML = /<script[^>]+cdnjs[^>]+js-yaml[^>]*>\s*<\/script>/i;
 
+/** Sleep without async, so sync readers can retry. */
+function nap(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch { /* best effort */ }
+}
+
 export function readDist() {
   if (!fs.existsSync(DIST)) throw new Error('dist/index.html missing - run "python build.py" first');
-  let html = fs.readFileSync(DIST, 'utf8');
+  // Four agents share this tree: a build may be writing dist/index.html right now, so a
+  // read can land on a half-written file. Retry until it looks like a whole document.
+  let html = '';
+  for (let attempt = 0; attempt < 8; attempt++) {
+    html = fs.readFileSync(DIST, 'utf8');
+    if (html.includes('</html>')) break;
+    nap(60);
+  }
+  if (!html.includes('</html>')) throw new Error('dist/index.html is incomplete - a build is probably still running');
   // Offline: swap the CDN js-yaml tag for the vendored copy (or node_modules') if it is still there.
   if (CDN_YAML.test(html)) {
     const vendored = path.join(ROOT, 'app', 'vendor', 'js-yaml.js');

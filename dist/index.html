@@ -247,6 +247,13 @@
     .chipbar{flex-wrap:wrap}
     #pin-search{width:120px!important}
   }
+  @media (max-width:1180px){
+    #view-pinout{grid-template-columns:212px minmax(296px,1fr) minmax(356px,1.25fr)}
+    .subbar{gap:28px}
+    table.gpio{font-size:11.5px}
+    .mode{padding:8px 10px}
+    .menubar .menu{padding:6px 8px}
+  }
   @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
 </style>
 </head>
@@ -1622,6 +1629,24 @@ clock:
 <script>
 "use strict";
 // Bundled from app/engine/*.js by build.py — do not edit here.
+// ===== app/engine/util.js =====================================================
+// =============================================================================
+//  util.js — the few primitives every other engine module needs.
+// =============================================================================
+
+// Deep copy that keeps Sets as Sets (the checkbox settings in S are Sets) and
+// does not depend on structuredClone, which jsdom does not implement and older
+// webviews do not have. The data is plain YAML: scalars, arrays, maps, Sets.
+function deepClone(v) {
+  if (v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map(deepClone);
+  if (v instanceof Set) return new Set([...v].map(deepClone));
+  if (v instanceof Map) return new Map([...v].map(([k, x]) => [deepClone(k), deepClone(x)]));
+  const out = {};
+  for (const [k, x] of Object.entries(v)) out[k] = deepClone(x);
+  return out;
+}
+
 // ===== app/engine/inherit.js ==================================================
 // =============================================================================
 //  inherit.js — `mcu.inherits:` resolution. A derived part (CH32V005 = CH32V006
@@ -1641,15 +1666,16 @@ clock:
 //  peripherals entirely; nothing downstream ever sees `inherits`.
 // =============================================================================
 
+
+
 const isMap = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-const clone = v => (v === null || typeof v !== 'object' ? v : structuredClone(v));
 
 function deepMerge(base, over) {
-  if (!isMap(base) || !isMap(over)) return clone(over);
+  if (!isMap(base) || !isMap(over)) return deepClone(over);
   const out = {};
   for (const k of new Set([...Object.keys(base), ...Object.keys(over)])) {
-    if (!(k in over)) out[k] = clone(base[k]);
-    else if (!(k in base)) out[k] = clone(over[k]);
+    if (!(k in over)) out[k] = deepClone(base[k]);
+    else if (!(k in base)) out[k] = deepClone(over[k]);
     else out[k] = deepMerge(base[k], over[k]);
   }
   return out;
@@ -1680,7 +1706,7 @@ function resolveInherits(y, lookup, parse, seen = []) {
 
   const base = resolveInherits(parse(src), lookup, parse, [...seen, me]);
   const merged = deepMerge(base, y);
-  if (y.mcu.variants) merged.mcu.variants = clone(y.mcu.variants);   // never inherit part numbers
+  if (y.mcu.variants) merged.mcu.variants = deepClone(y.mcu.variants);   // never inherit part numbers
 
   for (const path of y.mcu.remove || []) {
     if (!removePath(merged, path)) throw new Error(`"${me}": mcu.remove path "${path}" matched nothing in ${parent}`);
@@ -1688,6 +1714,86 @@ function resolveInherits(y, lookup, parse, seen = []) {
   merged.mcu.inherited_from = parent;      // metadata; inert everywhere else
   return merged;
 }
+
+// ===== app/engine/history.js ==================================================
+// =============================================================================
+//  history.js — undo/redo as a stack of configuration snapshots.
+//
+//  Snapshots, not inverse commands: the whole configuration is a few kilobytes
+//  of plain data, and a snapshot cannot drift out of step with the engine the
+//  way a hand-written inverse can.
+//
+//  View state (selection, zoom, pan) is deliberately excluded — undo must not
+//  scroll the chip around or change which peripheral is open.
+//
+//  Every engine mutator calls record(label) BEFORE it changes anything, so the
+//  UI gets undo for free by going through the engine instead of writing S.
+// =============================================================================
+
+
+
+const VIEW_KEYS = ['sel', 'selPin', 'zoom', 'panX', 'panY'];
+const LIMIT = 100;
+
+let undoStack = [];
+let redoStack = [];
+let batching = false;
+
+// deepClone keeps Sets as Sets, which the checkbox settings rely on.
+function snap() {
+  const out = {};
+  for (const [k, v] of Object.entries(S)) if (!VIEW_KEYS.includes(k)) out[k] = deepClone(v);
+  return out;
+}
+
+// Restore in place: the UI and the engine hold a reference to S, so the object
+// identity has to survive.
+function restore(state) {
+  for (const k of Object.keys(S)) if (!VIEW_KEYS.includes(k)) delete S[k];
+  for (const [k, v] of Object.entries(state)) S[k] = deepClone(v);
+}
+
+function clearHistory() { undoStack = []; redoStack = []; }
+
+function record(label) {
+  if (!S || batching) return;      // inside batch(), the group's own record() already fired
+  undoStack.push({ label, state: snap() });
+  if (undoStack.length > LIMIT) undoStack.shift();
+  redoStack = [];
+}
+
+// Undo/redo return the label of what moved, or null when there was nothing.
+function undo() {
+  if (!undoStack.length) return null;
+  const entry = undoStack.pop();
+  redoStack.push({ label: entry.label, state: snap() });
+  restore(entry.state);
+  return entry.label;
+}
+
+function redo() {
+  if (!redoStack.length) return null;
+  const entry = redoStack.pop();
+  undoStack.push({ label: entry.label, state: snap() });
+  restore(entry.state);
+  return entry.label;
+}
+
+const canUndo = () => undoStack.length > 0;
+const canRedo = () => redoStack.length > 0;
+const undoLabel = () => (undoStack.length ? undoStack[undoStack.length - 1].label : null);
+const redoLabel = () => (redoStack.length ? redoStack[redoStack.length - 1].label : null);
+const historyDepth = () => ({ undo: undoStack.length, redo: redoStack.length });
+
+// Group several mutations into one undo step (a package switch that also drops
+// pins, say). The inner record() calls are suppressed.
+function batch(label, fn) {
+  if (batching) return fn();
+  record(label);
+  batching = true;
+  try { return fn(); } finally { batching = false; }
+}
+const recording = () => !batching;
 
 // ===== app/engine/model.js ====================================================
 // =============================================================================
@@ -1700,6 +1806,7 @@ function resolveInherits(y, lookup, parse, seen = []) {
 //  The UI reads M/S/E as globals in the browser bundle and as live ES module
 //  bindings in Node tests. Never reassign M or S from outside this module.
 // =============================================================================
+
 
 
 
@@ -1803,6 +1910,7 @@ function loadMcu(source) {
   MCU_FILES[y.mcu.name] ||= src;
   S = initState(M);
   applyPackageRemaps();
+  clearHistory();            // a different part is a different document
   return M;
 }
 
@@ -1866,6 +1974,7 @@ function isAvailable(pid) {
 // are no longer bonded (the caller decides how loudly to say so).
 function setPackage(pkg) {
   if (!(pkg in M.packages)) throw new Error(`No such package: ${pkg}`);
+  record(`Package ${pkg}`);
   S.pkg = pkg;
   applyPackageRemaps();
   return Object.keys(S.manual).filter(p => !pinExists(p));
@@ -1945,6 +2054,7 @@ function clockCalc(m = M, s = S) {
 //    conflictList: [ { pin, label, num, signals, owners, shorted, text } ]
 //  }
 // =============================================================================
+
 
 
 let E = null;
@@ -2027,6 +2137,7 @@ function previewAssign(pin, opt) {
 // Assign an option from the pin picker: either a plain GPIO mode, or a
 // peripheral signal (which also selects the remap that routes it to this pin).
 function assignSignal(pin, opt) {
+  record(`${opt.gpio || sigName(opt.periph, opt.signal)} on ${pinLabel(pin)}`);
   if (opt.gpio) {
     for (const n of groupOf(pin)) delete S.manual[n];
     S.manual[pin] = opt.gpio;
@@ -2055,6 +2166,7 @@ function assignSignal(pin, opt) {
 // Put a pin back to its reset state: drop the manual GPIO and switch off
 // whichever peripheral choices were driving it.
 function resetPin(pin) {
+  record(`Reset ${pinLabel(pin)}`);
   const cl = ((E && E.pins[canon(pin)]) || {}).claims || [];
   for (const n of groupOf(pin)) { delete S.manual[n]; delete S.gpio[n]; }
   for (const c of cl) {
@@ -2071,12 +2183,65 @@ function resetPin(pin) {
   }
 }
 
+
+// ---- state writers -----------------------------------------------------------
+// Everything that changes the configuration goes through one of these, so undo
+// works and the UI never has to know how S is shaped. (AGENT-3: route the centre
+// panel and the clock tab here — these replace the thin writers in section 4b.)
+
+// A dropdown setting: "Mode" -> "Asynchronous".
+function setSetting(pid, setting, choice) {
+  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
+  if (!s) throw new Error(`${pid} has no setting "${setting}"`);
+  if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
+  record(`${pid} ${setting}`);
+  S.periph[pid].settings[setting] = choice;
+}
+
+// A checkbox setting: ADC1 "Channels" IN3 on or off.
+function toggleSetting(pid, setting, choice, on) {
+  const s = (M.peripherals[pid].settings || []).find(x => x.name === setting);
+  if (!s || s.type !== 'checkboxes') throw new Error(`${pid}.${setting} is not a checkbox setting`);
+  if (!s.choices.some(c => c.name === choice)) throw new Error(`${pid}.${setting} has no choice "${choice}"`);
+  record(`${pid} ${choice}`);
+  const set = S.periph[pid].settings[setting];
+  if (on === undefined ? set.has(choice) : !on) set.delete(choice); else set.add(choice);
+}
+
+// The AFIO remap / pin-location selector.
+function setRemap(pid, index) {
+  const remaps = M.peripherals[pid].remaps || [];
+  if (!remaps[index]) throw new Error(`${pid} has no remap ${index}`);
+  record(`${pid} remap ${remaps[index].name}`);
+  S.periph[pid].remap = index;
+}
+
+// One cell of the GPIO settings table (mode, pull, speed, label).
+function setGpioField(pin, key, value) {
+  record(value === '' ? `Clear ${key} on ${pinLabel(pin)}` : `${pinLabel(pin)} ${key}`);
+  (S.gpio[pin] ||= {})[key] = value;
+}
+const userLabel = pin => ((S.gpio[pin] || {}).label || '').trim();
+const pinModified = pin => !!(E && E.pins[canon(pin)]) || !!userLabel(pin);
+
+// Clock tab: { sys, hse, pllIn, pllMul, pre: { HB: 2 } } — partial, merged in.
+function setClock(patch) {
+  record('Clock');
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+  }
+}
+
+// selectPeripheral() stays in the UI: it re-renders, and the engine never touches
+// the DOM. Selection is view state anyway — no undo step.
+
 // ===== app/engine/project.js ==================================================
 // =============================================================================
 //  project.js — one project = one MCU + one package + every setting, saved as
 //  readable YAML (`.wchproj`). Pure: serialise/apply touch only M, S and PROJECT.
 //  The browser download and the file dialogs live in the app shell.
 // =============================================================================
+
 
 
 const PROJECT = { name: 'Untitled', variant: null, dirty: false };
@@ -2135,6 +2300,7 @@ function projectApply(src) {
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
   if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
+  clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
   return PROJECT;
 }
@@ -2371,8 +2537,9 @@ const attr = s => esc(s).replace(/"/g, '&quot;');
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
 const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false, cview: 'pinout' };
 
-const userLabel = name => ((S.gpio[name] || {}).label || '').trim();
-const pinModified = name => !!(E && E.pins[name]) || !!userLabel(name);
+// userLabel() and pinModified() now live in app/engine/engine.js (AGENT-3's
+// 01:00Z handoff). pinModified() there canonicalises the pin, so the second name
+// of a shorted pair reports correctly too.
 // how much horizontal room the longest label needs, so nothing is clipped at fit-zoom
 function labelRoom() {
   if (!E) return 190;
@@ -2616,8 +2783,7 @@ function placeFloat(d, cx, cy) {
   d.style.left = Math.max(4, Math.min(cx + 4, window.innerWidth - W - 8)) + 'px';
   d.style.top = Math.max(4, Math.min(cy + 4, window.innerHeight - H - 8)) + 'px';
 }
-// thin setters so the UI never pokes at S in more than one place (AGENT-2: adopt these into engine/model.js)
-function setGpioField(pin, key, val) { (S.gpio[pin] ||= {})[key] = val; }
+// setGpioField() is the engine's now (app/engine/engine.js) and records an undo step.
 function selectPeripheral(pid) { if (pid === 'GPIO' || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
 
 function openPinMenu(pin, cx, cy) {
@@ -2736,9 +2902,24 @@ function renderSystem() {
   const rest = Object.keys(M.peripherals).filter(p => !placed.has(p));
   if (rest.length) groups.push({ bus: groups.length ? 'Not on a documented bus' : 'Peripherals', items: rest });
 
-  const W = 1040, PAD = 18, COREW = 176, BX = PAD + COREW + 66;
+  const PAD = 18, COREW = 176, BX = PAD + COREW + 66;
   const BW = 108, BH = 30, GX = 9, GY = 9, HDR = 21, BANDGAP = 16;
-  const perRow = Math.max(1, Math.floor((W - BX - PAD + GX) / (BW + GX)));
+  // Choose how many blocks per row so the diagram ends up shaped like the panel it
+  // has to fill - a tall narrow panel gets few columns, a wide one gets many.
+  const panel = document.getElementById('syscanvas');
+  const aspect = Math.max(0.2, (panel.clientWidth || 620) / (panel.clientHeight || 430));
+  const widest = Math.max(1, ...groups.map(g => g.items.length));
+  const measure = pr => {
+    let yy = PAD;
+    for (const g of groups) yy += HDR + Math.ceil(g.items.length / pr) * (BH + GY) - GY + BANDGAP;
+    return { pr, w: BX + pr * (BW + GX) - GX + PAD, h: Math.max(yy - BANDGAP + PAD, 180) };
+  };
+  let best = null;
+  for (let pr = 1; pr <= Math.min(10, widest); pr++) {
+    const m = measure(pr), score = Math.abs(Math.log((m.w / m.h) / aspect));
+    if (!best || score < best.score) best = Object.assign(m, { score });
+  }
+  const perRow = best.pr, W = best.w;
   let y = PAD;
   for (const g of groups) {
     g.y = y;
@@ -2775,7 +2956,12 @@ function renderSystem() {
       g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}"` : ''}>`);
       g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
       g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
-      const note = !known ? 'fabric' : st === 'na' ? 'no pins here' : conf ? `${conf} conflict${conf > 1 ? 's' : ''}` : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
+      const iss = known ? (E.issues[p] || []).length : 0;
+      const note = !known ? 'fabric'
+        : st === 'na' ? 'not on this package'
+        : conf ? `${conf} conflict${conf > 1 ? 's' : ''}`
+        : iss ? `${iss} issue${iss > 1 ? 's' : ''}`
+        : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
       g.push(`<text x="${x + 8}" y="${by + 25}" fill="${FG[st]}" font-size="9.5" opacity=".85">${esc(note)}</text>`);
       g.push(`</g>`);
     });
@@ -2784,7 +2970,7 @@ function renderSystem() {
   g.push(`<text class="systxt" x="${PAD}" y="${H - 4}" font-size="11" fill="var(--muted)">${onCount} peripheral${onCount === 1 ? '' : 's'} enabled \u00b7 ${E.conflicts.length} pin conflict${E.conflicts.length === 1 ? '' : 's'} \u00b7 click a block to configure it</text>`);
 
   sv.setAttribute('viewBox', `0 0 ${W} ${H + 8}`);
-  sv.setAttribute('preserveAspectRatio', 'xMidYMin meet');
+  sv.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   sv.innerHTML = g.join('');
 }
 document.getElementById('syssvg').addEventListener('click', e => {
@@ -3166,6 +3352,24 @@ function renderAll(fit) {
   lastConflicts = key;
 }
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+
+// Undo / redo (engine: app/engine/history.js). Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z.
+// Ignored while typing, so the user label editor keeps its own undo.
+window.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const el = e.target;
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  const wantRedo = k === 'y' || (k === 'z' && e.shiftKey);
+  if (k !== 'z' && k !== 'y') return;
+  e.preventDefault();
+  const label = wantRedo ? redo() : undo();
+  if (!label) { toast(wantRedo ? 'Nothing to redo' : 'Nothing to undo'); return; }
+  closePicker();
+  document.getElementById('pkgsel').value = S.pkg;      // undo can move the package
+  renderAll();
+  toast(`${wantRedo ? 'Redo' : 'Undo'}: ${label}`);
+});
 
 document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));

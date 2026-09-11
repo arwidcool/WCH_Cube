@@ -61,19 +61,83 @@ test('every data file is inlined and parses', () => {
   assert.empty(missing, 'data files that build.py did not inline');
 });
 
-test('dist/index.html is not stale', () => {
-  // Rebuild into a scratch copy and compare. A stale dist means someone edited the
-  // template (or the data) and shipped the old build - or hand-edited dist itself.
-  const before = dist();
-  let ran = null;
-  for (const exe of ['python', 'python3']) {
-    const res = spawnSync(exe, [path.join(ROOT, 'build.py')], { cwd: ROOT, encoding: 'utf8' });
-    if (!res.error) { ran = res; break; }
+/** Fingerprint everything build.py reads, so we can tell if the tree moved under us. */
+function sourceStamp() {
+  const files = [path.join(ROOT, 'app', 'template.html')];
+  for (const dir of [['app', 'engine'], ['app', 'vendor'], ['data', 'mcus'], ['data', 'packages']]) {
+    const d = path.join(ROOT, ...dir);
+    if (!fs.existsSync(d)) continue;
+    for (const f of fs.readdirSync(d)) files.push(path.join(d, f));
   }
-  if (!ran) { console.log('        (skipped: no python interpreter on PATH)'); return; }
-  assert.equal(ran.status, 0, 'build.py failed:\n' + (ran.stdout || '') + (ran.stderr || ''));
-  const after = dist();
-  assert.equal(after === before, true,
-    'dist/index.html was out of date with app/ and data/ (it has now been rebuilt).\n' +
-    '    Run "python build.py" before committing; never hand-edit dist/index.html.');
+  return files.sort().map(f => {
+    try { const st = fs.statSync(f); return `${f}:${st.size}:${st.mtimeMs}`; } catch { return `${f}:gone`; }
+  }).join('|');
+}
+
+test('dist/index.html is not stale', () => {
+  // Rebuild and compare: a difference means someone changed app/ or data/ and shipped
+  // the old build - or hand-edited dist itself.
+  //
+  // Four agents write this tree at once, so a source file changing WHILE the test runs
+  // looks exactly like a stale dist. Detect that and say so instead of failing the
+  // build on somebody else's half-finished edit.
+  const runBuild = () => {
+    for (const exe of ['python', 'python3']) {
+      const res = spawnSync(exe, [path.join(ROOT, 'build.py')], { cwd: ROOT, encoding: 'utf8' });
+      if (!res.error) return res;
+    }
+    return null;
+  };
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const stamp = sourceStamp();
+    const before = dist();
+    const ran = runBuild();
+    if (!ran) { console.log('        (skipped: no python interpreter on PATH)'); return; }
+    assert.equal(ran.status, 0, 'build.py failed:\n' + (ran.stdout || '') + (ran.stderr || ''));
+    const after = dist();
+
+    if (after === before) return;                 // dist was up to date
+    if (sourceStamp() !== stamp) continue;        // another agent edited mid-run: retry
+
+    assert.ok(false,
+      'dist/index.html was out of date with app/ and data/ (it has now been rebuilt).\n' +
+      '    Run "python build.py" before committing; never hand-edit dist/index.html.');
+  }
+  console.log('        (inconclusive: app/ or data/ kept changing while the build ran)');
+});
+
+/**
+ * build.py concatenates app/engine/*.js and the app script into ONE classic script
+ * scope. Two files declaring the same top-level name is then a SyntaxError that kills
+ * the whole app - and the only symptom is a blank page. Name the clash instead.
+ */
+test('no identifier is declared twice in the bundled scripts', () => {
+  const html = dist();
+  const scripts = [...html.matchAll(/<script(?![^>]*text\/x-yaml)[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]);
+  const seen = new Map();       // name -> [contexts]
+  const clashes = [];
+
+  for (const src of scripts) {
+    if (src.length < 200) continue;                      // inline one-liners, not the bundle
+    let where = 'app script';
+    for (const line of src.split('\n')) {
+      const marker = line.match(/^\/\/ =====\s+([^\s=]\S*)/);  // build.py's per-module banner
+      if (marker) { where = marker[1]; continue; }
+      // top-level declarations sit at column 0 in every file here
+      const m = line.match(/^(?:export\s+)?(?:async\s+)?(const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/);
+      if (!m) continue;
+      const [, kind, name] = m;
+      if (seen.has(name)) {
+        const first = seen.get(name);
+        // var and function may legally repeat; const/let/class cannot
+        if (kind !== 'var' && !(kind === 'function' && first.kind === 'function')) {
+          clashes.push(`${name}: ${kind} here in ${where}, already declared as ${first.kind} in ${first.where}`);
+        }
+      } else {
+        seen.set(name, { kind, where });
+      }
+    }
+  }
+  assert.empty(clashes, 'the same name is declared twice in one script scope - the app will not start');
 });
