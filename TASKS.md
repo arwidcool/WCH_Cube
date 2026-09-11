@@ -385,9 +385,9 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [x] (AGENT-2) Never iterate a port 0..N — PC is not contiguous
 - [x] (AGENT-2) A part with **no HSE**: `clockCalc().selectable` from the data, the HSE auto-enable
       coupling no-ops when `clock.hse_peripheral` is absent, nothing throws or renders a placeholder
-- [ ] (AGENT-2) Emit `GPIO_PinRemapConfig(<macro>, ENABLE)` where the data gives a macro, the
+- [x] (AGENT-2) Emit `GPIO_PinRemapConfig(<macro>, ENABLE)` where the data gives a macro, the
       `AFIO->PCFR1` word where it does not — both families, no special case
-- [ ] (AGENT-2) Grouped NVIC vectors: many EXTI lines → one vector, enabled exactly once
+- [x] (AGENT-2) Grouped NVIC vectors: many EXTI lines → one vector, enabled exactly once
 - [~] (AGENT-3) Clock tab on a part with no HSE: no box, no mux entry, no RCC row, **no greyed
       placeholder**, no layout gap, silent console — and CH32V006 unchanged
 - [ ] (AGENT-3) 24-bit ports and PC's hole in the GPIO table, tree, picker and chip labels
