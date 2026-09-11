@@ -1,0 +1,562 @@
+# =============================================================================
+#  CH32V006 — extracted from CH32V006 Datasheet V2.0 (DS) and CH32V00X
+#  Reference Manual V1.4 (RM).  Sources are noted next to each block.
+#
+#  Package pin numbers: DS Table 2-1-1.  Pin 0 = exposed pad (QFN).
+#  A pin number may list several names (e.g. [PD7, PA4]) — those GPIOs are
+#  shorted together inside the package (DS notes 3 and 4). The app treats them
+#  as ONE physical pin: a signal on either name claims the pin.
+#  Remap tables: RM 7.2.11 (Tables 7-8, 7-9-1, 7-10, 7-11, 7-12, 7-13-1, 7-14, 7-15).
+#  Remap index in each list == value of the AFIO_PCFR1 field (0 = default).
+# =============================================================================
+
+mcu:
+  name: CH32V006
+  vendor: WCH
+  family: CH32V00x
+  core: QingKe RISC-V2A (RV32EmC)
+  flash_kb: 62
+  sram_kb: 8
+  vdd_v: [2.0, 5.5]
+  max_sysclk_mhz: 48
+  default_package: TSSOP20
+  variants:                      # DS model table
+    CH32V006K8U7: { package: QFN32,   flash_kb: 62, sram_kb: 8, temp: 105 }
+    CH32V006E8R6: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 85 }
+    CH32V006E8R7: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 105 }
+    CH32V006F8U7: { package: QFN20,   flash_kb: 62, sram_kb: 8, temp: 105 }
+    CH32V006F4U6: { package: QFN20,   flash_kb: 16, sram_kb: 4, temp: 85, notes: no OPA }
+    CH32V006F8P7: { package: TSSOP20, flash_kb: 62, sram_kb: 8, temp: 105 }
+    CH32V006D8U7: { package: QFN12,   flash_kb: 62, sram_kb: 8, temp: 105 }
+
+# -----------------------------------------------------------------------------
+packages:
+  QFN32:                          # CH32V006K8U7 — DS note 5: PA7 is the reset pin
+    0: VSS                        # exposed pad
+    1: PB3
+    2: PA5
+    3: PA6
+    4: PA7
+    5: PA0
+    6: PA1
+    7: PA2
+    8: PD0
+    9: PA3
+    10: PB0
+    11: PB1
+    12: PB2
+    13: PC0
+    14: PC1
+    15: PC2
+    16: PC3
+    17: VDD
+    18: PC4
+    19: PC5
+    20: PC6
+    21: PC7
+    22: PB4
+    23: PD1
+    24: PD2
+    25: PD3
+    26: PD4
+    27: PD5
+    28: PD6
+    29: PB5
+    30: PB6
+    31: PD7
+    32: PA4
+
+  QSOP24:                         # CH32V006E8R6/R7 — DS note 5: PC5 is the reset pin
+    1: PD1
+    2: PC0
+    3: PC1
+    4: PC2
+    5: VSS
+    6: VDD
+    7: PC5
+    8: PC4
+    9: PD2
+    10: PD3
+    11: PD4
+    12: PD5
+    13: PD6
+    14: PD7
+    15: PA4
+    16: PA5
+    17: [PA1, PA6]                # DS note 3: shorted internally, never both outputs
+    18: PA0
+    19: PA2
+    20: PD0
+    21: PA3
+    22: PB0
+    23: PB1
+    24: PB3
+
+  QFN20:                          # CH32V006F8U7 / F4U6 — reset pin PD7
+    0: VSS
+    1: [PD7, PA4]                 # DS note 4: shorted internally
+    2: PA1
+    3: PA2
+    4: VSS
+    5: PD0
+    6: VDD
+    7: PC0
+    8: PC1
+    9: PC2
+    10: PC3
+    11: PC4
+    12: PC5
+    13: PC6
+    14: PC7
+    15: PD1
+    16: PD2
+    17: PD3
+    18: PD4
+    19: PD5
+    20: PD6
+
+  TSSOP20:                        # CH32V006F8P7 — reset pin PD7
+    1: PD4
+    2: PD5
+    3: PD6
+    4: [PD7, PA4]                 # DS note 4: shorted internally
+    5: PA1
+    6: PA2
+    7: VSS
+    8: PD0
+    9: VDD
+    10: PC0
+    11: PC1
+    12: PC2
+    13: PC3
+    14: PC4
+    15: PC5
+    16: PC6
+    17: PC7
+    18: PD1
+    19: PD2
+    20: PD3
+
+  QFN12:                          # CH32V006D8U7 — reset pin PD7
+    0: VSS
+    1: PA1
+    2: PA2
+    3: PD0
+    4: VDD
+    5: PC0
+    6: PC3
+    7: PC4
+    8: PC6
+    9: PC7
+    10: PD1
+    11: PD4
+    12: [PD7, PA4]                # DS note 4: shorted internally
+
+# -----------------------------------------------------------------------------
+# DS Table 2-1-1 — pin type and "main function after reset"
+pins:
+  VDD:  { type: power }
+  VSS:  { type: ground }
+  PA0:  { type: io }
+  PA1:  { type: io, analog: true, notes: XI when HSE used (AFIO PA12_RM) }
+  PA2:  { type: io, analog: true, notes: XO when HSE used (AFIO PA12_RM) }
+  PA3:  { type: io }
+  PA4:  { type: io, analog: true }
+  PA5:  { type: io, analog: true }
+  PA6:  { type: io }
+  PA7:  { type: io, notes: RST after reset on QFN32 }
+  PB0:  { type: io }
+  PB1:  { type: io }
+  PB2:  { type: io }
+  PB3:  { type: io, notes: SWCLK in 2-wire debug mode }
+  PB4:  { type: io }
+  PB5:  { type: io }
+  PB6:  { type: io }
+  PC0:  { type: io }
+  PC1:  { type: io }
+  PC2:  { type: io, analog: true }
+  PC3:  { type: io }
+  PC4:  { type: io, analog: true }
+  PC5:  { type: io, notes: RST after reset on QSOP24 }
+  PC6:  { type: io }
+  PC7:  { type: io }
+  PD0:  { type: io, analog: true }
+  PD1:  { type: io, analog: true, notes: SWIO after reset — debug interface is ON by default }
+  PD2:  { type: io, analog: true }
+  PD3:  { type: io, analog: true }
+  PD4:  { type: io, analog: true }
+  PD5:  { type: io, analog: true }
+  PD6:  { type: io, analog: true }
+  PD7:  { type: io, analog: true, notes: RST after reset on QFN12/QFN20/TSSOP20 }
+
+# -----------------------------------------------------------------------------
+peripherals:
+
+  # ---------------- System Core ----------------
+  SYS:
+    category: System Core
+    settings:
+      - name: Debug (SDI)
+        choices:
+          - { name: No Debug }
+          - { name: 1-wire SDI (SWIO), signals: [SWIO], default: true }     # DS 1.4.18 — default after reset
+          - { name: 2-wire SDI (SWIO + SWCLK), signals: [SWIO, SWCLK] }
+      - name: External reset pin
+        choices:
+          - { name: RST enabled (option byte RST_MODE), signals: [RST], default: true }
+          - { name: RST disabled — pin is GPIO }
+    # RST location depends on package (DS note 5); the app picks the remap per package.
+    remaps:
+      - name: RST on PD7 (QFN12 / QFN20 / TSSOP20)
+        pins: { SWIO: PD1, SWCLK: PB3, RST: PD7 }
+      - name: RST on PC5 (QSOP24)
+        pins: { SWIO: PD1, SWCLK: PB3, RST: PC5 }
+      - name: RST on PA7 (QFN32)
+        pins: { SWIO: PD1, SWCLK: PB3, RST: PA7 }
+    remap_by_package: { QFN12: 0, QFN20: 0, TSSOP20: 0, QSOP24: 1, QFN32: 2 }
+
+  RCC:
+    category: System Core
+    settings:
+      - name: High Speed Clock (HSE)
+        choices:
+          - { name: Disable }
+          - { name: BYPASS clock source, signals: [XI] }
+          - { name: Crystal / ceramic resonator, signals: [XI, XO] }
+      - name: Master Clock Output (MCO)
+        choices:
+          - { name: Disable }
+          - { name: SYSCLK, signals: [MCO] }
+          - { name: HSI, signals: [MCO] }
+          - { name: HSE, signals: [MCO] }
+          - { name: PLLCLK, signals: [MCO] }
+    remaps:
+      - name: Default
+        pins: { XI: PA1, XO: PA2, MCO: PC4 }     # DS pin table; AFIO PA12_RM selects XI/XO on PA1/PA2
+
+  DMA1:
+    category: System Core
+    settings:
+      - name: Mode
+        choices: [ { name: Disable }, { name: Activated (7 channels) } ]
+
+  IWDG:
+    category: System Core
+    settings:
+      - name: Mode
+        choices: [ { name: Disable }, { name: Activated } ]
+
+  WWDG:
+    category: System Core
+    settings:
+      - name: Mode
+        choices: [ { name: Disable }, { name: Activated } ]
+
+  # ---------------- Analog ----------------
+  ADC1:
+    category: Analog
+    settings:
+      - name: Channels
+        type: checkboxes
+        choices:
+          - { name: IN0, signals: [IN0] }
+          - { name: IN1, signals: [IN1] }
+          - { name: IN2, signals: [IN2] }
+          - { name: IN3, signals: [IN3] }
+          - { name: IN4, signals: [IN4] }
+          - { name: IN5, signals: [IN5] }
+          - { name: IN6, signals: [IN6] }
+          - { name: IN7, signals: [IN7] }
+          - { name: IN8 (Vrefint, internal) }
+          - { name: IN9 (OPA output, internal) }
+      - name: Regular group external trigger      # RM Table 7-15, ADC_ETRGREG_RM
+        choices:
+          - { name: Disable }
+          - { name: External pin PD3 (ETRGREG_RM=0), signals: [RETR0] }
+          - { name: External pin PC2 (ETRGREG_RM=1), signals: [RETR1] }
+      - name: Injected group external trigger     # RM Table 7-14, ADC_ETRGINJ_RM
+        choices:
+          - { name: Disable }
+          - { name: External pin PD1 (ETRGINJ_RM=0), signals: [IETR0] }
+          - { name: External pin PA2 (ETRGINJ_RM=1), signals: [IETR1] }
+    remaps:
+      - name: Default
+        pins: { IN0: PA2, IN1: PA1, IN2: PC4, IN3: PD2, IN4: PD3, IN5: PD5, IN6: PD6, IN7: PD4,
+                RETR0: PD3, RETR1: PC2, IETR0: PD1, IETR1: PA2 }
+
+  TKEY:
+    category: Analog
+    notes: Touchkey channels reuse the ADC input pins (DS 1.4.11). Not on CH32V005.
+    settings:
+      - name: Channels
+        type: checkboxes
+        choices:
+          - { name: CH0, signals: [CH0] }
+          - { name: CH1, signals: [CH1] }
+          - { name: CH2, signals: [CH2] }
+          - { name: CH3, signals: [CH3] }
+          - { name: CH4, signals: [CH4] }
+          - { name: CH5, signals: [CH5] }
+          - { name: CH6, signals: [CH6] }
+          - { name: CH7, signals: [CH7] }
+    remaps:
+      - name: Default
+        pins: { CH0: PA2, CH1: PA1, CH2: PC4, CH3: PD2, CH4: PD3, CH5: PD5, CH6: PD6, CH7: PD4 }
+
+  OPA1:
+    category: Analog
+    notes: OPA/PGA/CMP. Pin assignment from DS pin table (OPA_P0..P3, OPA_N0..N2, OPA_OUT0/1); selection via OPA_CTLR1 PSEL/NSEL/MODE.
+    settings:
+      - name: Positive input (PSEL)
+        choices:
+          - { name: Disable }
+          - { name: P0 — PA2, signals: [P0] }
+          - { name: P1 — PD7, signals: [P1] }
+          - { name: P2 — PD3, signals: [P2] }
+          - { name: P3 — PD1, signals: [P3] }
+          - { name: Polling P0/P1/P2, signals: [P0, P1, P2] }
+          - { name: Polling P0/P1/P2/P3, signals: [P0, P1, P2, P3] }
+      - name: Negative input (NSEL)
+        choices:
+          - { name: Disable }
+          - { name: N0 — PA1, signals: [N0] }
+          - { name: N1 — PD0, signals: [N1] }
+          - { name: N2 — PA4, signals: [N2] }
+          - { name: PGA internal feedback (no pin) }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: OUT0 — PD4, signals: [OUT0] }
+          - { name: OUT1 — PA5, signals: [OUT1] }
+          - { name: Internal to ADC IN9 only }
+    remaps:
+      - name: Default
+        pins: { P0: PA2, P1: PD7, P2: PD3, P3: PD1, N0: PA1, N1: PD0, N2: PA4, OUT0: PD4, OUT1: PA5 }
+
+  # ---------------- Timers ----------------
+  TIM1:
+    category: Timers
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH1] }
+          - { name: PWM Generation CH1, signals: [CH1] }
+          - { name: PWM Generation CH1 CH1N, signals: [CH1, CH1N] }
+          - { name: PWM Generation CH1N only, signals: [CH1N] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+          - { name: PWM Generation CH2 CH2N, signals: [CH2, CH2N] }
+          - { name: PWM Generation CH2N only, signals: [CH2N] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+          - { name: PWM Generation CH3 CH3N, signals: [CH3, CH3N] }
+          - { name: PWM Generation CH3N only, signals: [CH3N] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR (external), signals: [ETR] }
+      - name: Break Input
+        choices:
+          - { name: Disable }
+          - { name: Activate break input, signals: [BKIN] }
+    # RM Table 7-8, TIM1_RM[3:0] — index == register value
+    remaps:
+      - { name: "0000 Default",  pins: { ETR: PC5, CH1: PD2, CH2: PA1, CH3: PC3, CH4: PC4, BKIN: PC2, CH1N: PD0, CH2N: PA2, CH3N: PD1 } }
+      - { name: "0001 Partial",  pins: { ETR: PD4, CH1: PD2, CH2: PA1, CH3: PC3, CH4: PC4, BKIN: PC2, CH1N: PD0, CH2N: PA2, CH3N: PD1 } }
+      - { name: "0010 Partial",  pins: { ETR: PC5, CH1: PC6, CH2: PC7, CH3: PC0, CH4: PD3, BKIN: PC1, CH1N: PC3, CH2N: PC4, CH3N: PD1 } }
+      - { name: "0011 Full",     pins: { ETR: PC2, CH1: PC4, CH2: PC7, CH3: PC5, CH4: PD4, BKIN: PC1, CH1N: PC3, CH2N: PD2, CH3N: PC6 } }
+      - { name: "0100 Partial",  pins: { ETR: PD4, CH1: PA3, CH2: PB0, CH3: PB1, CH4: PD1, BKIN: PB3, CH1N: PA0, CH2N: PA2, CH3N: PD0 } }
+      - { name: "0101 Partial",  pins: { ETR: PD4, CH1: PA3, CH2: PB0, CH3: PC3, CH4: PD1, BKIN: PB3, CH1N: PA0, CH2N: PA2, CH3N: PD0 } }
+      - { name: "0110 Partial",  pins: { ETR: PD4, CH1: PA3, CH2: PB0, CH3: PB1, CH4: PB2, BKIN: PA7, CH1N: PA0, CH2N: PA2, CH3N: PD0 } }
+      - { name: "0111 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
+      - { name: "1000 Full",     pins: { ETR: PB4, CH1: PC4, CH2: PC5, CH3: PC6, CH4: PC7, BKIN: PB2, CH1N: PA3, CH2N: PB0, CH3N: PB1 } }
+      - { name: "1001 Partial",  pins: { ETR: PB4, CH1: PA0, CH2: PA1, CH3: PA2, CH4: PA3, BKIN: PB2, CH1N: PC0, CH2N: PC1, CH3N: PC2 } }
+
+  TIM2:
+    category: Timers
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH1_ETR] }
+          - { name: PWM Generation CH1, signals: [CH1_ETR] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR (shares the CH1 pin), signals: [CH1_ETR] }
+      - name: Encoder Mode
+        choices:
+          - { name: Disable }
+          - { name: Encoder CH1/CH2, signals: [CH1_ETR, CH2] }
+    # RM Table 7-9-1 (CH32V002/004/005/006), TIM2_RM[2:0]
+    remaps:
+      - { name: "000 Default", pins: { CH1_ETR: PD4, CH2: PD3, CH3: PC0, CH4: PD7 } }
+      - { name: "001 Partial", pins: { CH1_ETR: PC1, CH2: PD3, CH3: PC0, CH4: PD7 } }
+      - { name: "010 Full",    pins: { CH1_ETR: PC5, CH2: PC2, CH3: PD2, CH4: PC1 } }
+      - { name: "011 Full",    pins: { CH1_ETR: PC1, CH2: PC7, CH3: PD6, CH4: PD5 } }
+      - { name: "100 Full",    pins: { CH1_ETR: PC0, CH2: PC1, CH3: PC3, CH4: PB6 } }
+      - { name: "101 Full",    pins: { CH1_ETR: PA0, CH2: PA1, CH3: PA2, CH4: PA3 } }
+      - { name: "110 Full",    pins: { CH1_ETR: PB1, CH2: PA1, CH3: PA2, CH4: PA3 } }
+      - { name: "111 Full",    pins: { CH1_ETR: PD3, CH2: PD4, CH3: PA2, CH4: PA3 } }
+
+  TIM3:
+    category: Timers
+    notes: Streamlined timer — output compare only, no external pins (RM ch.13). Not on CH32V005.
+    settings:
+      - name: Mode
+        choices: [ { name: Disable }, { name: Activated } ]
+
+  # ---------------- Connectivity ----------------
+  USART1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+          - { name: Transmit only, signals: [TX] }
+          - { name: Receive only, signals: [RX] }
+          - { name: LIN, signals: [TX, RX] }
+      - name: Hardware Flow Control
+        choices:
+          - { name: Disable }
+          - { name: CTS only, signals: [CTS] }
+          - { name: RTS only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    # RM Table 7-10, USART1_RM[3:0]
+    remaps:
+      - { name: "0000 Default", pins: { TX: PD5, RX: PD6, CTS: PD3, RTS: PC2 } }
+      - { name: "0001",         pins: { TX: PD6, RX: PD5, CTS: PC6, RTS: PC7 } }
+      - { name: "0010",         pins: { TX: PD0, RX: PD1, CTS: PC3, RTS: PC2 } }
+      - { name: "0011",         pins: { TX: PC0, RX: PC1, CTS: PC6, RTS: PC7 } }
+      - { name: "0100",         pins: { TX: PD1, RX: PB3, CTS: PD7, RTS: PA5 } }
+      - { name: "0101",         pins: { TX: PB3, RX: PD1, CTS: PD7, RTS: PA5 } }
+      - { name: "0110",         pins: { TX: PC5, RX: PC6, CTS: PC7, RTS: PB4 } }
+      - { name: "0111",         pins: { TX: PB5, RX: PB6, CTS: PC7, RTS: PB4 } }
+      - { name: "1000",         pins: { TX: PA0, RX: PA1, CTS: PD2, RTS: PD3 } }
+      - { name: "1001",         pins: { TX: PA0, RX: PC4, CTS: PD5, RTS: PD4 } }
+
+  USART2:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+          - { name: Transmit only, signals: [TX] }
+          - { name: Receive only, signals: [RX] }
+          - { name: LIN, signals: [TX, RX] }
+      - name: Hardware Flow Control
+        choices:
+          - { name: Disable }
+          - { name: CTS only, signals: [CTS] }
+          - { name: RTS only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    # RM Table 7-11, USART2_RM[2:0]
+    remaps:
+      - { name: "000 Default", pins: { TX: PA7, RX: PB3, CTS: PA4, RTS: PA5 } }
+      - { name: "001",         pins: { TX: PA4, RX: PA5, CTS: PA7, RTS: PB3 } }
+      - { name: "010",         pins: { TX: PA2, RX: PA3, CTS: PA0, RTS: PA1 } }
+      - { name: "011",         pins: { TX: PD2, RX: PD3, CTS: PA0, RTS: PA1 } }
+      - { name: "100",         pins: { TX: PB0, RX: PB1, CTS: PB6, RTS: PA1 } }
+      - { name: "101",         pins: { TX: PC4, RX: PD1, CTS: PA4, RTS: PA1 } }
+      - { name: "110",         pins: { TX: PA6, RX: PA5, CTS: PA7, RTS: PB3 } }
+
+  SPI1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Full-Duplex Master, signals: [SCK, MISO, MOSI] }
+          - { name: Full-Duplex Slave, signals: [SCK, MISO, MOSI] }
+          - { name: Half-Duplex Master, signals: [SCK, MOSI] }
+          - { name: Half-Duplex Slave, signals: [SCK, MISO] }
+          - { name: Receive Only Master, signals: [SCK, MISO] }
+          - { name: Receive Only Slave, signals: [SCK, MOSI] }
+          - { name: Transmit Only Master, signals: [SCK, MOSI] }
+          - { name: Transmit Only Slave, signals: [SCK, MISO] }
+      - name: Hardware NSS Signal
+        choices:
+          - { name: Disable (software NSS) }
+          - { name: Hardware NSS Input, signals: [NSS] }
+          - { name: Hardware NSS Output, signals: [NSS] }
+    # RM Table 7-12, SPI_RM[2:0]
+    remaps:
+      - { name: "000 Default", pins: { NSS: PC1, SCK: PC5, MISO: PC7, MOSI: PC6 } }
+      - { name: "001",         pins: { NSS: PC0, SCK: PC5, MISO: PC7, MOSI: PC6 } }
+      - { name: "010",         pins: { NSS: PC4, SCK: PD2, MISO: PB3, MOSI: PD3 } }
+      - { name: "011",         pins: { NSS: PB0, SCK: PB1, MISO: PB2, MOSI: PC0 } }
+      - { name: "100",         pins: { NSS: PD3, SCK: PD4, MISO: PD5, MOSI: PD6 } }
+      - { name: "101",         pins: { NSS: PC1, SCK: PA1, MISO: PB5, MOSI: PA2 } }
+      - { name: "110",         pins: { NSS: PC4, SCK: PB5, MISO: PC7, MOSI: PB4 } }
+
+  I2C1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: I2C, signals: [SCL, SDA] }
+    # RM Table 7-13-1 (CH32V002/004/005/006), I2C_RM[2:0]
+    remaps:
+      - { name: "000 Default", pins: { SCL: PC2, SDA: PC1 } }
+      - { name: "001",         pins: { SCL: PD1, SDA: PD0 } }
+      - { name: "010",         pins: { SCL: PC5, SDA: PC6 } }
+      - { name: "011",         pins: { SCL: PB5, SDA: PB6 } }
+      - { name: "1xx",         pins: { SCL: PB3, SDA: PD1 } }
+
+# -----------------------------------------------------------------------------
+# Clock tree — DS 1.3 Figure 1-3, RM 3 (RCC_CFGR0 HPRE / ADCPRE / MCO / PLLSRC)
+clock:
+  sources:
+    HSI: { mhz: 24, fixed: true }
+    HSE: { mhz: 24, min_mhz: 3, max_mhz: 25 }
+    LSI: { khz: 128, fixed: true }
+  pll:
+    inputs:
+      - { name: HSI, source: HSI, div: 1 }
+      - { name: HSE, source: HSE, div: 1 }
+    multipliers: [2]
+  sysclk:
+    sources: [HSI, HSE, PLLCLK]
+    max_mhz: 48
+  prescalers:
+    HB:  { options: [1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64, 128, 256], max_mhz: 48, label: HB prescaler (HPRE) → HCLK }
+    ADC: { options: [1, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128], source: HB, min_mhz: 16, max_mhz: 48,
+           label: "ADC prescaler (ADCPRE; /1 = ADC_CLK_MODE)" }
+  derived:                          # informational taps off HCLK
+    - { name: Flash time base, source: HB, div: 3 }
+    - { name: Core SysTick, source: HB, div: 8 }
+  buses:
+    HB: [TIM1, TIM2, TIM3, GPIO, AFIO, USART1, USART2, I2C1, SPI1, ADC1, TKEY, DMA1, WWDG, OPA1, PWR]
+  notes: "Single HB domain — no APB1/APB2 split. IWDG runs from LSI. MCO on PC4 can output SYSCLK, HSI, HSE or PLLCLK."
