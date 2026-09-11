@@ -31,7 +31,8 @@
 //    slice starts at (TIM2_RM[2] lives at bit 16, away from TIM2_RM[1:0]).
 // =============================================================================
 import {
-  M, S, pinType, requiredSignals, gpioSpeeds, gpioSpeedFor, gpioModes, gpioInputModes, isEnabled,
+  M, S, pinType, requiredSignals, sigName, gpioSpeeds, gpioSpeedFor, gpioModes,
+  gpioInputModes, isEnabled,
 } from './model.js';
 import { paramDefs, paramValue, paramApplies } from './params.js';
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
@@ -464,10 +465,23 @@ function gpioSection() {
   } else if (!rp.calls.length) {
     // Neither style reaches these: the peripheral is on, has a real choice of remaps,
     // and the data says nothing about how to apply the one that is selected.
+    //
+    // One exclusion, and it is the difference between a TODO and a false TODO: a
+    // peripheral whose pins GPIO_Init must NOT touch needs no AFIO write either. CH32X035
+    // bonds its reset pin to PC3 on TSSOP20 and QSOP28 instead of PA21 (`remap_by_package`,
+    // index 1), SYS carries no `macro:` on either index because the reset pin is
+    // controlled by the option bytes and not by a remap, and SYS's pins are skipped by
+    // `codegen.skip_signals` - so EVERY CH32X035 TSSOP20 configuration used to emit a
+    // spurious TODO naming SYS, and failed --strict for a rule that does not exist.
+    //
+    // The test is read from the data, not from a peripheral name: does any signal this
+    // peripheral requires actually reach a GPIO register?
+    const configured = pid => [...requiredSignals(pid)]
+      .some(sig => !skippedClaim({ who: pid, signal: sigName(pid, sig) }));
     const used = Object.keys(M.peripherals).filter(pid =>
       (M.peripherals[pid].remaps || []).length > 1
-      && requiredSignals(pid).size
-      && (S.periph[pid] || {}).remap);
+      && (S.periph[pid] || {}).remap
+      && configured(pid));
     if (used.length) {
       L.push('    /* TODO: alternate function remap. The MCU file has neither a `macro:` on the');
       L.push('       selected remap nor codegen.remap.fields, so nothing can be applied. Selected:');

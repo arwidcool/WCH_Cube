@@ -337,6 +337,32 @@ test('every bundled part and package generates without throwing', () => {
   }
 });
 
+test('a bonding remap table is not an AFIO remap table, so it is not asked for a macro', () => {
+  // A DEFAULT configuration emits an empty GPIO function and never reaches the remap
+  // section, so it proves nothing about it. With one pin assigned it does - and there
+  // CH32X035 on TSSOP20 and QSOP28 used to emit a spurious TODO naming the reset pin:
+  // its RST is bonded to PC3 on those packages (`remap_by_package`, index 1), SYS's
+  // remap table carries no `macro:` on either index because it is not an AFIO remap at
+  // all, and the filter only asked "is a remap selected". Every CH32X035 TSSOP20
+  // configuration therefore failed --strict for a rule that does not exist.
+  const e = fresh();
+  for (const name of Object.keys(e.MCU_FILES)) {
+    e.loadMcu(e.MCU_FILES[name]);
+    for (const pkg of Object.keys(e.M.packages)) {
+      e.setPackage(pkg);
+      e.compute();
+      // a pin nothing has claimed and no constraint restricts, so neither can be what
+      // complains - this check is about the remap section and nothing else
+      const free = Object.keys(e.M.pins).find(p => e.pinExists(p) && e.pinType(p) === 'io'
+        && !e.E.pins[e.canon(p)] && !e.E.constraintIssues.some(c => c.pin === p));
+      assert.ok(free, `${name} ${pkg}: no unclaimed I/O pin, so this check cannot run`);
+      e.assignSignal(free, { gpio: 'GPIO_Output' });
+      e.compute();
+      assert.deepEqual(e.cComplaints(e.cFiles()), [], `${name} ${pkg}, ${free} assigned`);
+    }
+  }
+});
+
 test('the debug interface and the reset pin are never set up as GPIOs', () => {
   const e = withCodegen();
   e.compute();
