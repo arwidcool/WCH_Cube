@@ -20,14 +20,19 @@ mcu:
   vdd_v: [2.0, 5.5]
   max_sysclk_mhz: 48
   default_package: TSSOP20
-  variants:                      # DS model table
-    CH32V006K8U7: { package: QFN32,   flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006E8R6: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 85 }
-    CH32V006E8R7: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006F8U7: { package: QFN20,   flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006F4U6: { package: QFN20,   flash_kb: 16, sram_kb: 4, temp: 85, notes: no OPA }
-    CH32V006F8P7: { package: TSSOP20, flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006D8U7: { package: QFN12,   flash_kb: 62, sram_kb: 8, temp: 105 }
+  # DS model table (CH32V006DS0 §1, the "General Description" model list).
+  # io_count is the datasheet's own I/O column. `tools/validate_mcu.py` counts the io
+  # pins in each package table and fails if the two disagree, which is what catches a
+  # dropped or duplicated row in `packages:` below. A pair of internally shorted GPIOs
+  # (DS notes 3 and 4) is one physical pin and counts once.
+  variants:
+    CH32V006K8U7: { package: QFN32,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 31 }
+    CH32V006E8R6: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 85,  io_count: 22 }
+    CH32V006E8R7: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 105, io_count: 22 }
+    CH32V006F8U7: { package: QFN20,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18 }
+    CH32V006F4U6: { package: QFN20,   flash_kb: 16, sram_kb: 4, temp: 85,  io_count: 18, notes: "no OPA, no TouchKey; DS Table 2-1-2 is its own pin table" }
+    CH32V006F8P7: { package: TSSOP20, flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18 }
+    CH32V006D8U7: { package: QFN12,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 11, notes: "ADC 4+2 channels and TouchKey 4-channel only — the other inputs have no pin" }
 
 # -----------------------------------------------------------------------------
 packages:
@@ -201,10 +206,19 @@ peripherals:
           - { name: No Debug }
           - { name: 1-wire SDI (SWIO), signals: [SWIO], default: true }     # DS 1.4.18 — default after reset
           - { name: 2-wire SDI (SWIO + SWCLK), signals: [SWIO, SWCLK] }
+      # Option byte USER[4:3] = RST_MODE, RM Table 18-4 (ch.18).
+      # Reset value on CH32V006 is 10b, so the external reset pin is ACTIVE on a blank
+      # part and the pin is not yours until you reprogram the option byte. The three
+      # enabled values differ only in how long the pin is ignored after the alternate
+      # function turns on, which is a glitch filter, not a different pin.
+      # RM 18 writes this value as "PD7 for I/O function"; the pin is actually the
+      # package's reset pin — PA7 on QFN32 and PC5 on QSOP24 (DS note 5, see `remaps`).
       - name: External reset pin
         choices:
-          - { name: RST enabled (option byte RST_MODE), signals: [RST], default: true }
-          - { name: RST disabled — pin is GPIO }
+          - { name: "RST enabled — ignore 12 ms (RST_MODE=10, factory default)", signals: [RST], default: true }
+          - { name: "RST enabled — ignore 1 ms (RST_MODE=01)", signals: [RST] }
+          - { name: "RST enabled — ignore 128 us (RST_MODE=00)", signals: [RST] }
+          - { name: "RST disabled — pin is GPIO (RST_MODE=11)" }
     # RST location depends on package (DS note 5); the app picks the remap per package.
     remaps:
       - name: RST on PD7 (QFN12 / QFN20 / TSSOP20)
@@ -267,8 +281,8 @@ peripherals:
           - { name: IN5, signals: [IN5] }
           - { name: IN6, signals: [IN6] }
           - { name: IN7, signals: [IN7] }
-          - { name: IN8 (Vrefint, internal) }
-          - { name: IN9 (OPA output, internal) }
+          - { name: "IN8 (Vrefint, internal)" }
+          - { name: "IN9 (OPA output, internal)" }
       - name: Regular group external trigger      # RM Table 7-15, ADC_ETRGREG_RM
         choices:
           - { name: Disable }
@@ -336,6 +350,7 @@ peripherals:
   # ---------------- Timers ----------------
   TIM1:
     category: Timers
+    notes: Advanced timer, 4 channels + 3 complementary outputs + break input (RM ch.11).
     settings:
       - name: Channel1
         choices:
@@ -371,6 +386,14 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Activate break input, signals: [BKIN] }
+      # RM Table 7-8 note + RM 7.3.2.2 AFIO_PCFR1[13:10]: TIM1_RM = 11xx routes the
+      # channel-1 INPUT to the internal LSI instead of a pin, for LSI calibration.
+      # It is a value of the same TIM1_RM field, but it claims no pin, so it is a
+      # setting here rather than an 11th entry in `remaps` (index == register value).
+      - name: Channel 1 input source
+        choices:
+          - { name: "CH1 pin (TIM1_RM = 0000..1001)" }
+          - { name: "Internal LSI for calibration (TIM1_RM = 11xx — frees the CH1 pin)" }
     # RM Table 7-8, TIM1_RM[3:0] — index == register value
     remaps:
       - { name: "0000 Default",  pins: { ETR: PC5, CH1: PD2, CH2: PA1, CH3: PC3, CH4: PC4, BKIN: PC2, CH1N: PD0, CH2N: PA2, CH3N: PD1 } }
@@ -386,6 +409,12 @@ peripherals:
 
   TIM2:
     category: Timers
+    # RM 12.3.9: TIM2 can output 2 complementary pairs with dead-time, and when it does,
+    # "channels 3 and 4 act as channel 1 and channel 2 complementary output channels".
+    # So CH1N lives on the CH3 pin and CH2N on the CH4 pin — there are no extra pins, which
+    # is why `remaps` below has only 4 signals. Selecting a complementary output and a plain
+    # CH3/CH4 output at the same time is a genuine conflict and the engine will flag it.
+    notes: Channels 3 and 4 double as CH1N and CH2N when complementary output is enabled (RM 12.3.9).
     settings:
       - name: Channel1
         choices:
@@ -415,6 +444,12 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Encoder CH1/CH2, signals: [CH1_ETR, CH2] }
+      - name: Complementary Outputs        # RM 12.3.9 — CH1N/CH2N reuse the CH3/CH4 pins
+        choices:
+          - { name: Disable }
+          - { name: CH1N on the CH3 pin, signals: [CH3] }
+          - { name: CH2N on the CH4 pin, signals: [CH4] }
+          - { name: CH1N + CH2N on the CH3/CH4 pins, signals: [CH3, CH4] }
     # RM Table 7-9-1 (CH32V002/004/005/006), TIM2_RM[2:0]
     remaps:
       - { name: "000 Default", pins: { CH1_ETR: PD4, CH2: PD3, CH3: PC0, CH4: PD7 } }
@@ -534,6 +569,57 @@ peripherals:
       - { name: "010",         pins: { SCL: PC5, SDA: PC6 } }
       - { name: "011",         pins: { SCL: PB5, SDA: PB6 } }
       - { name: "1xx",         pins: { SCL: PB3, SDA: PD1 } }
+
+# -----------------------------------------------------------------------------
+# External interrupts — RM 6.4.4 Table 6-2, register AFIO_EXTICR (RM 7.3.2.1).
+#
+# EXTI is not a peripheral in the `peripherals:` sense: it has eight INDEPENDENT
+# 4-way selectors, one per line, whereas a `remaps:` entry switches every signal of a
+# peripheral at once. So it lives here as plain data. The app ignores unknown
+# top-level keys, so this block is inert until AGENT-2 wires it in.
+#
+# Line x can only ever reach pin number x — EXTI3 reaches PA3/PB3/PC3/PD3 and nothing
+# else. The key is the 2-bit AFIO_EXTICR field value for that line.
+exti:
+  register: { name: AFIO_EXTICR, address: 0x40010008, bits_per_line: 2, reset: 0x00000000 }
+  lines:
+    EXTI0: { "00": PA0, "01": PB0, "10": PC0, "11": PD0 }
+    EXTI1: { "00": PA1, "01": PB1, "10": PC1, "11": PD1 }
+    EXTI2: { "00": PA2, "01": PB2, "10": PC2, "11": PD2 }
+    EXTI3: { "00": PA3, "01": PB3, "10": PC3, "11": PD3 }
+    EXTI4: { "00": PA4, "01": PB4, "10": PC4, "11": PD4 }
+    EXTI5: { "00": PA5, "01": PB5, "10": PC5, "11": PD5 }
+    EXTI6: { "00": PA6, "01": PB6, "10": PC6, "11": PD6 }
+    EXTI7: { "00": PA7,             "10": PC7, "11": PD7 }   # no PB7 on CH32V00x — 01 selects nothing
+  internal:                       # RM Table 6-2 — no pin, cannot conflict
+    EXTI8: { event: PVD — supply crossed the voltage-monitoring threshold }
+    EXTI9: { event: Automatic wake-up }
+  interrupt: EXTI7_0 — one vector for lines 0-7 (RM Table 6-1, vector 20)
+
+# -----------------------------------------------------------------------------
+# DMA — RM 8.2 Table 8-2 and Figure 8-1. Seven channels; a channel serves several
+# peripherals, so two peripherals on the same channel is a conflict the app can warn
+# about. No pins are involved, so this never affects the pinout.
+#
+# Confidence: HIGH. Table 8-2 and Figure 8-1 are two separate renderings of the same
+# map in the source and they agree on every entry, which is why this is not marked
+# provisional despite Table 8-2 being badly mangled by the PDF-to-markdown conversion.
+dma:
+  controller: DMA1
+  channels: 7
+  requests:
+    1: [ADC1, TIM2_CH3, TIM3_CH3]
+    2: [SPI1_RX, TIM1_CH1, TIM2_UP]
+    3: [SPI1_TX, TIM1_CH2]
+    4: [USART1_TX, TIM1_TRIG, TIM1_COM, TIM1_CH4, TIM3_CH4]
+    5: [USART1_RX, TIM2_CH1, TIM1_UP]
+    6: [I2C1_TX, TIM1_CH3, USART2_TX]
+    7: [I2C1_RX, TIM2_CH2, TIM2_CH4, USART2_RX]
+  notes: >
+    RM Table 8-2 note (2): on CH32V006 the TIM3 CH3 event can trigger only DMA channel 1
+    and the TIM3 CH4 event only channel 4. The wider TIM3 fan-out in the table
+    (channels 1-3 and 4-6) applies to CH32M007, not to this part.
+    TIM1_TRIG, TIM1_COM and TIM1_CH4 share channel 4 as one hardware request line.
 
 # -----------------------------------------------------------------------------
 # Clock tree — DS 1.3 Figure 1-3, RM 3 (RCC_CFGR0 HPRE / ADCPRE / MCO / PLLSRC)

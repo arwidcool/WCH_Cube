@@ -4,7 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WCHCube — Pinout &amp; Configuration</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script>
+/*! js-yaml 4.1.0 https://github.com/nodeca/js-yaml @license MIT */
+!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).jsyaml={})}(this,(function(e){"use strict";function t(e){return null==e}var n={isNothing:t,isObject:function(e){return"object"==typeof e&&null!==e},toArray:function(e){return Array.isArray(e)?e:t(e)?[]:[e]},repeat:function(e,t){var n,i="";for(n=0;n<t;n+=1)i+=e;return i},isNegativeZero:function(e){return 0===e&&Number.NEGATIVE_INFINITY===1/e},extend:function(e,t){var n,i,r,o;if(t)for(n=0,i=(o=Object.keys(t)).length;n<i;n+=1)e[r=o[n]]=t[r];return e}};function i(e,t){var n="",i=e.reason||"(unknown reason)";return e.mark?(e.mark.name&&(n+='in "'+e.mark.name+'" '),n+="("+(e.mark.line+1)+":"+(e.mark.column+1)+")",!t&&e.mark.snippet&&(n+="\n\n"+e.mark.snippet),i+" "+n):i}function r(e,t){Error.call(this),this.name="YAMLException",this.reason=e,this.mark=t,this.message=i(this,!1),Error.captureStackTrace?Error.captureStackTrace(this,this.constructor):this.stack=(new Error).stack||""}r.prototype=Object.create(Error.prototype),r.prototype.constructor=r,r.prototype.toString=function(e){return this.name+": "+i(this,e)};var o=r;function a(e,t,n,i,r){var o="",a="",l=Math.floor(r/2)-1;return i-t>l&&(t=i-l+(o=" ... ").length),n-i>l&&(n=i+l-(a=" ...").length),{str:o+e.slice(t,n).replace(/\t/g,"→")+a,pos:i-t+o.length}}function l(e,t){return n.repeat(" ",t-e.length)+e}var c=function(e,t){if(t=Object.create(t||null),!e.buffer)return null;t.maxLength||(t.maxLength=79),"number"!=typeof t.indent&&(t.indent=1),"number"!=typeof t.linesBefore&&(t.linesBefore=3),"number"!=typeof t.linesAfter&&(t.linesAfter=2);for(var i,r=/\r?\n|\r|\0/g,o=[0],c=[],s=-1;i=r.exec(e.buffer);)c.push(i.index),o.push(i.index+i[0].length),e.position<=i.index&&s<0&&(s=o.length-2);s<0&&(s=o.length-1);var u,p,f="",d=Math.min(e.line+t.linesAfter,c.length).toString().length,h=t.maxLength-(t.indent+d+3);for(u=1;u<=t.linesBefore&&!(s-u<0);u++)p=a(e.buffer,o[s-u],c[s-u],e.position-(o[s]-o[s-u]),h),f=n.repeat(" ",t.indent)+l((e.line-u+1).toString(),d)+" | "+p.str+"\n"+f;for(p=a(e.buffer,o[s],c[s],e.position,h),f+=n.repeat(" ",t.indent)+l((e.line+1).toString(),d)+" | "+p.str+"\n",f+=n.repeat("-",t.indent+d+3+p.pos)+"^\n",u=1;u<=t.linesAfter&&!(s+u>=c.length);u++)p=a(e.buffer,o[s+u],c[s+u],e.position-(o[s]-o[s+u]),h),f+=n.repeat(" ",t.indent)+l((e.line+u+1).toString(),d)+" | "+p.str+"\n";return f.replace(/\n$/,"")},s=["kind","multi","resolve","construct","instanceOf","predicate","represent","representName","defaultStyle","styleAliases"],u=["scalar","sequence","mapping"];var p=function(e,t){if(t=t||{},Object.keys(t).forEach((function(t){if(-1===s.indexOf(t))throw new o('Unknown option "'+t+'" is met in definition of "'+e+'" YAML type.')})),this.options=t,this.tag=e,this.kind=t.kind||null,this.resolve=t.resolve||function(){return!0},this.construct=t.construct||function(e){return e},this.instanceOf=t.instanceOf||null,this.predicate=t.predicate||null,this.represent=t.represent||null,this.representName=t.representName||null,this.defaultStyle=t.defaultStyle||null,this.multi=t.multi||!1,this.styleAliases=function(e){var t={};return null!==e&&Object.keys(e).forEach((function(n){e[n].forEach((function(e){t[String(e)]=n}))})),t}(t.styleAliases||null),-1===u.indexOf(this.kind))throw new o('Unknown kind "'+this.kind+'" is specified for "'+e+'" YAML type.')};function f(e,t){var n=[];return e[t].forEach((function(e){var t=n.length;n.forEach((function(n,i){n.tag===e.tag&&n.kind===e.kind&&n.multi===e.multi&&(t=i)})),n[t]=e})),n}function d(e){return this.extend(e)}d.prototype.extend=function(e){var t=[],n=[];if(e instanceof p)n.push(e);else if(Array.isArray(e))n=n.concat(e);else{if(!e||!Array.isArray(e.implicit)&&!Array.isArray(e.explicit))throw new o("Schema.extend argument should be a Type, [ Type ], or a schema definition ({ implicit: [...], explicit: [...] })");e.implicit&&(t=t.concat(e.implicit)),e.explicit&&(n=n.concat(e.explicit))}t.forEach((function(e){if(!(e instanceof p))throw new o("Specified list of YAML types (or a single Type object) contains a non-Type object.");if(e.loadKind&&"scalar"!==e.loadKind)throw new o("There is a non-scalar type in the implicit list of a schema. Implicit resolving of such types is not supported.");if(e.multi)throw new o("There is a multi type in the implicit list of a schema. Multi tags can only be listed as explicit.")})),n.forEach((function(e){if(!(e instanceof p))throw new o("Specified list of YAML types (or a single Type object) contains a non-Type object.")}));var i=Object.create(d.prototype);return i.implicit=(this.implicit||[]).concat(t),i.explicit=(this.explicit||[]).concat(n),i.compiledImplicit=f(i,"implicit"),i.compiledExplicit=f(i,"explicit"),i.compiledTypeMap=function(){var e,t,n={scalar:{},sequence:{},mapping:{},fallback:{},multi:{scalar:[],sequence:[],mapping:[],fallback:[]}};function i(e){e.multi?(n.multi[e.kind].push(e),n.multi.fallback.push(e)):n[e.kind][e.tag]=n.fallback[e.tag]=e}for(e=0,t=arguments.length;e<t;e+=1)arguments[e].forEach(i);return n}(i.compiledImplicit,i.compiledExplicit),i};var h=d,g=new p("tag:yaml.org,2002:str",{kind:"scalar",construct:function(e){return null!==e?e:""}}),m=new p("tag:yaml.org,2002:seq",{kind:"sequence",construct:function(e){return null!==e?e:[]}}),y=new p("tag:yaml.org,2002:map",{kind:"mapping",construct:function(e){return null!==e?e:{}}}),b=new h({explicit:[g,m,y]});var A=new p("tag:yaml.org,2002:null",{kind:"scalar",resolve:function(e){if(null===e)return!0;var t=e.length;return 1===t&&"~"===e||4===t&&("null"===e||"Null"===e||"NULL"===e)},construct:function(){return null},predicate:function(e){return null===e},represent:{canonical:function(){return"~"},lowercase:function(){return"null"},uppercase:function(){return"NULL"},camelcase:function(){return"Null"},empty:function(){return""}},defaultStyle:"lowercase"});var v=new p("tag:yaml.org,2002:bool",{kind:"scalar",resolve:function(e){if(null===e)return!1;var t=e.length;return 4===t&&("true"===e||"True"===e||"TRUE"===e)||5===t&&("false"===e||"False"===e||"FALSE"===e)},construct:function(e){return"true"===e||"True"===e||"TRUE"===e},predicate:function(e){return"[object Boolean]"===Object.prototype.toString.call(e)},represent:{lowercase:function(e){return e?"true":"false"},uppercase:function(e){return e?"TRUE":"FALSE"},camelcase:function(e){return e?"True":"False"}},defaultStyle:"lowercase"});function w(e){return 48<=e&&e<=55}function k(e){return 48<=e&&e<=57}var C=new p("tag:yaml.org,2002:int",{kind:"scalar",resolve:function(e){if(null===e)return!1;var t,n,i=e.length,r=0,o=!1;if(!i)return!1;if("-"!==(t=e[r])&&"+"!==t||(t=e[++r]),"0"===t){if(r+1===i)return!0;if("b"===(t=e[++r])){for(r++;r<i;r++)if("_"!==(t=e[r])){if("0"!==t&&"1"!==t)return!1;o=!0}return o&&"_"!==t}if("x"===t){for(r++;r<i;r++)if("_"!==(t=e[r])){if(!(48<=(n=e.charCodeAt(r))&&n<=57||65<=n&&n<=70||97<=n&&n<=102))return!1;o=!0}return o&&"_"!==t}if("o"===t){for(r++;r<i;r++)if("_"!==(t=e[r])){if(!w(e.charCodeAt(r)))return!1;o=!0}return o&&"_"!==t}}if("_"===t)return!1;for(;r<i;r++)if("_"!==(t=e[r])){if(!k(e.charCodeAt(r)))return!1;o=!0}return!(!o||"_"===t)},construct:function(e){var t,n=e,i=1;if(-1!==n.indexOf("_")&&(n=n.replace(/_/g,"")),"-"!==(t=n[0])&&"+"!==t||("-"===t&&(i=-1),t=(n=n.slice(1))[0]),"0"===n)return 0;if("0"===t){if("b"===n[1])return i*parseInt(n.slice(2),2);if("x"===n[1])return i*parseInt(n.slice(2),16);if("o"===n[1])return i*parseInt(n.slice(2),8)}return i*parseInt(n,10)},predicate:function(e){return"[object Number]"===Object.prototype.toString.call(e)&&e%1==0&&!n.isNegativeZero(e)},represent:{binary:function(e){return e>=0?"0b"+e.toString(2):"-0b"+e.toString(2).slice(1)},octal:function(e){return e>=0?"0o"+e.toString(8):"-0o"+e.toString(8).slice(1)},decimal:function(e){return e.toString(10)},hexadecimal:function(e){return e>=0?"0x"+e.toString(16).toUpperCase():"-0x"+e.toString(16).toUpperCase().slice(1)}},defaultStyle:"decimal",styleAliases:{binary:[2,"bin"],octal:[8,"oct"],decimal:[10,"dec"],hexadecimal:[16,"hex"]}}),x=new RegExp("^(?:[-+]?(?:[0-9][0-9_]*)(?:\\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?|\\.[0-9_]+(?:[eE][-+]?[0-9]+)?|[-+]?\\.(?:inf|Inf|INF)|\\.(?:nan|NaN|NAN))$");var I=/^[-+]?[0-9]+e/;var S=new p("tag:yaml.org,2002:float",{kind:"scalar",resolve:function(e){return null!==e&&!(!x.test(e)||"_"===e[e.length-1])},construct:function(e){var t,n;return n="-"===(t=e.replace(/_/g,"").toLowerCase())[0]?-1:1,"+-".indexOf(t[0])>=0&&(t=t.slice(1)),".inf"===t?1===n?Number.POSITIVE_INFINITY:Number.NEGATIVE_INFINITY:".nan"===t?NaN:n*parseFloat(t,10)},predicate:function(e){return"[object Number]"===Object.prototype.toString.call(e)&&(e%1!=0||n.isNegativeZero(e))},represent:function(e,t){var i;if(isNaN(e))switch(t){case"lowercase":return".nan";case"uppercase":return".NAN";case"camelcase":return".NaN"}else if(Number.POSITIVE_INFINITY===e)switch(t){case"lowercase":return".inf";case"uppercase":return".INF";case"camelcase":return".Inf"}else if(Number.NEGATIVE_INFINITY===e)switch(t){case"lowercase":return"-.inf";case"uppercase":return"-.INF";case"camelcase":return"-.Inf"}else if(n.isNegativeZero(e))return"-0.0";return i=e.toString(10),I.test(i)?i.replace("e",".e"):i},defaultStyle:"lowercase"}),O=b.extend({implicit:[A,v,C,S]}),j=O,T=new RegExp("^([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])$"),N=new RegExp("^([0-9][0-9][0-9][0-9])-([0-9][0-9]?)-([0-9][0-9]?)(?:[Tt]|[ \\t]+)([0-9][0-9]?):([0-9][0-9]):([0-9][0-9])(?:\\.([0-9]*))?(?:[ \\t]*(Z|([-+])([0-9][0-9]?)(?::([0-9][0-9]))?))?$");var F=new p("tag:yaml.org,2002:timestamp",{kind:"scalar",resolve:function(e){return null!==e&&(null!==T.exec(e)||null!==N.exec(e))},construct:function(e){var t,n,i,r,o,a,l,c,s=0,u=null;if(null===(t=T.exec(e))&&(t=N.exec(e)),null===t)throw new Error("Date resolve error");if(n=+t[1],i=+t[2]-1,r=+t[3],!t[4])return new Date(Date.UTC(n,i,r));if(o=+t[4],a=+t[5],l=+t[6],t[7]){for(s=t[7].slice(0,3);s.length<3;)s+="0";s=+s}return t[9]&&(u=6e4*(60*+t[10]+ +(t[11]||0)),"-"===t[9]&&(u=-u)),c=new Date(Date.UTC(n,i,r,o,a,l,s)),u&&c.setTime(c.getTime()-u),c},instanceOf:Date,represent:function(e){return e.toISOString()}});var E=new p("tag:yaml.org,2002:merge",{kind:"scalar",resolve:function(e){return"<<"===e||null===e}}),M="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r";var L=new p("tag:yaml.org,2002:binary",{kind:"scalar",resolve:function(e){if(null===e)return!1;var t,n,i=0,r=e.length,o=M;for(n=0;n<r;n++)if(!((t=o.indexOf(e.charAt(n)))>64)){if(t<0)return!1;i+=6}return i%8==0},construct:function(e){var t,n,i=e.replace(/[\r\n=]/g,""),r=i.length,o=M,a=0,l=[];for(t=0;t<r;t++)t%4==0&&t&&(l.push(a>>16&255),l.push(a>>8&255),l.push(255&a)),a=a<<6|o.indexOf(i.charAt(t));return 0===(n=r%4*6)?(l.push(a>>16&255),l.push(a>>8&255),l.push(255&a)):18===n?(l.push(a>>10&255),l.push(a>>2&255)):12===n&&l.push(a>>4&255),new Uint8Array(l)},predicate:function(e){return"[object Uint8Array]"===Object.prototype.toString.call(e)},represent:function(e){var t,n,i="",r=0,o=e.length,a=M;for(t=0;t<o;t++)t%3==0&&t&&(i+=a[r>>18&63],i+=a[r>>12&63],i+=a[r>>6&63],i+=a[63&r]),r=(r<<8)+e[t];return 0===(n=o%3)?(i+=a[r>>18&63],i+=a[r>>12&63],i+=a[r>>6&63],i+=a[63&r]):2===n?(i+=a[r>>10&63],i+=a[r>>4&63],i+=a[r<<2&63],i+=a[64]):1===n&&(i+=a[r>>2&63],i+=a[r<<4&63],i+=a[64],i+=a[64]),i}}),_=Object.prototype.hasOwnProperty,D=Object.prototype.toString;var U=new p("tag:yaml.org,2002:omap",{kind:"sequence",resolve:function(e){if(null===e)return!0;var t,n,i,r,o,a=[],l=e;for(t=0,n=l.length;t<n;t+=1){if(i=l[t],o=!1,"[object Object]"!==D.call(i))return!1;for(r in i)if(_.call(i,r)){if(o)return!1;o=!0}if(!o)return!1;if(-1!==a.indexOf(r))return!1;a.push(r)}return!0},construct:function(e){return null!==e?e:[]}}),q=Object.prototype.toString;var Y=new p("tag:yaml.org,2002:pairs",{kind:"sequence",resolve:function(e){if(null===e)return!0;var t,n,i,r,o,a=e;for(o=new Array(a.length),t=0,n=a.length;t<n;t+=1){if(i=a[t],"[object Object]"!==q.call(i))return!1;if(1!==(r=Object.keys(i)).length)return!1;o[t]=[r[0],i[r[0]]]}return!0},construct:function(e){if(null===e)return[];var t,n,i,r,o,a=e;for(o=new Array(a.length),t=0,n=a.length;t<n;t+=1)i=a[t],r=Object.keys(i),o[t]=[r[0],i[r[0]]];return o}}),R=Object.prototype.hasOwnProperty;var B=new p("tag:yaml.org,2002:set",{kind:"mapping",resolve:function(e){if(null===e)return!0;var t,n=e;for(t in n)if(R.call(n,t)&&null!==n[t])return!1;return!0},construct:function(e){return null!==e?e:{}}}),K=j.extend({implicit:[F,E],explicit:[L,U,Y,B]}),P=Object.prototype.hasOwnProperty,W=/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x84\x86-\x9F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]/,H=/[\x85\u2028\u2029]/,$=/[,\[\]\{\}]/,G=/^(?:!|!!|![a-z\-]+!)$/i,V=/^(?:!|[^,\[\]\{\}])(?:%[0-9a-f]{2}|[0-9a-z\-#;\/\?:@&=\+\$,_\.!~\*'\(\)\[\]])*$/i;function Z(e){return Object.prototype.toString.call(e)}function J(e){return 10===e||13===e}function Q(e){return 9===e||32===e}function z(e){return 9===e||32===e||10===e||13===e}function X(e){return 44===e||91===e||93===e||123===e||125===e}function ee(e){var t;return 48<=e&&e<=57?e-48:97<=(t=32|e)&&t<=102?t-97+10:-1}function te(e){return 48===e?"\0":97===e?"":98===e?"\b":116===e||9===e?"\t":110===e?"\n":118===e?"\v":102===e?"\f":114===e?"\r":101===e?"":32===e?" ":34===e?'"':47===e?"/":92===e?"\\":78===e?"":95===e?" ":76===e?"\u2028":80===e?"\u2029":""}function ne(e){return e<=65535?String.fromCharCode(e):String.fromCharCode(55296+(e-65536>>10),56320+(e-65536&1023))}for(var ie=new Array(256),re=new Array(256),oe=0;oe<256;oe++)ie[oe]=te(oe)?1:0,re[oe]=te(oe);function ae(e,t){this.input=e,this.filename=t.filename||null,this.schema=t.schema||K,this.onWarning=t.onWarning||null,this.legacy=t.legacy||!1,this.json=t.json||!1,this.listener=t.listener||null,this.implicitTypes=this.schema.compiledImplicit,this.typeMap=this.schema.compiledTypeMap,this.length=e.length,this.position=0,this.line=0,this.lineStart=0,this.lineIndent=0,this.firstTabInLine=-1,this.documents=[]}function le(e,t){var n={name:e.filename,buffer:e.input.slice(0,-1),position:e.position,line:e.line,column:e.position-e.lineStart};return n.snippet=c(n),new o(t,n)}function ce(e,t){throw le(e,t)}function se(e,t){e.onWarning&&e.onWarning.call(null,le(e,t))}var ue={YAML:function(e,t,n){var i,r,o;null!==e.version&&ce(e,"duplication of %YAML directive"),1!==n.length&&ce(e,"YAML directive accepts exactly one argument"),null===(i=/^([0-9]+)\.([0-9]+)$/.exec(n[0]))&&ce(e,"ill-formed argument of the YAML directive"),r=parseInt(i[1],10),o=parseInt(i[2],10),1!==r&&ce(e,"unacceptable YAML version of the document"),e.version=n[0],e.checkLineBreaks=o<2,1!==o&&2!==o&&se(e,"unsupported YAML version of the document")},TAG:function(e,t,n){var i,r;2!==n.length&&ce(e,"TAG directive accepts exactly two arguments"),i=n[0],r=n[1],G.test(i)||ce(e,"ill-formed tag handle (first argument) of the TAG directive"),P.call(e.tagMap,i)&&ce(e,'there is a previously declared suffix for "'+i+'" tag handle'),V.test(r)||ce(e,"ill-formed tag prefix (second argument) of the TAG directive");try{r=decodeURIComponent(r)}catch(t){ce(e,"tag prefix is malformed: "+r)}e.tagMap[i]=r}};function pe(e,t,n,i){var r,o,a,l;if(t<n){if(l=e.input.slice(t,n),i)for(r=0,o=l.length;r<o;r+=1)9===(a=l.charCodeAt(r))||32<=a&&a<=1114111||ce(e,"expected valid JSON character");else W.test(l)&&ce(e,"the stream contains non-printable characters");e.result+=l}}function fe(e,t,i,r){var o,a,l,c;for(n.isObject(i)||ce(e,"cannot merge mappings; the provided source object is unacceptable"),l=0,c=(o=Object.keys(i)).length;l<c;l+=1)a=o[l],P.call(t,a)||(t[a]=i[a],r[a]=!0)}function de(e,t,n,i,r,o,a,l,c){var s,u;if(Array.isArray(r))for(s=0,u=(r=Array.prototype.slice.call(r)).length;s<u;s+=1)Array.isArray(r[s])&&ce(e,"nested arrays are not supported inside keys"),"object"==typeof r&&"[object Object]"===Z(r[s])&&(r[s]="[object Object]");if("object"==typeof r&&"[object Object]"===Z(r)&&(r="[object Object]"),r=String(r),null===t&&(t={}),"tag:yaml.org,2002:merge"===i)if(Array.isArray(o))for(s=0,u=o.length;s<u;s+=1)fe(e,t,o[s],n);else fe(e,t,o,n);else e.json||P.call(n,r)||!P.call(t,r)||(e.line=a||e.line,e.lineStart=l||e.lineStart,e.position=c||e.position,ce(e,"duplicated mapping key")),"__proto__"===r?Object.defineProperty(t,r,{configurable:!0,enumerable:!0,writable:!0,value:o}):t[r]=o,delete n[r];return t}function he(e){var t;10===(t=e.input.charCodeAt(e.position))?e.position++:13===t?(e.position++,10===e.input.charCodeAt(e.position)&&e.position++):ce(e,"a line break is expected"),e.line+=1,e.lineStart=e.position,e.firstTabInLine=-1}function ge(e,t,n){for(var i=0,r=e.input.charCodeAt(e.position);0!==r;){for(;Q(r);)9===r&&-1===e.firstTabInLine&&(e.firstTabInLine=e.position),r=e.input.charCodeAt(++e.position);if(t&&35===r)do{r=e.input.charCodeAt(++e.position)}while(10!==r&&13!==r&&0!==r);if(!J(r))break;for(he(e),r=e.input.charCodeAt(e.position),i++,e.lineIndent=0;32===r;)e.lineIndent++,r=e.input.charCodeAt(++e.position)}return-1!==n&&0!==i&&e.lineIndent<n&&se(e,"deficient indentation"),i}function me(e){var t,n=e.position;return!(45!==(t=e.input.charCodeAt(n))&&46!==t||t!==e.input.charCodeAt(n+1)||t!==e.input.charCodeAt(n+2)||(n+=3,0!==(t=e.input.charCodeAt(n))&&!z(t)))}function ye(e,t){1===t?e.result+=" ":t>1&&(e.result+=n.repeat("\n",t-1))}function be(e,t){var n,i,r=e.tag,o=e.anchor,a=[],l=!1;if(-1!==e.firstTabInLine)return!1;for(null!==e.anchor&&(e.anchorMap[e.anchor]=a),i=e.input.charCodeAt(e.position);0!==i&&(-1!==e.firstTabInLine&&(e.position=e.firstTabInLine,ce(e,"tab characters must not be used in indentation")),45===i)&&z(e.input.charCodeAt(e.position+1));)if(l=!0,e.position++,ge(e,!0,-1)&&e.lineIndent<=t)a.push(null),i=e.input.charCodeAt(e.position);else if(n=e.line,we(e,t,3,!1,!0),a.push(e.result),ge(e,!0,-1),i=e.input.charCodeAt(e.position),(e.line===n||e.lineIndent>t)&&0!==i)ce(e,"bad indentation of a sequence entry");else if(e.lineIndent<t)break;return!!l&&(e.tag=r,e.anchor=o,e.kind="sequence",e.result=a,!0)}function Ae(e){var t,n,i,r,o=!1,a=!1;if(33!==(r=e.input.charCodeAt(e.position)))return!1;if(null!==e.tag&&ce(e,"duplication of a tag property"),60===(r=e.input.charCodeAt(++e.position))?(o=!0,r=e.input.charCodeAt(++e.position)):33===r?(a=!0,n="!!",r=e.input.charCodeAt(++e.position)):n="!",t=e.position,o){do{r=e.input.charCodeAt(++e.position)}while(0!==r&&62!==r);e.position<e.length?(i=e.input.slice(t,e.position),r=e.input.charCodeAt(++e.position)):ce(e,"unexpected end of the stream within a verbatim tag")}else{for(;0!==r&&!z(r);)33===r&&(a?ce(e,"tag suffix cannot contain exclamation marks"):(n=e.input.slice(t-1,e.position+1),G.test(n)||ce(e,"named tag handle cannot contain such characters"),a=!0,t=e.position+1)),r=e.input.charCodeAt(++e.position);i=e.input.slice(t,e.position),$.test(i)&&ce(e,"tag suffix cannot contain flow indicator characters")}i&&!V.test(i)&&ce(e,"tag name cannot contain such characters: "+i);try{i=decodeURIComponent(i)}catch(t){ce(e,"tag name is malformed: "+i)}return o?e.tag=i:P.call(e.tagMap,n)?e.tag=e.tagMap[n]+i:"!"===n?e.tag="!"+i:"!!"===n?e.tag="tag:yaml.org,2002:"+i:ce(e,'undeclared tag handle "'+n+'"'),!0}function ve(e){var t,n;if(38!==(n=e.input.charCodeAt(e.position)))return!1;for(null!==e.anchor&&ce(e,"duplication of an anchor property"),n=e.input.charCodeAt(++e.position),t=e.position;0!==n&&!z(n)&&!X(n);)n=e.input.charCodeAt(++e.position);return e.position===t&&ce(e,"name of an anchor node must contain at least one character"),e.anchor=e.input.slice(t,e.position),!0}function we(e,t,i,r,o){var a,l,c,s,u,p,f,d,h,g=1,m=!1,y=!1;if(null!==e.listener&&e.listener("open",e),e.tag=null,e.anchor=null,e.kind=null,e.result=null,a=l=c=4===i||3===i,r&&ge(e,!0,-1)&&(m=!0,e.lineIndent>t?g=1:e.lineIndent===t?g=0:e.lineIndent<t&&(g=-1)),1===g)for(;Ae(e)||ve(e);)ge(e,!0,-1)?(m=!0,c=a,e.lineIndent>t?g=1:e.lineIndent===t?g=0:e.lineIndent<t&&(g=-1)):c=!1;if(c&&(c=m||o),1!==g&&4!==i||(d=1===i||2===i?t:t+1,h=e.position-e.lineStart,1===g?c&&(be(e,h)||function(e,t,n){var i,r,o,a,l,c,s,u=e.tag,p=e.anchor,f={},d=Object.create(null),h=null,g=null,m=null,y=!1,b=!1;if(-1!==e.firstTabInLine)return!1;for(null!==e.anchor&&(e.anchorMap[e.anchor]=f),s=e.input.charCodeAt(e.position);0!==s;){if(y||-1===e.firstTabInLine||(e.position=e.firstTabInLine,ce(e,"tab characters must not be used in indentation")),i=e.input.charCodeAt(e.position+1),o=e.line,63!==s&&58!==s||!z(i)){if(a=e.line,l=e.lineStart,c=e.position,!we(e,n,2,!1,!0))break;if(e.line===o){for(s=e.input.charCodeAt(e.position);Q(s);)s=e.input.charCodeAt(++e.position);if(58===s)z(s=e.input.charCodeAt(++e.position))||ce(e,"a whitespace character is expected after the key-value separator within a block mapping"),y&&(de(e,f,d,h,g,null,a,l,c),h=g=m=null),b=!0,y=!1,r=!1,h=e.tag,g=e.result;else{if(!b)return e.tag=u,e.anchor=p,!0;ce(e,"can not read an implicit mapping pair; a colon is missed")}}else{if(!b)return e.tag=u,e.anchor=p,!0;ce(e,"can not read a block mapping entry; a multiline key may not be an implicit key")}}else 63===s?(y&&(de(e,f,d,h,g,null,a,l,c),h=g=m=null),b=!0,y=!0,r=!0):y?(y=!1,r=!0):ce(e,"incomplete explicit mapping pair; a key node is missed; or followed by a non-tabulated empty line"),e.position+=1,s=i;if((e.line===o||e.lineIndent>t)&&(y&&(a=e.line,l=e.lineStart,c=e.position),we(e,t,4,!0,r)&&(y?g=e.result:m=e.result),y||(de(e,f,d,h,g,m,a,l,c),h=g=m=null),ge(e,!0,-1),s=e.input.charCodeAt(e.position)),(e.line===o||e.lineIndent>t)&&0!==s)ce(e,"bad indentation of a mapping entry");else if(e.lineIndent<t)break}return y&&de(e,f,d,h,g,null,a,l,c),b&&(e.tag=u,e.anchor=p,e.kind="mapping",e.result=f),b}(e,h,d))||function(e,t){var n,i,r,o,a,l,c,s,u,p,f,d,h=!0,g=e.tag,m=e.anchor,y=Object.create(null);if(91===(d=e.input.charCodeAt(e.position)))a=93,s=!1,o=[];else{if(123!==d)return!1;a=125,s=!0,o={}}for(null!==e.anchor&&(e.anchorMap[e.anchor]=o),d=e.input.charCodeAt(++e.position);0!==d;){if(ge(e,!0,t),(d=e.input.charCodeAt(e.position))===a)return e.position++,e.tag=g,e.anchor=m,e.kind=s?"mapping":"sequence",e.result=o,!0;h?44===d&&ce(e,"expected the node content, but found ','"):ce(e,"missed comma between flow collection entries"),f=null,l=c=!1,63===d&&z(e.input.charCodeAt(e.position+1))&&(l=c=!0,e.position++,ge(e,!0,t)),n=e.line,i=e.lineStart,r=e.position,we(e,t,1,!1,!0),p=e.tag,u=e.result,ge(e,!0,t),d=e.input.charCodeAt(e.position),!c&&e.line!==n||58!==d||(l=!0,d=e.input.charCodeAt(++e.position),ge(e,!0,t),we(e,t,1,!1,!0),f=e.result),s?de(e,o,y,p,u,f,n,i,r):l?o.push(de(e,null,y,p,u,f,n,i,r)):o.push(u),ge(e,!0,t),44===(d=e.input.charCodeAt(e.position))?(h=!0,d=e.input.charCodeAt(++e.position)):h=!1}ce(e,"unexpected end of the stream within a flow collection")}(e,d)?y=!0:(l&&function(e,t){var i,r,o,a,l,c=1,s=!1,u=!1,p=t,f=0,d=!1;if(124===(a=e.input.charCodeAt(e.position)))r=!1;else{if(62!==a)return!1;r=!0}for(e.kind="scalar",e.result="";0!==a;)if(43===(a=e.input.charCodeAt(++e.position))||45===a)1===c?c=43===a?3:2:ce(e,"repeat of a chomping mode identifier");else{if(!((o=48<=(l=a)&&l<=57?l-48:-1)>=0))break;0===o?ce(e,"bad explicit indentation width of a block scalar; it cannot be less than one"):u?ce(e,"repeat of an indentation width identifier"):(p=t+o-1,u=!0)}if(Q(a)){do{a=e.input.charCodeAt(++e.position)}while(Q(a));if(35===a)do{a=e.input.charCodeAt(++e.position)}while(!J(a)&&0!==a)}for(;0!==a;){for(he(e),e.lineIndent=0,a=e.input.charCodeAt(e.position);(!u||e.lineIndent<p)&&32===a;)e.lineIndent++,a=e.input.charCodeAt(++e.position);if(!u&&e.lineIndent>p&&(p=e.lineIndent),J(a))f++;else{if(e.lineIndent<p){3===c?e.result+=n.repeat("\n",s?1+f:f):1===c&&s&&(e.result+="\n");break}for(r?Q(a)?(d=!0,e.result+=n.repeat("\n",s?1+f:f)):d?(d=!1,e.result+=n.repeat("\n",f+1)):0===f?s&&(e.result+=" "):e.result+=n.repeat("\n",f):e.result+=n.repeat("\n",s?1+f:f),s=!0,u=!0,f=0,i=e.position;!J(a)&&0!==a;)a=e.input.charCodeAt(++e.position);pe(e,i,e.position,!1)}}return!0}(e,d)||function(e,t){var n,i,r;if(39!==(n=e.input.charCodeAt(e.position)))return!1;for(e.kind="scalar",e.result="",e.position++,i=r=e.position;0!==(n=e.input.charCodeAt(e.position));)if(39===n){if(pe(e,i,e.position,!0),39!==(n=e.input.charCodeAt(++e.position)))return!0;i=e.position,e.position++,r=e.position}else J(n)?(pe(e,i,r,!0),ye(e,ge(e,!1,t)),i=r=e.position):e.position===e.lineStart&&me(e)?ce(e,"unexpected end of the document within a single quoted scalar"):(e.position++,r=e.position);ce(e,"unexpected end of the stream within a single quoted scalar")}(e,d)||function(e,t){var n,i,r,o,a,l,c;if(34!==(l=e.input.charCodeAt(e.position)))return!1;for(e.kind="scalar",e.result="",e.position++,n=i=e.position;0!==(l=e.input.charCodeAt(e.position));){if(34===l)return pe(e,n,e.position,!0),e.position++,!0;if(92===l){if(pe(e,n,e.position,!0),J(l=e.input.charCodeAt(++e.position)))ge(e,!1,t);else if(l<256&&ie[l])e.result+=re[l],e.position++;else if((a=120===(c=l)?2:117===c?4:85===c?8:0)>0){for(r=a,o=0;r>0;r--)(a=ee(l=e.input.charCodeAt(++e.position)))>=0?o=(o<<4)+a:ce(e,"expected hexadecimal character");e.result+=ne(o),e.position++}else ce(e,"unknown escape sequence");n=i=e.position}else J(l)?(pe(e,n,i,!0),ye(e,ge(e,!1,t)),n=i=e.position):e.position===e.lineStart&&me(e)?ce(e,"unexpected end of the document within a double quoted scalar"):(e.position++,i=e.position)}ce(e,"unexpected end of the stream within a double quoted scalar")}(e,d)?y=!0:!function(e){var t,n,i;if(42!==(i=e.input.charCodeAt(e.position)))return!1;for(i=e.input.charCodeAt(++e.position),t=e.position;0!==i&&!z(i)&&!X(i);)i=e.input.charCodeAt(++e.position);return e.position===t&&ce(e,"name of an alias node must contain at least one character"),n=e.input.slice(t,e.position),P.call(e.anchorMap,n)||ce(e,'unidentified alias "'+n+'"'),e.result=e.anchorMap[n],ge(e,!0,-1),!0}(e)?function(e,t,n){var i,r,o,a,l,c,s,u,p=e.kind,f=e.result;if(z(u=e.input.charCodeAt(e.position))||X(u)||35===u||38===u||42===u||33===u||124===u||62===u||39===u||34===u||37===u||64===u||96===u)return!1;if((63===u||45===u)&&(z(i=e.input.charCodeAt(e.position+1))||n&&X(i)))return!1;for(e.kind="scalar",e.result="",r=o=e.position,a=!1;0!==u;){if(58===u){if(z(i=e.input.charCodeAt(e.position+1))||n&&X(i))break}else if(35===u){if(z(e.input.charCodeAt(e.position-1)))break}else{if(e.position===e.lineStart&&me(e)||n&&X(u))break;if(J(u)){if(l=e.line,c=e.lineStart,s=e.lineIndent,ge(e,!1,-1),e.lineIndent>=t){a=!0,u=e.input.charCodeAt(e.position);continue}e.position=o,e.line=l,e.lineStart=c,e.lineIndent=s;break}}a&&(pe(e,r,o,!1),ye(e,e.line-l),r=o=e.position,a=!1),Q(u)||(o=e.position+1),u=e.input.charCodeAt(++e.position)}return pe(e,r,o,!1),!!e.result||(e.kind=p,e.result=f,!1)}(e,d,1===i)&&(y=!0,null===e.tag&&(e.tag="?")):(y=!0,null===e.tag&&null===e.anchor||ce(e,"alias node should not have any properties")),null!==e.anchor&&(e.anchorMap[e.anchor]=e.result)):0===g&&(y=c&&be(e,h))),null===e.tag)null!==e.anchor&&(e.anchorMap[e.anchor]=e.result);else if("?"===e.tag){for(null!==e.result&&"scalar"!==e.kind&&ce(e,'unacceptable node kind for !<?> tag; it should be "scalar", not "'+e.kind+'"'),s=0,u=e.implicitTypes.length;s<u;s+=1)if((f=e.implicitTypes[s]).resolve(e.result)){e.result=f.construct(e.result),e.tag=f.tag,null!==e.anchor&&(e.anchorMap[e.anchor]=e.result);break}}else if("!"!==e.tag){if(P.call(e.typeMap[e.kind||"fallback"],e.tag))f=e.typeMap[e.kind||"fallback"][e.tag];else for(f=null,s=0,u=(p=e.typeMap.multi[e.kind||"fallback"]).length;s<u;s+=1)if(e.tag.slice(0,p[s].tag.length)===p[s].tag){f=p[s];break}f||ce(e,"unknown tag !<"+e.tag+">"),null!==e.result&&f.kind!==e.kind&&ce(e,"unacceptable node kind for !<"+e.tag+'> tag; it should be "'+f.kind+'", not "'+e.kind+'"'),f.resolve(e.result,e.tag)?(e.result=f.construct(e.result,e.tag),null!==e.anchor&&(e.anchorMap[e.anchor]=e.result)):ce(e,"cannot resolve a node with !<"+e.tag+"> explicit tag")}return null!==e.listener&&e.listener("close",e),null!==e.tag||null!==e.anchor||y}function ke(e){var t,n,i,r,o=e.position,a=!1;for(e.version=null,e.checkLineBreaks=e.legacy,e.tagMap=Object.create(null),e.anchorMap=Object.create(null);0!==(r=e.input.charCodeAt(e.position))&&(ge(e,!0,-1),r=e.input.charCodeAt(e.position),!(e.lineIndent>0||37!==r));){for(a=!0,r=e.input.charCodeAt(++e.position),t=e.position;0!==r&&!z(r);)r=e.input.charCodeAt(++e.position);for(i=[],(n=e.input.slice(t,e.position)).length<1&&ce(e,"directive name must not be less than one character in length");0!==r;){for(;Q(r);)r=e.input.charCodeAt(++e.position);if(35===r){do{r=e.input.charCodeAt(++e.position)}while(0!==r&&!J(r));break}if(J(r))break;for(t=e.position;0!==r&&!z(r);)r=e.input.charCodeAt(++e.position);i.push(e.input.slice(t,e.position))}0!==r&&he(e),P.call(ue,n)?ue[n](e,n,i):se(e,'unknown document directive "'+n+'"')}ge(e,!0,-1),0===e.lineIndent&&45===e.input.charCodeAt(e.position)&&45===e.input.charCodeAt(e.position+1)&&45===e.input.charCodeAt(e.position+2)?(e.position+=3,ge(e,!0,-1)):a&&ce(e,"directives end mark is expected"),we(e,e.lineIndent-1,4,!1,!0),ge(e,!0,-1),e.checkLineBreaks&&H.test(e.input.slice(o,e.position))&&se(e,"non-ASCII line breaks are interpreted as content"),e.documents.push(e.result),e.position===e.lineStart&&me(e)?46===e.input.charCodeAt(e.position)&&(e.position+=3,ge(e,!0,-1)):e.position<e.length-1&&ce(e,"end of the stream or a document separator is expected")}function Ce(e,t){t=t||{},0!==(e=String(e)).length&&(10!==e.charCodeAt(e.length-1)&&13!==e.charCodeAt(e.length-1)&&(e+="\n"),65279===e.charCodeAt(0)&&(e=e.slice(1)));var n=new ae(e,t),i=e.indexOf("\0");for(-1!==i&&(n.position=i,ce(n,"null byte is not allowed in input")),n.input+="\0";32===n.input.charCodeAt(n.position);)n.lineIndent+=1,n.position+=1;for(;n.position<n.length-1;)ke(n);return n.documents}var xe={loadAll:function(e,t,n){null!==t&&"object"==typeof t&&void 0===n&&(n=t,t=null);var i=Ce(e,n);if("function"!=typeof t)return i;for(var r=0,o=i.length;r<o;r+=1)t(i[r])},load:function(e,t){var n=Ce(e,t);if(0!==n.length){if(1===n.length)return n[0];throw new o("expected a single document in the stream, but found more")}}},Ie=Object.prototype.toString,Se=Object.prototype.hasOwnProperty,Oe=65279,je={0:"\\0",7:"\\a",8:"\\b",9:"\\t",10:"\\n",11:"\\v",12:"\\f",13:"\\r",27:"\\e",34:'\\"',92:"\\\\",133:"\\N",160:"\\_",8232:"\\L",8233:"\\P"},Te=["y","Y","yes","Yes","YES","on","On","ON","n","N","no","No","NO","off","Off","OFF"],Ne=/^[-+]?[0-9_]+(?::[0-9_]+)+(?:\.[0-9_]*)?$/;function Fe(e){var t,i,r;if(t=e.toString(16).toUpperCase(),e<=255)i="x",r=2;else if(e<=65535)i="u",r=4;else{if(!(e<=4294967295))throw new o("code point within a string may not be greater than 0xFFFFFFFF");i="U",r=8}return"\\"+i+n.repeat("0",r-t.length)+t}function Ee(e){this.schema=e.schema||K,this.indent=Math.max(1,e.indent||2),this.noArrayIndent=e.noArrayIndent||!1,this.skipInvalid=e.skipInvalid||!1,this.flowLevel=n.isNothing(e.flowLevel)?-1:e.flowLevel,this.styleMap=function(e,t){var n,i,r,o,a,l,c;if(null===t)return{};for(n={},r=0,o=(i=Object.keys(t)).length;r<o;r+=1)a=i[r],l=String(t[a]),"!!"===a.slice(0,2)&&(a="tag:yaml.org,2002:"+a.slice(2)),(c=e.compiledTypeMap.fallback[a])&&Se.call(c.styleAliases,l)&&(l=c.styleAliases[l]),n[a]=l;return n}(this.schema,e.styles||null),this.sortKeys=e.sortKeys||!1,this.lineWidth=e.lineWidth||80,this.noRefs=e.noRefs||!1,this.noCompatMode=e.noCompatMode||!1,this.condenseFlow=e.condenseFlow||!1,this.quotingType='"'===e.quotingType?2:1,this.forceQuotes=e.forceQuotes||!1,this.replacer="function"==typeof e.replacer?e.replacer:null,this.implicitTypes=this.schema.compiledImplicit,this.explicitTypes=this.schema.compiledExplicit,this.tag=null,this.result="",this.duplicates=[],this.usedDuplicates=null}function Me(e,t){for(var i,r=n.repeat(" ",t),o=0,a=-1,l="",c=e.length;o<c;)-1===(a=e.indexOf("\n",o))?(i=e.slice(o),o=c):(i=e.slice(o,a+1),o=a+1),i.length&&"\n"!==i&&(l+=r),l+=i;return l}function Le(e,t){return"\n"+n.repeat(" ",e.indent*t)}function _e(e){return 32===e||9===e}function De(e){return 32<=e&&e<=126||161<=e&&e<=55295&&8232!==e&&8233!==e||57344<=e&&e<=65533&&e!==Oe||65536<=e&&e<=1114111}function Ue(e){return De(e)&&e!==Oe&&13!==e&&10!==e}function qe(e,t,n){var i=Ue(e),r=i&&!_e(e);return(n?i:i&&44!==e&&91!==e&&93!==e&&123!==e&&125!==e)&&35!==e&&!(58===t&&!r)||Ue(t)&&!_e(t)&&35===e||58===t&&r}function Ye(e,t){var n,i=e.charCodeAt(t);return i>=55296&&i<=56319&&t+1<e.length&&(n=e.charCodeAt(t+1))>=56320&&n<=57343?1024*(i-55296)+n-56320+65536:i}function Re(e){return/^\n* /.test(e)}function Be(e,t,n,i,r,o,a,l){var c,s,u=0,p=null,f=!1,d=!1,h=-1!==i,g=-1,m=De(s=Ye(e,0))&&s!==Oe&&!_e(s)&&45!==s&&63!==s&&58!==s&&44!==s&&91!==s&&93!==s&&123!==s&&125!==s&&35!==s&&38!==s&&42!==s&&33!==s&&124!==s&&61!==s&&62!==s&&39!==s&&34!==s&&37!==s&&64!==s&&96!==s&&function(e){return!_e(e)&&58!==e}(Ye(e,e.length-1));if(t||a)for(c=0;c<e.length;u>=65536?c+=2:c++){if(!De(u=Ye(e,c)))return 5;m=m&&qe(u,p,l),p=u}else{for(c=0;c<e.length;u>=65536?c+=2:c++){if(10===(u=Ye(e,c)))f=!0,h&&(d=d||c-g-1>i&&" "!==e[g+1],g=c);else if(!De(u))return 5;m=m&&qe(u,p,l),p=u}d=d||h&&c-g-1>i&&" "!==e[g+1]}return f||d?n>9&&Re(e)?5:a?2===o?5:2:d?4:3:!m||a||r(e)?2===o?5:2:1}function Ke(e,t,n,i,r){e.dump=function(){if(0===t.length)return 2===e.quotingType?'""':"''";if(!e.noCompatMode&&(-1!==Te.indexOf(t)||Ne.test(t)))return 2===e.quotingType?'"'+t+'"':"'"+t+"'";var a=e.indent*Math.max(1,n),l=-1===e.lineWidth?-1:Math.max(Math.min(e.lineWidth,40),e.lineWidth-a),c=i||e.flowLevel>-1&&n>=e.flowLevel;switch(Be(t,c,e.indent,l,(function(t){return function(e,t){var n,i;for(n=0,i=e.implicitTypes.length;n<i;n+=1)if(e.implicitTypes[n].resolve(t))return!0;return!1}(e,t)}),e.quotingType,e.forceQuotes&&!i,r)){case 1:return t;case 2:return"'"+t.replace(/'/g,"''")+"'";case 3:return"|"+Pe(t,e.indent)+We(Me(t,a));case 4:return">"+Pe(t,e.indent)+We(Me(function(e,t){var n,i,r=/(\n+)([^\n]*)/g,o=(l=e.indexOf("\n"),l=-1!==l?l:e.length,r.lastIndex=l,He(e.slice(0,l),t)),a="\n"===e[0]||" "===e[0];var l;for(;i=r.exec(e);){var c=i[1],s=i[2];n=" "===s[0],o+=c+(a||n||""===s?"":"\n")+He(s,t),a=n}return o}(t,l),a));case 5:return'"'+function(e){for(var t,n="",i=0,r=0;r<e.length;i>=65536?r+=2:r++)i=Ye(e,r),!(t=je[i])&&De(i)?(n+=e[r],i>=65536&&(n+=e[r+1])):n+=t||Fe(i);return n}(t)+'"';default:throw new o("impossible error: invalid scalar style")}}()}function Pe(e,t){var n=Re(e)?String(t):"",i="\n"===e[e.length-1];return n+(i&&("\n"===e[e.length-2]||"\n"===e)?"+":i?"":"-")+"\n"}function We(e){return"\n"===e[e.length-1]?e.slice(0,-1):e}function He(e,t){if(""===e||" "===e[0])return e;for(var n,i,r=/ [^ ]/g,o=0,a=0,l=0,c="";n=r.exec(e);)(l=n.index)-o>t&&(i=a>o?a:l,c+="\n"+e.slice(o,i),o=i+1),a=l;return c+="\n",e.length-o>t&&a>o?c+=e.slice(o,a)+"\n"+e.slice(a+1):c+=e.slice(o),c.slice(1)}function $e(e,t,n,i){var r,o,a,l="",c=e.tag;for(r=0,o=n.length;r<o;r+=1)a=n[r],e.replacer&&(a=e.replacer.call(n,String(r),a)),(Ve(e,t+1,a,!0,!0,!1,!0)||void 0===a&&Ve(e,t+1,null,!0,!0,!1,!0))&&(i&&""===l||(l+=Le(e,t)),e.dump&&10===e.dump.charCodeAt(0)?l+="-":l+="- ",l+=e.dump);e.tag=c,e.dump=l||"[]"}function Ge(e,t,n){var i,r,a,l,c,s;for(a=0,l=(r=n?e.explicitTypes:e.implicitTypes).length;a<l;a+=1)if(((c=r[a]).instanceOf||c.predicate)&&(!c.instanceOf||"object"==typeof t&&t instanceof c.instanceOf)&&(!c.predicate||c.predicate(t))){if(n?c.multi&&c.representName?e.tag=c.representName(t):e.tag=c.tag:e.tag="?",c.represent){if(s=e.styleMap[c.tag]||c.defaultStyle,"[object Function]"===Ie.call(c.represent))i=c.represent(t,s);else{if(!Se.call(c.represent,s))throw new o("!<"+c.tag+'> tag resolver accepts not "'+s+'" style');i=c.represent[s](t,s)}e.dump=i}return!0}return!1}function Ve(e,t,n,i,r,a,l){e.tag=null,e.dump=n,Ge(e,n,!1)||Ge(e,n,!0);var c,s=Ie.call(e.dump),u=i;i&&(i=e.flowLevel<0||e.flowLevel>t);var p,f,d="[object Object]"===s||"[object Array]"===s;if(d&&(f=-1!==(p=e.duplicates.indexOf(n))),(null!==e.tag&&"?"!==e.tag||f||2!==e.indent&&t>0)&&(r=!1),f&&e.usedDuplicates[p])e.dump="*ref_"+p;else{if(d&&f&&!e.usedDuplicates[p]&&(e.usedDuplicates[p]=!0),"[object Object]"===s)i&&0!==Object.keys(e.dump).length?(!function(e,t,n,i){var r,a,l,c,s,u,p="",f=e.tag,d=Object.keys(n);if(!0===e.sortKeys)d.sort();else if("function"==typeof e.sortKeys)d.sort(e.sortKeys);else if(e.sortKeys)throw new o("sortKeys must be a boolean or a function");for(r=0,a=d.length;r<a;r+=1)u="",i&&""===p||(u+=Le(e,t)),c=n[l=d[r]],e.replacer&&(c=e.replacer.call(n,l,c)),Ve(e,t+1,l,!0,!0,!0)&&((s=null!==e.tag&&"?"!==e.tag||e.dump&&e.dump.length>1024)&&(e.dump&&10===e.dump.charCodeAt(0)?u+="?":u+="? "),u+=e.dump,s&&(u+=Le(e,t)),Ve(e,t+1,c,!0,s)&&(e.dump&&10===e.dump.charCodeAt(0)?u+=":":u+=": ",p+=u+=e.dump));e.tag=f,e.dump=p||"{}"}(e,t,e.dump,r),f&&(e.dump="&ref_"+p+e.dump)):(!function(e,t,n){var i,r,o,a,l,c="",s=e.tag,u=Object.keys(n);for(i=0,r=u.length;i<r;i+=1)l="",""!==c&&(l+=", "),e.condenseFlow&&(l+='"'),a=n[o=u[i]],e.replacer&&(a=e.replacer.call(n,o,a)),Ve(e,t,o,!1,!1)&&(e.dump.length>1024&&(l+="? "),l+=e.dump+(e.condenseFlow?'"':"")+":"+(e.condenseFlow?"":" "),Ve(e,t,a,!1,!1)&&(c+=l+=e.dump));e.tag=s,e.dump="{"+c+"}"}(e,t,e.dump),f&&(e.dump="&ref_"+p+" "+e.dump));else if("[object Array]"===s)i&&0!==e.dump.length?(e.noArrayIndent&&!l&&t>0?$e(e,t-1,e.dump,r):$e(e,t,e.dump,r),f&&(e.dump="&ref_"+p+e.dump)):(!function(e,t,n){var i,r,o,a="",l=e.tag;for(i=0,r=n.length;i<r;i+=1)o=n[i],e.replacer&&(o=e.replacer.call(n,String(i),o)),(Ve(e,t,o,!1,!1)||void 0===o&&Ve(e,t,null,!1,!1))&&(""!==a&&(a+=","+(e.condenseFlow?"":" ")),a+=e.dump);e.tag=l,e.dump="["+a+"]"}(e,t,e.dump),f&&(e.dump="&ref_"+p+" "+e.dump));else{if("[object String]"!==s){if("[object Undefined]"===s)return!1;if(e.skipInvalid)return!1;throw new o("unacceptable kind of an object to dump "+s)}"?"!==e.tag&&Ke(e,e.dump,t,a,u)}null!==e.tag&&"?"!==e.tag&&(c=encodeURI("!"===e.tag[0]?e.tag.slice(1):e.tag).replace(/!/g,"%21"),c="!"===e.tag[0]?"!"+c:"tag:yaml.org,2002:"===c.slice(0,18)?"!!"+c.slice(18):"!<"+c+">",e.dump=c+" "+e.dump)}return!0}function Ze(e,t){var n,i,r=[],o=[];for(Je(e,r,o),n=0,i=o.length;n<i;n+=1)t.duplicates.push(r[o[n]]);t.usedDuplicates=new Array(i)}function Je(e,t,n){var i,r,o;if(null!==e&&"object"==typeof e)if(-1!==(r=t.indexOf(e)))-1===n.indexOf(r)&&n.push(r);else if(t.push(e),Array.isArray(e))for(r=0,o=e.length;r<o;r+=1)Je(e[r],t,n);else for(r=0,o=(i=Object.keys(e)).length;r<o;r+=1)Je(e[i[r]],t,n)}function Qe(e,t){return function(){throw new Error("Function yaml."+e+" is removed in js-yaml 4. Use yaml."+t+" instead, which is now safe by default.")}}var ze=p,Xe=h,et=b,tt=O,nt=j,it=K,rt=xe.load,ot=xe.loadAll,at={dump:function(e,t){var n=new Ee(t=t||{});n.noRefs||Ze(e,n);var i=e;return n.replacer&&(i=n.replacer.call({"":i},"",i)),Ve(n,0,i,!0,!0)?n.dump+"\n":""}}.dump,lt=o,ct={binary:L,float:S,map:y,null:A,pairs:Y,set:B,timestamp:F,bool:v,int:C,merge:E,omap:U,seq:m,str:g},st=Qe("safeLoad","load"),ut=Qe("safeLoadAll","loadAll"),pt=Qe("safeDump","dump"),ft={Type:ze,Schema:Xe,FAILSAFE_SCHEMA:et,JSON_SCHEMA:tt,CORE_SCHEMA:nt,DEFAULT_SCHEMA:it,load:rt,loadAll:ot,dump:at,YAMLException:lt,types:ct,safeLoad:st,safeLoadAll:ut,safeDump:pt};e.CORE_SCHEMA=nt,e.DEFAULT_SCHEMA=it,e.FAILSAFE_SCHEMA=et,e.JSON_SCHEMA=tt,e.Schema=Xe,e.Type=ze,e.YAMLException=lt,e.default=ft,e.dump=at,e.load=rt,e.loadAll=ot,e.safeDump=pt,e.safeLoad=st,e.safeLoadAll=ut,e.types=ct,Object.defineProperty(e,"__esModule",{value:!0})}));
+
+</script>
 <style>
   :root{
     --navy:#03234b; --blue:#1f8fd3; --blue-lt:#39a9dc; --blue-pale:#e6f2fa;
@@ -84,6 +88,13 @@
   .mode .issue{grid-column:1/-1;color:var(--bad);background:#fff3e0;border-left:3px solid var(--pin-conflict);padding:4px 8px}
   .mode .hint{grid-column:1/-1;color:var(--muted)}
   .conflicts{margin-top:4px;background:#fff3e0;color:var(--bad);border:1px solid var(--pin-conflict);padding:3px 8px;font-size:12px;text-align:left}
+  .conflicts .cf{display:inline-block;margin:1px 10px 1px 0;white-space:nowrap}
+  .conflicts a{color:#a11;text-decoration:underline;cursor:pointer}
+  .conflicts a:hover{background:var(--pin-conflict);color:#fff;text-decoration:none}
+  .cnt{background:var(--pin-conflict);color:#fff;border-radius:8px;padding:0 6px;font-size:11px;line-height:15px;min-width:17px;text-align:center;display:inline-block}
+  .item .cnt{margin-left:auto}
+  .item.selected .cnt{background:#fff;color:#c25100}
+  .cat>button .cnt{margin-left:8px}
   .config{flex:1;display:flex;flex-direction:column;min-height:0;background:#fff;margin-top:8px}
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
   .ctab{border:1px solid var(--line);border-bottom:0;background:#e9ecef;padding:4px 12px;color:#333}
@@ -112,6 +123,9 @@
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px}
   .chipbar .spacer{flex:1}
+  .chipbar label.flt{display:flex;align-items:center;gap:5px;color:#333;white-space:nowrap;cursor:pointer}
+  .chipbar label.flt input{margin:0;cursor:pointer}
+  #pkgsel{max-width:250px}
   .unused{border:1px solid var(--line);padding:3px 8px;background:#fff}
   .unused b{margin-left:6px}
 
@@ -132,6 +146,24 @@
   .siglabel{font-family:var(--font);font-size:10.5px;fill:#222}
   .siglabel.conflict{fill:var(--bad);font-weight:600}
   .pinnum{font-family:var(--font);font-size:7.5px;fill:#555}
+  .siglabel.userlabel{fill:#0b57a4;font-style:italic;font-size:9.5px}
+  .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
+  .pin.dim rect{opacity:.22}
+  .pin.dim text{opacity:.28}
+  .pin.dim.focused rect{opacity:1}
+  @keyframes pinpulse{0%{stroke:var(--bad);stroke-width:1}20%{stroke:var(--bad);stroke-width:5}40%{stroke:var(--bad);stroke-width:1}60%{stroke:var(--bad);stroke-width:5}80%{stroke:var(--bad);stroke-width:1}100%{stroke:#fff;stroke-width:.8}}
+  .pin.newconflict rect{animation:pinpulse 1.2s ease-out 1}
+
+  /* pin context menu */
+  .ctxmenu{position:fixed;z-index:60;background:#fff;border:1px solid #9aa;box-shadow:0 6px 18px rgba(0,0,0,.25);min-width:210px;font-size:12.5px;padding:0 0 3px}
+  .ctxmenu .hd{padding:5px 12px;background:var(--navy);color:#fff;margin-bottom:3px}
+  .ctxmenu .mi{padding:5px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:18px;align-items:baseline}
+  .ctxmenu .mi:hover{background:var(--blue-pale)}
+  .ctxmenu .mi.dis{color:#aaa;cursor:default;background:none}
+  .ctxmenu .mi small{color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ctxmenu .sep{height:1px;background:#e3e6ea;margin:3px 0}
+  .ctxmenu input{width:calc(100% - 24px);margin:5px 12px 7px;padding:4px 6px;border:1px solid var(--line);border-radius:3px}
+  .ctxmenu .kb{color:var(--muted);font-size:11px}
 
   /* pin picker */
   .picker{position:absolute;z-index:50;background:#fff;border:1px solid #9aa;box-shadow:0 6px 18px rgba(0,0,0,.25);min-width:220px;max-height:340px;overflow:auto;font-size:12.5px}
@@ -142,6 +174,7 @@
   .picker .opt.cur{background:var(--pin-set);color:#fff}
   .picker .opt.na{color:#aaa;cursor:not-allowed}
   .picker .opt small{color:var(--muted)}
+  .picker .opt .lbl{white-space:nowrap}
   .picker .opt.cur small{color:#e8ffe0}
   .picker .grp{padding:4px 10px 2px;color:var(--muted);font-size:11px;border-top:1px solid #eee}
 
@@ -186,7 +219,15 @@
   .btns .primary{background:var(--blue-lt);color:#fff;border-color:var(--blue-lt)}
   .toast{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:8px 14px;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.3);z-index:99;opacity:0;transition:opacity .2s;pointer-events:none}
   .toast.show{opacity:1}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}.pin.newconflict rect{animation:none}}
+  /* layout hardening: keep three columns usable from 1280 to 2560 */
+  @media (max-width:1460px){
+    #view-pinout{grid-template-columns:266px minmax(360px,1fr) minmax(450px,1.3fr)}
+    .subbar{gap:60px}
+    .chipbar{flex-wrap:wrap}
+    #pin-search{width:120px!important}
+  }
+  @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
 </style>
 </head>
 <body>
@@ -270,14 +311,19 @@ mcu:
   vdd_v: [2.0, 5.5]
   max_sysclk_mhz: 48
   default_package: TSSOP20
-  variants:                      # DS model table
-    CH32V006K8U7: { package: QFN32,   flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006E8R6: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 85 }
-    CH32V006E8R7: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006F8U7: { package: QFN20,   flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006F4U6: { package: QFN20,   flash_kb: 16, sram_kb: 4, temp: 85, notes: no OPA }
-    CH32V006F8P7: { package: TSSOP20, flash_kb: 62, sram_kb: 8, temp: 105 }
-    CH32V006D8U7: { package: QFN12,   flash_kb: 62, sram_kb: 8, temp: 105 }
+  # DS model table (CH32V006DS0 §1, the "General Description" model list).
+  # io_count is the datasheet's own I/O column. `tools/validate_mcu.py` counts the io
+  # pins in each package table and fails if the two disagree, which is what catches a
+  # dropped or duplicated row in `packages:` below. A pair of internally shorted GPIOs
+  # (DS notes 3 and 4) is one physical pin and counts once.
+  variants:
+    CH32V006K8U7: { package: QFN32,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 31 }
+    CH32V006E8R6: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 85,  io_count: 22 }
+    CH32V006E8R7: { package: QSOP24,  flash_kb: 62, sram_kb: 8, temp: 105, io_count: 22 }
+    CH32V006F8U7: { package: QFN20,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18 }
+    CH32V006F4U6: { package: QFN20,   flash_kb: 16, sram_kb: 4, temp: 85,  io_count: 18, notes: "no OPA, no TouchKey; DS Table 2-1-2 is its own pin table" }
+    CH32V006F8P7: { package: TSSOP20, flash_kb: 62, sram_kb: 8, temp: 105, io_count: 18 }
+    CH32V006D8U7: { package: QFN12,   flash_kb: 62, sram_kb: 8, temp: 105, io_count: 11, notes: "ADC 4+2 channels and TouchKey 4-channel only — the other inputs have no pin" }
 
 # -----------------------------------------------------------------------------
 packages:
@@ -451,10 +497,19 @@ peripherals:
           - { name: No Debug }
           - { name: 1-wire SDI (SWIO), signals: [SWIO], default: true }     # DS 1.4.18 — default after reset
           - { name: 2-wire SDI (SWIO + SWCLK), signals: [SWIO, SWCLK] }
+      # Option byte USER[4:3] = RST_MODE, RM Table 18-4 (ch.18).
+      # Reset value on CH32V006 is 10b, so the external reset pin is ACTIVE on a blank
+      # part and the pin is not yours until you reprogram the option byte. The three
+      # enabled values differ only in how long the pin is ignored after the alternate
+      # function turns on, which is a glitch filter, not a different pin.
+      # RM 18 writes this value as "PD7 for I/O function"; the pin is actually the
+      # package's reset pin — PA7 on QFN32 and PC5 on QSOP24 (DS note 5, see `remaps`).
       - name: External reset pin
         choices:
-          - { name: RST enabled (option byte RST_MODE), signals: [RST], default: true }
-          - { name: RST disabled — pin is GPIO }
+          - { name: "RST enabled — ignore 12 ms (RST_MODE=10, factory default)", signals: [RST], default: true }
+          - { name: "RST enabled — ignore 1 ms (RST_MODE=01)", signals: [RST] }
+          - { name: "RST enabled — ignore 128 us (RST_MODE=00)", signals: [RST] }
+          - { name: "RST disabled — pin is GPIO (RST_MODE=11)" }
     # RST location depends on package (DS note 5); the app picks the remap per package.
     remaps:
       - name: RST on PD7 (QFN12 / QFN20 / TSSOP20)
@@ -517,8 +572,8 @@ peripherals:
           - { name: IN5, signals: [IN5] }
           - { name: IN6, signals: [IN6] }
           - { name: IN7, signals: [IN7] }
-          - { name: IN8 (Vrefint, internal) }
-          - { name: IN9 (OPA output, internal) }
+          - { name: "IN8 (Vrefint, internal)" }
+          - { name: "IN9 (OPA output, internal)" }
       - name: Regular group external trigger      # RM Table 7-15, ADC_ETRGREG_RM
         choices:
           - { name: Disable }
@@ -586,6 +641,7 @@ peripherals:
   # ---------------- Timers ----------------
   TIM1:
     category: Timers
+    notes: Advanced timer, 4 channels + 3 complementary outputs + break input (RM ch.11).
     settings:
       - name: Channel1
         choices:
@@ -621,6 +677,14 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Activate break input, signals: [BKIN] }
+      # RM Table 7-8 note + RM 7.3.2.2 AFIO_PCFR1[13:10]: TIM1_RM = 11xx routes the
+      # channel-1 INPUT to the internal LSI instead of a pin, for LSI calibration.
+      # It is a value of the same TIM1_RM field, but it claims no pin, so it is a
+      # setting here rather than an 11th entry in `remaps` (index == register value).
+      - name: Channel 1 input source
+        choices:
+          - { name: "CH1 pin (TIM1_RM = 0000..1001)" }
+          - { name: "Internal LSI for calibration (TIM1_RM = 11xx — frees the CH1 pin)" }
     # RM Table 7-8, TIM1_RM[3:0] — index == register value
     remaps:
       - { name: "0000 Default",  pins: { ETR: PC5, CH1: PD2, CH2: PA1, CH3: PC3, CH4: PC4, BKIN: PC2, CH1N: PD0, CH2N: PA2, CH3N: PD1 } }
@@ -636,6 +700,12 @@ peripherals:
 
   TIM2:
     category: Timers
+    # RM 12.3.9: TIM2 can output 2 complementary pairs with dead-time, and when it does,
+    # "channels 3 and 4 act as channel 1 and channel 2 complementary output channels".
+    # So CH1N lives on the CH3 pin and CH2N on the CH4 pin — there are no extra pins, which
+    # is why `remaps` below has only 4 signals. Selecting a complementary output and a plain
+    # CH3/CH4 output at the same time is a genuine conflict and the engine will flag it.
+    notes: Channels 3 and 4 double as CH1N and CH2N when complementary output is enabled (RM 12.3.9).
     settings:
       - name: Channel1
         choices:
@@ -665,6 +735,12 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Encoder CH1/CH2, signals: [CH1_ETR, CH2] }
+      - name: Complementary Outputs        # RM 12.3.9 — CH1N/CH2N reuse the CH3/CH4 pins
+        choices:
+          - { name: Disable }
+          - { name: CH1N on the CH3 pin, signals: [CH3] }
+          - { name: CH2N on the CH4 pin, signals: [CH4] }
+          - { name: CH1N + CH2N on the CH3/CH4 pins, signals: [CH3, CH4] }
     # RM Table 7-9-1 (CH32V002/004/005/006), TIM2_RM[2:0]
     remaps:
       - { name: "000 Default", pins: { CH1_ETR: PD4, CH2: PD3, CH3: PC0, CH4: PD7 } }
@@ -784,6 +860,57 @@ peripherals:
       - { name: "010",         pins: { SCL: PC5, SDA: PC6 } }
       - { name: "011",         pins: { SCL: PB5, SDA: PB6 } }
       - { name: "1xx",         pins: { SCL: PB3, SDA: PD1 } }
+
+# -----------------------------------------------------------------------------
+# External interrupts — RM 6.4.4 Table 6-2, register AFIO_EXTICR (RM 7.3.2.1).
+#
+# EXTI is not a peripheral in the `peripherals:` sense: it has eight INDEPENDENT
+# 4-way selectors, one per line, whereas a `remaps:` entry switches every signal of a
+# peripheral at once. So it lives here as plain data. The app ignores unknown
+# top-level keys, so this block is inert until AGENT-2 wires it in.
+#
+# Line x can only ever reach pin number x — EXTI3 reaches PA3/PB3/PC3/PD3 and nothing
+# else. The key is the 2-bit AFIO_EXTICR field value for that line.
+exti:
+  register: { name: AFIO_EXTICR, address: 0x40010008, bits_per_line: 2, reset: 0x00000000 }
+  lines:
+    EXTI0: { "00": PA0, "01": PB0, "10": PC0, "11": PD0 }
+    EXTI1: { "00": PA1, "01": PB1, "10": PC1, "11": PD1 }
+    EXTI2: { "00": PA2, "01": PB2, "10": PC2, "11": PD2 }
+    EXTI3: { "00": PA3, "01": PB3, "10": PC3, "11": PD3 }
+    EXTI4: { "00": PA4, "01": PB4, "10": PC4, "11": PD4 }
+    EXTI5: { "00": PA5, "01": PB5, "10": PC5, "11": PD5 }
+    EXTI6: { "00": PA6, "01": PB6, "10": PC6, "11": PD6 }
+    EXTI7: { "00": PA7,             "10": PC7, "11": PD7 }   # no PB7 on CH32V00x — 01 selects nothing
+  internal:                       # RM Table 6-2 — no pin, cannot conflict
+    EXTI8: { event: PVD — supply crossed the voltage-monitoring threshold }
+    EXTI9: { event: Automatic wake-up }
+  interrupt: EXTI7_0 — one vector for lines 0-7 (RM Table 6-1, vector 20)
+
+# -----------------------------------------------------------------------------
+# DMA — RM 8.2 Table 8-2 and Figure 8-1. Seven channels; a channel serves several
+# peripherals, so two peripherals on the same channel is a conflict the app can warn
+# about. No pins are involved, so this never affects the pinout.
+#
+# Confidence: HIGH. Table 8-2 and Figure 8-1 are two separate renderings of the same
+# map in the source and they agree on every entry, which is why this is not marked
+# provisional despite Table 8-2 being badly mangled by the PDF-to-markdown conversion.
+dma:
+  controller: DMA1
+  channels: 7
+  requests:
+    1: [ADC1, TIM2_CH3, TIM3_CH3]
+    2: [SPI1_RX, TIM1_CH1, TIM2_UP]
+    3: [SPI1_TX, TIM1_CH2]
+    4: [USART1_TX, TIM1_TRIG, TIM1_COM, TIM1_CH4, TIM3_CH4]
+    5: [USART1_RX, TIM2_CH1, TIM1_UP]
+    6: [I2C1_TX, TIM1_CH3, USART2_TX]
+    7: [I2C1_RX, TIM2_CH2, TIM2_CH4, USART2_RX]
+  notes: >
+    RM Table 8-2 note (2): on CH32V006 the TIM3 CH3 event can trigger only DMA channel 1
+    and the TIM3 CH4 event only channel 4. The wider TIM3 fan-out in the table
+    (channels 1-3 and 4-6) applies to CH32M007, not to this part.
+    TIM1_TRIG, TIM1_COM and TIM1_CH4 share channel 4 as one hardware request line.
 
 # -----------------------------------------------------------------------------
 # Clock tree — DS 1.3 Figure 1-3, RM 3 (RCC_CFGR0 HPRE / ADCPRE / MCO / PLLSRC)
@@ -1007,10 +1134,10 @@ pins:
   BOOT0: { type: boot }
   PD0:   { type: io, notes: OSC_IN when HSE enabled }
   PD1:   { type: io, notes: OSC_OUT when HSE enabled }
-  PC13:  { type: io, notes: Low drive strength, 3 mA max }
+  PC13:  { type: io, notes: "Low drive strength, 3 mA max" }
   PC14:  { type: io, notes: OSC32_IN when LSE enabled }
   PC15:  { type: io, notes: OSC32_OUT when LSE enabled }
-  PA0:   { type: io, notes: 5 V tolerant, WKUP }
+  PA0:   { type: io, notes: "5 V tolerant, WKUP" }
   PA1:   { type: io, notes: 5 V tolerant }
   PA2:   { type: io, notes: 5 V tolerant }
   PA3:   { type: io, notes: 5 V tolerant }
@@ -1464,6 +1591,534 @@ clock:
     APB2: [TIM1, USART1, SPI1, ADC1, ADC2, GPIO, AFIO]
 
 </script>
+<script>
+"use strict";
+// Bundled from app/engine/*.js by build.py — do not edit here.
+// ===== app/engine/model.js ====================================================
+// =============================================================================
+//  model.js — MCU file parsing, derived maps, configuration state, pin helpers.
+//  No DOM. Owned by AGENT-2 (ENGINE).
+//
+//  Public state:
+//    M  parsed MCU model + derived maps (_pinSignals, _phys, _alias, _src)
+//    S  configuration state { pkg, periph, manual, gpio, sel, selPin, clock, zoom, panX, panY }
+//  The UI reads M/S/E as globals in the browser bundle and as live ES module
+//  bindings in Node tests. Never reassign M or S from outside this module.
+// =============================================================================
+
+
+const PACKAGES = {};          // package id -> geometry (from data/packages/packages.yaml)
+const MCU_FILES = {};         // mcu.name -> yaml source text (bundled + opened from disk)
+
+let M = null;
+let S = null;
+
+// ---- YAML hook ---------------------------------------------------------------
+// Browser: js-yaml is on globalThis. Node tests: call setYaml(jsyaml) first.
+let YAML = null;
+function setYaml(y) { YAML = y; }
+function yaml() {
+  const y = YAML || (typeof globalThis !== 'undefined' ? globalThis.jsyaml : null);
+  if (!y) throw new Error('No YAML parser available — call setYaml(jsyaml) first');
+  return y;
+}
+const yamlLoad = text => yaml().load(text);
+const yamlDump = (obj, opt) => yaml().dump(obj, opt);
+
+// ---- registries --------------------------------------------------------------
+function loadPackages(src) {
+  const y = typeof src === 'string' ? yamlLoad(src) : src;
+  for (const p of y.packages) PACKAGES[p.id] = p;
+  return PACKAGES;
+}
+function registerMcuFile(text) {
+  const y = yamlLoad(text);
+  if (!y || !y.mcu || !y.mcu.name) throw new Error('Not an MCU file (no mcu.name)');
+  MCU_FILES[y.mcu.name] = text;
+  return y.mcu.name;
+}
+
+// ---- derive ------------------------------------------------------------------
+// Pin alternate functions are NOT listed per pin in the data files; they are
+// derived here from every peripheral's remap table (single source of truth).
+function deriveMcu(y) {
+  y._pinSignals = {};                                   // pin name -> [{periph, signal, remap}]
+  for (const [pid, P] of Object.entries(y.peripherals)) {
+    (P.remaps || []).forEach((r, ri) => {
+      for (const [sig, pin] of Object.entries(r.pins || {})) {
+        (y._pinSignals[pin] ||= []).push({ periph: pid, signal: sig, remap: ri });
+      }
+    });
+  }
+  y._phys = {};                                         // package -> {pin number: [names]}
+  y._alias = {};                                        // package -> {name: canonical name}
+  for (const [pk, map] of Object.entries(y.packages)) {
+    y._phys[pk] = {}; y._alias[pk] = {};
+    for (const [num, v] of Object.entries(map)) {
+      const names = Array.isArray(v) ? v : [v];
+      y._phys[pk][num] = names;
+      for (const n of names) y._alias[pk][n] = names[0];   // shorted pins share one canonical name
+    }
+  }
+  return y;
+}
+
+function initState(m) {
+  const pkgs = Object.keys(m.packages);
+  const st = {
+    pkg: pkgs.includes(m.mcu.default_package) ? m.mcu.default_package : pkgs[0],
+    periph: {},            // pid -> { settings: {name: choice | Set}, remap: index }
+    manual: {},            // pin -> 'GPIO_Output' | …
+    gpio: {},              // pin -> { mode, pull, speed, label }
+    sel: null,             // selected peripheral
+    selPin: null,
+    clock: defaultClock(m.clock),
+    zoom: 1, panX: 0, panY: 0,
+  };
+  for (const [pid, P] of Object.entries(m.peripherals)) {
+    const ps = { settings: {}, remap: 0 };
+    for (const s of P.settings || []) {
+      const def = s.choices.find(c => c.default);
+      ps.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;
+    }
+    st.periph[pid] = ps;
+  }
+  return st;
+}
+
+// Load an MCU: accepts YAML text or an already-parsed object. Pure — no DOM.
+function loadMcu(source) {
+  const y = typeof source === 'string' ? yamlLoad(source) : source;
+  if (!y || !y.mcu || !y.packages || !y.pins || !y.peripherals)
+    throw new Error('Not an MCU file (needs mcu, packages, pins, peripherals)');
+  const src = typeof source === 'string' ? source : yamlDump(y);
+  M = deriveMcu(y);
+  M._src = src;
+  MCU_FILES[y.mcu.name] ||= src;
+  S = initState(M);
+  applyPackageRemaps();
+  return M;
+}
+
+// ---- pin helpers (current package) -------------------------------------------
+const pkgPins  = () => M._phys[S.pkg];
+const canon    = name => M._alias[S.pkg][name] || name;
+const pinExists = name => name in M._alias[S.pkg];
+const pinType  = name => (M.pins[name] || {}).type || 'io';
+const pinNum   = name => Object.keys(pkgPins()).find(n => pkgPins()[n].includes(name));
+const pinLabel = name => { const num = pinNum(name); return num === undefined ? name : pkgPins()[num].join('/'); };
+const groupOf  = name => { const num = pinNum(name); return num === undefined ? [name] : pkgPins()[num]; };
+const sigName  = (pid, sig) => `${pid}_${sig}`;
+const GPIO_SIGS = ['GPIO_Input', 'GPIO_Output', 'GPIO_Analog', 'GPIO_EXTI'];
+
+// Some peripherals sit on different pins depending on the package (bonding, not AFIO).
+function applyPackageRemaps() {
+  for (const [pid, P] of Object.entries(M.peripherals))
+    if (P.remap_by_package && S.pkg in P.remap_by_package) S.periph[pid].remap = P.remap_by_package[S.pkg];
+}
+
+// ---- peripheral queries ------------------------------------------------------
+// Which signals this peripheral needs, given its current settings.
+function requiredSignals(pid) {
+  const P = M.peripherals[pid], st = S.periph[pid], out = new Set();
+  for (const s of P.settings || []) {
+    const v = st.settings[s.name];
+    for (const c of s.choices) {
+      const on = s.type === 'checkboxes' ? v.has(c.name) : v === c.name;
+      if (on) (c.signals || []).forEach(x => out.add(x));
+    }
+  }
+  return out;
+}
+function isEnabled(pid) {
+  const P = M.peripherals[pid], st = S.periph[pid];
+  for (const s of P.settings || []) {
+    const v = st.settings[s.name];
+    if (s.type === 'checkboxes' ? v.size : v !== s.choices[0].name) return true;
+  }
+  return false;
+}
+// Can any non-default choice of this peripheral be satisfied on this package?
+function isAvailable(pid) {
+  const P = M.peripherals[pid];
+  if (!P.remaps || !P.remaps.length) return true;
+  for (const s of P.settings || []) for (const c of s.choices) {
+    if (!c.signals) continue;
+    if (P.remaps.some(r => c.signals.every(sig => r.pins[sig] && pinExists(r.pins[sig])))) return true;
+  }
+  return !((P.settings || []).some(s => s.choices.some(c => c.signals)));
+}
+
+// Switch package, keeping everything that still exists. Returns the pin names that
+// are no longer bonded (the caller decides how loudly to say so).
+function setPackage(pkg) {
+  if (!(pkg in M.packages)) throw new Error(`No such package: ${pkg}`);
+  S.pkg = pkg;
+  applyPackageRemaps();
+  return Object.keys(S.manual).filter(p => !pinExists(p));
+}
+
+// ===== app/engine/clock.js ====================================================
+// =============================================================================
+//  clock.js — clock tree maths. No DOM, no rendering: renderClock() (UI) draws
+//  whatever clockCalc() returns, so a new MCU's tree needs no UI change.
+// =============================================================================
+
+
+// Initial clock state for an MCU's `clock:` block (null when the file has none).
+function defaultClock(c) {
+  if (!c) return null;
+  const pre = {};
+  for (const [k, v] of Object.entries(c.prescalers || {})) pre[k] = v.options[0];
+  return {
+    hse: c.sources.HSE ? c.sources.HSE.mhz : 8,
+    pllIn: 0,
+    pllMul: c.pll ? c.pll.multipliers[0] : 1,
+    sys: c.sysclk.sources[0],
+    pre,
+  };
+}
+
+// The root prescaler (the one with no `source:`) — AHB on F1-style parts, HB on V00x.
+const firstPre = c => Object.keys(c.prescalers || {}).find(n => !(c.prescalers[n].source));
+
+// Every frequency in MHz, plus `over`: the names that are out of specification.
+function clockCalc(m = M, s = S) {
+  const c = m.clock, k = s.clock, out = { over: [] };
+  const src = {
+    HSI: c.sources.HSI ? c.sources.HSI.mhz : 0,
+    HSE: k.hse,
+    LSI: c.sources.LSI ? c.sources.LSI.khz / 1000 : 0,
+    LSE: c.sources.LSE ? c.sources.LSE.khz / 1000 : 0,
+  };
+  const pin = c.pll ? c.pll.inputs[k.pllIn] : null;
+  out.pllIn = pin ? src[pin.source] / pin.div : 0;
+  out.PLLCLK = out.pllIn * (k.pllMul || 1);
+  out.SYSCLK = k.sys === 'PLLCLK' ? out.PLLCLK : src[k.sys];
+  if (out.SYSCLK > c.sysclk.max_mhz) out.over.push('SYSCLK');
+
+  const p = c.prescalers || {}, fp = firstPre(c);
+  out.HCLK = out.SYSCLK / (fp ? k.pre[fp] : 1);
+  if (fp && p[fp].max_mhz && out.HCLK > p[fp].max_mhz) out.over.push(fp);
+
+  for (const [name, v] of Object.entries(p)) {
+    if (name === fp) continue;
+    const base = v.source === 'PLLCLK' ? out.PLLCLK
+      : (v.source && v.source !== fp && out[v.source] !== undefined) ? out[v.source]
+      : out.HCLK;
+    out[name] = base / k.pre[name];
+    if (v.max_mhz && out[name] > v.max_mhz) out.over.push(name);
+    if (v.min_mhz && out[name] < v.min_mhz) out.over.push(name);
+    if (v.target_mhz && Math.abs(out[name] - v.target_mhz) > 0.01) out.over.push(name);
+  }
+  for (const d of c.derived || []) out[d.name] = out.HCLK / d.div;
+  if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) out.over.push('HSE');
+  return out;
+}
+
+// ===== app/engine/engine.js ===================================================
+// =============================================================================
+//  engine.js — the conflict engine. Everything the UI colours orange comes from
+//  here. A conflict is two different owners (two peripherals, or a peripheral
+//  and a manual GPIO) claiming one PHYSICAL pin. Pins shorted inside the package
+//  are one physical pin, so PD7 and PA4 on QFN20 collide with each other.
+//
+//  E = {
+//    pins:         { canonPin: { state:'set'|'conflict', label, claims:[{who,signal}] } },
+//    issues:       { periphId: [message, ...] },
+//    status:       { periphId: 'ok'|'warn'|'na'|'' },
+//    issueCount:   { periphId: n },
+//    conflicts:    [ 'PD7/PA4: TIM1_CH1 / USART1_TX', ... ]        // legacy string form
+//    conflictList: [ { pin, label, num, signals, owners, shorted, text } ]
+//  }
+// =============================================================================
+
+
+let E = null;
+
+function compute() {
+  const claims = {};                     // canonical pin -> [{who, signal}]
+  const issues = {};                     // pid -> [message]
+  const add = (pin, who, signal) => (claims[pin] ||= []).push({ who, signal });
+
+  for (const [pid, P] of Object.entries(M.peripherals)) {
+    const req = requiredSignals(pid);
+    if (!req.size) continue;
+    const r = (P.remaps || [])[S.periph[pid].remap] || { pins: {} };
+    for (const sig of req) {
+      const pin = r.pins[sig];
+      if (!pin) { (issues[pid] ||= []).push(`${sig}: not routed in "${r.name}"`); continue; }
+      if (!pinExists(pin)) { (issues[pid] ||= []).push(`${sig} needs ${pin}, which is not bonded on ${S.pkg}`); continue; }
+      add(canon(pin), pid, sigName(pid, sig));
+    }
+  }
+  for (const [pin, sig] of Object.entries(S.manual)) if (pinExists(pin)) add(canon(pin), 'GPIO', sig);
+
+  const pins = {}, conflictList = [];
+  for (const [pin, cl] of Object.entries(claims)) {
+    // one peripheral taking one pin twice (TIM2 CH1 + ETR on PA0) is not a conflict
+    const owners = [...new Set(cl.map(c => c.who))];
+    const conflict = owners.length > 1;
+    const shorted = groupOf(pin).length > 1;
+    pins[pin] = { state: conflict ? 'conflict' : 'set', label: cl.map(c => c.signal).join(' / '), claims: cl };
+    if (!conflict) continue;
+    const label = pinLabel(pin);
+    conflictList.push({
+      pin, label, num: pinNum(pin), owners, shorted,
+      signals: cl.map(c => c.signal),
+      text: `${label}: ${cl.map(c => c.signal).join(' / ')}${shorted ? ' (shorted inside the package)' : ''}`,
+    });
+    for (const c of cl) {
+      if (c.who === 'GPIO') continue;
+      const others = cl.filter(x => x !== c).map(x => x.signal).join(', ');
+      (issues[c.who] ||= []).push(`${c.signal} on ${label} conflicts with ${others}${shorted ? ' (pins are shorted inside the package)' : ''}`);
+    }
+  }
+
+  const status = {}, issueCount = {};
+  for (const pid of Object.keys(M.peripherals)) {
+    status[pid] = !isAvailable(pid) ? 'na' : issues[pid] ? 'warn' : isEnabled(pid) ? 'ok' : '';
+    issueCount[pid] = (issues[pid] || []).length;
+  }
+
+  E = {
+    pins, issues, status, issueCount, conflictList,
+    conflicts: conflictList.map(c => `${c.label}: ${c.signals.join(' / ')}`),
+  };
+  return E;
+}
+
+// Would picking this option collide? Returns '' or a short reason. The picker
+// shows it BEFORE the click, so a conflict is never a surprise.
+function previewAssign(pin, opt) {
+  if (!E) compute();
+  const cur = E.pins[canon(pin)];
+  if (opt.gpio || opt.reset) return cur && cur.claims.some(c => c.who !== 'GPIO') ? 'pin in use' : '';
+  const { periph, signal, remap } = opt;
+  const isCur = !!(cur
+    && cur.claims.some(c => c.who === periph && c.signal === sigName(periph, signal))
+    && S.periph[periph].remap === remap);
+  if (isCur) return '';
+  if (cur && cur.claims.some(c => c.who !== periph)) return 'pin in use';
+  if (S.periph[periph].remap !== remap && requiredSignals(periph).size) {
+    const r = M.peripherals[periph].remaps[remap];
+    const hit = [...requiredSignals(periph)]
+      .filter(sig => sig !== signal)
+      .map(sig => r.pins[sig])
+      .filter(px => px && E.pins[canon(px)] && E.pins[canon(px)].claims.some(c => c.who !== periph));
+    if (hit.length) return 'remap collides on ' + [...new Set(hit)].join(', ');
+  }
+  return '';
+}
+
+// Assign an option from the pin picker: either a plain GPIO mode, or a
+// peripheral signal (which also selects the remap that routes it to this pin).
+function assignSignal(pin, opt) {
+  if (opt.gpio) {
+    for (const n of groupOf(pin)) delete S.manual[n];
+    S.manual[pin] = opt.gpio;
+    S.gpio[pin] ||= {
+      mode: opt.gpio === 'GPIO_Output' ? 'Output Push Pull' : opt.gpio === 'GPIO_Analog' ? 'Analog' : 'Input',
+      pull: 'No pull', speed: 'Low', label: '',
+    };
+    return;
+  }
+  const { periph, signal, remap } = opt;
+  const P = M.peripherals[periph], st = S.periph[periph];
+  for (const n of groupOf(pin)) delete S.manual[n];
+  st.remap = remap;
+  // turn on the first setting choice that carries this signal (if none already does)
+  if (!requiredSignals(periph).has(signal)) {
+    outer: for (const s of P.settings || []) for (const c of s.choices) {
+      if ((c.signals || []).includes(signal)) {
+        if (s.type === 'checkboxes') st.settings[s.name].add(c.name); else st.settings[s.name] = c.name;
+        break outer;
+      }
+    }
+  }
+  S.sel = periph;
+}
+
+// Put a pin back to its reset state: drop the manual GPIO and switch off
+// whichever peripheral choices were driving it.
+function resetPin(pin) {
+  const cl = ((E && E.pins[canon(pin)]) || {}).claims || [];
+  for (const n of groupOf(pin)) { delete S.manual[n]; delete S.gpio[n]; }
+  for (const c of cl) {
+    if (c.who === 'GPIO') continue;
+    const P = M.peripherals[c.who], st = S.periph[c.who], sig = c.signal.slice(c.who.length + 1);
+    for (const s of P.settings || []) {
+      if (s.type === 'checkboxes') {
+        for (const ch of s.choices) if ((ch.signals || []).includes(sig)) st.settings[s.name].delete(ch.name);
+      } else {
+        const cur = s.choices.find(x => x.name === st.settings[s.name]);
+        if (cur && (cur.signals || []).includes(sig)) st.settings[s.name] = s.choices[0].name;
+      }
+    }
+  }
+}
+
+// ===== app/engine/project.js ==================================================
+// =============================================================================
+//  project.js — one project = one MCU + one package + every setting, saved as
+//  readable YAML (`.wchproj`). Pure: serialise/apply touch only M, S and PROJECT.
+//  The browser download and the file dialogs live in the app shell.
+// =============================================================================
+
+
+const PROJECT = { name: 'Untitled', variant: null, dirty: false };
+
+function setProject(p) { Object.assign(PROJECT, p); }
+
+function projectObject() {
+  const periph = {};
+  for (const [pid, st] of Object.entries(S.periph)) {
+    const settings = {};
+    for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
+    periph[pid] = { settings, remap: st.remap };
+  }
+  return {
+    wchproj: 1,
+    name: PROJECT.name,
+    saved: new Date().toISOString(),
+    mcu: M.mcu.name,
+    variant: PROJECT.variant,
+    package: S.pkg,
+    peripherals: periph,
+    gpio_manual: S.manual,
+    gpio_settings: S.gpio,
+    clock: S.clock,
+  };
+}
+
+function projectSerialize() {
+  return yamlDump(projectObject(), { noRefs: true, lineWidth: 120 });
+}
+
+// Restore a project. Throws with a human sentence if the MCU file is not loaded.
+function projectApply(src) {
+  const obj = typeof src === 'string' ? yamlLoad(src) : src;
+  if (!obj || obj.wchproj !== 1) throw new Error('Not a WCHCube project file');
+  const mcuSrc = MCU_FILES[obj.mcu];
+  if (!mcuSrc) throw new Error(`This project is for "${obj.mcu}", which is not loaded. Use "Open MCU file…" to load its YAML first, then open the project again.`);
+
+  loadMcu(mcuSrc);
+  PROJECT.name = obj.name || 'Untitled';
+  PROJECT.variant = obj.variant || null;
+  if (obj.package in M.packages) S.pkg = obj.package;
+  applyPackageRemaps();
+
+  for (const [pid, st] of Object.entries(obj.peripherals || {})) {
+    if (!S.periph[pid]) continue;
+    const P = M.peripherals[pid];
+    for (const s of P.settings || []) {
+      const v = (st.settings || {})[s.name];
+      if (v === undefined) continue;
+      if (s.type === 'checkboxes') S.periph[pid].settings[s.name] = new Set(Array.isArray(v) ? v : []);
+      else if (s.choices.some(c => c.name === v)) S.periph[pid].settings[s.name] = v;
+    }
+    if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
+  }
+  S.manual = obj.gpio_manual || {};
+  S.gpio = obj.gpio_settings || {};
+  if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
+  PROJECT.dirty = false;
+  return PROJECT;
+}
+
+// ===== app/engine/export.js ===================================================
+// =============================================================================
+//  export.js — text reports. Pure string building; no DOM, no file saving.
+//  First real output of the Generate button (Phase 3). C code generation will
+//  join these once the pin table is trusted.
+// =============================================================================
+
+
+
+
+const num = v => (Math.round(v * 1000) / 1000).toString();
+
+// One row per physical pin of the current package, in pin-number order.
+function pinRows() {
+  const e = E || compute();
+  const rows = [];
+  for (const [n, names] of Object.entries(M._phys[S.pkg])) {
+    const name = names[0];
+    const info = e.pins[name];
+    const g = S.gpio[name] || {};
+    const type = pinType(name);
+    rows.push({
+      num: n === '0' ? '' : n,
+      sortNum: n === '0' ? 1e6 : +n,
+      name: names.join('/'),
+      type,
+      shorted: names.length > 1,
+      signal: info ? info.label : (type === 'io' ? '' : type.toUpperCase()),
+      mode: info ? (g.mode || (info.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : 'Input')) : '',
+      pull: info ? (g.pull || 'No pull') : '',
+      speed: info ? (g.speed || 'Low') : '',
+      label: g.label || '',
+      conflict: !!(info && info.state === 'conflict'),
+    });
+  }
+  return rows.sort((a, b) => a.sortNum - b.sortNum);
+}
+
+const COLS = ['Pin', 'Name', 'Signal', 'Mode', 'Pull', 'Speed', 'User label', 'Note'];
+const note = r => [r.conflict ? 'CONFLICT' : '', r.shorted ? 'shorted pins' : '', r.type !== 'io' ? r.type : ''].filter(Boolean).join('; ');
+
+function pinTableMarkdown() {
+  const rows = pinRows();
+  const head = `# ${M.mcu.name} — pinout (${S.pkg})\n\n`;
+  const body = [
+    `| ${COLS.join(' | ')} |`,
+    `|${COLS.map(() => '---').join('|')}|`,
+    ...rows.map(r => `| ${[r.num, r.name, r.signal, r.mode, r.pull, r.speed, r.label, note(r)].map(v => String(v).replace(/\|/g, '\\|')).join(' | ')} |`),
+  ].join('\n');
+  const conflicts = (E || compute()).conflictList;
+  const tail = conflicts.length
+    ? `\n\n**${conflicts.length} pin conflict${conflicts.length > 1 ? 's' : ''}:**\n` + conflicts.map(c => `- ${c.text}`).join('\n') + '\n'
+    : '\n\nNo pin conflicts.\n';
+  return head + body + tail;
+}
+
+function pinTableCsv() {
+  const esc = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  return [COLS.join(','), ...pinRows().map(r => [r.num, r.name, r.signal, r.mode, r.pull, r.speed, r.label, note(r)].map(esc).join(','))].join('\n') + '\n';
+}
+
+function clockSummaryMarkdown() {
+  if (!M.clock) return `# ${M.mcu.name} — clocks\n\nThis MCU file has no clock section.\n`;
+  const c = M.clock, k = S.clock, r = clockCalc();
+  const fp = firstPre(c);
+  const lines = [`# ${M.mcu.name} — clock configuration`, '', '| Node | Setting | Frequency |', '|---|---|---|'];
+  if (c.sources.HSI) lines.push(`| HSI | fixed | ${num(c.sources.HSI.mhz)} MHz |`);
+  if (c.sources.HSE) lines.push(`| HSE | crystal | ${num(k.hse)} MHz |`);
+  if (c.sources.LSI) lines.push(`| LSI | fixed | ${num(c.sources.LSI.khz)} kHz |`);
+  if (c.pll) lines.push(`| PLL | ${c.pll.inputs[k.pllIn].name} × ${k.pllMul} | ${num(r.PLLCLK)} MHz |`);
+  lines.push(`| SYSCLK | source ${k.sys} | ${num(r.SYSCLK)} MHz |`);
+  if (fp) lines.push(`| HCLK | ${fp} /${k.pre[fp]} | ${num(r.HCLK)} MHz |`);
+  for (const [n, v] of Object.entries(c.prescalers || {})) {
+    if (n === fp) continue;
+    lines.push(`| ${n} | /${k.pre[n]}${v.source ? ` from ${v.source}` : ''} | ${num(r[n])} MHz |`);
+  }
+  for (const d of c.derived || []) lines.push(`| ${d.name} | HCLK /${d.div} | ${num(r[d.name])} MHz |`);
+  lines.push('');
+  lines.push(r.over.length ? `**Out of specification: ${r.over.join(', ')}**` : 'All clocks within specification.');
+  lines.push('');
+  return lines.join('\n');
+}
+
+// Everything the Generate button can produce right now, as {filename: text}.
+function generateAll() {
+  const base = `${M.mcu.name}_${S.pkg}`;
+  return {
+    [`${base}_pinout.md`]: pinTableMarkdown(),
+    [`${base}_pinout.csv`]: pinTableCsv(),
+    [`${base}_clocks.md`]: clockSummaryMarkdown(),
+  };
+}
+</script>
 
 <div class="app">
   <div class="menubar">
@@ -1514,7 +2169,7 @@ clock:
           <button class="ctab" data-ctab="param">Parameter Settings</button>
         </div>
         <div class="cbody" id="cbody"></div>
-        <div class="foot">Click a pin on the chip to assign a signal. Right-click a pin to reset it. Drag to pan, wheel to zoom.</div>
+        <div class="foot">Click a pin to assign a signal · right-click for label &amp; reset · <span class="kbd">←↑↓→</span> move <span class="kbd">Enter</span> open <span class="kbd">L</span> label <span class="kbd">Del</span> reset · drag to pan, wheel to zoom.</div>
       </div>
     </div>
 
@@ -1527,6 +2182,7 @@ clock:
         <button class="ic" id="z-out" title="Zoom out">⊖</button>
         <select id="pkgsel" title="Package"></select>
         <input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px">
+        <label class="flt" title="Hide pins that have no signal and no user label"><input type="checkbox" id="only-mod">Only modified</label>
         <div class="spacer"></div>
         <div class="unused">Unused GPIOs:<b id="unused">0 / 0</b></div>
       </div>
@@ -1560,190 +2216,63 @@ clock:
 'use strict';
 /* =============================================================================
    WCHCube — single-file app
-   Sections:  1 data loading   2 model   3 engine (claims/conflicts)
-              4 chip render    5 tree    6 centre panel   7 clock tab   8 glue
+   Engine (model, conflicts, clocks, projects, exports): app/engine/*.js
+   This file:  1 data loading (DOM)  4 chip render  5 tree  6 centre panel
+               7 clock tab  7b project dialogs  8 glue
    ========================================================================== */
 
-// ---------- 1. data loading ---------------------------------------------------
-const PACKAGES = {};
-for (const p of jsyaml.load(document.getElementById('yaml-packages').textContent).packages) PACKAGES[p.id] = p;
+// ---------- 1. data loading (DOM side) ----------------------------------------
+// The model, conflict engine, clock maths, project and export code live in
+// app/engine/*.js and are inlined above by build.py, so every name they export is
+// a global here: M, S, E, PACKAGES, MCU_FILES, compute(), assignSignal(),
+// resetPin(), requiredSignals(), isAvailable(), clockCalc(), projectSerialize()...
+// Sections 1-3 used to hold that code; only the DOM plumbing is left.
+loadPackages(jsyaml.load(document.getElementById('yaml-packages').textContent));
+document.querySelectorAll('script[id^="yaml-mcu-"]').forEach(s => {
+  try { registerMcuFile(s.textContent); } catch (e) { console.error('bad MCU file', s.id, e); }
+});
 
-const MCU_FILES = {};           // mcu.name -> yaml text (bundled + anything opened from disk)
-document.querySelectorAll('script[id^="yaml-mcu-"]').forEach(s => { try { const y = jsyaml.load(s.textContent); MCU_FILES[y.mcu.name] = s.textContent; } catch (e) { console.error('bad MCU file', s.id, e); } });
-const PROJECT = { name: 'Untitled', variant: null, dirty: false };
-
-let M = null;                   // parsed mcu yaml
-let S = null;                   // state
-
-function loadMcu(yamlText) {
-  const y = jsyaml.load(yamlText);
-  if (!y || !y.mcu || !y.packages || !y.pins || !y.peripherals) throw new Error('Not an MCU file (needs mcu, packages, pins, peripherals)');
-  M = y; M._src = yamlText; MCU_FILES[y.mcu.name] ||= yamlText;
-  // derived: pin -> [{periph, signal, remapIdx}]
-  M._pinSignals = {};
-  for (const [pid, P] of Object.entries(M.peripherals)) {
-    (P.remaps || []).forEach((r, ri) => {
-      for (const [sig, pin] of Object.entries(r.pins || {})) {
-        (M._pinSignals[pin] ||= []).push({ periph: pid, signal: sig, remap: ri });
-      }
-    });
-  }
-  // physical pin map per package: num -> [names]; alias name -> canonical (first name of a shorted group)
-  M._phys = {}; M._alias = {};
-  for (const [pk, map] of Object.entries(M.packages)) {
-    M._phys[pk] = {}; M._alias[pk] = {};
-    for (const [num, v] of Object.entries(map)) {
-      const names = Array.isArray(v) ? v : [v];
-      M._phys[pk][num] = names;
-      for (const n of names) M._alias[pk][n] = names[0];
-    }
-  }
-  const pkgs = Object.keys(M.packages);
-  S = {
-    pkg: pkgs.includes(M.mcu.default_package) ? M.mcu.default_package : pkgs[0],
-    periph: {},                 // pid -> { settings:{name: choice | Set}, remap: idx }
-    manual: {},                 // pin -> 'GPIO_Output' etc
-    gpio: {},                   // pin -> { mode, pull, speed, label }
-    sel: null,                  // selected peripheral id
-    selPin: null,
-    clock: defaultClock(y.clock),
-    zoom: 1, panX: 0, panY: 0,
-  };
-  for (const [pid, P] of Object.entries(M.peripherals)) {
-    const st = { settings: {}, remap: 0 };
-    for (const s of P.settings || []) {
-      const def = s.choices.find(c => c.default);
-      st.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;
-    }
-    S.periph[pid] = st;
-  }
-  applyPackageRemaps();
+// Load an MCU and bring the shell (breadcrumb, part info, package list) with it.
+function openMcu(source) { loadMcu(source); syncMcuUi(); renderAll(true); }
+function syncMcuUi() {
   document.getElementById('crumb-mcu').textContent = M.mcu.name;
   document.getElementById('mcu-meta').textContent = `${M.mcu.core || ''}  ·  ${M.mcu.flash_kb || '?'} KB flash  ·  ${M.mcu.sram_kb || '?'} KB SRAM`;
-  const ps = document.getElementById('pkgsel'); ps.innerHTML = '';
-  for (const k of pkgs) { const o = document.createElement('option'); o.value = k; o.textContent = k + (PACKAGES[k] ? '' : ' (no geometry!)'); ps.appendChild(o); }
+  const ps = document.getElementById('pkgsel');
+  ps.innerHTML = '';
+  for (const k of Object.keys(M.packages)) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = k + (PACKAGES[k] ? '' : ' (no geometry!)');
+    ps.appendChild(o);
+  }
   ps.value = S.pkg;
-  renderAll(true);
-}
-
-// ---------- 2. model helpers --------------------------------------------------
-const pkgPins = () => M._phys[S.pkg];                          // {num: [names]}
-const canon = name => M._alias[S.pkg][name] || name;           // shorted pins share one canonical name
-const pinExists = name => name in M._alias[S.pkg];
-const pinType = name => (M.pins[name] || {}).type || 'io';
-const pinLabel = name => { const num = pinNum(name); return num === undefined ? name : pkgPins()[num].join('/'); };
-const pinNum = name => Object.keys(pkgPins()).find(n => pkgPins()[n].includes(name));
-const groupOf = name => { const num = pinNum(name); return num === undefined ? [name] : pkgPins()[num]; };
-function applyPackageRemaps() {
-  for (const [pid, P] of Object.entries(M.peripherals)) if (P.remap_by_package && S.pkg in P.remap_by_package) S.periph[pid].remap = P.remap_by_package[S.pkg];
-}
-const sigName = (pid, sig) => `${pid}_${sig}`;
-const GPIO_SIGS = ['GPIO_Input', 'GPIO_Output', 'GPIO_Analog', 'GPIO_EXTI'];
-
-// which signals a peripheral needs given its current settings
-function requiredSignals(pid) {
-  const P = M.peripherals[pid], st = S.periph[pid], out = new Set();
-  for (const s of P.settings || []) {
-    const v = st.settings[s.name];
-    for (const c of s.choices) {
-      const on = s.type === 'checkboxes' ? v.has(c.name) : v === c.name;
-      if (on) (c.signals || []).forEach(x => out.add(x));
-    }
-  }
-  return out;
-}
-function isEnabled(pid) {
-  const P = M.peripherals[pid], st = S.periph[pid];
-  for (const s of P.settings || []) {
-    const v = st.settings[s.name];
-    if (s.type === 'checkboxes' ? v.size : v !== s.choices[0].name) return true;
-  }
-  return false;
-}
-// can any non-default choice of this peripheral be satisfied on this package?
-function isAvailable(pid) {
-  const P = M.peripherals[pid];
-  if (!P.remaps || !P.remaps.length) return true;
-  for (const s of P.settings || []) for (const c of s.choices) {
-    if (!c.signals) continue;
-    if (P.remaps.some(r => c.signals.every(sig => r.pins[sig] && pinExists(r.pins[sig])))) return true;
-  }
-  return !((P.settings || []).some(s => s.choices.some(c => c.signals)));
-}
-
-// ---------- 3. engine ---------------------------------------------------------
-let E = null;  // engine result
-function compute() {
-  const claims = {};           // pin -> [{who, signal}]
-  const issues = {};           // pid -> [msg]
-  const add = (pin, who, signal) => (claims[pin] ||= []).push({ who, signal });
-  for (const [pid, P] of Object.entries(M.peripherals)) {
-    const req = requiredSignals(pid); if (!req.size) continue;
-    const r = (P.remaps || [])[S.periph[pid].remap] || { pins: {} };
-    for (const sig of req) {
-      const pin = r.pins[sig];
-      if (!pin) { (issues[pid] ||= []).push(`${sig}: not routed in "${r.name}"`); continue; }
-      if (!pinExists(pin)) { (issues[pid] ||= []).push(`${sig} needs ${pin}, which is not bonded on ${S.pkg}`); continue; }
-      add(canon(pin), pid, sigName(pid, sig));
-    }
-  }
-  for (const [pin, sig] of Object.entries(S.manual)) if (pinExists(pin)) add(canon(pin), 'GPIO', sig);
-  const pins = {};             // pin -> {state, label, claims}
-  for (const [pin, cl] of Object.entries(claims)) {
-    // same pin, same peripheral, two signals (e.g. TIM2 CH1 + ETR on PA0) is not a conflict
-    const owners = new Set(cl.map(c => c.who));
-    const conflict = owners.size > 1;
-    const shorted = groupOf(pin).length > 1;
-    pins[pin] = { state: conflict ? 'conflict' : 'set', label: cl.map(c => c.signal).join(' / '), claims: cl };
-    if (conflict) for (const c of cl) if (c.who !== 'GPIO') (issues[c.who] ||= []).push(`${c.signal} on ${pinLabel(pin)} conflicts with ${cl.filter(x => x !== c).map(x => x.signal).join(', ')}${shorted ? ' (pins are shorted inside the package)' : ''}`);
-  }
-  const conflicts = Object.entries(pins).filter(([, v]) => v.state === 'conflict').map(([k, v]) => `${pinLabel(k)}: ${v.label}`);
-  const status = {};
-  for (const pid of Object.keys(M.peripherals)) {
-    status[pid] = !isAvailable(pid) ? 'na' : issues[pid] ? 'warn' : isEnabled(pid) ? 'ok' : '';
-  }
-  E = { pins, issues, status, conflicts };
-  return E;
-}
-
-// assign a signal to a pin from the picker
-function assignSignal(pin, opt) {
-  if (opt.gpio) { S.manual[pin] = opt.gpio; S.gpio[pin] ||= { mode: opt.gpio === 'GPIO_Output' ? 'Output Push Pull' : opt.gpio === 'GPIO_Analog' ? 'Analog' : 'Input', pull: 'No pull', speed: 'Low', label: '' }; return; }
-  const { periph, signal, remap } = opt;
-  const P = M.peripherals[periph], st = S.periph[periph];
-  delete S.manual[pin];
-  st.remap = remap;
-  // turn on the first setting choice that carries this signal (if none already does)
-  if (!requiredSignals(periph).has(signal)) {
-    outer: for (const s of P.settings || []) for (const c of s.choices) {
-      if ((c.signals || []).includes(signal)) {
-        if (s.type === 'checkboxes') st.settings[s.name].add(c.name); else st.settings[s.name] = c.name;
-        break outer;
-      }
-    }
-  }
-  S.sel = periph;
-}
-function resetPin(pin) {
-  delete S.manual[pin]; delete S.gpio[pin];
-  const cl = (E.pins[canon(pin)] || {}).claims || [];
-  for (const n of groupOf(pin)) { delete S.manual[n]; delete S.gpio[n]; }
-  for (const c of cl) {
-    if (c.who === 'GPIO') continue;
-    const P = M.peripherals[c.who], st = S.periph[c.who], sig = c.signal.slice(c.who.length + 1);
-    for (const s of P.settings || []) {
-      if (s.type === 'checkboxes') { for (const ch of s.choices) if ((ch.signals || []).includes(sig)) st.settings[s.name].delete(ch.name); }
-      else { const cur = s.choices.find(x => x.name === st.settings[s.name]); if (cur && (cur.signals || []).includes(sig)) st.settings[s.name] = s.choices[0].name; }
-    }
-  }
 }
 
 // ---------- 4. chip render ----------------------------------------------------
 const svg = document.getElementById('svg');
-const PITCH = 22, PLEN = 40, MARGIN = 26, LABEL = 190;
+const PITCH = 22, PLEN = 40, MARGIN = 26;
+let LABEL = 190;                 // room outside the chip for signal labels - grows with the longest label
 let geom = null;
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const attr = s => esc(s).replace(/"/g, '&quot;');
+// UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
+const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastW: 0, lastH: 0 };
+
+const userLabel = name => ((S.gpio[name] || {}).label || '').trim();
+const pinModified = name => !!(E && E.pins[name]) || !!userLabel(name);
+// how much horizontal room the longest label needs, so nothing is clipped at fit-zoom
+function labelRoom() {
+  if (!E) return 190;
+  let n = 8;
+  for (const grp of Object.values(pkgPins())) {
+    const nm = grp[0], i = E.pins[nm];
+    if (i) n = Math.max(n, i.label.length);
+    const ul = userLabel(nm); if (ul) n = Math.max(n, ul.length);
+  }
+  return Math.max(120, Math.min(340, 34 + n * 5.9));
+}
 
 function layout() {
+  LABEL = labelRoom();
   const pk = PACKAGES[S.pkg] || { kind: 'quad', pins: Object.keys(pkgPins()).length };
   const n = pk.pins, pins = [];
   if (pk.kind === 'quad') {
@@ -1774,7 +2303,10 @@ function renderChip() {
   const names = pkgPins();
   const g = [];
   const epad = names[0];
-  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  // pins that became conflicted since the last paint get a one-shot pulse
+  const nowConf = new Set(Object.entries(E.pins).filter(([, v]) => v.state === 'conflict').map(([k]) => k));
+  const fresh = new Set([...nowConf].filter(n => !U.prevConflicts.has(n)));
+  U.prevConflicts = nowConf;
   g.push(`<g id="root" transform="translate(${S.panX},${S.panY}) scale(${S.zoom})">`);
   const b = geom.body;
   g.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="var(--chip)" rx="4"/>`);
@@ -1790,10 +2322,14 @@ function renderChip() {
   for (const p of geom.pins) {
     const grp = names[p.num]; if (!grp) continue;
     const name = grp[0], shown = grp.join('/');
-    const info = E.pins[name], t = pinType(name);
+    const info = E.pins[name], t = pinType(name), ul = userLabel(name);
+    const hidden = U.onlyMod && !pinModified(name);
     let cls = 'pin ' + (t === 'io' ? 'io' : t);
     if (info) cls += ' ' + info.state;
+    if (info && info.state === 'conflict' && fresh.has(name)) cls += ' newconflict';
     if (S.selPin === name) cls += ' selected';
+    if (U.focus === name) cls += ' focused';
+    if (hidden) cls += ' dim';
     const w = vert(p) ? PITCH - 3 : PLEN, h = vert(p) ? PLEN : PITCH - 3;
     g.push(`<g class="${cls}" data-pin="${esc(name)}" data-num="${p.num}">`);
     g.push(`<rect x="${p.x}" y="${p.y}" width="${w}" height="${h}" rx="2"/>`);
@@ -1806,14 +2342,21 @@ function renderChip() {
     if (numPos) g.push(`<text class="pinnum" x="${numPos[0]}" y="${numPos[1]}" text-anchor="${numPos[2]}">${p.num}</text>`);
     else g.push(`<text class="pinnum" transform="translate(${cx + 2.5},${p.side === 3 ? p.y - 6 : p.y + h + 6}) rotate(-90)" text-anchor="${p.side === 3 ? 'start' : 'end'}">${p.num}</text>`);
     g.push('</g>');
-    // signal label
-    if (info) {
-      const lc = 'siglabel' + (info.state === 'conflict' ? ' conflict' : '');
-      const off = 22;
-      if (p.side === 0) g.push(`<text class="${lc}" x="${p.x - off}" y="${cy + 4}" text-anchor="end">${esc(info.label)}</text>`);
-      if (p.side === 2) g.push(`<text class="${lc}" x="${p.x + w + off}" y="${cy + 4}" text-anchor="start">${esc(info.label)}</text>`);
-      if (p.side === 3) g.push(`<text class="${lc}" transform="translate(${cx + 4},${p.y - off}) rotate(-90)" text-anchor="start">${esc(info.label)}</text>`);
-      if (p.side === 1) g.push(`<text class="${lc}" transform="translate(${cx + 4},${p.y + h + off}) rotate(-90)" text-anchor="end">${esc(info.label)}</text>`);
+    // labels outside the chip: signal on the first line, user label under it
+    if ((info || ul) && !hidden) {
+      const lc = 'siglabel' + (info && info.state === 'conflict' ? ' conflict' : '');
+      const off = 22, lines = [];
+      if (info) lines.push([lc, info.label]);
+      if (ul) lines.push(['siglabel userlabel', ul]);
+      lines.forEach(([klass, txt], li) => {
+        const dy = lines.length > 1 ? (li === 0 ? 0 : 10.5) : 4;      // two lines straddle the pin centre
+        const y = cy + (lines.length > 1 ? dy : 4);
+        const perp = li * 11;
+        if (p.side === 0) g.push(`<text class="${klass}" x="${p.x - off}" y="${y}" text-anchor="end">${esc(txt)}</text>`);
+        if (p.side === 2) g.push(`<text class="${klass}" x="${p.x + w + off}" y="${y}" text-anchor="start">${esc(txt)}</text>`);
+        if (p.side === 3) g.push(`<text class="${klass}" transform="translate(${cx + 4 + perp},${p.y - off}) rotate(-90)" text-anchor="start">${esc(txt)}</text>`);
+        if (p.side === 1) g.push(`<text class="${klass}" transform="translate(${cx + 4 + perp},${p.y + h + off}) rotate(-90)" text-anchor="end">${esc(txt)}</text>`);
+      });
     }
   }
   g.push('</g>');
@@ -1822,11 +2365,41 @@ function renderChip() {
   const io = Object.entries(names).filter(([n, g]) => n !== '0' && pinType(g[0]) === 'io').map(([, g]) => g[0]);
   const used = io.filter(n => E.pins[n]).length;
   document.getElementById('unused').textContent = `${io.length - used} / ${io.length}`;
+  decoratePkgSel();
+  // the label margin grows and shrinks with the longest label, so the drawing changes size as
+  // signals are assigned. Re-fit automatically until the user pans or zooms themselves.
+  const grew = geom.W !== U.lastW || geom.H !== U.lastH;
+  U.lastW = geom.W; U.lastH = geom.H;
+  if (grew && U.autoFit) fitChip();
+}
+
+// package selector shows I/O count and the part numbers that use that package
+function pkgIoCount(pk) {
+  let n = 0;
+  for (const [num, v] of Object.entries(M._phys[pk] || {})) {
+    if (num === '0') continue;
+    const nm = Array.isArray(v) ? v[0] : v;
+    if (((M.pins[nm] || {}).type || 'io') === 'io') n++;
+  }
+  return n;
+}
+function decoratePkgSel() {
+  const ps = document.getElementById('pkgsel');
+  for (const o of ps.options) {
+    const pk = o.value, bits = [`${pkgIoCount(pk)} I/O`];
+    const vs = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === pk).map(([v]) => v);
+    if (vs.length) bits.push(vs.slice(0, 2).join(', ') + (vs.length > 2 ? ` +${vs.length - 2}` : ''));
+    if (!PACKAGES[pk]) bits.push('no drawing');
+    const txt = `${pk} · ${bits.join(' · ')}`;
+    if (o.textContent !== txt) o.textContent = txt;
+    o.title = txt;
+  }
 }
 
 function fitChip() {
   const c = document.getElementById('canvas'), W = c.clientWidth, H = c.clientHeight;
   if (!geom) geom = layout();
+  U.autoFit = true;
   S.zoom = Math.min(W / geom.W, H / geom.H) * 0.98;
   S.panX = (W - geom.W * S.zoom) / 2; S.panY = (H - geom.H * S.zoom) / 2;
   applyTransform();
@@ -1835,6 +2408,7 @@ function applyTransform() {
   const r = document.getElementById('root'); if (r) r.setAttribute('transform', `translate(${S.panX},${S.panY}) scale(${S.zoom})`);
 }
 function zoomAt(f, cx, cy) {
+  U.autoFit = false;                       // the user took control of the view
   const nz = Math.max(.15, Math.min(6, S.zoom * f));
   S.panX = cx - (cx - S.panX) * nz / S.zoom; S.panY = cy - (cy - S.panY) * nz / S.zoom; S.zoom = nz; applyTransform();
 }
@@ -1843,14 +2417,14 @@ function zoomAt(f, cx, cy) {
 (() => {
   const c = document.getElementById('canvas'); let drag = null;
   c.addEventListener('mousedown', e => { if (e.button !== 0) return; drag = { x: e.clientX, y: e.clientY, px: S.panX, py: S.panY, moved: false }; });
-  window.addEventListener('mousemove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; c.classList.add('grabbing'); } S.panX = drag.px + dx; S.panY = drag.py + dy; applyTransform(); });
+  window.addEventListener('mousemove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; U.autoFit = false; c.classList.add('grabbing'); } S.panX = drag.px + dx; S.panY = drag.py + dy; applyTransform(); });
   window.addEventListener('mouseup', e => {
     if (!drag) return; const moved = drag.moved; drag = null; c.classList.remove('grabbing');
     if (moved) return;
     const pinEl = e.target.closest && e.target.closest('.pin');
-    if (pinEl && c.contains(pinEl)) openPicker(pinEl.dataset.pin, e.clientX, e.clientY); else closePicker();
+    if (pinEl && c.contains(pinEl)) { U.focus = pinEl.dataset.pin; openPicker(pinEl.dataset.pin, e.clientX, e.clientY); } else closePicker();
   });
-  c.addEventListener('contextmenu', e => { const pinEl = e.target.closest('.pin'); if (!pinEl) return; e.preventDefault(); resetPin(pinEl.dataset.pin); renderAll(); toast(`${pinEl.dataset.pin} reset`); });
+  c.addEventListener('contextmenu', e => { const pinEl = e.target.closest('.pin'); if (!pinEl) return; e.preventDefault(); U.focus = pinEl.dataset.pin; openPinMenu(pinEl.dataset.pin, e.clientX, e.clientY); });
   c.addEventListener('wheel', e => { e.preventDefault(); const r = c.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
   c.addEventListener('mouseover', e => { const p = e.target.closest('.pin'); if (p) p.classList.add('hover'); });
   c.addEventListener('mouseout', e => { const p = e.target.closest('.pin'); if (p) p.classList.remove('hover'); });
@@ -1873,7 +2447,7 @@ function openPicker(pin, cx, cy) {
   if (grp.length > 1) h += `<div class="note" style="color:var(--bad)">${grp.join(' and ')} are shorted inside this package — one physical pin, never both outputs.</div>`;
   for (const n of grp) if (M.pins[n] && M.pins[n].notes) h += `<div class="note">${n}: ${M.pins[n].notes}</div>`;
   if (cur) h += `<div class="note" style="color:${cur.state === 'conflict' ? 'var(--bad)' : 'var(--ok)'}">Currently: ${cur.label}${cur.state === 'conflict' ? ' — CONFLICT' : ''}</div>`;
-  const opt = (label, data, sub = '', isCur = false, na = false) => `<div class="opt${isCur ? ' cur' : ''}${na ? ' na' : ''}" data-opt='${JSON.stringify(data).replace(/'/g, '&#39;')}'>${label}<small>${sub}</small></div>`;
+  const opt = (label, data, sub = '', isCur = false, na = false) => `<div class="opt${isCur ? ' cur' : ''}${na ? ' na' : ''}" data-opt='${JSON.stringify(data).replace(/'/g, '&#39;')}' data-label="${attr(label)}"><span class="lbl">${label}</span><small>${sub}</small></div>`;
   h += opt('Reset state', { reset: true }, '', !cur);
   h += `<div class="grp">GPIO</div>`;
   for (const g of GPIO_SIGS) h += opt(g, { gpio: g }, '', S.manual[pin] === g);
@@ -1908,13 +2482,125 @@ function openPicker(pin, cx, cy) {
 }
 function resetPinManualOnly(pin) { delete S.manual[pin]; }
 function closePicker() { const p = document.getElementById('picker'); if (p) p.remove(); if (S) S.selPin = null; }
-window.addEventListener('keydown', e => { if (e.key === 'Escape') { closePicker(); renderChip(); } });
+window.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); closePicker(); renderChip(); } });
+
+// ---------- 4b. pin context menu, user labels, keyboard navigation --------------
+function closeCtx() { const m = document.getElementById('ctxmenu'); if (m) m.remove(); }
+function placeFloat(d, cx, cy) {
+  document.body.appendChild(d);
+  const W = d.offsetWidth, H = d.offsetHeight;
+  d.style.left = Math.max(4, Math.min(cx + 4, window.innerWidth - W - 8)) + 'px';
+  d.style.top = Math.max(4, Math.min(cy + 4, window.innerHeight - H - 8)) + 'px';
+}
+// thin setters so the UI never pokes at S in more than one place (AGENT-2: adopt these into engine/model.js)
+function setGpioField(pin, key, val) { (S.gpio[pin] ||= {})[key] = val; }
+function selectPeripheral(pid) { if (pid === 'GPIO' || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
+
+function openPinMenu(pin, cx, cy) {
+  closePicker(); closeCtx();
+  const grp = groupOf(pin), num = pinNum(pin), info = E.pins[canon(pin)], ul = userLabel(pin), io = pinType(pin) === 'io';
+  const d = document.createElement('div'); d.className = 'ctxmenu'; d.id = 'ctxmenu';
+  d.innerHTML =
+    `<div class="hd">${esc(grp.join(' / '))} <span style="opacity:.7">pin ${num}</span></div>` +
+    `<div class="mi" data-a="label">${ul ? 'Edit user label…' : 'Set user label…'}<small>${ul ? esc(ul) : '<span class="kb">L</span>'}</small></div>` +
+    (ul ? `<div class="mi" data-a="clear">Clear user label</div>` : '') +
+    `<div class="sep"></div>` +
+    `<div class="mi${io ? '' : ' dis'}" data-a="assign">Assign signal…<small class="kb">Enter</small></div>` +
+    `<div class="mi${info ? '' : ' dis'}" data-a="reset">Reset pin<small>${info ? esc(info.label) : 'nothing assigned'}</small></div>` +
+    `<div class="sep"></div>` +
+    `<div class="mi" data-a="copy">Copy pin name<small>${esc(grp.join('/'))}</small></div>`;
+  d.addEventListener('click', ev => {
+    const mi = ev.target.closest('.mi'); if (!mi || mi.classList.contains('dis')) return;
+    const a = mi.dataset.a;
+    closeCtx();
+    if (a === 'label') return openLabelEditor(pin, cx, cy);
+    if (a === 'clear') { setGpioField(pin, 'label', ''); renderAll(); toast(`${pin}: label cleared`); return; }
+    if (a === 'assign') return openPicker(pin, cx, cy);
+    if (a === 'reset') { resetPin(pin); renderAll(); toast(`${pin} reset`); return; }
+    if (a === 'copy') {
+      const txt = grp.join('/');
+      if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast(`Copied "${txt}"`), () => toast(txt));
+      else toast(txt);
+    }
+  });
+  placeFloat(d, cx, cy);
+}
+
+function openLabelEditor(pin, cx, cy) {
+  closeCtx(); closePicker();
+  const d = document.createElement('div'); d.className = 'ctxmenu'; d.id = 'ctxmenu';
+  d.innerHTML = `<div class="hd">User label — ${esc(pinLabel(pin))}</div>` +
+    `<input id="ctx-label" maxlength="32" placeholder="e.g. LED_STATUS" value="${attr(userLabel(pin))}">` +
+    `<div class="mi" data-a="ok">Apply<small class="kb">Enter</small></div>`;
+  placeFloat(d, cx, cy);
+  const inp = d.querySelector('#ctx-label');
+  const apply = () => {
+    const v = inp.value.trim();
+    setGpioField(pin, 'label', v);
+    closeCtx(); renderAll();
+    toast(v ? `${pin} labelled "${v}"` : `${pin}: label cleared`);
+  };
+  inp.addEventListener('keydown', ev => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); closeCtx(); }
+  });
+  d.querySelector('[data-a="ok"]').onclick = apply;
+  inp.focus(); inp.select();
+}
+window.addEventListener('mousedown', e => { if (!e.target.closest || !e.target.closest('.ctxmenu')) closeCtx(); }, true);
+
+// ---- keyboard: arrows move between pins, Enter opens the picker, L labels, Del resets
+function pinAt(name) { return geom ? geom.pins.find(p => (pkgPins()[p.num] || [])[0] === name) : null; }
+function focusRect() {
+  if (!U.focus) return null;
+  const el = svg.querySelector(`.pin[data-pin="${window.CSS && CSS.escape ? CSS.escape(U.focus) : U.focus}"] rect`);
+  return el ? el.getBoundingClientRect() : null;
+}
+function moveFocus(dx, dy) {
+  if (!geom) return;
+  const usable = geom.pins.filter(p => pkgPins()[p.num]);
+  if (!usable.length) return;
+  const cur = U.focus ? pinAt(U.focus) : null;
+  if (!cur) { U.focus = pkgPins()[usable[0].num][0]; renderChip(); return; }
+  let best = null, score = Infinity;
+  for (const p of usable) {
+    if (p === cur) continue;
+    const along = (p.x - cur.x) * dx + (p.y - cur.y) * dy;
+    const perp = Math.abs((p.x - cur.x) * dy - (p.y - cur.y) * dx);
+    if (along <= 2) continue;
+    const s = along + perp * 4;
+    if (s < score) { score = s; best = p; }
+  }
+  if (!best) return;
+  U.focus = pkgPins()[best.num][0];
+  renderChip();
+  const grp = groupOf(U.focus), i = E.pins[canon(U.focus)];
+  toast(`${grp.join('/')} (pin ${pinNum(U.focus)})${i ? ' — ' + i.label : ''}`);
+}
+const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+window.addEventListener('keydown', e => {
+  if (!M || !E) return;
+  if (!document.getElementById('view-pinout').classList.contains('active')) return;
+  if (document.querySelector('.modal.show')) return;
+  const el = e.target, tag = (el.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || el.isContentEditable) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (ARROWS[e.key]) { e.preventDefault(); closeCtx(); closePicker(); moveFocus(...ARROWS[e.key]); return; }
+  if (!U.focus) return;
+  if (e.key === 'Enter') { e.preventDefault(); const r = focusRect(); if (r) openPicker(U.focus, r.right, r.bottom); return; }
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); resetPin(U.focus); renderAll(); toast(`${U.focus} reset`); return; }
+  if (e.key === 'l' || e.key === 'L') { e.preventDefault(); const r = focusRect(); if (r) openLabelEditor(U.focus, r.right, r.bottom); }
+});
+document.getElementById('only-mod').addEventListener('change', e => { U.onlyMod = e.target.checked; renderChip(); toast(U.onlyMod ? 'Showing only pins with a signal or a label' : 'Showing all pins'); });
 
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
 const collapsed = new Set();
 function renderTree() {
   const q = document.getElementById('tree-search').value.trim().toLowerCase();
+  const conf = {};                    // pid -> how many physical pins it fights over
+  for (const v of Object.values(E.pins)) if (v.state === 'conflict') for (const c of v.claims) conf[c.who] = (conf[c.who] || 0) + 1;
   const cats = {};
   cats['System Core'] = ['GPIO'];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
@@ -1924,10 +2610,12 @@ function renderTree() {
   for (const c of order) {
     const items = cats[c].filter(p => !q || p.toLowerCase().includes(q));
     if (!items.length) continue;
-    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}">${c}</button><div class="items">`;
+    const ccnt = items.reduce((n, p) => n + (conf[p] || 0), 0);
+    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${ccnt ? ` <span class="cnt">${ccnt}</span>` : ''}</span></button><div class="items">`;
     for (const pid of items) {
       const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
-      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}"><span class="st ${st}">${ST[st]}</span>${pid}</div>`;
+      const cn = conf[pid] || 0;
+      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" title="${cn ? cn + ' pin conflict(s)' : ''}"><span class="st ${st}">${ST[st]}</span>${pid}${cn ? `<span class="cnt">${cn}</span>` : ''}</div>`;
     }
     h += '</div></div>';
   }
@@ -1943,11 +2631,29 @@ document.getElementById('tree-search').addEventListener('input', renderTree);
 let ctab = 'gpio';
 document.querySelector('.ctabs').addEventListener('click', e => { const b = e.target.closest('.ctab'); if (!b) return; ctab = b.dataset.ctab; document.querySelectorAll('.ctab').forEach(x => x.classList.toggle('active', x === b)); renderCentre(); });
 
+// conflict banner: every claimant is a link that jumps to its peripheral
+function conflictBanner() {
+  const rows = Object.entries(E.pins).filter(([, v]) => v.state === 'conflict');
+  if (!rows.length) return '';
+  const items = rows.map(([pin, v]) =>
+    `<span class="cf"><b>${esc(pinLabel(pin))}</b>: ` +
+    v.claims.map(c => `<a data-goto="${attr(c.who)}" title="Go to ${attr(c.who)}">${esc(c.signal)}</a>`).join(' ↔ ') +
+    `</span>`).join('');
+  return `<div class="conflicts">⚠ ${rows.length} pin conflict${rows.length > 1 ? 's' : ''} — click a signal to open its peripheral<br>${items}</div>`;
+}
+document.getElementById('ptitle').addEventListener('click', e => {
+  const a = e.target.closest('a[data-goto]'); if (!a) return;
+  selectPeripheral(a.dataset.goto);
+});
+
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
-  document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral') +
-    (E.conflicts.length ? `<div class="conflicts">⚠ ${E.conflicts.length} pin conflict${E.conflicts.length > 1 ? 's' : ''}: ${E.conflicts.join(' · ')}</div>` : '');
-  if (!pid) { mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>'; body.innerHTML = gpioTable(Object.keys(E.pins)); return; }
+  document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral') + conflictBanner();
+  if (!pid) {
+    mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>';
+    body.innerHTML = gpioTable([...new Set([...Object.keys(E.pins), ...Object.keys(S.gpio).filter(p => userLabel(p) && pinExists(p))])]);
+    return;
+  }
   if (pid === 'GPIO') {
     mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`;
     body.innerHTML = ctab === 'gpio' ? gpioTable(Object.keys(S.manual)) : '<div class="empty">No parameters for GPIO.</div>';
@@ -1991,52 +2697,25 @@ const PULLS = ['No pull', 'Pull-up', 'Pull-down'];
 const SPEEDS = ['Low', 'Medium', 'High'];
 function gpioTable(pinsList) {
   const rows = pinsList.slice().sort(pinSort).map(pin => {
-    const i = E.pins[pin], g = S.gpio[pin] || {}, num = pinNum(pin);
+    const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
     const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
     const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${o}</option>`).join('') + '</select>';
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
       <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td><td>${sel(SPEEDS, g.speed || 'Low', 'speed')}</td>
-      <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—"></td></tr>`;
+      <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';
   return `<table class="gpio"><thead><tr><th>Pin Name</th><th>Signal on Pin</th><th>GPIO mode</th><th>GPIO Pull-up/Pull-down</th><th>Maximum output speed</th><th>User Label</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 document.getElementById('cbody').addEventListener('change', e => {
   const el = e.target; if (!el.dataset.pin) return;
-  (S.gpio[el.dataset.pin] ||= {})[el.dataset.k] = el.value;
+  setGpioField(el.dataset.pin, el.dataset.k, el.value);
+  PROJECT.dirty = true; updateCrumb();
+  if (el.dataset.k === 'label') renderChip();          // labels show on the chip; don't redraw the table under the cursor
 });
 function pinSort(a, b) { const m = s => s.match(/^([A-Z]+)(\d+)$/); const x = m(a), y = m(b); if (x && y) return x[1] === y[1] ? +x[2] - +y[2] : x[1].localeCompare(y[1]); return a.localeCompare(b); }
 
-// ---------- 7. clock tab ------------------------------------------------------
-function defaultClock(c) {
-  if (!c) return null;
-  const pre = {}; for (const [k, v] of Object.entries(c.prescalers || {})) pre[k] = v.options[0];
-  return { hse: c.sources.HSE ? c.sources.HSE.mhz : 8, pllIn: 0, pllMul: c.pll ? c.pll.multipliers[0] : 1, sys: c.sysclk.sources[0], pre };
-}
-const firstPre = c => Object.keys(c.prescalers || {}).find(n => !(c.prescalers[n].source));   // AHB / HB
-function clockCalc() {
-  const c = M.clock, k = S.clock, out = { over: [] };
-  const src = { HSI: c.sources.HSI ? c.sources.HSI.mhz : 0, HSE: k.hse, LSI: c.sources.LSI ? c.sources.LSI.khz / 1000 : 0, LSE: c.sources.LSE ? c.sources.LSE.khz / 1000 : 0 };
-  const pin = c.pll ? c.pll.inputs[k.pllIn] : null;
-  out.pllIn = pin ? src[pin.source] / pin.div : 0;
-  out.PLLCLK = out.pllIn * (k.pllMul || 1);
-  out.SYSCLK = k.sys === 'PLLCLK' ? out.PLLCLK : src[k.sys];
-  if (out.SYSCLK > c.sysclk.max_mhz) out.over.push('SYSCLK');
-  const p = c.prescalers || {}, fp = firstPre(c);
-  out.HCLK = out.SYSCLK / (fp ? k.pre[fp] : 1);
-  if (fp && p[fp].max_mhz && out.HCLK > p[fp].max_mhz) out.over.push(fp);
-  for (const [name, v] of Object.entries(p)) {
-    if (name === fp) continue;
-    const base = v.source === 'PLLCLK' ? out.PLLCLK : (v.source && v.source !== fp && out[v.source] !== undefined) ? out[v.source] : out.HCLK;
-    out[name] = base / k.pre[name];
-    if (v.max_mhz && out[name] > v.max_mhz) out.over.push(name);
-    if (v.min_mhz && out[name] < v.min_mhz) out.over.push(name);
-    if (v.target_mhz && Math.abs(out[name] - v.target_mhz) > 0.01) out.over.push(name);
-  }
-  for (const d of c.derived || []) out[d.name] = out.HCLK / d.div;
-  if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) out.over.push('HSE');
-  return out;
-}
+// ---------- 7. clock tab (drawing only; the maths is app/engine/clock.js) ----
 function renderClock() {
   const el = document.getElementById('clock');
   if (!M.clock) { el.innerHTML = '<div class="empty">This MCU file has no clock section.</div>'; return; }
@@ -2082,42 +2761,13 @@ function renderClock() {
   el.querySelectorAll('select[data-pre]').forEach(s => s.onchange = () => { k.pre[s.dataset.pre] = +s.value; renderClock(); });
 }
 
-// ---------- 7b. projects ------------------------------------------------------
-// A project is one MCU + one package + every setting. Saved as YAML (.wchproj).
-function projectSerialize() {
-  const periph = {};
-  for (const [pid, st] of Object.entries(S.periph)) {
-    const settings = {}; for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
-    periph[pid] = { settings, remap: st.remap };
-  }
-  return jsyaml.dump({
-    wchproj: 1, name: PROJECT.name, saved: new Date().toISOString(),
-    mcu: M.mcu.name, variant: PROJECT.variant, package: S.pkg,
-    peripherals: periph, gpio_manual: S.manual, gpio_settings: S.gpio, clock: S.clock,
-  }, { noRefs: true, lineWidth: 120 });
-}
-function projectApply(obj) {
-  if (!obj || obj.wchproj !== 1) throw new Error('Not a WCHCube project file');
-  const src = MCU_FILES[obj.mcu];
-  if (!src) throw new Error(`This project is for "${obj.mcu}", which is not loaded. Use "Open MCU file…" to load its YAML first, then open the project again.`);
-  loadMcu(src);
-  PROJECT.name = obj.name || 'Untitled'; PROJECT.variant = obj.variant || null;
-  if (obj.package in M.packages) S.pkg = obj.package;
-  applyPackageRemaps();
-  for (const [pid, st] of Object.entries(obj.peripherals || {})) {
-    if (!S.periph[pid]) continue;
-    const P = M.peripherals[pid];
-    for (const s of P.settings || []) {
-      const v = (st.settings || {})[s.name]; if (v === undefined) continue;
-      if (s.type === 'checkboxes') S.periph[pid].settings[s.name] = new Set(Array.isArray(v) ? v : []);
-      else if (s.choices.some(c => c.name === v)) S.periph[pid].settings[s.name] = v;
-    }
-    if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
-  }
-  S.manual = obj.gpio_manual || {}; S.gpio = obj.gpio_settings || {};
-  if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
-  document.getElementById('pkgsel').value = S.pkg;
-  PROJECT.dirty = false; updateCrumb(); renderAll(true);
+// ---------- 7b. projects (dialogs and files; state is app/engine/project.js) --
+// Restore a saved project, then resync every part of the shell it can change.
+function applyProjectFile(text) {
+  projectApply(text);
+  syncMcuUi();
+  updateCrumb();
+  renderAll(true);
 }
 function updateCrumb() {
   document.getElementById('crumb-proj').textContent = `${PROJECT.name}.wchproj${PROJECT.dirty ? '*' : ''} - Pinout & Configuration`;
@@ -2155,8 +2805,9 @@ document.getElementById('np-cancel').onclick = () => document.getElementById('ne
 document.getElementById('np-create').onclick = () => {
   const name = document.getElementById('np-mcu').value;
   loadMcu(MCU_FILES[name]);
-  S.pkg = npPick.pkg; applyPackageRemaps(); document.getElementById('pkgsel').value = S.pkg;
-  PROJECT.name = document.getElementById('np-name').value.trim() || 'Untitled'; PROJECT.variant = npPick.variant; PROJECT.dirty = false;
+  setPackage(npPick.pkg);
+  syncMcuUi();
+  setProject({ name: document.getElementById('np-name').value.trim() || 'Untitled', variant: npPick.variant, dirty: false });
   document.getElementById('newproj').classList.remove('show'); updateCrumb(); renderAll(true);
   toast(`New project: ${PROJECT.name}`);
 };
@@ -2165,7 +2816,7 @@ document.getElementById('m-save').onclick = saveProject;
 document.getElementById('m-openproj').onclick = () => document.getElementById('projinput').click();
 document.getElementById('projinput').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
-  f.text().then(t => { try { projectApply(jsyaml.load(t)); toast(`Opened ${f.name}`); } catch (err) { alert('Could not open project: ' + err.message); } });
+  f.text().then(t => { try { applyProjectFile(t); toast(`Opened ${f.name}`); } catch (err) { alert('Could not open project: ' + err.message); } });
   e.target.value = '';
 };
 window.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveProject(); } if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); openNewProject(); } });
@@ -2191,8 +2842,9 @@ document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   if (b.dataset.view === 'pinout') fitChip();
 });
 document.getElementById('pkgsel').onchange = e => {
-  S.pkg = e.target.value; closePicker(); applyPackageRemaps(); PROJECT.dirty = true;
-  const dropped = Object.keys(S.manual).filter(p => !pinExists(p));
+  closePicker();
+  const dropped = setPackage(e.target.value);   // engine: keeps what still exists
+  PROJECT.dirty = true;
   renderAll(true);
   const msgs = [];
   if (dropped.length) msgs.push(`not bonded on ${S.pkg}: ${dropped.join(', ')}`);
@@ -2208,16 +2860,28 @@ document.getElementById('pin-search').addEventListener('input', e => {
 document.getElementById('m-open').onclick = () => document.getElementById('fileinput').click();
 document.getElementById('fileinput').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
-  f.text().then(t => { try { loadMcu(t); if (![...ms.options].some(o => o.value === M.mcu.name)) { const o = document.createElement('option'); o.value = o.textContent = M.mcu.name; ms.appendChild(o); } ms.value = M.mcu.name; PROJECT.name = `${M.mcu.name}_${S.pkg}`; PROJECT.variant = null; PROJECT.dirty = false; updateCrumb(); toast(`Loaded ${f.name}`); } catch (err) { alert('Could not load: ' + err.message); } });
+  f.text().then(t => {
+    try {
+      registerMcuFile(t); openMcu(t);
+      if (![...ms.options].some(o => o.value === M.mcu.name)) { const o = document.createElement('option'); o.value = o.textContent = M.mcu.name; ms.appendChild(o); }
+      ms.value = M.mcu.name;
+      setProject({ name: `${M.mcu.name}_${S.pkg}`, variant: null, dirty: false });
+      updateCrumb(); toast(`Loaded ${f.name}`);
+    } catch (err) { alert('Could not load: ' + err.message); }
+  });
   e.target.value = '';
 };
-document.getElementById('m-reset').onclick = () => { if (confirm('Reset all pin and peripheral settings?')) { const pk = S.pkg; loadMcu(M._src); S.pkg = pk; applyPackageRemaps(); document.getElementById('pkgsel').value = pk; PROJECT.dirty = true; renderAll(true); } };
-document.getElementById('m-help').onclick = () => alert('WCHCube\n\n• Click a pin → choose a GPIO mode or an alternate function.\n• Right-click a pin → reset it.\n• Left tree → configure peripheral modes and AFIO remap.\n• Orange pin = two signals want the same pin.\n• ⊘ = peripheral has no usable pin mapping on this package.\n• Open MCU file… loads any YAML in the same format as data/mcus/*.yaml.');
+document.getElementById('m-reset').onclick = () => {
+  if (!confirm('Reset all pin and peripheral settings?')) return;
+  const pk = S.pkg; loadMcu(M._src); setPackage(pk); syncMcuUi();
+  PROJECT.dirty = true; renderAll(true);
+};
+document.getElementById('m-help').onclick = () => alert('WCHCube\n\n• Click a pin → choose a GPIO mode or an alternate function.\n• Right-click a pin → user label, reset, copy name.\n• Arrow keys move between pins, Enter opens the picker, L sets a label, Del resets.\n• "Only modified" hides every pin without a signal or a label.\n• Left tree → configure peripheral modes and AFIO remap; the orange badge counts conflicts.\n• Orange pin = two signals want the same pin. Click a signal in the banner to jump to its peripheral.\n• ⊘ = peripheral has no usable pin mapping on this package.\n• Open MCU file… loads any YAML in the same format as data/mcus/*.yaml.');
 const ms = document.getElementById('mcusel');
 for (const k of Object.keys(MCU_FILES)) { const o = document.createElement('option'); o.value = k; o.textContent = k; ms.appendChild(o); }
-ms.onchange = () => { loadMcu(MCU_FILES[ms.value]); PROJECT.name = `${ms.value}_${S.pkg}`; PROJECT.variant = null; PROJECT.dirty = false; updateCrumb(); renderAll(true); };
-loadMcu(MCU_FILES[Object.keys(MCU_FILES).sort()[0]]);
-PROJECT.name = `${M.mcu.name}_${S.pkg}`; updateCrumb(); renderAll(true);
+ms.onchange = () => { openMcu(MCU_FILES[ms.value]); setProject({ name: `${ms.value}_${S.pkg}`, variant: null, dirty: false }); updateCrumb(); };
+openMcu(MCU_FILES[Object.keys(MCU_FILES).sort()[0]]);
+setProject({ name: `${M.mcu.name}_${S.pkg}`, dirty: false }); updateCrumb();
 </script>
 </body>
 </html>

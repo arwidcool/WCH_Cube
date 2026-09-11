@@ -192,10 +192,10 @@ pins:
   BOOT0: { type: boot }
   PD0:   { type: io, notes: OSC_IN when HSE enabled }
   PD1:   { type: io, notes: OSC_OUT when HSE enabled }
-  PC13:  { type: io, notes: Low drive strength, 3 mA max }
+  PC13:  { type: io, notes: "Low drive strength, 3 mA max" }
   PC14:  { type: io, notes: OSC32_IN when LSE enabled }
   PC15:  { type: io, notes: OSC32_OUT when LSE enabled }
-  PA0:   { type: io, notes: 5 V tolerant, WKUP }
+  PA0:   { type: io, notes: "5 V tolerant, WKUP" }
   PA1:   { type: io, notes: 5 V tolerant }
   PA2:   { type: io, notes: 5 V tolerant }
   PA3:   { type: io, notes: 5 V tolerant }

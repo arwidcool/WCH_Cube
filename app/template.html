@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WCHCube — Pinout &amp; Configuration</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<!--@@VENDOR@@-->
 <style>
   :root{
     --navy:#03234b; --blue:#1f8fd3; --blue-lt:#39a9dc; --blue-pale:#e6f2fa;
@@ -84,6 +84,13 @@
   .mode .issue{grid-column:1/-1;color:var(--bad);background:#fff3e0;border-left:3px solid var(--pin-conflict);padding:4px 8px}
   .mode .hint{grid-column:1/-1;color:var(--muted)}
   .conflicts{margin-top:4px;background:#fff3e0;color:var(--bad);border:1px solid var(--pin-conflict);padding:3px 8px;font-size:12px;text-align:left}
+  .conflicts .cf{display:inline-block;margin:1px 10px 1px 0;white-space:nowrap}
+  .conflicts a{color:#a11;text-decoration:underline;cursor:pointer}
+  .conflicts a:hover{background:var(--pin-conflict);color:#fff;text-decoration:none}
+  .cnt{background:var(--pin-conflict);color:#fff;border-radius:8px;padding:0 6px;font-size:11px;line-height:15px;min-width:17px;text-align:center;display:inline-block}
+  .item .cnt{margin-left:auto}
+  .item.selected .cnt{background:#fff;color:#c25100}
+  .cat>button .cnt{margin-left:8px}
   .config{flex:1;display:flex;flex-direction:column;min-height:0;background:#fff;margin-top:8px}
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
   .ctab{border:1px solid var(--line);border-bottom:0;background:#e9ecef;padding:4px 12px;color:#333}
@@ -112,6 +119,9 @@
   .chipbar .ic:hover{background:var(--blue-pale)}
   .chipbar select,.chipbar input{padding:3px 6px;border:1px solid var(--line);border-radius:3px}
   .chipbar .spacer{flex:1}
+  .chipbar label.flt{display:flex;align-items:center;gap:5px;color:#333;white-space:nowrap;cursor:pointer}
+  .chipbar label.flt input{margin:0;cursor:pointer}
+  #pkgsel{max-width:250px}
   .unused{border:1px solid var(--line);padding:3px 8px;background:#fff}
   .unused b{margin-left:6px}
 
@@ -132,6 +142,24 @@
   .siglabel{font-family:var(--font);font-size:10.5px;fill:#222}
   .siglabel.conflict{fill:var(--bad);font-weight:600}
   .pinnum{font-family:var(--font);font-size:7.5px;fill:#555}
+  .siglabel.userlabel{fill:#0b57a4;font-style:italic;font-size:9.5px}
+  .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
+  .pin.dim rect{opacity:.22}
+  .pin.dim text{opacity:.28}
+  .pin.dim.focused rect{opacity:1}
+  @keyframes pinpulse{0%{stroke:var(--bad);stroke-width:1}20%{stroke:var(--bad);stroke-width:5}40%{stroke:var(--bad);stroke-width:1}60%{stroke:var(--bad);stroke-width:5}80%{stroke:var(--bad);stroke-width:1}100%{stroke:#fff;stroke-width:.8}}
+  .pin.newconflict rect{animation:pinpulse 1.2s ease-out 1}
+
+  /* pin context menu */
+  .ctxmenu{position:fixed;z-index:60;background:#fff;border:1px solid #9aa;box-shadow:0 6px 18px rgba(0,0,0,.25);min-width:210px;font-size:12.5px;padding:0 0 3px}
+  .ctxmenu .hd{padding:5px 12px;background:var(--navy);color:#fff;margin-bottom:3px}
+  .ctxmenu .mi{padding:5px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:18px;align-items:baseline}
+  .ctxmenu .mi:hover{background:var(--blue-pale)}
+  .ctxmenu .mi.dis{color:#aaa;cursor:default;background:none}
+  .ctxmenu .mi small{color:var(--muted);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ctxmenu .sep{height:1px;background:#e3e6ea;margin:3px 0}
+  .ctxmenu input{width:calc(100% - 24px);margin:5px 12px 7px;padding:4px 6px;border:1px solid var(--line);border-radius:3px}
+  .ctxmenu .kb{color:var(--muted);font-size:11px}
 
   /* pin picker */
   .picker{position:absolute;z-index:50;background:#fff;border:1px solid #9aa;box-shadow:0 6px 18px rgba(0,0,0,.25);min-width:220px;max-height:340px;overflow:auto;font-size:12.5px}
@@ -142,6 +170,7 @@
   .picker .opt.cur{background:var(--pin-set);color:#fff}
   .picker .opt.na{color:#aaa;cursor:not-allowed}
   .picker .opt small{color:var(--muted)}
+  .picker .opt .lbl{white-space:nowrap}
   .picker .opt.cur small{color:#e8ffe0}
   .picker .grp{padding:4px 10px 2px;color:var(--muted);font-size:11px;border-top:1px solid #eee}
 
@@ -186,11 +215,20 @@
   .btns .primary{background:var(--blue-lt);color:#fff;border-color:var(--blue-lt)}
   .toast{position:fixed;left:50%;bottom:52px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:8px 14px;border-radius:4px;box-shadow:0 4px 14px rgba(0,0,0,.3);z-index:99;opacity:0;transition:opacity .2s;pointer-events:none}
   .toast.show{opacity:1}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}.pin.newconflict rect{animation:none}}
+  /* layout hardening: keep three columns usable from 1280 to 2560 */
+  @media (max-width:1460px){
+    #view-pinout{grid-template-columns:266px minmax(360px,1fr) minmax(450px,1.3fr)}
+    .subbar{gap:60px}
+    .chipbar{flex-wrap:wrap}
+    #pin-search{width:120px!important}
+  }
+  @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
 </style>
 </head>
 <body>
 <!--@@DATA@@-->
+<!--@@ENGINE@@-->
 
 <div class="app">
   <div class="menubar">
@@ -241,7 +279,7 @@
           <button class="ctab" data-ctab="param">Parameter Settings</button>
         </div>
         <div class="cbody" id="cbody"></div>
-        <div class="foot">Click a pin on the chip to assign a signal. Right-click a pin to reset it. Drag to pan, wheel to zoom.</div>
+        <div class="foot">Click a pin to assign a signal · right-click for label &amp; reset · <span class="kbd">←↑↓→</span> move <span class="kbd">Enter</span> open <span class="kbd">L</span> label <span class="kbd">Del</span> reset · drag to pan, wheel to zoom.</div>
       </div>
     </div>
 
@@ -254,6 +292,7 @@
         <button class="ic" id="z-out" title="Zoom out">⊖</button>
         <select id="pkgsel" title="Package"></select>
         <input id="pin-search" placeholder="🔍 find pin or signal" style="width:170px">
+        <label class="flt" title="Hide pins that have no signal and no user label"><input type="checkbox" id="only-mod">Only modified</label>
         <div class="spacer"></div>
         <div class="unused">Unused GPIOs:<b id="unused">0 / 0</b></div>
       </div>
@@ -287,190 +326,63 @@
 'use strict';
 /* =============================================================================
    WCHCube — single-file app
-   Sections:  1 data loading   2 model   3 engine (claims/conflicts)
-              4 chip render    5 tree    6 centre panel   7 clock tab   8 glue
+   Engine (model, conflicts, clocks, projects, exports): app/engine/*.js
+   This file:  1 data loading (DOM)  4 chip render  5 tree  6 centre panel
+               7 clock tab  7b project dialogs  8 glue
    ========================================================================== */
 
-// ---------- 1. data loading ---------------------------------------------------
-const PACKAGES = {};
-for (const p of jsyaml.load(document.getElementById('yaml-packages').textContent).packages) PACKAGES[p.id] = p;
+// ---------- 1. data loading (DOM side) ----------------------------------------
+// The model, conflict engine, clock maths, project and export code live in
+// app/engine/*.js and are inlined above by build.py, so every name they export is
+// a global here: M, S, E, PACKAGES, MCU_FILES, compute(), assignSignal(),
+// resetPin(), requiredSignals(), isAvailable(), clockCalc(), projectSerialize()...
+// Sections 1-3 used to hold that code; only the DOM plumbing is left.
+loadPackages(jsyaml.load(document.getElementById('yaml-packages').textContent));
+document.querySelectorAll('script[id^="yaml-mcu-"]').forEach(s => {
+  try { registerMcuFile(s.textContent); } catch (e) { console.error('bad MCU file', s.id, e); }
+});
 
-const MCU_FILES = {};           // mcu.name -> yaml text (bundled + anything opened from disk)
-document.querySelectorAll('script[id^="yaml-mcu-"]').forEach(s => { try { const y = jsyaml.load(s.textContent); MCU_FILES[y.mcu.name] = s.textContent; } catch (e) { console.error('bad MCU file', s.id, e); } });
-const PROJECT = { name: 'Untitled', variant: null, dirty: false };
-
-let M = null;                   // parsed mcu yaml
-let S = null;                   // state
-
-function loadMcu(yamlText) {
-  const y = jsyaml.load(yamlText);
-  if (!y || !y.mcu || !y.packages || !y.pins || !y.peripherals) throw new Error('Not an MCU file (needs mcu, packages, pins, peripherals)');
-  M = y; M._src = yamlText; MCU_FILES[y.mcu.name] ||= yamlText;
-  // derived: pin -> [{periph, signal, remapIdx}]
-  M._pinSignals = {};
-  for (const [pid, P] of Object.entries(M.peripherals)) {
-    (P.remaps || []).forEach((r, ri) => {
-      for (const [sig, pin] of Object.entries(r.pins || {})) {
-        (M._pinSignals[pin] ||= []).push({ periph: pid, signal: sig, remap: ri });
-      }
-    });
-  }
-  // physical pin map per package: num -> [names]; alias name -> canonical (first name of a shorted group)
-  M._phys = {}; M._alias = {};
-  for (const [pk, map] of Object.entries(M.packages)) {
-    M._phys[pk] = {}; M._alias[pk] = {};
-    for (const [num, v] of Object.entries(map)) {
-      const names = Array.isArray(v) ? v : [v];
-      M._phys[pk][num] = names;
-      for (const n of names) M._alias[pk][n] = names[0];
-    }
-  }
-  const pkgs = Object.keys(M.packages);
-  S = {
-    pkg: pkgs.includes(M.mcu.default_package) ? M.mcu.default_package : pkgs[0],
-    periph: {},                 // pid -> { settings:{name: choice | Set}, remap: idx }
-    manual: {},                 // pin -> 'GPIO_Output' etc
-    gpio: {},                   // pin -> { mode, pull, speed, label }
-    sel: null,                  // selected peripheral id
-    selPin: null,
-    clock: defaultClock(y.clock),
-    zoom: 1, panX: 0, panY: 0,
-  };
-  for (const [pid, P] of Object.entries(M.peripherals)) {
-    const st = { settings: {}, remap: 0 };
-    for (const s of P.settings || []) {
-      const def = s.choices.find(c => c.default);
-      st.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;
-    }
-    S.periph[pid] = st;
-  }
-  applyPackageRemaps();
+// Load an MCU and bring the shell (breadcrumb, part info, package list) with it.
+function openMcu(source) { loadMcu(source); syncMcuUi(); renderAll(true); }
+function syncMcuUi() {
   document.getElementById('crumb-mcu').textContent = M.mcu.name;
   document.getElementById('mcu-meta').textContent = `${M.mcu.core || ''}  ·  ${M.mcu.flash_kb || '?'} KB flash  ·  ${M.mcu.sram_kb || '?'} KB SRAM`;
-  const ps = document.getElementById('pkgsel'); ps.innerHTML = '';
-  for (const k of pkgs) { const o = document.createElement('option'); o.value = k; o.textContent = k + (PACKAGES[k] ? '' : ' (no geometry!)'); ps.appendChild(o); }
+  const ps = document.getElementById('pkgsel');
+  ps.innerHTML = '';
+  for (const k of Object.keys(M.packages)) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = k + (PACKAGES[k] ? '' : ' (no geometry!)');
+    ps.appendChild(o);
+  }
   ps.value = S.pkg;
-  renderAll(true);
-}
-
-// ---------- 2. model helpers --------------------------------------------------
-const pkgPins = () => M._phys[S.pkg];                          // {num: [names]}
-const canon = name => M._alias[S.pkg][name] || name;           // shorted pins share one canonical name
-const pinExists = name => name in M._alias[S.pkg];
-const pinType = name => (M.pins[name] || {}).type || 'io';
-const pinLabel = name => { const num = pinNum(name); return num === undefined ? name : pkgPins()[num].join('/'); };
-const pinNum = name => Object.keys(pkgPins()).find(n => pkgPins()[n].includes(name));
-const groupOf = name => { const num = pinNum(name); return num === undefined ? [name] : pkgPins()[num]; };
-function applyPackageRemaps() {
-  for (const [pid, P] of Object.entries(M.peripherals)) if (P.remap_by_package && S.pkg in P.remap_by_package) S.periph[pid].remap = P.remap_by_package[S.pkg];
-}
-const sigName = (pid, sig) => `${pid}_${sig}`;
-const GPIO_SIGS = ['GPIO_Input', 'GPIO_Output', 'GPIO_Analog', 'GPIO_EXTI'];
-
-// which signals a peripheral needs given its current settings
-function requiredSignals(pid) {
-  const P = M.peripherals[pid], st = S.periph[pid], out = new Set();
-  for (const s of P.settings || []) {
-    const v = st.settings[s.name];
-    for (const c of s.choices) {
-      const on = s.type === 'checkboxes' ? v.has(c.name) : v === c.name;
-      if (on) (c.signals || []).forEach(x => out.add(x));
-    }
-  }
-  return out;
-}
-function isEnabled(pid) {
-  const P = M.peripherals[pid], st = S.periph[pid];
-  for (const s of P.settings || []) {
-    const v = st.settings[s.name];
-    if (s.type === 'checkboxes' ? v.size : v !== s.choices[0].name) return true;
-  }
-  return false;
-}
-// can any non-default choice of this peripheral be satisfied on this package?
-function isAvailable(pid) {
-  const P = M.peripherals[pid];
-  if (!P.remaps || !P.remaps.length) return true;
-  for (const s of P.settings || []) for (const c of s.choices) {
-    if (!c.signals) continue;
-    if (P.remaps.some(r => c.signals.every(sig => r.pins[sig] && pinExists(r.pins[sig])))) return true;
-  }
-  return !((P.settings || []).some(s => s.choices.some(c => c.signals)));
-}
-
-// ---------- 3. engine ---------------------------------------------------------
-let E = null;  // engine result
-function compute() {
-  const claims = {};           // pin -> [{who, signal}]
-  const issues = {};           // pid -> [msg]
-  const add = (pin, who, signal) => (claims[pin] ||= []).push({ who, signal });
-  for (const [pid, P] of Object.entries(M.peripherals)) {
-    const req = requiredSignals(pid); if (!req.size) continue;
-    const r = (P.remaps || [])[S.periph[pid].remap] || { pins: {} };
-    for (const sig of req) {
-      const pin = r.pins[sig];
-      if (!pin) { (issues[pid] ||= []).push(`${sig}: not routed in "${r.name}"`); continue; }
-      if (!pinExists(pin)) { (issues[pid] ||= []).push(`${sig} needs ${pin}, which is not bonded on ${S.pkg}`); continue; }
-      add(canon(pin), pid, sigName(pid, sig));
-    }
-  }
-  for (const [pin, sig] of Object.entries(S.manual)) if (pinExists(pin)) add(canon(pin), 'GPIO', sig);
-  const pins = {};             // pin -> {state, label, claims}
-  for (const [pin, cl] of Object.entries(claims)) {
-    // same pin, same peripheral, two signals (e.g. TIM2 CH1 + ETR on PA0) is not a conflict
-    const owners = new Set(cl.map(c => c.who));
-    const conflict = owners.size > 1;
-    const shorted = groupOf(pin).length > 1;
-    pins[pin] = { state: conflict ? 'conflict' : 'set', label: cl.map(c => c.signal).join(' / '), claims: cl };
-    if (conflict) for (const c of cl) if (c.who !== 'GPIO') (issues[c.who] ||= []).push(`${c.signal} on ${pinLabel(pin)} conflicts with ${cl.filter(x => x !== c).map(x => x.signal).join(', ')}${shorted ? ' (pins are shorted inside the package)' : ''}`);
-  }
-  const conflicts = Object.entries(pins).filter(([, v]) => v.state === 'conflict').map(([k, v]) => `${pinLabel(k)}: ${v.label}`);
-  const status = {};
-  for (const pid of Object.keys(M.peripherals)) {
-    status[pid] = !isAvailable(pid) ? 'na' : issues[pid] ? 'warn' : isEnabled(pid) ? 'ok' : '';
-  }
-  E = { pins, issues, status, conflicts };
-  return E;
-}
-
-// assign a signal to a pin from the picker
-function assignSignal(pin, opt) {
-  if (opt.gpio) { S.manual[pin] = opt.gpio; S.gpio[pin] ||= { mode: opt.gpio === 'GPIO_Output' ? 'Output Push Pull' : opt.gpio === 'GPIO_Analog' ? 'Analog' : 'Input', pull: 'No pull', speed: 'Low', label: '' }; return; }
-  const { periph, signal, remap } = opt;
-  const P = M.peripherals[periph], st = S.periph[periph];
-  delete S.manual[pin];
-  st.remap = remap;
-  // turn on the first setting choice that carries this signal (if none already does)
-  if (!requiredSignals(periph).has(signal)) {
-    outer: for (const s of P.settings || []) for (const c of s.choices) {
-      if ((c.signals || []).includes(signal)) {
-        if (s.type === 'checkboxes') st.settings[s.name].add(c.name); else st.settings[s.name] = c.name;
-        break outer;
-      }
-    }
-  }
-  S.sel = periph;
-}
-function resetPin(pin) {
-  delete S.manual[pin]; delete S.gpio[pin];
-  const cl = (E.pins[canon(pin)] || {}).claims || [];
-  for (const n of groupOf(pin)) { delete S.manual[n]; delete S.gpio[n]; }
-  for (const c of cl) {
-    if (c.who === 'GPIO') continue;
-    const P = M.peripherals[c.who], st = S.periph[c.who], sig = c.signal.slice(c.who.length + 1);
-    for (const s of P.settings || []) {
-      if (s.type === 'checkboxes') { for (const ch of s.choices) if ((ch.signals || []).includes(sig)) st.settings[s.name].delete(ch.name); }
-      else { const cur = s.choices.find(x => x.name === st.settings[s.name]); if (cur && (cur.signals || []).includes(sig)) st.settings[s.name] = s.choices[0].name; }
-    }
-  }
 }
 
 // ---------- 4. chip render ----------------------------------------------------
 const svg = document.getElementById('svg');
-const PITCH = 22, PLEN = 40, MARGIN = 26, LABEL = 190;
+const PITCH = 22, PLEN = 40, MARGIN = 26;
+let LABEL = 190;                 // room outside the chip for signal labels - grows with the longest label
 let geom = null;
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const attr = s => esc(s).replace(/"/g, '&quot;');
+// UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
+const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastW: 0, lastH: 0 };
+
+const userLabel = name => ((S.gpio[name] || {}).label || '').trim();
+const pinModified = name => !!(E && E.pins[name]) || !!userLabel(name);
+// how much horizontal room the longest label needs, so nothing is clipped at fit-zoom
+function labelRoom() {
+  if (!E) return 190;
+  let n = 8;
+  for (const grp of Object.values(pkgPins())) {
+    const nm = grp[0], i = E.pins[nm];
+    if (i) n = Math.max(n, i.label.length);
+    const ul = userLabel(nm); if (ul) n = Math.max(n, ul.length);
+  }
+  return Math.max(120, Math.min(340, 34 + n * 5.9));
+}
 
 function layout() {
+  LABEL = labelRoom();
   const pk = PACKAGES[S.pkg] || { kind: 'quad', pins: Object.keys(pkgPins()).length };
   const n = pk.pins, pins = [];
   if (pk.kind === 'quad') {
@@ -501,7 +413,10 @@ function renderChip() {
   const names = pkgPins();
   const g = [];
   const epad = names[0];
-  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  // pins that became conflicted since the last paint get a one-shot pulse
+  const nowConf = new Set(Object.entries(E.pins).filter(([, v]) => v.state === 'conflict').map(([k]) => k));
+  const fresh = new Set([...nowConf].filter(n => !U.prevConflicts.has(n)));
+  U.prevConflicts = nowConf;
   g.push(`<g id="root" transform="translate(${S.panX},${S.panY}) scale(${S.zoom})">`);
   const b = geom.body;
   g.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="var(--chip)" rx="4"/>`);
@@ -517,10 +432,14 @@ function renderChip() {
   for (const p of geom.pins) {
     const grp = names[p.num]; if (!grp) continue;
     const name = grp[0], shown = grp.join('/');
-    const info = E.pins[name], t = pinType(name);
+    const info = E.pins[name], t = pinType(name), ul = userLabel(name);
+    const hidden = U.onlyMod && !pinModified(name);
     let cls = 'pin ' + (t === 'io' ? 'io' : t);
     if (info) cls += ' ' + info.state;
+    if (info && info.state === 'conflict' && fresh.has(name)) cls += ' newconflict';
     if (S.selPin === name) cls += ' selected';
+    if (U.focus === name) cls += ' focused';
+    if (hidden) cls += ' dim';
     const w = vert(p) ? PITCH - 3 : PLEN, h = vert(p) ? PLEN : PITCH - 3;
     g.push(`<g class="${cls}" data-pin="${esc(name)}" data-num="${p.num}">`);
     g.push(`<rect x="${p.x}" y="${p.y}" width="${w}" height="${h}" rx="2"/>`);
@@ -533,14 +452,21 @@ function renderChip() {
     if (numPos) g.push(`<text class="pinnum" x="${numPos[0]}" y="${numPos[1]}" text-anchor="${numPos[2]}">${p.num}</text>`);
     else g.push(`<text class="pinnum" transform="translate(${cx + 2.5},${p.side === 3 ? p.y - 6 : p.y + h + 6}) rotate(-90)" text-anchor="${p.side === 3 ? 'start' : 'end'}">${p.num}</text>`);
     g.push('</g>');
-    // signal label
-    if (info) {
-      const lc = 'siglabel' + (info.state === 'conflict' ? ' conflict' : '');
-      const off = 22;
-      if (p.side === 0) g.push(`<text class="${lc}" x="${p.x - off}" y="${cy + 4}" text-anchor="end">${esc(info.label)}</text>`);
-      if (p.side === 2) g.push(`<text class="${lc}" x="${p.x + w + off}" y="${cy + 4}" text-anchor="start">${esc(info.label)}</text>`);
-      if (p.side === 3) g.push(`<text class="${lc}" transform="translate(${cx + 4},${p.y - off}) rotate(-90)" text-anchor="start">${esc(info.label)}</text>`);
-      if (p.side === 1) g.push(`<text class="${lc}" transform="translate(${cx + 4},${p.y + h + off}) rotate(-90)" text-anchor="end">${esc(info.label)}</text>`);
+    // labels outside the chip: signal on the first line, user label under it
+    if ((info || ul) && !hidden) {
+      const lc = 'siglabel' + (info && info.state === 'conflict' ? ' conflict' : '');
+      const off = 22, lines = [];
+      if (info) lines.push([lc, info.label]);
+      if (ul) lines.push(['siglabel userlabel', ul]);
+      lines.forEach(([klass, txt], li) => {
+        const dy = lines.length > 1 ? (li === 0 ? 0 : 10.5) : 4;      // two lines straddle the pin centre
+        const y = cy + (lines.length > 1 ? dy : 4);
+        const perp = li * 11;
+        if (p.side === 0) g.push(`<text class="${klass}" x="${p.x - off}" y="${y}" text-anchor="end">${esc(txt)}</text>`);
+        if (p.side === 2) g.push(`<text class="${klass}" x="${p.x + w + off}" y="${y}" text-anchor="start">${esc(txt)}</text>`);
+        if (p.side === 3) g.push(`<text class="${klass}" transform="translate(${cx + 4 + perp},${p.y - off}) rotate(-90)" text-anchor="start">${esc(txt)}</text>`);
+        if (p.side === 1) g.push(`<text class="${klass}" transform="translate(${cx + 4 + perp},${p.y + h + off}) rotate(-90)" text-anchor="end">${esc(txt)}</text>`);
+      });
     }
   }
   g.push('</g>');
@@ -549,11 +475,41 @@ function renderChip() {
   const io = Object.entries(names).filter(([n, g]) => n !== '0' && pinType(g[0]) === 'io').map(([, g]) => g[0]);
   const used = io.filter(n => E.pins[n]).length;
   document.getElementById('unused').textContent = `${io.length - used} / ${io.length}`;
+  decoratePkgSel();
+  // the label margin grows and shrinks with the longest label, so the drawing changes size as
+  // signals are assigned. Re-fit automatically until the user pans or zooms themselves.
+  const grew = geom.W !== U.lastW || geom.H !== U.lastH;
+  U.lastW = geom.W; U.lastH = geom.H;
+  if (grew && U.autoFit) fitChip();
+}
+
+// package selector shows I/O count and the part numbers that use that package
+function pkgIoCount(pk) {
+  let n = 0;
+  for (const [num, v] of Object.entries(M._phys[pk] || {})) {
+    if (num === '0') continue;
+    const nm = Array.isArray(v) ? v[0] : v;
+    if (((M.pins[nm] || {}).type || 'io') === 'io') n++;
+  }
+  return n;
+}
+function decoratePkgSel() {
+  const ps = document.getElementById('pkgsel');
+  for (const o of ps.options) {
+    const pk = o.value, bits = [`${pkgIoCount(pk)} I/O`];
+    const vs = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === pk).map(([v]) => v);
+    if (vs.length) bits.push(vs.slice(0, 2).join(', ') + (vs.length > 2 ? ` +${vs.length - 2}` : ''));
+    if (!PACKAGES[pk]) bits.push('no drawing');
+    const txt = `${pk} · ${bits.join(' · ')}`;
+    if (o.textContent !== txt) o.textContent = txt;
+    o.title = txt;
+  }
 }
 
 function fitChip() {
   const c = document.getElementById('canvas'), W = c.clientWidth, H = c.clientHeight;
   if (!geom) geom = layout();
+  U.autoFit = true;
   S.zoom = Math.min(W / geom.W, H / geom.H) * 0.98;
   S.panX = (W - geom.W * S.zoom) / 2; S.panY = (H - geom.H * S.zoom) / 2;
   applyTransform();
@@ -562,6 +518,7 @@ function applyTransform() {
   const r = document.getElementById('root'); if (r) r.setAttribute('transform', `translate(${S.panX},${S.panY}) scale(${S.zoom})`);
 }
 function zoomAt(f, cx, cy) {
+  U.autoFit = false;                       // the user took control of the view
   const nz = Math.max(.15, Math.min(6, S.zoom * f));
   S.panX = cx - (cx - S.panX) * nz / S.zoom; S.panY = cy - (cy - S.panY) * nz / S.zoom; S.zoom = nz; applyTransform();
 }
@@ -570,14 +527,14 @@ function zoomAt(f, cx, cy) {
 (() => {
   const c = document.getElementById('canvas'); let drag = null;
   c.addEventListener('mousedown', e => { if (e.button !== 0) return; drag = { x: e.clientX, y: e.clientY, px: S.panX, py: S.panY, moved: false }; });
-  window.addEventListener('mousemove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; c.classList.add('grabbing'); } S.panX = drag.px + dx; S.panY = drag.py + dy; applyTransform(); });
+  window.addEventListener('mousemove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; U.autoFit = false; c.classList.add('grabbing'); } S.panX = drag.px + dx; S.panY = drag.py + dy; applyTransform(); });
   window.addEventListener('mouseup', e => {
     if (!drag) return; const moved = drag.moved; drag = null; c.classList.remove('grabbing');
     if (moved) return;
     const pinEl = e.target.closest && e.target.closest('.pin');
-    if (pinEl && c.contains(pinEl)) openPicker(pinEl.dataset.pin, e.clientX, e.clientY); else closePicker();
+    if (pinEl && c.contains(pinEl)) { U.focus = pinEl.dataset.pin; openPicker(pinEl.dataset.pin, e.clientX, e.clientY); } else closePicker();
   });
-  c.addEventListener('contextmenu', e => { const pinEl = e.target.closest('.pin'); if (!pinEl) return; e.preventDefault(); resetPin(pinEl.dataset.pin); renderAll(); toast(`${pinEl.dataset.pin} reset`); });
+  c.addEventListener('contextmenu', e => { const pinEl = e.target.closest('.pin'); if (!pinEl) return; e.preventDefault(); U.focus = pinEl.dataset.pin; openPinMenu(pinEl.dataset.pin, e.clientX, e.clientY); });
   c.addEventListener('wheel', e => { e.preventDefault(); const r = c.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
   c.addEventListener('mouseover', e => { const p = e.target.closest('.pin'); if (p) p.classList.add('hover'); });
   c.addEventListener('mouseout', e => { const p = e.target.closest('.pin'); if (p) p.classList.remove('hover'); });
@@ -600,7 +557,7 @@ function openPicker(pin, cx, cy) {
   if (grp.length > 1) h += `<div class="note" style="color:var(--bad)">${grp.join(' and ')} are shorted inside this package — one physical pin, never both outputs.</div>`;
   for (const n of grp) if (M.pins[n] && M.pins[n].notes) h += `<div class="note">${n}: ${M.pins[n].notes}</div>`;
   if (cur) h += `<div class="note" style="color:${cur.state === 'conflict' ? 'var(--bad)' : 'var(--ok)'}">Currently: ${cur.label}${cur.state === 'conflict' ? ' — CONFLICT' : ''}</div>`;
-  const opt = (label, data, sub = '', isCur = false, na = false) => `<div class="opt${isCur ? ' cur' : ''}${na ? ' na' : ''}" data-opt='${JSON.stringify(data).replace(/'/g, '&#39;')}'>${label}<small>${sub}</small></div>`;
+  const opt = (label, data, sub = '', isCur = false, na = false) => `<div class="opt${isCur ? ' cur' : ''}${na ? ' na' : ''}" data-opt='${JSON.stringify(data).replace(/'/g, '&#39;')}' data-label="${attr(label)}"><span class="lbl">${label}</span><small>${sub}</small></div>`;
   h += opt('Reset state', { reset: true }, '', !cur);
   h += `<div class="grp">GPIO</div>`;
   for (const g of GPIO_SIGS) h += opt(g, { gpio: g }, '', S.manual[pin] === g);
@@ -635,13 +592,125 @@ function openPicker(pin, cx, cy) {
 }
 function resetPinManualOnly(pin) { delete S.manual[pin]; }
 function closePicker() { const p = document.getElementById('picker'); if (p) p.remove(); if (S) S.selPin = null; }
-window.addEventListener('keydown', e => { if (e.key === 'Escape') { closePicker(); renderChip(); } });
+window.addEventListener('keydown', e => { if (e.key === 'Escape') { closeCtx(); closePicker(); renderChip(); } });
+
+// ---------- 4b. pin context menu, user labels, keyboard navigation --------------
+function closeCtx() { const m = document.getElementById('ctxmenu'); if (m) m.remove(); }
+function placeFloat(d, cx, cy) {
+  document.body.appendChild(d);
+  const W = d.offsetWidth, H = d.offsetHeight;
+  d.style.left = Math.max(4, Math.min(cx + 4, window.innerWidth - W - 8)) + 'px';
+  d.style.top = Math.max(4, Math.min(cy + 4, window.innerHeight - H - 8)) + 'px';
+}
+// thin setters so the UI never pokes at S in more than one place (AGENT-2: adopt these into engine/model.js)
+function setGpioField(pin, key, val) { (S.gpio[pin] ||= {})[key] = val; }
+function selectPeripheral(pid) { if (pid === 'GPIO' || (M.peripherals && M.peripherals[pid])) { S.sel = pid; renderAll(); } }
+
+function openPinMenu(pin, cx, cy) {
+  closePicker(); closeCtx();
+  const grp = groupOf(pin), num = pinNum(pin), info = E.pins[canon(pin)], ul = userLabel(pin), io = pinType(pin) === 'io';
+  const d = document.createElement('div'); d.className = 'ctxmenu'; d.id = 'ctxmenu';
+  d.innerHTML =
+    `<div class="hd">${esc(grp.join(' / '))} <span style="opacity:.7">pin ${num}</span></div>` +
+    `<div class="mi" data-a="label">${ul ? 'Edit user label…' : 'Set user label…'}<small>${ul ? esc(ul) : '<span class="kb">L</span>'}</small></div>` +
+    (ul ? `<div class="mi" data-a="clear">Clear user label</div>` : '') +
+    `<div class="sep"></div>` +
+    `<div class="mi${io ? '' : ' dis'}" data-a="assign">Assign signal…<small class="kb">Enter</small></div>` +
+    `<div class="mi${info ? '' : ' dis'}" data-a="reset">Reset pin<small>${info ? esc(info.label) : 'nothing assigned'}</small></div>` +
+    `<div class="sep"></div>` +
+    `<div class="mi" data-a="copy">Copy pin name<small>${esc(grp.join('/'))}</small></div>`;
+  d.addEventListener('click', ev => {
+    const mi = ev.target.closest('.mi'); if (!mi || mi.classList.contains('dis')) return;
+    const a = mi.dataset.a;
+    closeCtx();
+    if (a === 'label') return openLabelEditor(pin, cx, cy);
+    if (a === 'clear') { setGpioField(pin, 'label', ''); renderAll(); toast(`${pin}: label cleared`); return; }
+    if (a === 'assign') return openPicker(pin, cx, cy);
+    if (a === 'reset') { resetPin(pin); renderAll(); toast(`${pin} reset`); return; }
+    if (a === 'copy') {
+      const txt = grp.join('/');
+      if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast(`Copied "${txt}"`), () => toast(txt));
+      else toast(txt);
+    }
+  });
+  placeFloat(d, cx, cy);
+}
+
+function openLabelEditor(pin, cx, cy) {
+  closeCtx(); closePicker();
+  const d = document.createElement('div'); d.className = 'ctxmenu'; d.id = 'ctxmenu';
+  d.innerHTML = `<div class="hd">User label — ${esc(pinLabel(pin))}</div>` +
+    `<input id="ctx-label" maxlength="32" placeholder="e.g. LED_STATUS" value="${attr(userLabel(pin))}">` +
+    `<div class="mi" data-a="ok">Apply<small class="kb">Enter</small></div>`;
+  placeFloat(d, cx, cy);
+  const inp = d.querySelector('#ctx-label');
+  const apply = () => {
+    const v = inp.value.trim();
+    setGpioField(pin, 'label', v);
+    closeCtx(); renderAll();
+    toast(v ? `${pin} labelled "${v}"` : `${pin}: label cleared`);
+  };
+  inp.addEventListener('keydown', ev => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); closeCtx(); }
+  });
+  d.querySelector('[data-a="ok"]').onclick = apply;
+  inp.focus(); inp.select();
+}
+window.addEventListener('mousedown', e => { if (!e.target.closest || !e.target.closest('.ctxmenu')) closeCtx(); }, true);
+
+// ---- keyboard: arrows move between pins, Enter opens the picker, L labels, Del resets
+function pinAt(name) { return geom ? geom.pins.find(p => (pkgPins()[p.num] || [])[0] === name) : null; }
+function focusRect() {
+  if (!U.focus) return null;
+  const el = svg.querySelector(`.pin[data-pin="${window.CSS && CSS.escape ? CSS.escape(U.focus) : U.focus}"] rect`);
+  return el ? el.getBoundingClientRect() : null;
+}
+function moveFocus(dx, dy) {
+  if (!geom) return;
+  const usable = geom.pins.filter(p => pkgPins()[p.num]);
+  if (!usable.length) return;
+  const cur = U.focus ? pinAt(U.focus) : null;
+  if (!cur) { U.focus = pkgPins()[usable[0].num][0]; renderChip(); return; }
+  let best = null, score = Infinity;
+  for (const p of usable) {
+    if (p === cur) continue;
+    const along = (p.x - cur.x) * dx + (p.y - cur.y) * dy;
+    const perp = Math.abs((p.x - cur.x) * dy - (p.y - cur.y) * dx);
+    if (along <= 2) continue;
+    const s = along + perp * 4;
+    if (s < score) { score = s; best = p; }
+  }
+  if (!best) return;
+  U.focus = pkgPins()[best.num][0];
+  renderChip();
+  const grp = groupOf(U.focus), i = E.pins[canon(U.focus)];
+  toast(`${grp.join('/')} (pin ${pinNum(U.focus)})${i ? ' — ' + i.label : ''}`);
+}
+const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+window.addEventListener('keydown', e => {
+  if (!M || !E) return;
+  if (!document.getElementById('view-pinout').classList.contains('active')) return;
+  if (document.querySelector('.modal.show')) return;
+  const el = e.target, tag = (el.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || el.isContentEditable) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (ARROWS[e.key]) { e.preventDefault(); closeCtx(); closePicker(); moveFocus(...ARROWS[e.key]); return; }
+  if (!U.focus) return;
+  if (e.key === 'Enter') { e.preventDefault(); const r = focusRect(); if (r) openPicker(U.focus, r.right, r.bottom); return; }
+  if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); resetPin(U.focus); renderAll(); toast(`${U.focus} reset`); return; }
+  if (e.key === 'l' || e.key === 'L') { e.preventDefault(); const r = focusRect(); if (r) openLabelEditor(U.focus, r.right, r.bottom); }
+});
+document.getElementById('only-mod').addEventListener('change', e => { U.onlyMod = e.target.checked; renderChip(); toast(U.onlyMod ? 'Showing only pins with a signal or a label' : 'Showing all pins'); });
 
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
 const collapsed = new Set();
 function renderTree() {
   const q = document.getElementById('tree-search').value.trim().toLowerCase();
+  const conf = {};                    // pid -> how many physical pins it fights over
+  for (const v of Object.values(E.pins)) if (v.state === 'conflict') for (const c of v.claims) conf[c.who] = (conf[c.who] || 0) + 1;
   const cats = {};
   cats['System Core'] = ['GPIO'];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
@@ -651,10 +720,12 @@ function renderTree() {
   for (const c of order) {
     const items = cats[c].filter(p => !q || p.toLowerCase().includes(q));
     if (!items.length) continue;
-    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}">${c}</button><div class="items">`;
+    const ccnt = items.reduce((n, p) => n + (conf[p] || 0), 0);
+    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${ccnt ? ` <span class="cnt">${ccnt}</span>` : ''}</span></button><div class="items">`;
     for (const pid of items) {
       const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
-      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}"><span class="st ${st}">${ST[st]}</span>${pid}</div>`;
+      const cn = conf[pid] || 0;
+      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" title="${cn ? cn + ' pin conflict(s)' : ''}"><span class="st ${st}">${ST[st]}</span>${pid}${cn ? `<span class="cnt">${cn}</span>` : ''}</div>`;
     }
     h += '</div></div>';
   }
@@ -670,11 +741,29 @@ document.getElementById('tree-search').addEventListener('input', renderTree);
 let ctab = 'gpio';
 document.querySelector('.ctabs').addEventListener('click', e => { const b = e.target.closest('.ctab'); if (!b) return; ctab = b.dataset.ctab; document.querySelectorAll('.ctab').forEach(x => x.classList.toggle('active', x === b)); renderCentre(); });
 
+// conflict banner: every claimant is a link that jumps to its peripheral
+function conflictBanner() {
+  const rows = Object.entries(E.pins).filter(([, v]) => v.state === 'conflict');
+  if (!rows.length) return '';
+  const items = rows.map(([pin, v]) =>
+    `<span class="cf"><b>${esc(pinLabel(pin))}</b>: ` +
+    v.claims.map(c => `<a data-goto="${attr(c.who)}" title="Go to ${attr(c.who)}">${esc(c.signal)}</a>`).join(' ↔ ') +
+    `</span>`).join('');
+  return `<div class="conflicts">⚠ ${rows.length} pin conflict${rows.length > 1 ? 's' : ''} — click a signal to open its peripheral<br>${items}</div>`;
+}
+document.getElementById('ptitle').addEventListener('click', e => {
+  const a = e.target.closest('a[data-goto]'); if (!a) return;
+  selectPeripheral(a.dataset.goto);
+});
+
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
-  document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral') +
-    (E.conflicts.length ? `<div class="conflicts">⚠ ${E.conflicts.length} pin conflict${E.conflicts.length > 1 ? 's' : ''}: ${E.conflicts.join(' · ')}</div>` : '');
-  if (!pid) { mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>'; body.innerHTML = gpioTable(Object.keys(E.pins)); return; }
+  document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral') + conflictBanner();
+  if (!pid) {
+    mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>';
+    body.innerHTML = gpioTable([...new Set([...Object.keys(E.pins), ...Object.keys(S.gpio).filter(p => userLabel(p) && pinExists(p))])]);
+    return;
+  }
   if (pid === 'GPIO') {
     mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`;
     body.innerHTML = ctab === 'gpio' ? gpioTable(Object.keys(S.manual)) : '<div class="empty">No parameters for GPIO.</div>';
@@ -718,52 +807,25 @@ const PULLS = ['No pull', 'Pull-up', 'Pull-down'];
 const SPEEDS = ['Low', 'Medium', 'High'];
 function gpioTable(pinsList) {
   const rows = pinsList.slice().sort(pinSort).map(pin => {
-    const i = E.pins[pin], g = S.gpio[pin] || {}, num = pinNum(pin);
+    const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
     const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
     const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${o}</option>`).join('') + '</select>';
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
       <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td><td>${sel(SPEEDS, g.speed || 'Low', 'speed')}</td>
-      <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—"></td></tr>`;
+      <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';
   return `<table class="gpio"><thead><tr><th>Pin Name</th><th>Signal on Pin</th><th>GPIO mode</th><th>GPIO Pull-up/Pull-down</th><th>Maximum output speed</th><th>User Label</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 document.getElementById('cbody').addEventListener('change', e => {
   const el = e.target; if (!el.dataset.pin) return;
-  (S.gpio[el.dataset.pin] ||= {})[el.dataset.k] = el.value;
+  setGpioField(el.dataset.pin, el.dataset.k, el.value);
+  PROJECT.dirty = true; updateCrumb();
+  if (el.dataset.k === 'label') renderChip();          // labels show on the chip; don't redraw the table under the cursor
 });
 function pinSort(a, b) { const m = s => s.match(/^([A-Z]+)(\d+)$/); const x = m(a), y = m(b); if (x && y) return x[1] === y[1] ? +x[2] - +y[2] : x[1].localeCompare(y[1]); return a.localeCompare(b); }
 
-// ---------- 7. clock tab ------------------------------------------------------
-function defaultClock(c) {
-  if (!c) return null;
-  const pre = {}; for (const [k, v] of Object.entries(c.prescalers || {})) pre[k] = v.options[0];
-  return { hse: c.sources.HSE ? c.sources.HSE.mhz : 8, pllIn: 0, pllMul: c.pll ? c.pll.multipliers[0] : 1, sys: c.sysclk.sources[0], pre };
-}
-const firstPre = c => Object.keys(c.prescalers || {}).find(n => !(c.prescalers[n].source));   // AHB / HB
-function clockCalc() {
-  const c = M.clock, k = S.clock, out = { over: [] };
-  const src = { HSI: c.sources.HSI ? c.sources.HSI.mhz : 0, HSE: k.hse, LSI: c.sources.LSI ? c.sources.LSI.khz / 1000 : 0, LSE: c.sources.LSE ? c.sources.LSE.khz / 1000 : 0 };
-  const pin = c.pll ? c.pll.inputs[k.pllIn] : null;
-  out.pllIn = pin ? src[pin.source] / pin.div : 0;
-  out.PLLCLK = out.pllIn * (k.pllMul || 1);
-  out.SYSCLK = k.sys === 'PLLCLK' ? out.PLLCLK : src[k.sys];
-  if (out.SYSCLK > c.sysclk.max_mhz) out.over.push('SYSCLK');
-  const p = c.prescalers || {}, fp = firstPre(c);
-  out.HCLK = out.SYSCLK / (fp ? k.pre[fp] : 1);
-  if (fp && p[fp].max_mhz && out.HCLK > p[fp].max_mhz) out.over.push(fp);
-  for (const [name, v] of Object.entries(p)) {
-    if (name === fp) continue;
-    const base = v.source === 'PLLCLK' ? out.PLLCLK : (v.source && v.source !== fp && out[v.source] !== undefined) ? out[v.source] : out.HCLK;
-    out[name] = base / k.pre[name];
-    if (v.max_mhz && out[name] > v.max_mhz) out.over.push(name);
-    if (v.min_mhz && out[name] < v.min_mhz) out.over.push(name);
-    if (v.target_mhz && Math.abs(out[name] - v.target_mhz) > 0.01) out.over.push(name);
-  }
-  for (const d of c.derived || []) out[d.name] = out.HCLK / d.div;
-  if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) out.over.push('HSE');
-  return out;
-}
+// ---------- 7. clock tab (drawing only; the maths is app/engine/clock.js) ----
 function renderClock() {
   const el = document.getElementById('clock');
   if (!M.clock) { el.innerHTML = '<div class="empty">This MCU file has no clock section.</div>'; return; }
@@ -809,42 +871,13 @@ function renderClock() {
   el.querySelectorAll('select[data-pre]').forEach(s => s.onchange = () => { k.pre[s.dataset.pre] = +s.value; renderClock(); });
 }
 
-// ---------- 7b. projects ------------------------------------------------------
-// A project is one MCU + one package + every setting. Saved as YAML (.wchproj).
-function projectSerialize() {
-  const periph = {};
-  for (const [pid, st] of Object.entries(S.periph)) {
-    const settings = {}; for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
-    periph[pid] = { settings, remap: st.remap };
-  }
-  return jsyaml.dump({
-    wchproj: 1, name: PROJECT.name, saved: new Date().toISOString(),
-    mcu: M.mcu.name, variant: PROJECT.variant, package: S.pkg,
-    peripherals: periph, gpio_manual: S.manual, gpio_settings: S.gpio, clock: S.clock,
-  }, { noRefs: true, lineWidth: 120 });
-}
-function projectApply(obj) {
-  if (!obj || obj.wchproj !== 1) throw new Error('Not a WCHCube project file');
-  const src = MCU_FILES[obj.mcu];
-  if (!src) throw new Error(`This project is for "${obj.mcu}", which is not loaded. Use "Open MCU file…" to load its YAML first, then open the project again.`);
-  loadMcu(src);
-  PROJECT.name = obj.name || 'Untitled'; PROJECT.variant = obj.variant || null;
-  if (obj.package in M.packages) S.pkg = obj.package;
-  applyPackageRemaps();
-  for (const [pid, st] of Object.entries(obj.peripherals || {})) {
-    if (!S.periph[pid]) continue;
-    const P = M.peripherals[pid];
-    for (const s of P.settings || []) {
-      const v = (st.settings || {})[s.name]; if (v === undefined) continue;
-      if (s.type === 'checkboxes') S.periph[pid].settings[s.name] = new Set(Array.isArray(v) ? v : []);
-      else if (s.choices.some(c => c.name === v)) S.periph[pid].settings[s.name] = v;
-    }
-    if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
-  }
-  S.manual = obj.gpio_manual || {}; S.gpio = obj.gpio_settings || {};
-  if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
-  document.getElementById('pkgsel').value = S.pkg;
-  PROJECT.dirty = false; updateCrumb(); renderAll(true);
+// ---------- 7b. projects (dialogs and files; state is app/engine/project.js) --
+// Restore a saved project, then resync every part of the shell it can change.
+function applyProjectFile(text) {
+  projectApply(text);
+  syncMcuUi();
+  updateCrumb();
+  renderAll(true);
 }
 function updateCrumb() {
   document.getElementById('crumb-proj').textContent = `${PROJECT.name}.wchproj${PROJECT.dirty ? '*' : ''} - Pinout & Configuration`;
@@ -882,8 +915,9 @@ document.getElementById('np-cancel').onclick = () => document.getElementById('ne
 document.getElementById('np-create').onclick = () => {
   const name = document.getElementById('np-mcu').value;
   loadMcu(MCU_FILES[name]);
-  S.pkg = npPick.pkg; applyPackageRemaps(); document.getElementById('pkgsel').value = S.pkg;
-  PROJECT.name = document.getElementById('np-name').value.trim() || 'Untitled'; PROJECT.variant = npPick.variant; PROJECT.dirty = false;
+  setPackage(npPick.pkg);
+  syncMcuUi();
+  setProject({ name: document.getElementById('np-name').value.trim() || 'Untitled', variant: npPick.variant, dirty: false });
   document.getElementById('newproj').classList.remove('show'); updateCrumb(); renderAll(true);
   toast(`New project: ${PROJECT.name}`);
 };
@@ -892,7 +926,7 @@ document.getElementById('m-save').onclick = saveProject;
 document.getElementById('m-openproj').onclick = () => document.getElementById('projinput').click();
 document.getElementById('projinput').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
-  f.text().then(t => { try { projectApply(jsyaml.load(t)); toast(`Opened ${f.name}`); } catch (err) { alert('Could not open project: ' + err.message); } });
+  f.text().then(t => { try { applyProjectFile(t); toast(`Opened ${f.name}`); } catch (err) { alert('Could not open project: ' + err.message); } });
   e.target.value = '';
 };
 window.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveProject(); } if ((e.ctrlKey || e.metaKey) && e.key === 'n') { e.preventDefault(); openNewProject(); } });
@@ -918,8 +952,9 @@ document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
   if (b.dataset.view === 'pinout') fitChip();
 });
 document.getElementById('pkgsel').onchange = e => {
-  S.pkg = e.target.value; closePicker(); applyPackageRemaps(); PROJECT.dirty = true;
-  const dropped = Object.keys(S.manual).filter(p => !pinExists(p));
+  closePicker();
+  const dropped = setPackage(e.target.value);   // engine: keeps what still exists
+  PROJECT.dirty = true;
   renderAll(true);
   const msgs = [];
   if (dropped.length) msgs.push(`not bonded on ${S.pkg}: ${dropped.join(', ')}`);
@@ -935,16 +970,28 @@ document.getElementById('pin-search').addEventListener('input', e => {
 document.getElementById('m-open').onclick = () => document.getElementById('fileinput').click();
 document.getElementById('fileinput').onchange = e => {
   const f = e.target.files[0]; if (!f) return;
-  f.text().then(t => { try { loadMcu(t); if (![...ms.options].some(o => o.value === M.mcu.name)) { const o = document.createElement('option'); o.value = o.textContent = M.mcu.name; ms.appendChild(o); } ms.value = M.mcu.name; PROJECT.name = `${M.mcu.name}_${S.pkg}`; PROJECT.variant = null; PROJECT.dirty = false; updateCrumb(); toast(`Loaded ${f.name}`); } catch (err) { alert('Could not load: ' + err.message); } });
+  f.text().then(t => {
+    try {
+      registerMcuFile(t); openMcu(t);
+      if (![...ms.options].some(o => o.value === M.mcu.name)) { const o = document.createElement('option'); o.value = o.textContent = M.mcu.name; ms.appendChild(o); }
+      ms.value = M.mcu.name;
+      setProject({ name: `${M.mcu.name}_${S.pkg}`, variant: null, dirty: false });
+      updateCrumb(); toast(`Loaded ${f.name}`);
+    } catch (err) { alert('Could not load: ' + err.message); }
+  });
   e.target.value = '';
 };
-document.getElementById('m-reset').onclick = () => { if (confirm('Reset all pin and peripheral settings?')) { const pk = S.pkg; loadMcu(M._src); S.pkg = pk; applyPackageRemaps(); document.getElementById('pkgsel').value = pk; PROJECT.dirty = true; renderAll(true); } };
-document.getElementById('m-help').onclick = () => alert('WCHCube\n\n• Click a pin → choose a GPIO mode or an alternate function.\n• Right-click a pin → reset it.\n• Left tree → configure peripheral modes and AFIO remap.\n• Orange pin = two signals want the same pin.\n• ⊘ = peripheral has no usable pin mapping on this package.\n• Open MCU file… loads any YAML in the same format as data/mcus/*.yaml.');
+document.getElementById('m-reset').onclick = () => {
+  if (!confirm('Reset all pin and peripheral settings?')) return;
+  const pk = S.pkg; loadMcu(M._src); setPackage(pk); syncMcuUi();
+  PROJECT.dirty = true; renderAll(true);
+};
+document.getElementById('m-help').onclick = () => alert('WCHCube\n\n• Click a pin → choose a GPIO mode or an alternate function.\n• Right-click a pin → user label, reset, copy name.\n• Arrow keys move between pins, Enter opens the picker, L sets a label, Del resets.\n• "Only modified" hides every pin without a signal or a label.\n• Left tree → configure peripheral modes and AFIO remap; the orange badge counts conflicts.\n• Orange pin = two signals want the same pin. Click a signal in the banner to jump to its peripheral.\n• ⊘ = peripheral has no usable pin mapping on this package.\n• Open MCU file… loads any YAML in the same format as data/mcus/*.yaml.');
 const ms = document.getElementById('mcusel');
 for (const k of Object.keys(MCU_FILES)) { const o = document.createElement('option'); o.value = k; o.textContent = k; ms.appendChild(o); }
-ms.onchange = () => { loadMcu(MCU_FILES[ms.value]); PROJECT.name = `${ms.value}_${S.pkg}`; PROJECT.variant = null; PROJECT.dirty = false; updateCrumb(); renderAll(true); };
-loadMcu(MCU_FILES[Object.keys(MCU_FILES).sort()[0]]);
-PROJECT.name = `${M.mcu.name}_${S.pkg}`; updateCrumb(); renderAll(true);
+ms.onchange = () => { openMcu(MCU_FILES[ms.value]); setProject({ name: `${ms.value}_${S.pkg}`, variant: null, dirty: false }); updateCrumb(); };
+openMcu(MCU_FILES[Object.keys(MCU_FILES).sort()[0]]);
+setProject({ name: `${M.mcu.name}_${S.pkg}`, dirty: false }); updateCrumb();
 </script>
 </body>
 </html>

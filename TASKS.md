@@ -38,10 +38,10 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 - [x] Clock Configuration tab v1: source → PLL → SYSCLK → AHB/APB/ADC with limit warnings
 - [x] "Load MCU file" (pick a YAML from disk in the browser)
 - [x] Package switch keeps assignments that still exist, warns about dropped pins + issue count
-- [ ] Right-click pin → user label
+- [~] (AGENT-3) Right-click pin → user label
 - [x] Search box in left tree and in chip view (find pin / signal)
-- [ ] "Show only modified pins" filter
-- [x] Keyboard: Esc closes picker  [ ] arrow keys move between pins
+- [~] (AGENT-3) "Show only modified pins" filter
+- [x] Keyboard: Esc closes picker  [~] (AGENT-3) arrow keys move between pins
 - [x] Save / load project (`.wchproj` YAML: mcu, variant, package, all settings, clock) — Ctrl+S / Open project…
 - [x] New Project dialog: pick MCU → part number / package (with flash, SRAM, I/O count, temp grade) → name; one project per MCU+package
 - [ ] System view (block diagram) — low priority
