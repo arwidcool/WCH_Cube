@@ -42,22 +42,4 @@ when — and only when — every line in `DONE.md` is verifiably true.
   stop when they see that line.
 
 ## Current
-**Cycle 3.** Gate: `npm test` = **190 tests, green**. `python tools/validate_mcu.py` = 0 errors,
-2 warnings (unbonded PC10/PC11 on the dummy part), 1 info.
-
-Done this cycle:
-- Adopted the `agents/Update/` pack into `agents/` (briefs, README, DONE, BACKLOG, HUMAN_TODO,
-  run_agents.sh, and the 6 new HUMAN board lines). `agents/Update/` is now a snapshot and can be deleted.
-- Applied both HUMAN 11:30Z decisions to `tools/validate_mcu.py`: repeated `VSS`/`VDD` are no longer
-  reported at all (only `type: io` names must be unique), and the SYS first-choice-carries-signals
-  note is now `info`, never a failure. That removed 8 warnings of pure noise.
-- Re-audited the codegen lines and automated the gate: `tests/codegen.test.js` generates the C from
-  the built app for every MCU × package. While an MCU file has no `codegen:` block it asserts the
-  generator emits a TODO that names what is missing; the moment AGENT-1 lands the block it flips to
-  enforcing zero TODOs. Nobody has to remember to turn it on.
-- `tests/boot.test.js` for AGENT-3's 01:08Z request, with one correction: `window.M` is undefined by
-  construction and cannot be the boot signal. Requested a debug handle from AGENT-2 instead.
-
-Next: watch for a git remote (HUMAN_TODO 1) and take CI live the moment it exists; Playwright
-screenshots in CI once there is a remote to run them on; `tests/perf.test.js` on the 144-pin fixture
-as soon as AGENT-1 lands a package above 48 pins.
+(rewrite this section every cycle)

@@ -3,25 +3,21 @@
 Every `[x]` names the evidence, so anyone can re-check it. `npm test` runs all of it.
 QA does not tick a line on a claim — only on something that runs.
 
-**14 of 24 done** (re-audited against the tree, cycle 3). The ten open lines:
+**14 of 22 done.** The eight open lines, and who can close them:
 
 | Open line | Owner | What is missing |
 |---|---|---|
 | CH32V006 remap second pass | AGENT-1 | a re-derivation from the RM, diffed against the file |
 | CH32V005 via `inherits:` | AGENT-1 | the data file; the engine support is done and tested |
 | CH32V003 extraction | AGENT-1 | the part, or a BOARD note that the sources are absent |
-| C with no TODO sections | AGENT-1 | the `codegen:` + `analog_signals` blocks; the generator is done |
-| `params:` schema and tab | AGENT-1 / AGENT-2 / AGENT-3 | schema, data, engine, and the UI tab |
+| C code generation | AGENT-2 | in flight — `generateAll` already emits `wchcube_init.c/.h` |
 | Overflow up to LQFP144 | AGENT-1 | a package above 48 pins; nothing larger exists to test |
 | TASKS.md fully clean | everyone | the last Phase 1–3 boxes |
-| Generated C compiles | **human** | no remote, so no CI, and no compiler on this box |
 | Tauri builds on Linux CI | **human** | no Rust toolchain here and no remote, so it has never compiled |
 | CI runs on every push | **human** | the workflow is written but the repo has no remote |
 
-Six of the seven agent-owned lines are AGENT-1's, and five of those are just data extraction.
-The three human ones are not code problems: add a git remote and push, and the workflow builds,
-validates, tests, and compiles both the generated C and the desktop shell on Linux
-(see `agents/HUMAN_TODO.md`).
+The last two are not code problems. Add a git remote and push, and the workflow builds,
+validates, tests, and compiles the desktop shell on Linux.
 
 ## Data
 - [ ] CH32V006.yaml spot-checked: every remap table re-derived from RM by a second pass and diffed (0 differences)
@@ -64,15 +60,8 @@ validates, tests, and compiles both the generated C and the desktop shell on Lin
         pin order, exposed pad last, signal/mode/user label carried, conflicts marked and
         listed, CSV header and quoting). GENERATE CODE downloads all three files.
 - [ ] C code generation for GPIO + AFIO remap + RCC (WCH EVT SDK style), with real register words for CH32V006 (no TODO sections)
-      → **the generator is done and correct**: `app/engine/codegen.js` + `app/tests/codegen.test.js`
-        (19 structural tests), and `tests/codegen.test.js` generates the C from the built app for
-        every MCU × package and checks it is well formed — both files present, braces and comments
-        balanced, an include guard, and the configured pins named in the output.
-        What is missing is DATA, not code: `data/mcus/CH32V006.yaml` has no `codegen:` block, so the
-        generator emits the TODO it is designed to emit ("the MCU file has no codegen.rcc block, so
-        the register word cannot…"). The gate is already armed — `tests/codegen.test.js` ("once an
-        MCU file has a codegen: block its C contains no TODO") flips from reporting to enforcing the
-        moment AGENT-1 lands the block, so this line ticks itself.
+      → generator exists: `app/engine/codegen.js` + `app/tests/codegen.test.js` (19 tests, structural C check).
+        Tickable once AGENT-1's `codegen:` + `analog_signals` land and CH32V006 output has no TODOs.
 - [ ] Generated C compiles in CI (`riscv-none-elf-gcc`, else `gcc -fsyntax-only` with stub headers) — **human-blocked** (no remote)
 - [ ] `params:` schema in FORMAT.md, filled for CH32V006 USART/SPI/I2C/TIM/ADC, consumed by the engine and a Parameter Settings tab, round-trips in `.wchproj`
 
@@ -121,11 +110,6 @@ validates, tests, and compiles both the generated C and the desktop shell on Lin
         (with the remap-table idea and `tools/validate_mcu.py`), running the tests including
         the npm-on-Google-Drive workaround, and how the four agents work
 - [x] Zero console errors/warnings on load for every MCU × every package (automated check)
-      → also `tests/boot.test.js` (AGENT-3's 01:08Z request): a parsed MCU, an initialised state and
-        an engine result after load, the page actually painted, and a silent console. Note `window.M`
-        is undefined **by construction** — the bundle is one classic script, where a top-level
-        `let` never becomes a window property — so it cannot be the boot signal; the test pins that
-        down so nobody writes a check against it.
       → `tests/smoke.js`: every MCU × every package loads, switches, draws the expected pin
         count, survives five deterministic pin clicks with an assignment each, and must
         produce no console output at all. Also `tests/data.test.js` ("the app can load every

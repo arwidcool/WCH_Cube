@@ -16,6 +16,8 @@
     /* surfaces and ink - every themed colour goes through one of these */
     --head:#4b5563; --bar:#fafafa; --tab-off:#e9ecef; --line-soft:#eef0f2;
     --link:#0b57a4; --on-accent:#ffffff; --warn-bg:#fff3e0; --bad-bg:#fdecec;
+    /* shared-resource issues (EXTI lines, DMA channels) - never orange, they are not pin conflicts */
+    --res:#5a4fcf; --res-bg:#efedfc;
     --chip-text:#ffffff; --chip-sub:#cfd3d7; --chip-dot:#d0d4d8;
     --sys-na:#e3e6ea; --sys-na-fg:#98a1aa; --sys-off:#eceff1; --sys-off-fg:#4b5563;
     --shadow:rgba(0,0,0,.25); --ink-strong:#03234b;
@@ -96,13 +98,23 @@
   .checks label{background:none;font-weight:400}
   .mode .issue{grid-column:1/-1;color:var(--bad);background:var(--warn-bg);border-left:3px solid var(--pin-conflict);padding:4px 8px}
   .mode .hint{grid-column:1/-1;color:var(--muted)}
+  /* a shared resource is contended, not a pin clash: dashed edge, own colour */
+  .mode .issue.res{color:var(--res);background:var(--res-bg);border-left:3px dashed var(--res)}
+  .mode .issue.res b{font-weight:600}
   .conflicts{margin-top:4px;background:var(--warn-bg);color:var(--bad);border:1px solid var(--pin-conflict);padding:3px 8px;font-size:12px;text-align:left}
+  /* shared resources are contended, not double-booked pins: own colour, dashed edge */
+  .resbar{margin-top:4px;background:var(--res-bg);color:var(--res);border:1px dashed var(--res);padding:3px 8px;font-size:12px;text-align:left;font-weight:400}
+  .resbar .rw{display:block;margin-top:2px}
+  .resbar a{color:inherit;text-decoration:underline;cursor:pointer;padding:0 2px;border-radius:2px}
+  .resbar a:hover{background:var(--res);color:var(--on-accent);text-decoration:none}
   .conflicts .cf{display:inline-block;margin:1px 10px 1px 0;white-space:nowrap}
   .conflicts a{color:#a11;text-decoration:underline;cursor:pointer}
   .conflicts a:hover{background:var(--pin-conflict);color:#fff;text-decoration:none}
   .cnt{background:var(--pin-conflict);color:#fff;border-radius:8px;padding:0 6px;font-size:11px;line-height:15px;min-width:17px;text-align:center;display:inline-block}
   .item .cnt{margin-left:auto}
   .item.selected .cnt{background:#fff;color:#c25100}
+  .cnt.res{background:var(--res)}
+  .item.selected .cnt.res{background:#fff;color:var(--res)}
   .cat>button .cnt{margin-left:8px}
   .config{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel);margin-top:8px}
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
@@ -243,6 +255,7 @@
     --ok:#4cc85a; --warn:#e0a000; --bad:#ff7a7a;
     --head:#343c45; --bar:#1f2429; --tab-off:#2b3138; --line-soft:#2e343b;
     --link:#6cb8ee; --on-accent:#ffffff; --warn-bg:#3a2c1a; --bad-bg:#3a2323;
+    --res:#a79cff; --res-bg:#2a2740;
     --chip-text:#f2f5f7; --chip-sub:#b9c0c7; --chip-dot:#aeb5bc;
     --sys-na:#2b3138; --sys-na-fg:#7d868f; --sys-off:#2b3138; --sys-off-fg:#c3cad1;
     --shadow:rgba(0,0,0,.6); --ink-strong:#cfe2f2; --blue-hdr:#1c6f9f;
@@ -580,7 +593,8 @@ function decoratePkgSel() {
   const ps = document.getElementById('pkgsel');
   for (const o of ps.options) {
     const pk = o.value, bits = [`${pkgIoCount(pk)} I/O`];
-    const vs = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === pk).map(([v]) => v);
+    const vs = Object.entries(M.mcu.variants || {}).filter(([, i]) => i.package === pk)
+      .map(([v, i]) => v + (i.temp ? ` ${i.temp}\u00b0C` : ''));
     if (vs.length) bits.push(vs.slice(0, 2).join(', ') + (vs.length > 2 ? ` +${vs.length - 2}` : ''));
     if (!PACKAGES[pk]) bits.push('no drawing');
     const txt = `${pk} · ${bits.join(' · ')}`;
@@ -997,6 +1011,8 @@ function renderTree() {
   const q = document.getElementById('tree-search').value.trim().toLowerCase();
   const conf = {};                    // pid -> how many physical pins it fights over
   for (const c of E.conflictList || []) for (const who of new Set(c.owners)) conf[who] = (conf[who] || 0) + 1;
+  const res = {};                     // pid -> shared resources it contends for (EXTI line, DMA channel)
+  for (const r of E.resourceIssues || []) for (const who of new Set(r.owners)) res[who] = (res[who] || 0) + 1;
   const cats = {};
   cats['System Core'] = ['GPIO'];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
@@ -1007,12 +1023,19 @@ function renderTree() {
     const items = cats[c].filter(p => !q || p.toLowerCase().includes(q) || periphHasSignal(p, q));
     if (!items.length) continue;
     const ccnt = items.reduce((n, p) => n + (conf[p] || 0), 0);
-    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${ccnt ? ` <span class="cnt">${ccnt}</span>` : ''}</span></button><div class="items">`;
+    const rcnt = items.reduce((n, p) => n + (res[p] || 0), 0);
+    const cbadge = (ccnt ? ` <span class="cnt" title="pin conflicts">${ccnt}</span>` : '')
+      + (rcnt ? ` <span class="cnt res" title="shared-resource issues">${rcnt}</span>` : '');
+    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${cbadge}</span></button><div class="items">`;
     for (const pid of items) {
       const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
-      const cn = conf[pid] || 0;
-      const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cn} pin conflict${cn > 1 ? 's' : ''}` : ''}`;
-      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr(cn ? cn + ' pin conflict' + (cn > 1 ? 's' : '') : pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${cn ? `<span class="cnt">${cn}</span>` : ''}</div>`;
+      const cn = conf[pid] || 0, rn = res[pid] || 0;
+      const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
+      const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
+      const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
+      const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
+        + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
+      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([cnTxt, rnTxt].filter(Boolean).join('; ') || pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
     }
     h += '</div></div>';
   }
@@ -1050,6 +1073,22 @@ function conflictBanner() {
     `</span>`).join('');
   return `<div class="conflicts" role="status" aria-live="polite">⚠ ${rows.length} pin conflict${rows.length > 1 ? 's' : ''} — click a signal to open its peripheral<br>${items}</div>`;
 }
+// EXTI lines and DMA channels: contended resources, not double-booked pins. They get
+// their own strip so they are visible whatever the tree selection is, and they never
+// borrow the orange that means "two things want one pin".
+function resourceBanner() {
+  const rows = E.resourceIssues || [];
+  if (!rows.length) return '';
+  const n = rows.length;
+  const line = r => {
+    const owners = (r.owners || []).filter(o => M.peripherals[o]);
+    const links = owners.map(o => `<a data-goto="${attr(o)}" title="Go to ${attr(o)}">${esc(o)}</a>`).join(' ');
+    return `<span class="rw">${r.severity === 'warning' ? '⚑' : '⚠'} ${esc(r.text)}${links ? ' — ' + links : ''}</span>`;
+  };
+  return `<div class="resbar" role="status" aria-live="polite">${n} shared-resource issue${n > 1 ? 's' : ''}` +
+    ` <span style="opacity:.8">(EXTI lines and DMA channels, not pin conflicts)</span>${rows.map(line).join('')}</div>`;
+}
+
 document.getElementById('ptitle').addEventListener('click', e => {
   const a = e.target.closest('a[data-goto]'); if (!a) return;
   selectPeripheral(a.dataset.goto);
@@ -1057,14 +1096,17 @@ document.getElementById('ptitle').addEventListener('click', e => {
 
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
-  document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral') + conflictBanner();
+  document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral')
+    + conflictBanner() + resourceBanner();
   if (!pid) {
     mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>';
     body.innerHTML = gpioTable([...new Set([...Object.keys(E.pins), ...Object.keys(S.gpio).filter(p => userLabel(p) && pinExists(p))])]);
     return;
   }
   if (pid === 'GPIO') {
-    mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`;
+    const gres = (E.resourceIssues || []).filter(r => (r.owners || []).includes('GPIO'));
+    mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`
+      + gres.map(r => `<div class="issue res"><b>EXTI line conflict:</b> ${esc(r.text)}</div>`).join('');
     body.innerHTML = ctab === 'gpio' ? gpioTable(Object.keys(S.manual)) : '<div class="empty">No parameters for GPIO.</div>';
     return;
   }
@@ -1086,7 +1128,15 @@ function renderCentre() {
       return `<option value="${i}"${st.remap === i ? ' selected' : ''}>${r.name}${missing.length ? '  — missing ' + [...new Set(missing)].join(', ') : ''}</option>`;
     }).join('') + '</select>';
   }
-  for (const m of E.issues[pid] || []) h += `<div class="issue">${m}</div>`;
+  // Shared-resource issues arrive folded into E.issues[pid] as plain text; pull them
+  // back out so they read as what they are, and never print the same line twice.
+  const mine = (E.resourceIssues || []).filter(r => (r.owners || []).includes(pid));
+  const resText = new Set(mine.map(r => r.text));
+  for (const m of E.issues[pid] || []) if (!resText.has(m)) h += `<div class="issue">${esc(m)}</div>`;
+  for (const r of mine) {
+    const what = r.kind === 'exti' ? 'EXTI line' : r.kind === 'dma' ? 'DMA channel' : 'Shared resource';
+    h += `<div class="issue res"><b>${esc(what)}${r.severity === 'warning' ? '' : ' conflict'}:</b> ${esc(r.text)}</div>`;
+  }
   if (!(P.settings || []).length) h += `<div class="hint">No modes for this peripheral.</div>`;
   mode.innerHTML = h;
   // every write goes through the engine so it lands on the undo stack (AGENT-2, 05:12Z)
@@ -1373,20 +1423,15 @@ function toast(msg) { const t = document.getElementById('toast'); t.textContent 
 
 // Undo / redo (engine: app/engine/history.js). Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z.
 // Ignored while typing, so the user label editor keeps its own undo.
+// One implementation: runHistory() in section 4b also backs the menu-bar buttons.
 window.addEventListener('keydown', e => {
   if (!(e.ctrlKey || e.metaKey)) return;
   const el = e.target;
   if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
   const k = e.key.toLowerCase();
-  const wantRedo = k === 'y' || (k === 'z' && e.shiftKey);
   if (k !== 'z' && k !== 'y') return;
   e.preventDefault();
-  const label = wantRedo ? redo() : undo();
-  if (!label) { toast(wantRedo ? 'Nothing to redo' : 'Nothing to undo'); return; }
-  closePicker();
-  document.getElementById('pkgsel').value = S.pkg;      // undo can move the package
-  renderAll();
-  toast(`${wantRedo ? 'Redo' : 'Undo'}: ${label}`);
+  runHistory(k === 'y' || (k === 'z' && e.shiftKey));
 });
 
 document.querySelectorAll('.tab[data-view]').forEach(b => b.onclick = () => {
