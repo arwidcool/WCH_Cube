@@ -1,22 +1,32 @@
 #!/usr/bin/env python3
 """
-extract_remaps.py -- AGENT-1 (DATA), second-pass verification.
+extract_remaps.py -- AGENT-1 (DATA). Independent re-derivation of the remap tables.
 
-Re-derives every alternate-function remap table in RM section 7.2.11 straight from
-`data/sources/CH32V00XRM.md`, independently of how `data/mcus/CH32V006.yaml` was first
-written, then diffs the two.
+The MCU YAML is written by hand from the reference manual, so a typo in it looks exactly
+like correct data. This tool reads the manual again, on its own, and compares.
+
+    PASS 2   RM section 7.2.11 pin grids (Tables 7-8, 7-9-1, 7-10..7-13-1, 7-14, 7-15)
+             re-parsed from data/sources/CH32V00XRM.md, diffed against the YAML.
+             A difference here is a bug in the YAML. It fails the run.
+
+    PASS 3   RM section 7.3.2.2, the AFIO_PCFR1 register description, which spells every
+             remap out a second time in prose ("0000: Default mapping (ETR/PC5, ...)").
+             Diffed against the pass-2 grids. A difference here is the manual
+             contradicting itself, so it is reported but does NOT fail the run --
+             somebody has to decide which source is right and record it in the .notes.md.
 
 Usage:
-    python tools/extract_remaps.py                 # diff RM vs YAML, human report
-    python tools/extract_remaps.py --json          # dump the RM-derived tables as JSON
+    python tools/extract_remaps.py                 # all passes, human report
+    python tools/extract_remaps.py --json          # dump the RM-derived tables
+    python tools/extract_remaps.py --no-cross-check
     python tools/extract_remaps.py --rm PATH --yaml PATH
 
-Exit codes:  0 = identical   1 = differences found   2 = could not parse the RM
+Exit codes:  0 = YAML matches the RM   1 = differences found   2 = could not parse the RM
 
-Why the parser looks like this
-------------------------------
-The RM markdown is a PDF text dump. Three things are broken in it and the parser has to
-survive all three, while still failing loudly rather than silently inventing data:
+Why the parsers look like this
+-----------------------------
+The RM markdown is a PDF text dump. Four things are broken in it, and the parsers have to
+survive all four while still failing loudly rather than silently inventing data:
 
   1. A table row wraps across two lines, with the label only on the first:
          ## TIM1_ETR PC5 PD4 PC5 PC2
@@ -25,10 +35,18 @@ survive all three, while still failing loudly rather than silently inventing dat
   2. A row label itself wraps:  "## USART1_CT" / "## S" / "## PD3 PC6 ..."
   3. Page-break junk ("CH32V00X Reference Manual ... https://wch-ic.com", "## V1.4  73",
      "mapping mapping mapping ...") lands in the middle of a table.
+  4. Section 7.3.2.2 opens with the register bit-layout diagram, which prints four field
+     names on one line. Matching a bare field name there starts every paragraph at the
+     top of the section, and pass 3 then reads entirely the wrong text while still
+     producing plausible-looking output.
 
-The self-check that makes this trustworthy: every row must end up with EXACTLY the
+The self-check that makes pass 2 trustworthy: every row must end up with EXACTLY the
 table's column count. A mis-parse almost always changes a row length, so a wrong answer
-becomes a hard error instead of a plausible-looking table.
+becomes a hard error instead of a plausible-looking table. Pass 3's equivalent is that it
+has to agree with pass 2 on 227 of 228 values.
+
+Both parsers are negative-tested: plant a wrong pin in the YAML and pass 2 names it and
+exits 1.
 """
 
 import argparse
@@ -53,33 +71,50 @@ DEFAULT_YAML = ROOT / "data" / "mcus" / "CH32V006.yaml"
 # Table 7-13-1 (not 7-13-2). Picking the wrong twin is the classic error here, so the
 # `end` marker for each table is the heading of its twin.
 # --------------------------------------------------------------------------------------
+def _bincodes(n, width):
+    return [format(i, "0" + str(width) + "b") for i in range(n)]
+
+
 TABLES = [
     dict(name="Table 7-8 TIM1", periph="TIM1", strip="TIM1_", ncols=10,
          start="Table 7-8 TIM1 alternate function remapping",
          end="Table 7-9-1",
+         field="TIM1_RM", codes=_bincodes(10, 4),
          signals=["TIM1_ETR", "TIM1_CH1", "TIM1_CH2", "TIM1_CH3", "TIM1_CH4",
                   "TIM1_BKIN", "TIM1_CH1N", "TIM1_CH2N", "TIM1_CH3N"]),
     dict(name="Table 7-9-1 TIM2", periph="TIM2", strip="TIM2_", ncols=8,
          start="Table 7-9-1 TIM2 alternate function remapping",
          end="Table 7-9-2",
+         field="TIM2_RM", codes=_bincodes(8, 3),
          signals=["TIM2_ETR", "TIM2_CH1", "TIM2_CH2", "TIM2_CH3", "TIM2_CH4"]),
     dict(name="Table 7-10 USART1", periph="USART1", strip="USART1_", ncols=10,
          start="Table 7-10 USART1 alternate function remapping",
          end="Table 7-11",
+         field="USART1_RM", codes=_bincodes(10, 4),
          signals=["USART1_TX", "USART1_RX", "USART1_CTS", "USART1_RTS"]),
     dict(name="Table 7-11 USART2", periph="USART2", strip="USART2_", ncols=7,
          start="Table 7-11 USART2 alternate function remapping",
          end="7.2.11.3",
+         field="USART2_RM", codes=_bincodes(7, 3),
          signals=["USART2_TX", "USART2_RX", "USART2_CTS", "USART2_RTS"]),
     dict(name="Table 7-12 SPI", periph="SPI1", strip="SPI_", ncols=7,
          start="Table 7-12 SPI alternate function remapping",
          end="7.2.11.4",
+         field="SPI1_RM", codes=_bincodes(7, 3),
          signals=["SPI_NSS", "SPI_SCK", "SPI_MISO", "SPI_MOSI"]),
     dict(name="Table 7-13-1 I2C", periph="I2C1", strip="I2C_", ncols=5,
          start="Table 7-13-1 I2C alternate function remapping",
          end="Table 7-13-2",
+         field="I2C1_RM", codes=["000", "001", "010", "011", "1xx"],
          signals=["I2C_SCL", "I2C_SDA"]),
 ]
+
+# Third source. RM 7.3.2.2 describes AFIO_PCFR1 field by field and spells every remap out
+# again in prose -- "0000: Default mapping (ETR/PC5, CH1/PD2, ...)". It is written by hand
+# from the same silicon spec as the 7.2.11 grids, so agreement between the two is real
+# evidence and disagreement is a fault in the source worth knowing about.
+REGISTER_SECTION = ("7.3.2.2 Remap Register 1 (AFIO_PCFR1)",
+                    "Chapter 8 Direct Memory Access Control")
 
 # ADC triggers are printed as prose, not as a pin grid (RM Tables 7-14 / 7-15).
 ADC_TABLES = [
@@ -178,6 +213,148 @@ def parse_adc(block, keys, what):
         raise LookupError(what + ": expected " + str(len(keys))
                           + " 'connect to' pins, got " + str(pins))
     return dict(zip(keys, pins))
+
+
+def parse_register_prose(lines, table):
+    """Read one AFIO_PCFR1 field's prose into {code: {signal: pin}} (RM 7.3.2.2).
+
+    Returns (mapping, notes). `notes` collects codes the prose describes but that carry
+    no pins, such as TIM1_RM=11xx (channel 1 input comes from the internal LSI).
+    """
+    what = table["field"] + " prose"
+    block = slice_block(lines, REGISTER_SECTION[0], REGISTER_SECTION[1], what)
+
+    # Find this field's paragraph: from its description row to the next field's.
+    #
+    # The section opens with the register's bit-layout diagram, which prints four field
+    # names on one line ("TIM1_RM[3:0] USART1_RM[3:0] I2C1_RM[2:0] SPI1_RM[2:0]"). Matching
+    # a bare field name there starts every paragraph at the top of the section and the
+    # whole pass silently reads the wrong text. A description row is the row of the
+    # bit table, so it carries the access column "RW" and names exactly one field.
+    all_fields = [t["field"] for t in TABLES]
+
+    def field_row(bare):
+        if "RW" not in bare:
+            return None
+        hits = [f for f in all_fields if f + "[" in bare]
+        return hits[0] if len(hits) == 1 else None
+
+    start = None
+    chunk = []
+    for ln in block:
+        bare = ln.lstrip("# ").strip()
+        if start is None:
+            if field_row(bare) == table["field"]:
+                start = True
+            continue
+        if field_row(bare) not in (None, table["field"]):
+            break
+        chunk.append(bare)
+    if start is None:
+        raise LookupError(what + ": field description row not found in RM 7.3.2.2")
+
+    # Collapse to one line. The PDF dump breaks inside parentheses and uses full-width
+    # commas, and page furniture lands mid-sentence.
+    text = " ".join(c for c in chunk
+                    if "wch-ic.com" not in c and not c.startswith("V1.4"))
+    text = text.replace("，", ",").replace("。", ".")
+    text = re.sub(r"\s+", " ", text)
+
+    known = set(s[len(table["strip"]):] for s in table["signals"])
+    valid = set(table["codes"])
+
+    out, notes, bad = {}, {}, {}
+    # Split on "<code>:" and keep what follows, up to the next such code.
+    parts = re.split(r"(?<![0-9A-Za-z])([01x]{3,4})\s*(?=[:(])", text)
+    for i in range(1, len(parts) - 1, 2):
+        code, body = parts[i], parts[i + 1]
+        if code not in valid and code not in ("11xx", "111"):
+            continue
+        groups = re.findall(r"\(([^)]*)\)", body)
+        # "010 (Only for CH32V007/CH32M007): Full mapping (...)" -- skip the other family.
+        if any("only for" in g.lower() and ("V007" in g or "M007" in g) for g in groups):
+            continue
+        pinlists = [g for g in groups if PIN_RE.search(g) and "/" in g]
+        if not pinlists:
+            if code in valid or code == "11xx":
+                notes[code] = body.strip(" :;.")[:120]
+            continue
+        if code not in valid:
+            notes[code] = body.strip(" :;.")[:120]
+            continue
+
+        mapping = {}
+        for item in pinlists[-1].split(","):
+            item = item.strip()
+            if not item:
+                continue
+            bits = [b for b in item.split("/") if b]
+            if len(bits) < 2:
+                continue
+            pin, sigs = bits[-1], bits[:-1]
+            if table["periph"] == "TIM2" and {"CH1", "ETR"} <= set(sigs):
+                key = "CH1_ETR"
+            else:
+                key = next((s for s in sigs if s in known), None)
+            if key is None:
+                continue
+            if PIN_RE.fullmatch(pin):
+                mapping[key] = pin
+            elif re.fullmatch(r"P[A-Z]\w*", pin):
+                # The prose names something pin-shaped that this part does not have --
+                # RM 7.3.2.2 writes USART2_RM=101 RTS as "PA11" and port A stops at PA7.
+                # Report it rather than dropping it, or the cross-check reads as a
+                # missing entry and the reader has to go find the source line.
+                bad.setdefault(code, {})[key] = pin
+        if mapping:
+            out[code] = mapping
+    return out, notes, bad
+
+
+def cross_check(rm, rm_path):
+    """Diff the 7.2.11 grids against the 7.3.2.2 register prose. Returns (problems, notes)."""
+    lines = Path(rm_path).read_text(encoding="utf-8", errors="replace").splitlines()
+    problems, notes, checked = [], [], 0
+
+    for t in TABLES:
+        periph = t["periph"]
+        grid = rm.get(periph)
+        if not grid:
+            continue
+        try:
+            prose, extra, bad = parse_register_prose(lines, t)
+        except LookupError as e:
+            problems.append(str(e))
+            continue
+        for code, body in sorted(extra.items()):
+            notes.append(t["field"] + "=" + code + ": " + body)
+
+        for i, code in enumerate(t["codes"]):
+            if code not in prose:
+                problems.append(t["field"] + "=" + code
+                                + ": Table has this column, the register prose does not")
+                continue
+            for sig, pins in sorted(grid.items()):
+                want = pins[i]
+                got = prose[code].get(sig)
+                if got is None:
+                    stray = bad.get(code, {}).get(sig)
+                    if stray:
+                        problems.append(
+                            t["field"] + "=" + code + " " + sig + ": Table 7.2.11 says "
+                            + want + ", register prose says " + stray
+                            + " -- which is not a pin on this part, so the table wins")
+                    else:
+                        problems.append(t["field"] + "=" + code + " " + sig
+                                        + ": missing from the register prose (table says "
+                                        + want + ")")
+                elif got != want:
+                    problems.append(t["field"] + "=" + code + " " + sig
+                                    + ": Table 7.2.11 says " + want
+                                    + ", register prose says " + got)
+                else:
+                    checked += 1
+    return problems, notes, checked
 
 
 def extract(rm_path):
@@ -291,6 +468,8 @@ def main():
     ap.add_argument("--rm", default=str(DEFAULT_RM))
     ap.add_argument("--yaml", dest="yml", default=str(DEFAULT_YAML))
     ap.add_argument("--json", action="store_true", help="print the RM-derived tables and exit")
+    ap.add_argument("--no-cross-check", action="store_true",
+                    help="skip pass 3 (the AFIO_PCFR1 register-prose cross-check)")
     args = ap.parse_args()
 
     rm, parse_problems = extract(args.rm)
@@ -320,12 +499,32 @@ def main():
     yml, _doc = from_yaml(args.yml)
     problems = diff(rm, yml)
 
+    print("PASS 2 -- RM section 7.2.11 tables vs the YAML")
     if problems:
-        print("DIFFERENCES: " + str(len(problems)))
+        print("  DIFFERENCES: " + str(len(problems)))
         for p in problems:
-            print("  x " + p)
+            print("    x " + p)
     else:
-        print("DIFFERENCES: 0 -- every pin in the YAML matches the RM table it cites.")
+        print("  DIFFERENCES: 0 -- every pin in the YAML matches the RM table it cites.")
+
+    # Pass 3 disagreements are faults in the RM itself, not in the YAML, so they are
+    # reported separately and do not fail the run. Read them, decide which source is
+    # right, and record the decision in the .notes.md.
+    if not args.no_cross_check:
+        xp, notes, checked = cross_check(rm, args.rm)
+        print("\nPASS 3 -- RM section 7.2.11 tables vs the AFIO_PCFR1 register prose (RM 7.3.2.2)")
+        print("  " + str(checked) + " pin assignments confirmed by both.")
+        if notes:
+            print("  Codes the prose describes that carry no pin:")
+            for n in notes:
+                print("    - " + n)
+        if xp:
+            print("  SOURCE DISAGREEMENTS: " + str(len(xp))
+                  + "  (the RM contradicts itself here -- judgement required, not a YAML bug)")
+            for p in xp:
+                print("    ? " + p)
+        else:
+            print("  SOURCE DISAGREEMENTS: 0 -- the two independent descriptions agree.")
 
     if parse_problems:
         return 2

@@ -1,412 +1,449 @@
 #!/usr/bin/env python3
+"""Validate data/mcus/*.yaml against the format the app actually relies on.
+
+    python tools/validate_mcu.py                    # every bundled MCU
+    python tools/validate_mcu.py data/mcus/X.yaml   # just one
+    python tools/validate_mcu.py --strict           # warnings count as failures
+    python tools/validate_mcu.py --quiet            # only problems, no summary
+
+Exit code 0 = clean.  1 = at least one ERROR (or a WARN under --strict).
+
+What it checks
+  schema             required keys and value types, per the format header in
+                     data/mcus/WCH-DUMMY32-C8.yaml
+  packages           the package id has a geometry in data/packages/packages.yaml,
+                     pin numbers are 1..N with no gaps or duplicates, N matches the
+                     geometry, pin 0 is the exposed pad and only on packages that have one
+  pin-existence      every pin named in a remap table, in a package map, or in the EXTI
+                     table exists in `pins:`
+  remap-consistency  every signal a setting can ask for is routed by at least one remap,
+                     every remap_by_package index is in range, and remap tables agree
+                     with each other about which signals they carry
+  I/O counts         mcu.variants[*].io_count vs the io pins actually in that package
+                     table (a shorted pair counts once) - catches a dropped or
+                     duplicated row in `packages:`
+  clock              every source/prescaler reference points at a node that exists
+
+Output is deliberately ASCII only: the Windows console here is cp1252 and chokes
+on arrows and box characters.
 """
-validate_mcu.py -- AGENT-1 (DATA). Schema and consistency checks for MCU YAML files.
-
-Usage:
-    python tools/validate_mcu.py                     # every data/mcus/*.yaml
-    python tools/validate_mcu.py data/mcus/X.yaml    # just these
-    python tools/validate_mcu.py --quiet             # only print problems
-
-Exit codes:  0 = all files valid   1 = at least one ERROR   2 = usage / file / parse error
-
-WARNINGs do not fail the run. ERRORs do. Nothing here lowers a threshold to pass; if a
-check cannot be evaluated (missing optional data) it is skipped and reported as skipped.
-
-The checks exist because each one has already caught, or would have caught, a real fault:
-
-  choice-keys      An unquoted comma inside a YAML flow mapping silently truncates the
-                   name and turns the rest into null-valued keys:
-                       { name: RST enabled, ignore 12 ms (RST_MODE=10), signals: [RST] }
-                   parses as name="RST enabled" plus a junk key. Three such choices
-                   collapse to the same name, and the app keys its per-setting state by
-                   choice name, so two settings silently become one. The file still
-                   parses, so only a key whitelist catches it.
-  signal-parity    Every remap of a peripheral must offer the same signal set, otherwise
-                   selecting a remap silently drops a signal the settings still request.
-  pin-exists       A remap or package pin that is not declared in `pins:` renders as a
-                   blank pad and claims nothing.
-  io-count         Guards the package tables against a dropped or duplicated row: the
-                   count must equal the I/O number the datasheet's model table states.
-  exti-line        AFIO_EXTICR line x can only reach pin number x. A copy-paste that
-                   points EXTI3 at PA4 is invisible by eye.
-"""
+from __future__ import annotations
 
 import argparse
+import glob
+import os
+import pathlib
 import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-MCU_DIR = ROOT / "data" / "mcus"
+try:
+    import yaml
+except ImportError:
+    sys.exit("validate_mcu: PyYAML is required.  pip install pyyaml")
 
-CHOICE_KEYS = {"name", "signals", "default"}
-SETTING_KEYS = {"name", "type", "choices", "notes"}
-PIN_KEYS = {"type", "analog", "notes", "five_volt_tolerant", "drive"}
-# The app treats every type other than "io" as a fixed-function pad that cannot be
-# assigned (template.html, pin click handler). The whitelist exists to catch typos, not
-# to restrict the data, so add to it when a part genuinely needs a new pad type.
-PIN_TYPES = {"io", "power", "ground", "reset", "boot"}
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+PACKAGES_YAML = ROOT / "data" / "packages" / "packages.yaml"
+
+PIN_TYPES = {"io", "power", "ground", "reset", "boot", "sys", "nc", "analog"}
+SETTING_TYPES = {"choice", "checkboxes"}
 
 
 class Report:
-    def __init__(self, path):
+    """Collects problems for one file and prints them grouped."""
+
+    def __init__(self, path: pathlib.Path):
         self.path = path
-        self.errors = []
-        self.warnings = []
-        self.skipped = []
+        self.errors: list[str] = []
+        self.warns: list[str] = []
 
-    def err(self, check, msg):
-        self.errors.append((check, msg))
+    def error(self, where: str, msg: str) -> None:
+        self.errors.append(f"{where}: {msg}")
 
-    def warn(self, check, msg):
-        self.warnings.append((check, msg))
+    def warn(self, where: str, msg: str) -> None:
+        self.warns.append(f"{where}: {msg}")
 
-    def skip(self, check, msg):
-        self.skipped.append((check, msg))
+    @staticmethod
+    def _safe(text: str) -> str:
+        """The YAML contains arrows and dashes; this console is cp1252."""
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        return str(text).encode(enc, "replace").decode(enc, "replace")
 
-
-def names_of(entry):
-    """A package pin slot is either one name or a list of internally shorted names."""
-    return entry if isinstance(entry, list) else [entry]
-
-
-# ---------------------------------------------------------------------------- checks
-
-def check_structure(doc, r):
-    for key in ("mcu", "packages", "pins", "peripherals"):
-        if key not in doc:
-            r.err("structure", "missing required top-level key: " + key)
-    mcu = doc.get("mcu") or {}
-    if not mcu.get("name"):
-        r.err("structure", "mcu.name is missing")
-    pkgs = doc.get("packages") or {}
-    dflt = mcu.get("default_package")
-    if dflt and dflt not in pkgs:
-        r.err("structure", "mcu.default_package " + repr(dflt) + " is not in packages")
+    def print(self, quiet: bool = False) -> None:
+        rel = os.path.relpath(self.path, ROOT).replace("\\", "/")
+        if not self.errors and not self.warns:
+            if not quiet:
+                print(f"  OK    {rel}")
+            return
+        print(f"  {'FAIL' if self.errors else 'warn'}  {rel}")
+        for e in self.errors:
+            print(f"          ERROR  {self._safe(e)}")
+        for w in self.warns:
+            print(f"          warn   {self._safe(w)}")
 
 
-def check_pins(doc, r):
-    for name, spec in (doc.get("pins") or {}).items():
-        spec = spec or {}
-        if not isinstance(spec, dict):
-            r.err("pins", name + ": entry is not a mapping")
-            continue
-        unknown = set(spec) - PIN_KEYS
-        if unknown:
-            r.err("pins", name + ": unknown key(s) " + ", ".join(sorted(unknown))
-                  + " -- usually an unquoted comma inside { }")
-        t = spec.get("type")
-        if t not in PIN_TYPES:
-            r.err("pins", name + ": type " + repr(t) + " not one of " + ", ".join(sorted(PIN_TYPES)))
+def load_geometries() -> dict:
+    if not PACKAGES_YAML.exists():
+        return {}
+    doc = yaml.safe_load(PACKAGES_YAML.read_text(encoding="utf-8")) or {}
+    return {p["id"]: p for p in doc.get("packages", []) if isinstance(p, dict) and "id" in p}
 
 
-def check_packages(doc, r):
-    declared = set(doc.get("pins") or {})
-    for pkg, table in (doc.get("packages") or {}).items():
-        if not isinstance(table, dict) or not table:
-            r.err("packages", pkg + ": empty or not a mapping")
-            continue
-        nums = sorted(table)
-        for n in nums:
-            if not isinstance(n, int):
-                r.err("packages", pkg + ": pin key " + repr(n) + " is not an integer")
-        nums = [n for n in nums if isinstance(n, int)]
-        if not nums:
-            continue
-
-        numbered = [n for n in nums if n > 0]
-        expected = list(range(1, len(numbered) + 1))
-        if numbered != expected:
-            missing = sorted(set(expected) - set(numbered))
-            extra = sorted(set(numbered) - set(expected))
-            r.err("packages", pkg + ": pin numbers are not 1.." + str(len(numbered))
-                  + (" (missing " + str(missing) + ")" if missing else "")
-                  + (" (unexpected " + str(extra) + ")" if extra else ""))
-        if 0 in nums and names_of(table[0]) != ["VSS"]:
-            r.warn("packages", pkg + ": pin 0 is the exposed pad and is normally VSS, found "
-                   + str(table[0]))
-
-        seen = {}
-        for n in nums:
-            for name in names_of(table[n]):
-                if name not in declared:
-                    r.err("pin-exists", pkg + " pin " + str(n) + ": " + name
-                          + " is not declared in pins:")
-                if name.startswith("P"):
-                    if name in seen:
-                        r.err("packages", pkg + ": " + name + " appears on pin "
-                              + str(seen[name]) + " and pin " + str(n))
-                    seen[name] = n
+def names_of(value) -> list[str]:
+    """A package row is either one name or a list of internally shorted names."""
+    return [str(v) for v in value] if isinstance(value, list) else [str(value)]
 
 
-def check_io_counts(doc, r):
-    """Package I/O count must match the DS model table (variants[*].io_count)."""
-    pins = doc.get("pins") or {}
-    variants = (doc.get("mcu") or {}).get("variants") or {}
-    stated = {}
-    for vname, v in variants.items():
-        if not isinstance(v, dict) or "io_count" not in v:
-            continue
-        stated.setdefault(v.get("package"), {})[vname] = v["io_count"]
-    if not stated:
-        r.skip("io-count", "no variant declares io_count; nothing to compare against")
+def check_mcu_block(doc: dict, r: Report) -> None:
+    mcu = doc.get("mcu")
+    if not isinstance(mcu, dict):
+        r.error("mcu", "missing or not a mapping")
         return
+    for key in ("name", "vendor", "family", "core", "default_package"):
+        if not mcu.get(key):
+            r.error("mcu", f"missing `{key}`")
+    for key in ("flash_kb", "sram_kb"):
+        if not isinstance(mcu.get(key), (int, float)):
+            r.error("mcu", f"`{key}` must be a number")
+    packages = doc.get("packages") or {}
+    default = mcu.get("default_package")
+    if default and default not in packages:
+        r.error("mcu.default_package", f"`{default}` is not in `packages:` ({', '.join(packages)})")
 
-    for pkg, table in (doc.get("packages") or {}).items():
-        if pkg not in stated:
-            r.warn("io-count", pkg + ": no variant with io_count uses this package")
+    variants = mcu.get("variants") or {}
+    if variants and not isinstance(variants, dict):
+        r.error("mcu.variants", "must be a mapping of part number -> info")
+        return
+    for part, info in (variants or {}).items():
+        if not isinstance(info, dict):
+            r.error(f"mcu.variants.{part}", "must be a mapping")
             continue
-        count = 0
-        for n, entry in table.items():
-            if not isinstance(n, int) or n == 0:
-                continue          # exposed pad is never an I/O
-            if all((pins.get(name) or {}).get("type") == "io" for name in names_of(entry)):
-                count += 1
-        for vname, want in sorted(stated[pkg].items()):
-            if count != want:
-                r.err("io-count", pkg + ": counted " + str(count) + " I/O pins, but "
-                      + vname + " states " + str(want) + " in the DS model table")
+        pkg = info.get("package")
+        if not pkg:
+            r.error(f"mcu.variants.{part}", "missing `package`")
+        elif pkg not in packages:
+            r.error(f"mcu.variants.{part}", f"package `{pkg}` is not in `packages:`")
 
 
-def check_peripherals(doc, r):
-    declared = set(doc.get("pins") or {})
-    packages = set(doc.get("packages") or {})
+def check_packages(doc: dict, geom: dict, r: Report) -> dict:
+    """Returns {package: {pin_number: [names]}} for the checks that follow."""
+    packages = doc.get("packages")
+    if not isinstance(packages, dict) or not packages:
+        r.error("packages", "missing or empty")
+        return {}
+    pins_map = doc.get("pins") or {}
+    out = {}
 
-    for pid, P in (doc.get("peripherals") or {}).items():
-        P = P or {}
-        settings = P.get("settings") or []
+    for pkg, table in packages.items():
+        where = f"packages.{pkg}"
+        if not isinstance(table, dict) or not table:
+            r.error(where, "missing or empty pin table")
+            continue
+
+        numbers = []
+        for raw in table:
+            try:
+                numbers.append(int(raw))
+            except (TypeError, ValueError):
+                r.error(where, f"pin key `{raw}` is not a number")
+        out[pkg] = {int(k): names_of(v) for k, v in table.items() if str(k).lstrip("-").isdigit()}
+
+        body = sorted(n for n in numbers if n != 0)
+        if body:
+            expected = list(range(1, len(body) + 1))
+            if body != expected:
+                missing = sorted(set(expected) - set(body))
+                extra = sorted(set(body) - set(expected))
+                bits = []
+                if missing:
+                    bits.append(f"missing {missing[:8]}")
+                if extra:
+                    bits.append(f"unexpected {extra[:8]}")
+                dupes = sorted({n for n in body if body.count(n) > 1})
+                if dupes:
+                    bits.append(f"duplicated {dupes[:8]}")
+                r.error(where, "pin numbers must be 1.." + str(len(body)) + " with no gaps - " + "; ".join(bits))
+
+        g = geom.get(pkg)
+        if not g:
+            r.error(where, f"no geometry for `{pkg}` in data/packages/packages.yaml - the chip cannot be drawn")
+        else:
+            if g.get("pins") != len(body):
+                r.error(where, f"has {len(body)} pins but geometry `{pkg}` is {g.get('pins')}-pin")
+            if 0 in numbers and not g.get("epad"):
+                r.warn(where, "declares pin 0 (exposed pad) but the geometry has no `epad: true`")
+            if g.get("epad") and 0 not in numbers:
+                r.warn(where, f"geometry `{pkg}` has an exposed pad but the table has no pin 0")
+
+        # every name must be declared in `pins:`
+        seen: dict[str, list[int]] = {}
+        for num, names in out[pkg].items():
+            for n in names:
+                if n not in pins_map:
+                    r.error(where, f"pin {num} is `{n}`, which is not declared in `pins:`")
+                seen.setdefault(n, []).append(num)
+
+        # the engine keys state by pin NAME, so a name on two physical pins is ambiguous
+        for name, nums in seen.items():
+            if len(nums) > 1:
+                kind = (pins_map.get(name) or {}).get("type", "io")
+                msg = (f"`{name}` is on {len(nums)} physical pins {sorted(nums)} - the app keys pins by name, "
+                       f"so only pin {sorted(nums)[0]} is reachable")
+                if kind == "io":
+                    r.error(where, msg)
+                else:
+                    r.warn(where, msg)
+
+    return out
+
+
+def check_pins(doc: dict, tables: dict, r: Report) -> None:
+    pins = doc.get("pins")
+    if not isinstance(pins, dict) or not pins:
+        r.error("pins", "missing or empty")
+        return
+    bonded = {n for table in tables.values() for names in table.values() for n in names}
+    for name, info in pins.items():
+        where = f"pins.{name}"
+        if info is None:
+            r.warn(where, "empty entry; give it at least a `type`")
+            continue
+        if not isinstance(info, dict):
+            r.error(where, "must be a mapping, e.g. { type: io }")
+            continue
+        kind = info.get("type", "io")
+        if kind not in PIN_TYPES:
+            r.error(where, f"unknown type `{kind}` (known: {', '.join(sorted(PIN_TYPES))})")
+        if name not in bonded:
+            r.warn(where, "declared but not bonded on any package")
+
+
+def check_peripherals(doc: dict, r: Report) -> None:
+    periphs = doc.get("peripherals")
+    if not isinstance(periphs, dict) or not periphs:
+        r.error("peripherals", "missing or empty")
+        return
+    pins_map = doc.get("pins") or {}
+    packages = doc.get("packages") or {}
+
+    for pid, P in periphs.items():
+        where = f"peripherals.{pid}"
+        if not isinstance(P, dict):
+            r.error(where, "must be a mapping")
+            continue
+        if not P.get("category"):
+            r.warn(where, "no `category`; it will not appear under a heading in the tree")
+
         remaps = P.get("remaps") or []
+        if remaps and not isinstance(remaps, list):
+            r.error(f"{where}.remaps", "must be a list")
+            remaps = []
 
-        # ---- settings and choices
-        seen_settings = set()
-        used_signals = set()
-        for s in settings:
-            if not isinstance(s, dict) or "name" not in s:
-                r.err("settings", pid + ": a setting has no name")
+        routed: set[str] = set()
+        for i, remap in enumerate(remaps):
+            rw = f"{where}.remaps[{i}]"
+            if not isinstance(remap, dict):
+                r.error(rw, "must be a mapping with `name` and `pins`")
                 continue
-            unknown = set(s) - SETTING_KEYS
-            if unknown:
-                r.err("settings", pid + "." + str(s["name"]) + ": unknown setting key(s) "
-                      + ", ".join(sorted(unknown)))
-            if s["name"] in seen_settings:
-                r.err("settings", pid + ": duplicate setting name " + repr(s["name"]))
-            seen_settings.add(s["name"])
+            if not remap.get("name"):
+                r.warn(rw, "has no `name`; the UI shows an empty remap label")
+            table = remap.get("pins")
+            if not isinstance(table, dict) or not table:
+                r.error(rw, "missing `pins:` mapping (signal -> pin)")
+                continue
+            for signal, pin in table.items():
+                routed.add(str(signal))
+                if pin is None:
+                    r.error(rw, f"signal `{signal}` has no pin")
+                elif str(pin) not in pins_map:
+                    r.error(rw, f"signal `{signal}` is routed to `{pin}`, which is not declared in `pins:`")
 
-            choices = s.get("choices") or []
-            if not choices:
-                r.err("settings", pid + "." + str(s["name"]) + ": no choices")
+        # every signal a setting can turn on must be routed somewhere
+        wanted: set[str] = set()
+        for j, s in enumerate(P.get("settings") or []):
+            sw = f"{where}.settings[{j}]"
+            if not isinstance(s, dict):
+                r.error(sw, "must be a mapping")
                 continue
-            seen_choices = set()
-            ndefault = 0
-            for c in choices:
-                if not isinstance(c, dict) or "name" not in c:
-                    r.err("choice-keys", pid + "." + str(s["name"])
-                          + ": a choice has no name")
+            if not s.get("name"):
+                r.error(sw, "missing `name`")
+            stype = s.get("type", "choice")
+            if stype not in SETTING_TYPES:
+                r.error(sw, f"unknown type `{stype}` (known: {', '.join(sorted(SETTING_TYPES))})")
+            choices = s.get("choices")
+            if not isinstance(choices, list) or not choices:
+                r.error(sw, "missing `choices`")
+                continue
+            defaults = [c for c in choices if isinstance(c, dict) and c.get("default")]
+            if len(defaults) > 1:
+                r.error(sw, f"{len(defaults)} choices marked `default: true`; at most one")
+            for k, c in enumerate(choices):
+                if not isinstance(c, dict) or not c.get("name"):
+                    r.error(f"{sw}.choices[{k}]", "each choice needs a `name`")
                     continue
-                unknown = set(c) - CHOICE_KEYS
-                if unknown:
-                    r.err("choice-keys", pid + "." + str(s["name"]) + " choice "
-                          + repr(c["name"]) + ": unknown key(s) "
-                          + ", ".join(repr(u) for u in sorted(unknown))
-                          + " -- an unquoted comma inside { } truncates the name")
-                if c["name"] in seen_choices:
-                    r.err("choice-keys", pid + "." + str(s["name"])
-                          + ": duplicate choice name " + repr(c["name"])
-                          + " -- the app keys its state by choice name")
-                seen_choices.add(c["name"])
-                if c.get("default"):
-                    ndefault += 1
-                for sig in (c.get("signals") or []):
-                    used_signals.add(sig)
-            if ndefault > 1:
-                r.err("settings", pid + "." + str(s["name"]) + ": "
-                      + str(ndefault) + " choices marked default")
+                for sig in c.get("signals") or []:
+                    wanted.add(str(sig))
+            # the engine treats choices[0] as the off state (isEnabled/resetPin rely on it)
+            if stype == "choice" and isinstance(choices[0], dict) and choices[0].get("signals"):
+                r.warn(sw, f"first choice `{choices[0].get('name')}` carries signals; the engine treats "
+                           f"choices[0] as the off state, so the peripheral will look permanently enabled")
 
-        # ---- remaps
-        if not remaps:
-            if used_signals:
-                r.err("signal-parity", pid + ": choices request signals ("
-                      + ", ".join(sorted(used_signals)) + ") but the peripheral has no remaps")
-            continue
+        for sig in sorted(wanted - routed):
+            if remaps:
+                r.error(where, f"signal `{sig}` can be selected but no remap routes it")
 
-        sigsets = []
-        for i, rm in enumerate(remaps):
-            if not isinstance(rm, dict) or "name" not in rm:
-                r.err("remaps", pid + " remap " + str(i) + ": missing name")
-                continue
-            pinmap = rm.get("pins")
-            if not isinstance(pinmap, dict) or not pinmap:
-                r.err("remaps", pid + " remap " + repr(rm.get("name")) + ": no pins")
-                continue
-            sigsets.append((rm["name"], set(pinmap)))
-            for sig, pin in pinmap.items():
-                if pin not in declared:
-                    r.err("pin-exists", pid + "." + sig + " remap " + repr(rm["name"])
-                          + ": pin " + repr(pin) + " is not declared in pins:")
-
-        if sigsets:
-            base_name, base = sigsets[0]
-            for name, s in sigsets[1:]:
-                if s != base:
-                    only_base = sorted(base - s)
-                    only_s = sorted(s - base)
-                    r.err("signal-parity", pid + ": remap " + repr(name)
-                          + " does not offer the same signals as " + repr(base_name)
-                          + (" (missing " + ", ".join(only_base) + ")" if only_base else "")
-                          + (" (extra " + ", ".join(only_s) + ")" if only_s else ""))
-            unknown = used_signals - base
-            if unknown:
-                r.err("signal-parity", pid + ": choices reference signal(s) "
-                      + ", ".join(sorted(unknown)) + " that no remap provides")
-            unused = base - used_signals
-            if unused:
-                r.warn("signal-parity", pid + ": remap signal(s) "
-                       + ", ".join(sorted(unused)) + " are never requested by any choice")
-
-        # ---- remap_by_package
-        rbp = P.get("remap_by_package")
-        if rbp:
+        rbp = P.get("remap_by_package") or {}
+        if rbp and not isinstance(rbp, dict):
+            r.error(f"{where}.remap_by_package", "must be a mapping package -> remap index")
+        else:
             for pkg, idx in rbp.items():
                 if pkg not in packages:
-                    r.err("remaps", pid + ".remap_by_package: unknown package " + repr(pkg))
-                if not isinstance(idx, int) or not (0 <= idx < len(remaps)):
-                    r.err("remaps", pid + ".remap_by_package[" + str(pkg) + "] = "
-                          + repr(idx) + " is out of range (0.." + str(len(remaps) - 1) + ")")
-            missing = packages - set(rbp)
-            if missing:
-                r.warn("remaps", pid + ".remap_by_package does not cover "
-                       + ", ".join(sorted(missing)))
+                    r.error(f"{where}.remap_by_package", f"`{pkg}` is not a package of this MCU")
+                if not isinstance(idx, int) or not (0 <= idx < max(len(remaps), 1)):
+                    r.error(f"{where}.remap_by_package.{pkg}",
+                            f"remap index {idx} is out of range (0..{len(remaps) - 1})")
 
 
-def check_exti(doc, r):
+def check_io_counts(doc: dict, tables: dict, r: Report) -> None:
+    """mcu.variants[*].io_count vs the pin tables. A shorted pair is one physical pin."""
+    pins_map = doc.get("pins") or {}
+    variants = (doc.get("mcu") or {}).get("variants") or {}
+    for part, info in variants.items():
+        if not isinstance(info, dict):
+            continue
+        declared = info.get("io_count")
+        if declared is None:
+            continue
+        pkg = info.get("package")
+        table = tables.get(pkg)
+        if table is None:
+            continue
+        counted = 0
+        for num, names in table.items():
+            if num == 0:
+                continue  # exposed pad is not an I/O
+            if any((pins_map.get(n) or {}).get("type", "io") == "io" for n in names):
+                counted += 1
+        if counted != declared:
+            r.error(f"mcu.variants.{part}",
+                    f"io_count says {declared} but package `{pkg}` has {counted} I/O pins "
+                    f"(a shorted pair counts once) - datasheet and pin table disagree")
+
+
+def check_clock(doc: dict, r: Report) -> None:
+    clock = doc.get("clock")
+    if clock is None:
+        r.warn("clock", "no clock tree; the Clock Configuration tab will be empty")
+        return
+    if not isinstance(clock, dict):
+        r.error("clock", "must be a mapping")
+        return
+    sources = clock.get("sources") or {}
+    if not sources:
+        r.error("clock.sources", "no oscillators declared")
+    nodes = set(sources) | {"PLLCLK"}
+
+    pll = clock.get("pll") or {}
+    for i, inp in enumerate(pll.get("inputs") or []):
+        src = (inp or {}).get("source")
+        if src and src not in sources:
+            r.error(f"clock.pll.inputs[{i}]", f"source `{src}` is not in clock.sources")
+    if pll and not pll.get("multipliers"):
+        r.error("clock.pll", "no `multipliers`")
+
+    for src in (clock.get("sysclk") or {}).get("sources") or []:
+        if src not in nodes:
+            r.error("clock.sysclk.sources", f"`{src}` is neither an oscillator nor PLLCLK")
+
+    prescalers = clock.get("prescalers") or {}
+    # a prescaler may hang off SYSCLK, another prescaler, an oscillator, or the PLL directly
+    known = set(prescalers) | set(sources) | {"SYSCLK", "PLLCLK"}
+    for name, p in prescalers.items():
+        pw = f"clock.prescalers.{name}"
+        if not isinstance(p, dict):
+            r.error(pw, "must be a mapping")
+            continue
+        if not p.get("options"):
+            r.error(pw, "no `options` (divider list)")
+        src = p.get("source")
+        if src and src not in known:
+            r.error(pw, f"source `{src}` is not another prescaler or SYSCLK")
+    for i, d in enumerate(clock.get("derived") or []):
+        src = (d or {}).get("source")
+        if src and src not in known:
+            r.error(f"clock.derived[{i}]", f"source `{src}` is not a known clock node")
+
+
+def check_exti(doc: dict, r: Report) -> None:
     exti = doc.get("exti")
     if not exti:
-        r.skip("exti-line", "no exti: block in this file")
         return
-    declared = set(doc.get("pins") or {})
-    for line, ports in (exti.get("lines") or {}).items():
-        digits = "".join(ch for ch in str(line) if ch.isdigit())
-        if not digits:
-            r.err("exti-line", str(line) + ": cannot read a line number from the key")
+    pins_map = doc.get("pins") or {}
+    for line, mapping in (exti.get("lines") or {}).items():
+        if not isinstance(mapping, dict):
+            r.error(f"exti.lines.{line}", "must be a mapping of register value -> pin")
             continue
-        want = digits[-1]
-        for value, pin in (ports or {}).items():
-            if pin not in declared:
-                r.err("pin-exists", str(line) + " [" + str(value) + "]: pin " + repr(pin)
-                      + " is not declared in pins:")
-                continue
-            if not pin.endswith(want):
-                r.err("exti-line", str(line) + " [" + str(value) + "] = " + pin
-                      + ": AFIO_EXTICR line " + want + " can only reach pin number " + want)
+        for bits, pin in mapping.items():
+            if pin and str(pin) not in pins_map:
+                r.error(f"exti.lines.{line}", f"`{bits}` selects `{pin}`, which is not declared in `pins:`")
 
 
-def check_dma(doc, r):
-    dma = doc.get("dma")
-    if not dma:
-        r.skip("dma", "no dma: block in this file")
-        return
-    n = dma.get("channels")
-    if not isinstance(n, int) or n < 1:
-        r.err("dma", "dma.channels must be a positive integer, got " + repr(n))
-        return
-    for ch, reqs in (dma.get("requests") or {}).items():
-        if not isinstance(ch, int) or not (1 <= ch <= n):
-            r.err("dma", "request channel " + repr(ch) + " is outside 1.." + str(n))
-        if not reqs:
-            r.warn("dma", "channel " + str(ch) + " has no requests")
-
-
-def check_clock(doc, r):
-    clock = doc.get("clock")
-    if not clock:
-        r.skip("clock", "no clock: block in this file")
-        return
-    pres = clock.get("prescalers") or {}
-    # A prescaler may hang off another prescaler (ADC off HB), off a raw oscillator, or
-    # straight off the PLL / system clock (USB off PLLCLK on the dummy part).
-    valid_sources = set(pres) | set(clock.get("sources") or {}) | {"PLLCLK", "SYSCLK"}
-    for name, spec in pres.items():
-        src = (spec or {}).get("source")
-        if src and src not in valid_sources:
-            r.err("clock", "prescaler " + str(name) + ": source " + repr(src)
-                  + " is not a prescaler, a clock source, PLLCLK or SYSCLK")
-        opts = (spec or {}).get("options") or []
-        if opts and sorted(opts) != list(opts):
-            r.warn("clock", "prescaler " + str(name) + ": options are not in ascending order")
-    for src in (clock.get("sysclk") or {}).get("sources") or []:
-        if src not in (clock.get("sources") or {}) and src != "PLLCLK":
-            r.err("clock", "sysclk source " + repr(src) + " is not a declared clock source")
-
-
-CHECKS = [check_structure, check_pins, check_packages, check_io_counts,
-          check_peripherals, check_exti, check_dma, check_clock]
-
-
-def validate(path, quiet=False):
-    import yaml
+def validate_file(path: pathlib.Path, geom: dict) -> Report:
     r = Report(path)
     try:
-        doc = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    except Exception as e:
-        print(str(path) + ": YAML PARSE ERROR: " + str(e))
-        return None
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        r.error("yaml", f"will not parse: {str(e).splitlines()[0]}")
+        return r
     if not isinstance(doc, dict):
-        print(str(path) + ": top level is not a mapping")
-        return None
+        r.error("yaml", "top level must be a mapping")
+        return r
 
-    for fn in CHECKS:
-        fn(doc, r)
+    for key in ("mcu", "packages", "pins", "peripherals"):
+        if key not in doc:
+            r.error("(file)", f"missing top-level `{key}:`")
+    if r.errors:
+        return r
 
-    name = (doc.get("mcu") or {}).get("name") or Path(path).stem
-    status = "FAIL" if r.errors else ("ok" if not r.warnings else "ok (warnings)")
-    if not quiet or r.errors or r.warnings:
-        print("\n" + name + "  [" + status + "]  " + str(path))
-    for check, msg in r.errors:
-        print("  ERROR   " + check.ljust(14) + " " + msg)
-    for check, msg in r.warnings:
-        print("  warning " + check.ljust(14) + " " + msg)
-    if not quiet:
-        for check, msg in r.skipped:
-            print("  skipped " + check.ljust(14) + " " + msg)
+    check_mcu_block(doc, r)
+    tables = check_packages(doc, geom, r)
+    check_pins(doc, tables, r)
+    check_peripherals(doc, r)
+    check_io_counts(doc, tables, r)
+    check_clock(doc, r)
+    check_exti(doc, r)
     return r
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Validate MCU YAML files.")
-    ap.add_argument("files", nargs="*", help="default: every data/mcus/*.yaml")
-    ap.add_argument("--quiet", action="store_true", help="print only files with findings")
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Validate WCHCube MCU YAML files.")
+    ap.add_argument("files", nargs="*", help="MCU yaml files (default: data/mcus/*.yaml)")
+    ap.add_argument("--strict", action="store_true", help="treat warnings as failures")
+    ap.add_argument("--quiet", action="store_true", help="print problems only")
     args = ap.parse_args()
 
-    try:
-        import yaml  # noqa: F401
-    except ImportError:
-        print("PyYAML is required:  pip install pyyaml", file=sys.stderr)
-        return 2
+    paths = [pathlib.Path(f) for f in args.files] or [
+        pathlib.Path(f) for f in sorted(glob.glob(str(ROOT / "data" / "mcus" / "*.yaml")))
+    ]
+    if not paths:
+        print("validate_mcu: no MCU files found")
+        return 1
 
-    files = [Path(f) for f in args.files] or sorted(MCU_DIR.glob("*.yaml"))
-    if not files:
-        print("no MCU files found under " + str(MCU_DIR), file=sys.stderr)
-        return 2
+    geom = load_geometries()
+    if not geom:
+        print(f"validate_mcu: WARNING - no package geometries loaded from {PACKAGES_YAML}")
 
-    reports, broken = [], 0
-    for f in files:
-        if not f.exists():
-            print(str(f) + ": no such file", file=sys.stderr)
-            return 2
-        rep = validate(f, args.quiet)
-        if rep is None:
-            broken += 1
-        else:
-            reports.append(rep)
+    if not args.quiet:
+        print(f"validate_mcu: {len(paths)} file(s)")
+    reports = [validate_file(p, geom) for p in paths]
+    for rep in reports:
+        rep.print(args.quiet)
 
-    nerr = sum(len(r.errors) for r in reports)
-    nwarn = sum(len(r.warnings) for r in reports)
-    print("\n" + str(len(files)) + " file(s): " + str(nerr) + " error(s), "
-          + str(nwarn) + " warning(s)"
-          + (", " + str(broken) + " unparseable" if broken else ""))
-    if broken:
-        return 2
-    return 1 if nerr else 0
+    errors = sum(len(r.errors) for r in reports)
+    warns = sum(len(r.warns) for r in reports)
+    bad = errors + (warns if args.strict else 0)
+    if not args.quiet or bad:
+        print(f"\n{errors} error(s), {warns} warning(s)" + (" [--strict]" if args.strict else ""))
+    return 1 if bad else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

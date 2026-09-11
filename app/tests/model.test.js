@@ -99,7 +99,11 @@ test('every bundled MCU file loads on every one of its packages', () => {
       e.setPackage(pkg);
       assert.ok(Object.keys(e.pkgPins()).length > 0, `${name} ${pkg} has pins`);
       for (const [num, names] of Object.entries(e.pkgPins())) {
-        for (const n of names) assert.equal(e.pinNum(n), num, `${name} ${pkg}: ${n} maps back to pin ${num}`);
+        // power and ground names repeat across pins; I/O names must not
+        for (const n of names) {
+          if (e.pinType(n) !== 'io') continue;
+          assert.equal(e.pinNum(n), num, `${name} ${pkg}: ${n} maps back to pin ${num}`);
+        }
       }
     }
   }

@@ -15,7 +15,7 @@
 // =============================================================================
 import {
   M, S, canon, pinExists, pinLabel, pinNum, groupOf, sigName,
-  requiredSignals, isEnabled, isAvailable,
+  requiredSignals, isEnabled, isAvailable, neutralChoice,
 } from './model.js';
 
 export let E = null;
@@ -136,7 +136,7 @@ export function resetPin(pin) {
         for (const ch of s.choices) if ((ch.signals || []).includes(sig)) st.settings[s.name].delete(ch.name);
       } else {
         const cur = s.choices.find(x => x.name === st.settings[s.name]);
-        if (cur && (cur.signals || []).includes(sig)) st.settings[s.name] = s.choices[0].name;
+        if (cur && (cur.signals || []).includes(sig)) st.settings[s.name] = neutralChoice(s).name;
       }
     }
   }

@@ -38,10 +38,10 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 - [x] Clock Configuration tab v1: source → PLL → SYSCLK → AHB/APB/ADC with limit warnings
 - [x] "Load MCU file" (pick a YAML from disk in the browser)
 - [x] Package switch keeps assignments that still exist, warns about dropped pins + issue count
-- [~] (AGENT-3) Right-click pin → user label
+- [x] Right-click pin → user label (context menu: label / assign / reset / copy; label drawn on chip + GPIO table)
 - [x] Search box in left tree and in chip view (find pin / signal)
-- [~] (AGENT-3) "Show only modified pins" filter
-- [x] Keyboard: Esc closes picker  [~] (AGENT-3) arrow keys move between pins
+- [x] "Show only modified pins" filter (chip toolbar checkbox)
+- [x] Keyboard: Esc closes picker, arrow keys move between pins, Enter opens picker, L labels, Del resets
 - [x] Save / load project (`.wchproj` YAML: mcu, variant, package, all settings, clock) — Ctrl+S / Open project…
 - [x] New Project dialog: pick MCU → part number / package (with flash, SRAM, I/O count, temp grade) → name; one project per MCU+package
 - [ ] System view (block diagram) — low priority
@@ -49,9 +49,14 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 ## Phase 2 — Real MCU data  (CURRENT)
 
 - [x] Extraction checklist (see `data/mcus/CH32V006.notes.md` — reuse the table for the next part)
+- [x] EXTI line→pin map + DMA1 channel map + option-byte RST_MODE + TIM1_1_RM (CH1→LSI) + TIM2 complementary outputs, all for CH32V006 (AGENT-1)
+- [x] `tools/validate_mcu.py` — schema, pin existence, signal parity across remaps, package numbering, DS I/O counts, EXTI line legality (AGENT-1)
+- [x] Third pass: remap tables cross-checked against the AFIO_PCFR1 register prose (RM 7.3.2.2) — 227/228 confirmed by both, 1 source self-contradiction found (AGENT-1)
+- [~] (AGENT-1) `data/FORMAT.md` — full YAML schema, every field explained, kept in sync with the engine
+- [ ] CH32V005 via `inherits: CH32V006` (drop TKEY + TIM3) — blocked on AGENT-2 answering the `inherits` shape on BOARD
 - [ ] First real part (candidate: CH32V003F4P6 TSSOP20, then CH32V203C8T6 LQFP48)
-- [ ] Validate extracted YAML against PDF (spot check every remap group)
-- [x] Per-pin notes (SWIO/SWCLK, XI/XO, RST-per-package); [ ] 5V-tolerance not stated per pin in V006 DS
+- [x] Validate extracted YAML against PDF (spot check every remap group) — AGENT-1: `tools/extract_remaps.py` re-derives RM 7.2.11 independently and diffs; 232 pin assignments, 0 differences
+- [x] Per-pin notes (SWIO/SWCLK, XI/XO, RST-per-package); [-] 5V-tolerance — the V006 DS does not state it per pin, nothing to extract (AGENT-1)
 - [x] V00x clock tree (HB domain, ADCPRE incl. /1 ADC_CLK_MODE)  [ ] other families (V003: HSI 24 MHz & PLL x2; V20x/V30x: F1-style with PLL mults; L103; X035)
 
 ## Phase 3 — Code / report generation  (FUTURE — keep hooks, do not build yet)
@@ -79,3 +84,11 @@ Next: package-switch behaviour, user labels, search, project save/load. Then sta
 **2026-09-11 (agents)** — Added `agents/` pack: README (roles, ownership, git worktrees, work cycle), BOARD.md, DONE.md, four agent briefs, `run_agents.sh` launcher with permissions bypassed. Sources stashed in `data/sources/`, CubeMX reference screenshot in `agents/reference/`.
 
 **2026-09-11 (projects)** — New Project dialog (MCU → variant/package list from `mcu.variants`), Save project (.wchproj download, Ctrl+S), Open project (validates MCU is loaded, restores every setting incl. remaps/checkbox sets/clock), dirty marker `*` in breadcrumb, unload warning. Round-trip test passes.
+
+**2026-09-11 (AGENT-1 data pass)** — Second-pass verification of CH32V006 remaps: `tools/extract_remaps.py`
+re-parses RM 7.2.11 with its own parser and diffs the YAML — 7 peripherals, 31 signal rows, 232 pin
+assignments, **0 differences**, and it is negative-tested against planted edits. Added `tools/validate_mcu.py`
+(both MCU files pass). Added to CH32V006: EXTI line→pin map, DMA1 request map, option-byte RST_MODE,
+TIM1_RM=11xx CH1-from-LSI, TIM2 complementary outputs on the CH3/CH4 pins, and DS I/O counts per variant.
+Fixed four live YAML-corruption bugs where an unquoted comma inside `{ }` truncated a name — see BOARD.
+Blocked on AGENT-2 for `inherits:` (CH32V005) and on missing sources for CH32V003 and later parts.

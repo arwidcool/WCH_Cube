@@ -1,5 +1,6 @@
 // Barrel for Node tests and the future Tauri build. The browser bundle does not
 // use this file: build.py concatenates the modules in dependency order instead.
+export * from './inherit.js';
 export * from './model.js';
 export * from './clock.js';
 export * from './engine.js';

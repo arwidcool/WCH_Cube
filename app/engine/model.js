@@ -9,6 +9,7 @@
 //  bindings in Node tests. Never reassign M or S from outside this module.
 // =============================================================================
 import { defaultClock } from './clock.js';
+import { resolveInherits } from './inherit.js';
 
 export const PACKAGES = {};          // package id -> geometry (from data/packages/packages.yaml)
 export const MCU_FILES = {};         // mcu.name -> yaml source text (bundled + opened from disk)
@@ -89,12 +90,22 @@ export function initState(m) {
   return st;
 }
 
-// Load an MCU: accepts YAML text or an already-parsed object. Pure — no DOM.
+// Parse a file and resolve `mcu.inherits:` against the loaded files, without
+// deriving or installing it. The New Project dialog uses this to list a derived
+// part's packages and variants.
+export function mcuModel(source) {
+  const text = typeof source === 'string' && source in MCU_FILES ? MCU_FILES[source] : source;
+  const y = typeof text === 'string' ? yamlLoad(text) : text;
+  return resolveInherits(y, name => MCU_FILES[name], yamlLoad);
+}
+
+// Load an MCU: accepts a registered mcu.name, YAML text, or a parsed object.
+// Pure — no DOM.
 export function loadMcu(source) {
-  const y = typeof source === 'string' ? yamlLoad(source) : source;
+  const y = mcuModel(source);
   if (!y || !y.mcu || !y.packages || !y.pins || !y.peripherals)
     throw new Error('Not an MCU file (needs mcu, packages, pins, peripherals)');
-  const src = typeof source === 'string' ? source : yamlDump(y);
+  const src = typeof source === 'string' ? (MCU_FILES[source] || source) : yamlDump(y);
   M = deriveMcu(y);
   M._src = src;
   MCU_FILES[y.mcu.name] ||= src;
@@ -133,11 +144,18 @@ export function requiredSignals(pid) {
   }
   return out;
 }
+// The choice that means "off": the first one that needs no pins. Usually
+// choices[0] ("Disable"), but not always — CH32V006's external reset pin is
+// ENABLED at the factory, so its off switch is the RST_MODE=11 choice at the end.
+// Anything keyed off choices[0] would be unable to release that pin.
+export const neutralChoice = setting =>
+  setting.choices.find(c => !c.signals || !c.signals.length) || setting.choices[0];
+
 export function isEnabled(pid) {
   const P = M.peripherals[pid], st = S.periph[pid];
   for (const s of P.settings || []) {
     const v = st.settings[s.name];
-    if (s.type === 'checkboxes' ? v.size : v !== s.choices[0].name) return true;
+    if (s.type === 'checkboxes' ? v.size : v !== neutralChoice(s).name) return true;
   }
   return false;
 }

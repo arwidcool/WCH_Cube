@@ -174,26 +174,34 @@
   .picker .opt.cur small{color:#e8ffe0}
   .picker .grp{padding:4px 10px 2px;color:var(--muted);font-size:11px;border-top:1px solid #eee}
 
-  /* ---- clock view ---- */
+  /* ---- clock view: boxes positioned over an SVG connector layer ---- */
   #view-clock{grid-template-columns:1fr;overflow:auto}
-  .clock{padding:20px 28px;display:flex;flex-direction:column;gap:14px;max-width:1500px}
-  .crow{display:flex;align-items:center;gap:0;flex-wrap:wrap}
-  .cbox{background:#fff;border:1px solid var(--line);border-radius:4px;min-width:150px;padding:8px 10px}
-  .cbox h5{margin:0 0 6px;font-weight:600;font-size:12.5px;color:var(--navy)}
-  .cbox select,.cbox input{width:100%;padding:3px 6px;border:1px solid var(--line);border-radius:3px}
-  .cbox .val{font-size:18px;font-weight:600;margin-top:4px}
-  .cbox .val small{font-size:11px;font-weight:400;color:var(--muted);margin-left:3px}
-  .cbox.over{border-color:var(--bad);background:#fdecec}
-  .cbox.over .val{color:var(--bad)}
-  .cbox .lim{font-size:11px;color:var(--muted)}
-  .arrow{width:44px;height:2px;background:#8a94a0;position:relative;margin:0 2px}
-  .arrow::after{content:"";position:absolute;right:-1px;top:-4px;border:5px solid transparent;border-left:7px solid #8a94a0}
-  .cgrid{display:grid;grid-template-columns:repeat(2,max-content);gap:12px 40px;align-items:start}
-  .ctree{display:grid;grid-template-columns:max-content 44px max-content 44px max-content 44px max-content;align-items:center;gap:10px 0}
-  .ctree .col{display:flex;flex-direction:column;gap:12px}
-  .cnote{color:var(--muted);font-size:12px}
-  .clock .issues{color:var(--bad)}
-
+  .clock{padding:16px 22px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+  .ctreewrap{position:relative}
+  #ctree-svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+  .cedge{fill:none;stroke:#c3cbd3;stroke-width:1.4;stroke-dasharray:4 3}
+  .cedge.on{stroke:var(--blue);stroke-width:2;stroke-dasharray:none}
+  .carrow{fill:#c3cbd3}
+  .carrow.on{fill:var(--blue)}
+  .cnode{position:absolute;background:#fff;border:1px solid var(--line);border-radius:4px;padding:7px 9px;box-shadow:0 1px 2px rgba(0,0,0,.07)}
+  .cnode h5{margin:0 0 5px;font-weight:600;font-size:12px;line-height:1.25;color:var(--navy)}
+  .cnode select,.cnode input{width:100%;padding:2px 5px;border:1px solid var(--line);border-radius:3px}
+  .cnode .val{font-size:17px;font-weight:600;margin-top:5px;white-space:nowrap}
+  .cnode .val small{font-size:10.5px;font-weight:400;color:var(--muted);margin-left:3px}
+  .cnode .lim{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .cnode .mul{display:flex;align-items:center;gap:5px;margin-top:5px}
+  .cnode .mul span{color:var(--muted);font-size:14px}
+  .cnode.over{border-color:var(--bad);background:#fdecec}
+  .cnode.over .val,.cnode.over .lim{color:var(--bad)}
+  .cnode.off{opacity:.45;background:#f7f8f9}
+  .cnode.off .val{color:var(--muted)}
+  .clegend{display:flex;gap:20px;align-items:center;color:var(--muted);font-size:11.5px;flex-wrap:wrap}
+  .clegend b{font-weight:400}
+  .clegend i{display:inline-block;width:22px;border-top:2px solid var(--blue);vertical-align:middle;margin-right:5px}
+  .clegend i.dim{border-top:1.5px dashed #c3cbd3}
+  .clegend em{display:inline-block;width:12px;height:12px;border:1px solid var(--bad);background:#fdecec;vertical-align:-2px;margin-right:5px}
+  .cnote{color:var(--muted);font-size:12px;max-width:1100px}
+  .clock .issues{color:var(--bad);font-weight:500}
   /* misc */
   .kbd{display:inline-block;border:1px solid #bbb;border-bottom-width:2px;border-radius:3px;padding:0 4px;font-size:11px;background:#fafafa}
   #fileinput{display:none}
@@ -365,7 +373,7 @@ let geom = null;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const attr = s => esc(s).replace(/"/g, '&quot;');
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
-const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastW: 0, lastH: 0 };
+const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastW: 0, lastH: 0, clockPending: false };
 
 const userLabel = name => ((S.gpio[name] || {}).label || '').trim();
 const pinModified = name => !!(E && E.pins[name]) || !!userLabel(name);
@@ -830,46 +838,153 @@ function renderClock() {
   const el = document.getElementById('clock');
   if (!M.clock) { el.innerHTML = '<div class="empty">This MCU file has no clock section.</div>'; return; }
   const c = M.clock, k = S.clock, r = clockCalc();
-  const f = v => (Math.round(v * 1000) / 1000).toString();
-  const box = (title, inner, val, unit, over, lim) => `<div class="cbox${over ? ' over' : ''}"><h5>${title}</h5>${inner || ''}${val !== undefined ? `<div class="val">${f(val)}<small>${unit}</small></div>` : ''}${lim ? `<div class="lim">${lim}</div>` : ''}</div>`;
-  const opts = (arr, cur) => arr.map(o => `<option${String(o) === String(cur) ? ' selected' : ''}>${o}</option>`).join('');
-  let h = `<div class="cnote">Change any selector; frequencies recalculate immediately. Red boxes are out of specification.</div>`;
-  h += `<div class="ctree">`;
-  // column 1 sources
-  h += `<div class="col">`;
-  if (c.sources.HSI) h += box('HSI RC', '', c.sources.HSI.mhz, 'MHz');
-  if (c.sources.HSE) h += box('HSE crystal', `<input type="number" step="0.001" id="ck-hse" value="${k.hse}">`, undefined, '', r.over.includes('HSE'), `${c.sources.HSE.min_mhz}–${c.sources.HSE.max_mhz} MHz`);
-  if (c.sources.LSI) h += box('LSI RC', '', c.sources.LSI.khz, 'kHz');
-  if (c.sources.LSE) h += box('LSE crystal', '', c.sources.LSE.khz, 'kHz');
-  h += `</div><div class="arrow"></div>`;
-  // column 2 PLL
-  h += `<div class="col">`;
-  if (c.pll) h += box('PLL', `<select id="ck-pllin">${c.pll.inputs.map((i, n) => `<option value="${n}"${k.pllIn === n ? ' selected' : ''}>${i.name}</option>`).join('')}</select><div style="margin-top:6px">× <select id="ck-pllmul" style="width:auto">${opts(c.pll.multipliers, k.pllMul)}</select></div>`, r.PLLCLK, 'MHz PLLCLK');
-  h += `</div><div class="arrow"></div>`;
-  // column 3 SYSCLK
-  h += `<div class="col">` + box('System clock mux', `<select id="ck-sys">${opts(c.sysclk.sources, k.sys)}</select>`, r.SYSCLK, 'MHz SYSCLK', r.over.includes('SYSCLK'), `max ${c.sysclk.max_mhz} MHz`);
+  const f = v => Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '\u2014';
   const fp = firstPre(c);
-  if (fp) h += box(c.prescalers[fp].label || `${fp} prescaler`, `<select data-pre="${fp}">${opts(c.prescalers[fp].options, k.pre[fp])}</select>`, r.HCLK, 'MHz HCLK', r.over.includes(fp), `max ${c.prescalers[fp].max_mhz} MHz`);
-  h += `</div><div class="arrow"></div>`;
-  // column 4 buses
-  h += `<div class="col">`;
+  const COLW = [188, 208, 198, 216, 240];
+
+  // ---- 1. the graph, derived entirely from M.clock + clockCalc() -------------
+  const nodes = [], edges = [], byId = {};
+  const node = (id, col, o) => { const n = Object.assign({ id, col, w: COLW[col] || 200 }, o); nodes.push(n); byId[id] = n; return n; };
+  const edge = (from, to, active) => { if (byId[from] && byId[to]) edges.push({ from, to, active: !!active }); };
+  const preSel = n => `<select data-pre="${attr(n)}">` + c.prescalers[n].options
+    .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  const TITLE = { HSI: 'HSI RC oscillator', HSE: 'HSE crystal / clock in', LSI: 'LSI RC oscillator', LSE: 'LSE crystal' };
+
+  for (const s of ['HSI', 'HSE', 'LSI', 'LSE']) {
+    const d = c.sources[s]; if (!d) continue;
+    const khz = d.khz !== undefined;
+    node(s, 0, {
+      title: TITLE[s] || s,
+      body: s === 'HSE' ? `<input type="number" step="0.001" min="0" id="ck-hse" value="${k.hse}">` : '',
+      val: khz ? d.khz : (s === 'HSE' ? k.hse : d.mhz),
+      unit: khz ? 'kHz' : 'MHz',
+      lim: d.min_mhz !== undefined ? `${d.min_mhz}\u2013${d.max_mhz} MHz` : (d.fixed ? 'fixed' : ''),
+      over: r.over.includes(s),
+    });
+  }
+  if (c.pll) node('PLL', 1, {
+    title: 'PLL',
+    body: `<select id="ck-pllin">` + c.pll.inputs.map((i2, n) =>
+        `<option value="${n}"${k.pllIn === n ? ' selected' : ''}>${esc(i2.name)}${i2.div > 1 ? ' / ' + i2.div : ''}</option>`).join('') + '</select>' +
+      `<div class="mul"><span>\u00d7</span><select id="ck-pllmul">` + c.pll.multipliers.map(m =>
+        `<option value="${m}"${String(m) === String(k.pllMul) ? ' selected' : ''}>${m}</option>`).join('') + '</select></div>',
+    val: r.PLLCLK, unit: 'MHz PLLCLK', lim: `input ${f(r.pllIn)} MHz`,
+  });
+  node('SYSCLK', 2, {
+    title: 'System clock mux',
+    body: `<select id="ck-sys">` + c.sysclk.sources.map(s => `<option${s === k.sys ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>',
+    val: r.SYSCLK, unit: 'MHz SYSCLK', lim: `max ${c.sysclk.max_mhz} MHz`, over: r.over.includes('SYSCLK'),
+  });
+  if (fp) node('pre:' + fp, 3, {
+    title: c.prescalers[fp].label || `${fp} prescaler`,
+    body: preSel(fp), val: r.HCLK, unit: 'MHz HCLK',
+    lim: c.prescalers[fp].max_mhz ? `max ${c.prescalers[fp].max_mhz} MHz` : '', over: r.over.includes(fp),
+  });
+  const prebase = {};
   for (const [name, v] of Object.entries(c.prescalers || {})) {
     if (name === fp) continue;
+    prebase[name] = v.source === 'PLLCLK' ? 'PLL'
+      : (v.source && v.source !== fp && c.prescalers[v.source]) ? 'pre:' + v.source
+      : (fp ? 'pre:' + fp : 'SYSCLK');
     const lim = [v.min_mhz ? `min ${v.min_mhz}` : '', v.max_mhz ? `max ${v.max_mhz}` : '', v.target_mhz ? `must be ${v.target_mhz}` : ''].filter(Boolean).join(', ');
-    h += box(v.label || `${name} prescaler${v.source ? ` (from ${v.source})` : ''}`, `<select data-pre="${name}">${opts(v.options, k.pre[name])}</select>`, r[name], `MHz ${name}`, r.over.includes(name), lim ? lim + ' MHz' : '');
+    node('pre:' + name, 4, {
+      title: v.label || `${name} prescaler`, body: preSel(name),
+      val: r[name], unit: 'MHz ' + name, lim: lim ? lim + ' MHz' : '', over: r.over.includes(name),
+    });
   }
-  for (const d of c.derived || []) h += box(d.name, `<div class="lim">HCLK / ${d.div}</div>`, r[d.name], 'MHz');
-  h += `</div></div>`;
-  if (c.notes) h += `<div class="cnote">${c.notes}</div>`;
-  if (c.buses) h += `<div class="cnote">Bus assignment: ` + Object.entries(c.buses).map(([b, l]) => `<b>${b}</b>: ${l.join(', ')}`).join(' &nbsp;·&nbsp; ') + `</div>`;
-  if (r.over.length) h += `<div class="issues">Out of spec: ${r.over.join(', ')}</div>`;
+  for (const d of c.derived || []) node('drv:' + d.name, 4, {
+    title: d.name, val: r[d.name], unit: 'MHz', lim: `${d.source || fp || 'SYSCLK'} / ${d.div}`,
+  });
+
+  // which nodes actually carry a clock right now -> everything else is greyed
+  const on = new Set(['SYSCLK']);
+  const pllSrc = c.pll ? (c.pll.inputs[k.pllIn] || {}).source : null;
+  if (Object.values(c.prescalers || {}).some(v => v.source === 'PLLCLK')) on.add('PLL');
+  if (k.sys === 'PLLCLK') on.add('PLL'); else on.add(k.sys);
+  if (on.has('PLL') && pllSrc) on.add(pllSrc);
+  if (fp) on.add('pre:' + fp);
+  for (const name of Object.keys(prebase)) if (on.has(prebase[name])) on.add('pre:' + name);
+  for (const d of c.derived || []) if (!fp || on.has('pre:' + fp)) on.add('drv:' + d.name);
+  for (const n of nodes) n.off = !on.has(n.id);
+
+  if (c.pll) c.pll.inputs.forEach((i2, n) => edge(i2.source, 'PLL', on.has('PLL') && k.pllIn === n));
+  for (const s of c.sysclk.sources) edge(s === 'PLLCLK' ? 'PLL' : s, 'SYSCLK', k.sys === s);
+  if (fp) edge('SYSCLK', 'pre:' + fp, true);
+  for (const [name, base] of Object.entries(prebase)) edge(base, 'pre:' + name, on.has('pre:' + name));
+  for (const d of c.derived || []) edge(fp ? 'pre:' + fp : 'SYSCLK', 'drv:' + d.name, on.has('drv:' + d.name));
+
+  // ---- 2. paint the boxes ----------------------------------------------------
+  let h = `<div class="cnote">This tree is drawn from the MCU file's <b>clock:</b> block \u2014 no part-specific UI. `
+    + `Change any selector and every frequency recomputes.</div>`
+    + `<div class="clegend"><span><i></i>active path</span><span><i class="dim"></i>not feeding SYSCLK</span>`
+    + `<span><em></em>out of specification</span></div>`
+    + `<div class="ctreewrap" id="ctreewrap"><svg id="ctree-svg"></svg>`
+    + nodes.map(n => `<div class="cnode${n.over ? ' over' : ''}${n.off ? ' off' : ''}" data-id="${attr(n.id)}" style="width:${n.w}px">`
+      + `<h5>${esc(n.title)}</h5>${n.body || ''}`
+      + (n.val !== undefined ? `<div class="val">${f(n.val)}<small>${esc(n.unit || '')}</small></div>` : '')
+      + (n.lim ? `<div class="lim">${esc(n.lim)}</div>` : '') + '</div>').join('')
+    + `</div>`;
+  if (r.over.length) h += `<div class="issues">\u26a0 Out of specification: ${esc(r.over.join(', '))}</div>`;
+  if (c.notes) h += `<div class="cnote">${esc(c.notes)}</div>`;
+  if (c.buses) h += `<div class="cnote">Bus assignment \u2014 ` + Object.entries(c.buses)
+    .map(([b, l]) => `<b>${esc(b)}</b>: ${esc(l.join(', '))}`).join(' &nbsp;\u00b7&nbsp; ') + `</div>`;
   el.innerHTML = h;
+
+  // ---- 3. measure, place, connect --------------------------------------------
+  const wrap = el.querySelector('#ctreewrap');
+  if (!wrap.offsetParent) { U.clockPending = true; return; }   // tab hidden: heights are 0, redo when shown
+  U.clockPending = false;
+  const box = {};
+  wrap.querySelectorAll('.cnode').forEach(d => box[d.dataset.id] = d);
+  const GAPX = 56, GAPY = 16, PAD = 4;
+  const cols = [...new Set(nodes.map(n => n.col))].sort((a, b) => a - b);
+  let x = PAD; const colX = {}, colH = {};
+  for (const col of cols) {
+    const mine = nodes.filter(n => n.col === col);
+    colX[col] = x;
+    x += Math.max(...mine.map(n => n.w)) + GAPX;
+    colH[col] = mine.reduce((acc, n) => acc + box[n.id].offsetHeight + GAPY, -GAPY);
+  }
+  const totalW = x - GAPX + PAD, totalH = Math.max(...Object.values(colH)) + 2 * PAD;
+  for (const col of cols) {
+    let y = PAD + (totalH - 2 * PAD - colH[col]) / 2;
+    for (const n of nodes.filter(n => n.col === col)) {
+      const d = box[n.id];
+      n.x = colX[col]; n.y = y; n.h = d.offsetHeight;
+      d.style.left = n.x + 'px'; d.style.top = n.y + 'px';
+      y += n.h + GAPY;
+    }
+  }
+  wrap.style.width = totalW + 'px';
+  wrap.style.height = totalH + 'px';
+  const sv = wrap.querySelector('#ctree-svg');
+  sv.setAttribute('width', totalW); sv.setAttribute('height', totalH);
+  const seen = {};
+  sv.innerHTML = edges.map(e => {
+    const a = byId[e.from], b = byId[e.to];
+    if (!a || !b || a.x === undefined || b.x === undefined) return '';
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x - 8, y2 = b.y + b.h / 2;
+    // stagger the vertical runs so parallel edges into one column stay readable
+    const lane = (seen[b.col] = (seen[b.col] || 0) + 1);
+    const mx = Math.max(x1 + 10, x2 - 12 - (lane % 3) * 9);
+    const cls = e.active ? ' on' : '';
+    return `<path class="cedge${cls}" d="M${x1} ${y1} H${mx} V${y2} H${x2}"/>`
+      + `<path class="carrow${cls}" d="M${x2 + 7} ${y2} l-7 -4.5 v9 z"/>`;
+  }).join('');
+
+  // ---- 4. handlers (same contract as before) ---------------------------------
   const hse = el.querySelector('#ck-hse'); if (hse) hse.onchange = () => { k.hse = +hse.value; renderClock(); };
   const pi = el.querySelector('#ck-pllin'); if (pi) pi.onchange = () => { k.pllIn = +pi.value; renderClock(); };
   const pm = el.querySelector('#ck-pllmul'); if (pm) pm.onchange = () => { k.pllMul = +pm.value; renderClock(); };
   const sy = el.querySelector('#ck-sys'); if (sy) sy.onchange = () => { k.sys = sy.value; renderClock(); };
   el.querySelectorAll('select[data-pre]').forEach(s => s.onchange = () => { k.pre[s.dataset.pre] = +s.value; renderClock(); });
 }
+// The clock tab is display:none until selected, and hidden boxes measure 0, so
+// lay the tree out the moment the tab becomes visible.
+new MutationObserver(() => {
+  const v = document.getElementById('view-clock');
+  if (v.classList.contains('active') && U.clockPending) renderClock();
+}).observe(document.getElementById('view-clock'), { attributes: true, attributeFilter: ['class'] });
 
 // ---------- 7b. projects (dialogs and files; state is app/engine/project.js) --
 // Restore a saved project, then resync every part of the shell it can change.
