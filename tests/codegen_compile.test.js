@@ -131,11 +131,40 @@ function generate(fixture) {
   }
 }
 
+/**
+ * The gate's own scons build tree, kept out of `.pio/build`.
+ *
+ * Four agents share one working tree, and any of them may have `pio run` going
+ * in `data/firmware` while this suite runs. Two builds in one build directory
+ * produce failures that belong to neither — this cost one spurious red here
+ * before it was isolated. A STABLE directory rather than a fresh one, so the
+ * gate still builds incrementally and stays a couple of seconds per environment.
+ */
+const GATE_BUILD_DIR = path.join(FW, '.pio', 'gate');
+
 /** `pio run -e <env>` in data/firmware. Returns the combined output. */
 function build(env) {
-  const r = spawnSync(pio.cmd[0], [...pio.cmd.slice(1), 'run', '-e', env],
-    { cwd: FW, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  const r = spawnSync(pio.cmd[0], [...pio.cmd.slice(1), 'run', '-e', env], {
+    cwd: FW,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024,
+    env: { ...process.env, PLATFORMIO_BUILD_DIR: GATE_BUILD_DIR },
+  });
   return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
+}
+
+/**
+ * What actually went wrong, rather than the last N lines.
+ *
+ * A failing build's tail is often nothing but "Compiling ..." lines — scons
+ * keeps going after an error — so a plain tail can report a failure while
+ * showing none of it. Pull the diagnostic lines out first, then the tail.
+ */
+function whyItFailed(out) {
+  const lines = out.split(/\r?\n/);
+  const diag = lines.filter(l => /\b(error|Error|ERROR|undeclared|undefined reference|No such file|FAILED)\b/.test(l));
+  return (diag.length ? `--- the errors ---\n${diag.slice(0, 30).join('\n')}\n\n` : '')
+    + `--- last lines of the build ---\n${lines.slice(-25).join('\n')}`;
 }
 
 /**
@@ -147,7 +176,7 @@ function build(env) {
  * fail for no reason. Looking on disk is the same question asked correctly.
  */
 function generatedObject(env) {
-  const buildDir = path.join(FW, '.pio', 'build', env);
+  const buildDir = path.join(GATE_BUILD_DIR, env);
   if (!fs.existsSync(buildDir)) return null;
   const stack = [buildDir];
   while (stack.length) {
@@ -160,9 +189,6 @@ function generatedObject(env) {
   }
   return null;
 }
-
-/** The last few hundred lines are where the compiler errors are. */
-const tailOf = (text, n = 40) => text.split(/\r?\n/).slice(-n).join('\n');
 
 // ---------------------------------------------------------------- the gate
 for (const fixture of FIXTURES) {
@@ -183,8 +209,8 @@ for (const fixture of FIXTURES) {
       assert.equal(r.status, 0,
         `pio run -e ${fixture.env} failed on ${fixture.file}.\n`
         + 'This is the gate working: the generated C does not compile against the real SDK.\n'
-        + '--- last lines of the build ---\n' + tailOf(r.out, 60));
-      assert.match(r.out, /SUCCESS/, `pio reported no SUCCESS for ${fixture.env}:\n${tailOf(r.out)}`);
+        + whyItFailed(r.out));
+      assert.match(r.out, /SUCCESS/, `pio reported no SUCCESS for ${fixture.env}:\n${whyItFailed(r.out)}`);
       // A build that never compiled the generated file would "succeed" while
       // proving nothing, which is the failure mode this whole test exists for.
       const obj = generatedObject(fixture.env);
@@ -298,8 +324,10 @@ test('the compile gate builds each fixture for the part it claims, not a family 
   // compiles" has to mean "it compiles for this part".
   const bad = [];
   for (const fixture of FIXTURES) {
-    const r = spawnSync(pio.cmd[0], [...pio.cmd.slice(1), 'run', '-e', fixture.env, '-t', 'idedata'],
-      { cwd: FW, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    const r = spawnSync(pio.cmd[0], [...pio.cmd.slice(1), 'run', '-e', fixture.env, '-t', 'idedata'], {
+      cwd: FW, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+      env: { ...process.env, PLATFORMIO_BUILD_DIR: GATE_BUILD_DIR },
+    });
     if (r.status !== 0) { bad.push(`${fixture.env}: pio run -t idedata failed`); continue; }
     const json = (r.stdout || '').slice((r.stdout || '').indexOf('{'), (r.stdout || '').lastIndexOf('}') + 1);
     let defines = [];
