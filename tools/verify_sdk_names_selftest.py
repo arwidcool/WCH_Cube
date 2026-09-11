@@ -130,6 +130,10 @@ def build_cases(doc: dict):
          lambda d: set_path(d, "dma.channel_params.0.options.0.sdk", "DMA_DIR_PeripheralSrc"),
          "dma.channel_params[0]", "DMA_DIR_PeripheralSrc"),
 
+        ("dma.remaps macro, a plausible EXTEN bit name that does not exist",
+         lambda d: set_path(d, "dma.remaps.0.macro", "EXTEN_TIM2_DMA_REMAP_EN"),
+         "dma.remaps[0].macro", "EXTEN_TIM2_DMA_REMAP_EN"),
+
         ("nvic irqn, a name in neither the enum nor the startup table",
          lambda d: set_path(d, f"nvic.vectors.{adc}.irqn", "ADC1_IRQn"),
          "nvic.vectors", "ADC1_IRQn"),

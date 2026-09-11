@@ -502,6 +502,49 @@ peripherals:
   # What is configurable here is what each line does once it has a pin: whether it fires,
   # and on which edge (EXTI_RTENR / EXTI_FTENR, RM 6.4.3). No signals, so nothing here
   # claims a pin - the pin arrives when a GPIO is set to an interrupt mode.
+  # RM chapter 20. Found missing by tests/completeness.test.js (AGENT-4, BOARD 14:42Z):
+  # the chapter was neither modelled nor on this file's declared-absence list, so it was
+  # an undeclared fifth gap. Modelled rather than declared absent, because TIM2_DMA_REMAP
+  # is not cosmetic - it changes which DMA request TIM2_CH4 uses, which is a map this app
+  # renders and a conflict it detects.
+  #
+  # There is no SPL driver for this unit: EVT ships no ch32v00X_exten.h, so every setting
+  # here is a direct register write, like ADC's low-power bit. The RM and the EVT header
+  # agree exactly on all three bits, which is worth recording because they did not on the
+  # TIM3 vector:
+  #   EXTEN_LOCKUP_EN        0x00000040  bit 6   ch32v00X.h:2516   RM 20.2.1
+  #   EXTEN_LOCKUP_RSTF      0x00000080  bit 7   ch32v00X.h:2517   RM 20.2.1
+  #   EXTEN_TIM2_DMA_REMAP   0x00010000  bit 16  ch32v00X.h:2519   RM 20.2.1
+  # The register block is `EXTEN` with one member, `EXTEN_CTR` (ch32v00X.h:385, 470).
+  #
+  # LKUPRST is deliberately NOT offered. It is a write-1-to-clear STATUS flag reporting
+  # that a lock-up already reset the part; it is something firmware reads at startup, not
+  # something a configurator sets, and offering it would be offering a control that does
+  # nothing useful at init time.
+  EXTEN:
+    category: System Core
+    notes: >
+      Extended configuration unit (RM ch.20). Clocked from HB and reset only by a system
+      reset. No SPL driver exists, so generated code writes EXTEN->EXTEN_CTR directly.
+    settings:
+      - name: Lock-up reset
+        choices:
+          - { name: Disable }
+          - { name: Reset the chip on CPU lock-up }
+      - name: TIM2 channel 4 DMA
+        choices:
+          - { name: Own request (TIM2_CH4) }
+          - { name: Share the TIM2 update request }
+    params:
+      - key: lockup
+        name: Lock-up monitoring
+        sdk_none: true
+        sdk_note: "EVT ships no ch32v00X_exten.h and ch32v00X.h declares no function for this unit, so it is a direct write of EXTEN_LOCKUP_EN into EXTEN->EXTEN_CTR. Nothing to call."
+        type: bool
+        group: Basic
+        default: false
+        help: "RM 20.1: with LKUPEN set, a CPU lock-up resets the system and sets LKUPRST. LKUPRST itself is a write-1-to-clear status flag that firmware reads after reset, so it is not offered here."
+
   EXTI:
     category: System Core
     settings:
@@ -1642,6 +1685,30 @@ dma:
     TIM2_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
     TIM3_CH3:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
     TIM3_CH4:   { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+  # How a setting changes the DMA request map. TIM2_DMA_REMAP (RM 20.1 item 2) lets
+  # TIM2_CH4's DMA request share the TIM2 update channel instead of using its own, so the
+  # channel a user sees for TIM2_CH4 depends on a setting of a DIFFERENT peripheral. That
+  # is the same coupling shape as clock.hse_peripheral / hse_setting, and it is stated
+  # here rather than hardcoded anywhere.
+  #
+  # AGENT-2: with the remap ON, TIM2_CH4 is served by the channel that carries TIM2_UP
+  # (channel 2) and its own entry on channel 7 no longer applies. `dma.requests` in this
+  # file is the remap-OFF map, which is the reset state (EXTEN_CTR resets to 0x00000400,
+  # bit 16 clear).
+  remaps:
+    - peripheral: EXTEN
+      setting: TIM2 channel 4 DMA
+      when: Share the TIM2 update request
+      register: "EXTEN->EXTEN_CTR"
+      macro: EXTEN_TIM2_DMA_REMAP
+      lsb: 16
+      bits: 1
+      moves: { request: TIM2_CH4, from_channel: 7, to_channel: 2 }
+      note: >
+        RM 20.1: "The updated DMA channel can be shared between the DMA request of TIM2
+        channel 4 and the updated DMA request." Channel 2 is where TIM2_UP lives in
+        dma.requests; channel 7 is TIM2_CH4's own.
+
   request_notes:
     ADC1: >
       ADC_RDATAR is 12-bit data in a 16-bit field, so both widths are half-word; a byte

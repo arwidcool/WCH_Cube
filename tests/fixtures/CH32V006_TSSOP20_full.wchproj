@@ -55,6 +55,13 @@ peripherals:
     remap: 0
     params:
       latency: 2 wait states
+  EXTEN:
+    settings:
+      Lock-up reset: Disable
+      TIM2 channel 4 DMA: Own request (TIM2_CH4)
+    remap: 0
+    params:
+      lockup: false
   EXTI:
     settings:
       EXTI line 0 trigger: Disable

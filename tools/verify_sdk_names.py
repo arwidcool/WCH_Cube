@@ -465,6 +465,12 @@ def check_params(doc: dict, idx: Index, r: Report) -> None:
                 want(r, idx, f"{where}.options[{j}].sdk", o["sdk"],
                      idx.macros | idx.enum_members, "a defined macro or enum member")
 
+    # A DMA request remap names a macro and a register, like anything else.
+    for i, rm in enumerate((doc.get("dma") or {}).get("remaps") or []):
+        if isinstance(rm, dict):
+            want(r, idx, f"dma.remaps[{i}].macro", rm.get("macro"),
+                 idx.macros | idx.enum_members, "a defined macro or enum member")
+
     for i, p in enumerate((doc.get("dma") or {}).get("channel_params") or []):
         if isinstance(p, dict):
             one(f"dma.channel_params[{i}] ({p.get('key', i)})", p, "DMA_InitTypeDef")
