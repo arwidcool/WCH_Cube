@@ -57,6 +57,56 @@ test('a remove path that matches nothing is an error, not a silent no-op', () =>
   assert.throws(() => e.loadMcu('CH32V005'), /matched nothing in CH32V006/);
 });
 
+// Round-3 C4. `remove` used to run on the MERGED document, so a child that removed a
+// path and redefined it lost its own version as well. That is how CH32V005 shipped
+// with no DMA request map and dead channel-clash detection.
+test('a path the child removes AND redefines keeps the CHILD version', () => {
+  const e = withChild(CHILD.replace(
+    'remove: [peripherals.TKEY, peripherals.TIM3]',
+    'remove: [peripherals.TKEY, peripherals.TIM3, dma.requests]') + `
+dma:
+  requests:
+    1: [ADC1]
+    2: [SPI1_RX]
+`);
+  e.loadMcu('CH32V005');
+  assert.ok(e.M.dma && e.M.dma.requests, 'the child redefined dma.requests; removing must not delete it');
+  assert.deepEqual(Object.keys(e.M.dma.requests).sort(), ['1', '2']);
+  assert.deepEqual(e.M.dma.requests[1], ['ADC1'], "the parent's channel 1 was dropped, not merged into");
+});
+
+test('remove drops the parent key even when the child says nothing about it', () => {
+  const e = withChild();
+  e.loadMcu('CH32V005');
+  assert.equal(e.M.peripherals.TKEY, undefined);
+  assert.ok(e.M.peripherals.USART1, 'unrelated siblings survive');
+});
+
+// The flip side of applying `remove` to the parent: it now matches against the parent
+// only. Removing something only the CHILD has is a stale removal and says so, which is
+// what catches a parent rename.
+test('removing a path only the child defines is an error', () => {
+  const e = withChild(CHILD.replace(
+    'remove: [peripherals.TKEY, peripherals.TIM3]',
+    'remove: [peripherals.TKEY, peripherals.TIM3, peripherals.MYOWN]') + `
+peripherals:
+  MYOWN:
+    category: Test
+`);
+  assert.throws(() => e.loadMcu('CH32V005'), /mcu\.remove path "peripherals\.MYOWN" matched nothing in CH32V006/);
+});
+
+test('CH32V005 as shipped keeps its own DMA request map', () => {
+  const e = fresh();
+  e.loadMcu('CH32V005');
+  assert.ok(e.M.dma && e.M.dma.requests, 'the real file, not a fixture');
+  assert.deepEqual(Object.keys(e.M.dma.requests).sort(), ['1', '2', '3', '4', '5', '6', '7']);
+  const all = Object.values(e.M.dma.requests).flat();
+  assert.ok(!all.some(r => String(r).startsWith('TIM3')), 'and no TIM3 request on a part with no TIM3');
+  assert.equal(e.M.dma.request_defaults.TIM3_CH3, undefined, 'the removed defaults are still removed');
+  assert.ok(e.M.dma.request_defaults.ADC1, 'while the rest of the defaults survive');
+});
+
 test('variants are replaced, never merged — a derived part has its own part numbers', () => {
   const e = withChild();
   e.loadMcu('CH32V005');
