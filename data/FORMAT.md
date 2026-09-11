@@ -145,75 +145,91 @@ that is physically what the silicon does with those pins.
 ## Peripheral parameters (`params:`)
 
 `settings:` answers "which pins does this peripheral take". `params:` answers "how is it
-configured once it has them" — baud rate, prescaler, polarity. Parameters never claim a
-pin and never cause a conflict, which is the whole reason they are a separate list.
+configured once it has them" — baud rate, prescaler, polarity. **A parameter never claims
+a pin**, which is why the conflict engine can ignore this block entirely. Anything that
+changes which pin is used is a `setting` with `signals:`, not a parameter.
+
+The implementation is `app/engine/params.js`; when this document and that module disagree,
+the module is right.
 
 ```yaml
   USART1:
-    category: Connectivity
-    settings: [ ... ]
-    remaps:  [ ... ]
     params:
-      - { name: Baud Rate, type: int, default: 115200, min: 300, max: 3000000,
-          unit: bps, group: Basic, register: "USART_BRR", notes: "HCLK/16 max" }
-      - name: Parity
+      - key: baud                 # identifier: .wchproj key, codegen key. Stable forever.
+        name: Baud rate           # the label a user sees
+        type: int                 # int | number | enum | bool
+        default: 115200           # required; must satisfy its own constraints
+        min: 110
+        max: 3000000
+        unit: Bd
+        help: Ceiling is fCK/16, so 3 MBd at the 48 MHz maximum. USART_BRR.
+      - key: stop
+        name: Stop bits
         type: enum
-        default: None
-        group: Basic
-        register: "USART_CTLR1 PCE(10), PS(9)"
+        default: "1"
         options:
-          - { name: None, value: 0 }
-          - { name: Even, value: 1 }
-          - { name: Odd,  value: 2 }
-      - { name: Clock Phase, type: enum, default: 1 Edge, group: Basic,
-          options: [1 Edge, 2 Edge],
-          depends_on: { setting: Mode, not: Disable } }
+          - { name: "1",   value: 0 }
+          - { name: "0.5", value: 1 }
+          - { name: "2",   value: 2 }
+          - { name: "1.5", value: 3 }
+        help: "USART_CTLR2 STOP[13:12], listed in register order."
 ```
 
 ### Fields
 
 | Field | Required | Meaning |
 |---|---|---|
-| `name` | yes | unique within the peripheral; the UI label and the key state is stored under |
-| `type` | yes | `int`, `float`, `enum`, or `bool` |
-| `default` | yes | the value a fresh project starts with; for `enum` it is an option **name** |
-| `min` / `max` | int, float | inclusive bounds, rejected outside |
-| `step` | int, float | UI increment; does not restrict the value |
-| `options` | enum | either plain names (`[1 Edge, 2 Edge]`) or `{ name, value }` pairs when the register encoding matters |
-| `unit` | no | shown after the field: `bps`, `Hz`, `MHz`, `ns` |
-| `group` | no | `Basic` (default) or `Advanced`; the UI renders one table per group |
-| `readonly` | no | `true` for a computed or fixed row — displayed, never edited |
-| `depends_on` | no | when this parameter applies at all (below) |
-| `register` | no | provenance, e.g. `"SPI_CTLR1 BR[5:3]"`. Not consumed by code; it is what makes the number checkable |
-| `notes` | no | one line shown as help text |
+| `key` | **yes** | stable identifier. An entry without one is silently dropped by `paramDefs()`, so a whole block can look fine in the file and not exist to the app |
+| `name` | no | label; defaults to the key |
+| `type` | no | `int`, `number`, `enum`, `bool`; inferred from `options`/`default` when omitted |
+| `default` | yes | what a fresh project starts with; for `enum` it is an option **name** |
+| `min` / `max` / `step` | numeric only | bounds are enforced on the way in, so nothing downstream re-checks |
+| `unit` | no | shown after the value: `Bd`, `Hz`, `cycles` |
+| `options` | enum | plain names, or `{ name, value }` pairs |
+| `help` | no | one sentence, shown as help text |
+| `when` / `depends_on` | no | when the parameter applies at all |
 
-### `depends_on`
+### Give every enum its register encoding
 
-A parameter that only applies in some configurations. Exactly one of `setting` or `param`
-names what it looks at, and exactly one of `equals`, `in` or `not` says what it wants:
+Write `options` as `{ name, value }` whenever the reference manual states the field
+encoding, and put the field itself in `help`:
 
 ```yaml
-depends_on: { setting: Hardware Flow Control, in: [CTS only, CTS/RTS] }
-depends_on: { param: CRC Calculation, equals: true }
-depends_on: { setting: Mode, not: Disable }
+options:
+  - { name: "2",  value: 0 }      # SPI_CTLR1 BR[5:3]
+  - { name: "4",  value: 1 }
 ```
 
-When the condition is false the parameter is hidden and keeps its value; it is not reset.
+A plain list of names is only a label. With values, `paramRegisterValue(pid, key)` returns
+the number the generator has to emit, and the value becomes checkable against the manual
+instead of folklore. Write the encoding the manual gives, never a sequential index that
+happens to line up.
+
+### `when` and `depends_on`
+
+`when` tests a **setting**, `depends_on` tests another **parameter**:
+
+```yaml
+when: { Mode: Asynchronous }
+depends_on: { param: crc, equals: true }
+```
+
+A parameter that does not apply is reported as `applicable: false` rather than hidden, so
+the user can still see it exists. Neither form can test a numeric parameter's *value*, so
+a dependency like "fast-mode duty cycle only matters above 100 kHz" belongs in `help`
+until the engine can express it.
 
 ### Rules
 
-- **A parameter never claims a pin.** Anything that changes which pin is used is a
-  `setting` with `signals:`, not a parameter. Keeping that line sharp is what lets the
-  conflict engine ignore `params:` entirely.
-- **`default` must be valid against its own constraints** — inside `min`/`max`, or one of
-  the `options` names. `validate_mcu.py` checks this.
-- **An `enum` option's `value` is the raw register encoding** when one is given. Write the
-  encoding the reference manual gives, not a sequential index, and cite it in `register`.
-  A parameter with a stated encoding is checkable; one without is folklore.
-- **Bounds are physical, not preferences.** `max: 3000000` on a baud rate is HCLK/16 at
+- **`default` must be valid against its own constraints** — inside `min`/`max`, or exactly
+  one of the `options` names.
+- **Bounds are physical, not preferences.** `max: 3000000` on a baud rate is fCK/16 at
   48 MHz, not a round number someone liked.
-- **A fixed hardware fact is `readonly`, not a parameter with one option.** ADC resolution
-  is a property of the silicon; it is shown so the user knows it, and cannot be changed.
+- **Do not model a fixed hardware fact as a one-option parameter.** There is no read-only
+  flag, so a single-option enum reads as a choice the user could make. State it in the
+  peripheral's `notes:` instead — ADC resolution on CH32V006 is the worked example.
+- **Do not duplicate a setting.** Hardware flow control decides whether CTS and RTS claim
+  pins, so it is a setting; adding a `flow` parameter beside it would let the two disagree.
 
 ## `exti`
 
