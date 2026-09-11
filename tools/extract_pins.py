@@ -37,18 +37,41 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DS = ROOT / "data" / "sources" / "V006" / "Datasheets" / "CH32V006DS0.md"
 
-PIN_RE = re.compile(r"^P[A-D][0-7]$")
-# A data row: one cell per package (a pin number or "-"), then the pin name.
-ROW_RE = re.compile(r"^((?:(?:\d+|-)\s+){1,8})(P[A-D][0-7])\b")
-# Pieces of a row the conversion split onto their own lines.
+# A pin name. Deliberately NOT `P[A-D][0-7]`, which is what this said until round 3:
+# that hardcodes 8-bit ports A-D, and it is wrong on CH32X035, whose ports are 24 bits
+# wide (GPIO_Pin_0..23 all exist) and whose PC runs 0-7 and then 14-19. A tool that
+# assumes the shape of the parts it has already seen is the same class of mistake as an
+# SPL name borrowed from another family. Override with --pin-re for a part shaped
+# differently again.
+DEFAULT_PIN_PAT = r"P[A-Z]\d{1,2}"
 CELLS_ONLY_RE = re.compile(r"^(?:\d+|-)(?:\s+(?:\d+|-))*$")
-NAME_ONLY_RE = re.compile(r"^(P[A-D][0-7])\s*(?:\(\d+\))?\s*$")
+PIN_RE = ROW_RE = NAME_ONLY_RE = None       # compiled by compile_pin_res()
+
+
+def compile_pin_res(pat=DEFAULT_PIN_PAT, max_cols=8):
+    """One pattern, three uses: the name alone, and a name after a row of cells."""
+    global PIN_RE, ROW_RE, NAME_ONLY_RE
+    PIN_RE = re.compile(rf"^{pat}$")
+    ROW_RE = re.compile(rf"^((?:(?:\d+|-)\s+){{1,{max_cols}}})({pat})\b")
+    NAME_ONLY_RE = re.compile(rf"^({pat})\s*(?:\(\d+\))?\s*$")
+
+
+compile_pin_res()
 FOOTNOTE_RE = re.compile(r"^\(\d+\)\s*$")
 
 # Lines the PDF conversion sprinkles through the table. None of them can match ROW_RE
 # once the "## " prefix is gone, but the end-of-table marker has to be explicit.
 END_MARKERS = ("Note 1: Explanation of table abbreviations",
                "Note  1:  Explanation")
+
+# ...and so does the NEXT TABLE, which is a trap this tool fell into on its first run
+# against CH32X035. That datasheet follows "Table 2-1 CH32X035 Pin definitions" with
+# "Table 2-2 CH32X033 Pin definitions" - a DIFFERENT PART with FEWER package columns -
+# and neither end marker appears between them. The parser read straight on and produced
+# 26 rows whose cell count did not match, all of them CH32X033 rows wearing CH32X035
+# pin names. They were reported as ambiguous rather than silently believed, which is
+# the only reason this was visible at all.
+NEXT_TABLE_RE = re.compile(r"^Table\s+\d+-\d+")
 
 
 def read_table(ds_path, table_title, columns):
@@ -69,6 +92,9 @@ def read_table(ds_path, table_title, columns):
         if s.startswith("##"):
             s = s[2:].strip()
         if any(m in s for m in END_MARKERS):
+            break
+        # A table ends where the next one begins, even with no end marker between them.
+        if NEXT_TABLE_RE.match(s) and table_title not in s:
             break
 
         # Some rows are broken across lines by the PDF conversion, cells first:
@@ -172,9 +198,14 @@ def main():
     ap.add_argument("--columns", required=True,
                     help="package ids in datasheet column order, comma separated")
     ap.add_argument("--yaml", dest="yml", required=True)
+    ap.add_argument("--pin-re", default=DEFAULT_PIN_PAT,
+                    help=f"regex for a pin name (default: {DEFAULT_PIN_PAT})")
     args = ap.parse_args()
 
     columns = [c.strip() for c in args.columns.split(",") if c.strip()]
+    # The row pattern needs to allow one cell per package column, and this datasheet
+    # has seven of them where CH32V006 had five.
+    compile_pin_res(args.pin_re, max_cols=max(8, len(columns)))
     try:
         ds, seen, ambiguous = read_table(args.ds, args.table, columns)
     except LookupError as e:
