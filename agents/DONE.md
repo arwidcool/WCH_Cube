@@ -483,8 +483,23 @@ runs.** A line whose evidence is a sentence in a board entry is not ticked.
         it as a pass. AGENT-1's planted-break self-test was already in the runner.
 - [ ] E4 the 16 known-missing cells in `tests/completeness.test.js`, each filled or declared
       ABSENT with an EVT citation — the two are different and must not be conflated  (all three)
-- [ ] E5 `smoke.js`, `layout.test.js`, `legibility.test.js`, `codegen_compile.test.js`,
+- [x] E5 `smoke.js`, `layout.test.js`, `legibility.test.js`, `codegen_compile.test.js`,
       `data.test.js` all cover **CH32X035 × 7 packages**  (AGENT-3)
+      → every one of the five iterates **every registered part on every one of its packages**, so
+        the coverage is by construction rather than by a list that can go stale — and two of them
+        now assert it instead of assuming it. `layout.test.js` counts the combinations it swept and
+        requires them to equal the number `wchcube_cli.js --list` reports from the same data files
+        by a different path: **20 today** (CH32V003 4 + CH32V005 4 + CH32V006 5 + CH32X035 7), so a
+        part that stopped registering, or a package dropped from a table, fails rather than quietly
+        shrinking the sweep. `legibility.test.js` requires the widest package it reached to have
+        drawn **≥ 60 labels** and the longest name it saw to be **≥ 8 characters** — CH32X035's
+        LQFP64M and `USBPD_CC1`/`USBFS_UDM`, the first genuinely hostile text input this test has
+        had, since the synthetic fixture was built to be well-behaved. `codegen_compile.test.js` has
+        the explicit CH32X035 QFN28 fixture and builds it for `CH32X035G8U6`; `data.test.js` loads
+        every bundled part on every package and checks each has a geometry to draw with; `smoke.js`
+        drives all four parts × all 20 packages with a silent-console assertion. All green in the
+        517-test run — and it extended to CH32V003 for free, which is how the fourth part was
+        caught before it could ship unproven.
 - [ ] E6 `CH32X033F8P6` modelled as its own part (DS Table 2-2 is a separate pin table),
       most likely `inherits: CH32X035`  (AGENT-1)
 - [ ] E7 QFN28 / QFN20 / QFN12 on CH32X035: an answer on whether they have an external reset,

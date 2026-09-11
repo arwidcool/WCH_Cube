@@ -5,10 +5,14 @@
 // menu bar, breadcrumb, four navy tabs, then three columns (peripheral tree, mode and
 // configuration, chip with its zoom bar). That is what actually regresses when someone
 // reorganises the markup, and it is checked at both required viewport sizes.
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import { suite, test, assert } from './lib/harness.js';
-import { boot } from './lib/app.js';
+import { boot, ROOT } from './lib/app.js';
 
 suite('layout');
+
+const CLI = path.join(ROOT, 'tools', 'wchcube_cli.js');
 
 const SIZES = [
   { name: '1280x720', width: 1280, height: 720 },
@@ -111,11 +115,13 @@ for (const size of SIZES) {
 test('nothing is drawn outside the chip drawing from the smallest package up to the largest', () => {
   const a = boot();
   const problems = [];
+  let swept = 0;
   try {
     for (const name of a.mcuNames) {
       a.loadMcu(name);
       for (const pkg of a.packages) {
         a.setPackage(pkg);
+        swept++;
         const geom = a.ev('geom');
         const where = `${name} ${pkg} (${a.pinEls().length} pins)`;
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -145,6 +151,19 @@ test('nothing is drawn outside the chip drawing from the smallest package up to 
       }
     }
   } finally { a.close(); }
+  // Coverage, asserted rather than assumed — round-5 E5. This sweep walks
+  // whatever `#mcusel`/`#pkgsel` happen to offer, so a part that stopped
+  // registering, or a package dropped from a part's table, would silently shrink
+  // it to the easy cases and still report green. `wchcube_cli.js --list` reads the
+  // same data files by a different path, so the two counts must agree.
+  const listed = spawnSync(process.execPath, [CLI, '--list'], { cwd: ROOT, encoding: 'utf8' });
+  assert.equal(listed.status, 0, `wchcube_cli.js --list failed:\n${listed.stderr || listed.stdout}`);
+  const expected = (listed.stdout.match(/^\s+packages\s+\S.*$/gm) || [])
+    .reduce((n, line) => n + line.replace(/^\s+packages\s+/, '').split(',').length, 0);
+  assert.ok(expected > 0, 'no packages came back from --list, so this check proves nothing');
+  assert.equal(swept, expected,
+    `the sweep covered ${swept} part/package combinations but the app ships ${expected}. `
+    + 'A sweep that skips a part or a package reports green over the thing it did not look at');
   assert.empty(problems, 'chip drawing overflows');
 });
 
