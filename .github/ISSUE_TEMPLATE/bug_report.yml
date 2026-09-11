@@ -1,0 +1,87 @@
+name: Bug report
+description: Something is wrong — a wrong pin, a wrong number, a crash, a broken generated file
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Two things make a bug here much easier to act on:
+
+        1. **Which part and package.** Almost everything in this app is data-driven, so
+           `CH32V006` on `TSSOP20` behaves differently from the same chip on `QFN12`.
+        2. **Whether the claim is in the data or in the code.** If a pin is missing, a remap is
+           wrong, or the GPIO table offers a mode the chip does not have, that is a fact in
+           `data/mcus/*.yaml` — and it needs a citation from the datasheet, reference manual or
+           EVT package to fix. See `docs/ADDING-A-PART.md`.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem is it?
+      options:
+        - The app is broken (crash, blank page, console errors)
+        - A hardware fact is wrong (pin, package, remap, clock, DMA, NVIC)
+        - The GPIO/peripheral table offers a choice the chip cannot do
+        - Generated C is wrong, or does not compile
+        - The generated project does not build or flash
+        - The UI is wrong (layout, clipping, unreadable text)
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: part
+    attributes:
+      label: Part and package
+      description: e.g. CH32V006 on TSSOP20. If it happens on every part, say so.
+      placeholder: CH32V006 / TSSOP20
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: Where you are running it
+      description: The browser build (dist/index.html), the desktop app, or the CLI?
+      placeholder: Firefox 130, opened dist/index.html from the filesystem
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected
+      description: Steps to reproduce if you have them. A screenshot is very welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console output
+      description: |
+        The app is required to open and run with a completely silent console, so **any**
+        output here is a bug in itself. Paste it verbatim.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: citation
+    attributes:
+      label: If a hardware fact is wrong, what does the source say?
+      description: |
+        The datasheet table, reference manual section, or EVT `file:line`. Precedence is
+        **EVT → Reference Manual → Datasheet**. "The other CH32 parts have it" is not a
+        citation, and a fix without one cannot be accepted.
+      placeholder: CH32X035DS0.md Note 4 (p.19) says PC10/PC11 must be floating inputs while USBFS is enabled
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you post
+      options:
+        - label: I am running the latest `dist/index.html` (rebuilt with `python build.py`, not hand-edited)
+        - label: I have read `PROGRESS.md`, which lists what is known-broken and known-untested

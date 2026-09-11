@@ -1,0 +1,81 @@
+name: Add a microcontroller
+description: Ask for a part that is not supported yet, or offer an extraction you have done
+labels: ['new part']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding a part is a **data job**, not a programming job — the app, the generated C and
+        every test pick it up with no engine change, and CI fails if any part number appears in
+        `app/`. The full process is in [`docs/ADDING-A-PART.md`](../blob/main/docs/ADDING-A-PART.md).
+
+        You can do this yourself: supply the vendor files and describe what you need. This issue
+        is for tracking a part, and for asking whether somebody has the sources.
+
+  - type: input
+    id: part
+    attributes:
+      label: Which part?
+      placeholder: CH32V003
+    validations:
+      required: true
+
+  - type: dropdown
+    id: have
+    attributes:
+      label: Which of the three sources do you have?
+      description: |
+        The EVT package is the highest authority, because the generated code must compile
+        against it. The RM gives register-level truth. The DS gives pin tables and the notes,
+        which is where the gotchas live.
+      options:
+        - All three (EVT + RM + DS)
+        - EVT + one of RM/DS
+        - Only the DS
+        - Only the EVT package
+        - None yet — I am asking whether someone has them
+    validations:
+      required: true
+
+  - type: input
+    id: family
+    attributes:
+      label: Is it a delta of a part already supported?
+      description: |
+        If so it is a ~130-line file instead of a 1 600-line one. For example CH32V005 is
+        `CH32V006` minus TouchKey, TIM3 and QFN32.
+      placeholder: "yes — CH32V033 is CH32V035 with a different pin table (DS Table 2-2)"
+    validations:
+      required: false
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What do you need it for?
+      description: |
+        Useful if the part has an unusual shape — no HSE, ports wider than 16 bits, a
+        non-contiguous port, remaps applied by named SDK macros, grouped interrupt vectors.
+        Those are the things that break assumptions, and knowing about them early is worth a lot.
+    validations:
+      required: false
+
+  - type: input
+    id: board
+    attributes:
+      label: Does the PlatformIO `ch32v` platform ship a board for it?
+      description: |
+        Check `~/.platformio/platforms/ch32v/boards/`. If there is no board file, no project can
+        be generated for that variant — and it must be refused by name rather than substituted
+        with a neighbouring board, which would lie about the flash size.
+      placeholder: genericCH32V003F4P6
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: offer
+    attributes:
+      label: Are you offering to do the extraction?
+      options:
+        - label: Yes — I have the sources and I will work through `docs/ADDING-A-PART.md`
+        - label: I can supply the files but not do the extraction
+        - label: I am only asking whether this part is possible

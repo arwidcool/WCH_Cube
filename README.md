@@ -1,10 +1,46 @@
 # WCHCube
 
+[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![no dependencies](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen.svg)](#stack)
+[![one file](https://img.shields.io/badge/app-one%20offline%20HTML%20file-informational.svg)](#run-it-in-a-browser)
+
 An STM32CubeMX-style pinout, peripheral and clock configurator for WCH RISC-V microcontrollers.
 
 Pick a part, click a pin, choose a signal. The app shows you which peripherals can reach
 which pins on that exact package, colours the conflicts orange, and tells you *before* you
 click when a choice would collide with something you have already set.
+
+![The pinout view: CH32V006 on TSSOP20 with USART1 and SPI1 assigned](docs/images/app-pinout.png)
+
+> ### Read this before you trust it
+>
+> **This project is mostly vibe-coded.** The application was written by AI coding agents under
+> a written working agreement, with a human setting direction. It is fast and internally
+> consistent, and it has one specific, well-documented blind spot: an AI will confidently write
+> plausible-looking code for a chip it has never seen. It has shipped exactly that bug three
+> times — a wrong SDK header, a GPIO speed macro that does not exist, and a drive mode the
+> silicon cannot do. All three were caught by *building something*, never by reading code.
+>
+> **And nothing here has ever been flashed.** Every green result in this repository is a
+> **compile**. No board has been attached. Hardware behaviour is unverified.
+>
+> → **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** explains both in detail, and is worth ten
+> minutes before you rely on anything below.
+
+## Documentation
+
+| Document | Read it when |
+|---|---|
+| **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** | You want to understand the design and **exactly how much of it to trust**. Start here. |
+| **[docs/ADDING-A-PART.md](docs/ADDING-A-PART.md)** | Your microcontroller is not supported. The whole process: drop the vendor files in, let an AI extract them, verify. |
+| **[data/FORMAT.md](data/FORMAT.md)** | You are writing or editing an MCU file. The field-by-field schema. |
+| **[PROGRESS.md](PROGRESS.md)** | What is actually done, broken, and never tested. |
+| **[docs/](docs/)** | Index of all of the above. |
+
+Supported parts: **CH32V006**, **CH32V005** (defined as a delta on CH32V006) and **CH32X035** —
+a second, deliberately different family (24-bit ports, no HSE, named remap macros) that exists
+to prove the engine is data-driven rather than shaped around one chip.
 
 ```
 WCH_CubeMX/
@@ -16,15 +52,16 @@ WCH_CubeMX/
 ├── data/
 │   ├── mcus/*.yaml          one file per MCU - the whole part definition
 │   ├── packages/packages.yaml   package geometries (SOP, TSSOP, QFN, LQFP...)
-│   ├── sources/<PART>/      the DS, the RM and (when provided) the EVT package
+│   ├── sources/<PART>/      the DS, the RM and the EVT package
 │   └── firmware/            PlatformIO project - compiles the generated C for real silicon
+├── docs/                    how it works, and how to add a part (with pictures)
 ├── build.py                 inlines the engine and the YAML into dist/index.html
 ├── tests/                   QA suites + the runner (npm test)
 ├── tools/validate_mcu.py    checks an MCU file before you trust it
 ├── src-tauri/               desktop shell (Tauri 2)
 ├── PROGRESS.md              where the project stands - read this first
 ├── TASKS.md                 what is done, in progress and next
-└── agents/                  the four-agent working agreement (see "How this repo is built")
+└── agents/                  the three-agent working agreement (see "How this repo is built")
 ```
 
 ## Run it in a browser
@@ -171,6 +208,40 @@ working directory: `README.md` has the rules, `PROJECT.md` is the current round 
 `DONE.md` is the definition of done, and QA is the only agent that ticks it. Rounds 1–4 are
 archived under `agents/history/`. If you are picking the project up by hand, read `TASKS.md`
 first.
+
+## Contributing
+
+The two things that would help most, in order:
+
+1. **Flash one generated project and report what happened.** It is a five-minute job with any
+   CH32V006/CH32V005/CH32X035 board and a WCH-Link, and it is the only claim in this repository
+   that nobody here can close. See [`agents/HUMAN_TODO.md`](agents/HUMAN_TODO.md).
+2. **Add a part.** If your microcontroller is missing, [`docs/ADDING-A-PART.md`](docs/ADDING-A-PART.md)
+   is the whole process — it is a data job, not a programming job, and it does not require
+   understanding the engine.
+
+**Before opening a PR**, the gate is two commands and both must be green:
+
+```bash
+python build.py && node tests/run.js
+```
+
+Beyond that, the rules that matter and the reasons for them are in
+[`agents/README.md`](agents/README.md). The short version:
+
+- **A hardware fact needs a citation** — a datasheet table, an RM section, or an EVT `file:line`.
+  Precedence is **EVT → Reference Manual → Datasheet**. *"The other CH32 parts have it" is not a
+  citation*, and it is precisely how all three of the shipped data defects happened.
+- **If you changed what the generator emits, compile it** on a configuration that assigns pins.
+  A default configuration generates an empty function and proves nothing.
+- **If you changed the UI, look at it in a real browser.** jsdom has no layout engine and cannot
+  see clipped text; it is necessary, not sufficient.
+- **Never delete a data file or a test, and never lower a threshold to make something pass.**
+- **`dist/index.html` is generated** — never hand-edit it.
+- **Nothing in `app/` may name a part.** If behaviour differs between parts, it belongs in the data.
+
+The [PR template](.github/PULL_REQUEST_TEMPLATE.md) walks through these. Answering *"I did not
+run that"* is much more useful here than a guess.
 
 ## Stack
 

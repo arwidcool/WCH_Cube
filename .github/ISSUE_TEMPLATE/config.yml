@@ -1,0 +1,18 @@
+# Issue-template chooser.
+#
+# ACTION REQUIRED when this repository is pushed to GitHub: replace OWNER/REPO in
+# the three links below with the real `owner/repo`. GitHub requires absolute URLs
+# here, so they cannot be relative and cannot be interpolated. Until they are
+# replaced these three links 404 — which is why they sit in one block, at the top,
+# saying so, rather than being scattered where nobody would notice.
+blank_issues_enabled: true
+contact_links:
+  - name: How the project works, and how much to trust it
+    url: https://github.com/OWNER/REPO/blob/main/docs/HOW-IT-WORKS.md
+    about: Read this first — it is honest about what is verified and what has never been tested.
+  - name: Adding a microcontroller
+    url: https://github.com/OWNER/REPO/blob/main/docs/ADDING-A-PART.md
+    about: The whole process, from dropping the vendor files in to seeing generated C compile.
+  - name: Where the project actually stands
+    url: https://github.com/OWNER/REPO/blob/main/PROGRESS.md
+    about: Known-broken, known-untested, and what is next. Check here before filing a bug.
