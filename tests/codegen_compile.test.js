@@ -433,6 +433,14 @@ const TRACKED_TODOS = [
     why: 'the init struct is filled but the MCU file names no `*_Init()` to hand it to',
   },
   {
+    match: /has no channels: map/,
+    owner: 'AGENT-1',
+    task: '`peripherals.<TIM>.channel_params` needs a `channels:` map',
+    why: 'TIM_OCInitTypeDef is filled per CHANNEL and codegen cannot work out which channels a '
+      + 'configuration uses from the settings alone, so it declines to guess. Found by this gate '
+      + 'minutes after the emitter landed',
+  },
+  {
     match: /is applied by \w+\(\), not by an init struct/,
     owner: 'AGENT-1',
     task: '`params:` carry `struct:` and `field:` so codegen does not infer the SDK mapping',

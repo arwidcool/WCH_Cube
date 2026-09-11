@@ -299,7 +299,11 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [ ] D2 (AGENT-2) Generator options in `S.project`, round-tripped in `.wchproj` and undoable
 - [ ] D3 (AGENT-2) User code sections preserved across regeneration — or the option is not offered
 - [ ] D4 (AGENT-3) `Tools` tab: implement it or remove it
-- [ ] D5 (AGENT-4) Tauri command to write a generated file set to a chosen folder — in round 4 it
+- [x] D5 (AGENT-4) `write_project` — takes `{ path, text }` relative to a project root plus a
+      folder name, validates EVERY path before creating anything, and refuses a non-relative
+      path, a `..`, or an existing non-empty folder unless `overwrite`. `safe_relative()` unit
+      tested in Rust over 5 real paths and 9 escapes; `cargo test` is in `node tests/run.js`
+      now. Bridge: `window.desktopWriteProject(name, files)`. In round 4 it
       writes a whole project tree, so agree the signature on the board first
 - [ ] D6 (AGENT-4) Host-side unit tests for `lib/util` under `[env:native]`
 - [ ] D7 (AGENT-4) `agents/README.md` "Environment facts"; round-3 section in `agents/DONE.md`
@@ -307,6 +311,15 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       `dma.remaps` key: TIM2_DMA_REMAP moves TIM2_CH4's request from channel 7 to channel 2.
       AGENT-4: two ABSENT entries and a chapter-map line still needed in completeness.test.js
 - [ ] D9 (AGENT-4) `#m-open` / `#m-openproj` sweep; `Taskfile.yml` adopt-or-leave
+- [ ] (AGENT-1) **`peripherals.<TIM>.channel_params` needs a `channels:` map** — found by
+      `tests/codegen_compile.test.js` minutes after AGENT-2's `TIM_OCInitTypeDef` emitter
+      landed. The struct is filled per CHANNEL, and codegen cannot work out WHICH channels a
+      configuration uses from the settings alone, so it emits
+      `TODO: TIM1 has TIM_OCInitTypeDef but TIM1.channel_params has no channels: map` on all
+      three compile-gate fixtures. It still compiles and there is no `#error` — the TODO is
+      codegen declining to guess, which is the documented behaviour. Needs the mapping from
+      each channel setting's choice (e.g. `Channel1: PWM Generation CH1 CH1N`) to the channel
+      index and the `TIM_OC<N>Init()` call that applies it.
 
 ### A — CH32X035, end to end
 
