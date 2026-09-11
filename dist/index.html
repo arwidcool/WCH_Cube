@@ -120,6 +120,26 @@
   .cnt.res{background:var(--res)}
   .item.selected .cnt.res{background:#fff;color:var(--res)}
   .cat>button .cnt{margin-left:8px}
+  /* list options: sort toggle + gear, sitting under the search box */
+  .treebar{display:flex;align-items:center;gap:6px;padding:4px 8px;border-bottom:1px solid var(--line);background:var(--bar)}
+  .treebar .spacer{flex:1}
+  .treebar .seg{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+  .treebar .seg button{border:0;background:var(--panel);color:var(--muted);font-size:11.5px;padding:2px 9px}
+  .treebar .seg button+button{border-left:1px solid var(--line)}
+  .treebar .seg button:hover{background:var(--blue-pale);color:var(--ink-strong)}
+  .treebar .seg button.on{background:var(--blue-hdr);color:var(--on-accent)}
+  .treebar .ic{border:0;background:none;color:var(--blue);font-size:14px;padding:1px 5px;border-radius:3px}
+  .treebar .ic:hover{background:var(--blue-pale)}
+  .treebar .ic.on{background:var(--blue-pale)}
+  .azlist{padding:4px 0 8px}
+  .azlist .item{padding-left:10px}
+  .treemenu{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:4px;
+            box-shadow:0 6px 18px var(--shadow);min-width:190px;padding:4px 0;font-size:12.5px}
+  .treemenu .mi{padding:5px 12px;display:flex;gap:10px;align-items:center;cursor:pointer;color:var(--text)}
+  .treemenu .mi:hover{background:var(--blue-pale)}
+  .treemenu .mi .tick{width:12px;color:var(--blue)}
+  .treemenu .sep{height:1px;background:var(--line);margin:4px 0}
+  .treenone{padding:14px 10px;color:var(--muted);font-size:12px}
   .config{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel);margin-top:8px}
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
   .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text)}
@@ -372,6 +392,117 @@ packages:
   - { id: TQFP44,   kind: quad, pins: 44,  pitch: 0.8,  body: [10, 10] }
 
 # Future: BGA / WLCSP need a grid layout (rows A..T x columns 1..n). Not needed for WCH yet.
+
+</script>
+<script type="text/x-yaml" id="yaml-mcu-CH32V005" data-file="data/mcus/CH32V005.yaml">
+# =============================================================================
+#  CH32V005 — derived from CH32V006. Same die, same pinout, fewer peripherals.
+#
+#  Sources: CH32V006/005 Datasheet V2.0 (DS) §1 model table lines 106-109 and
+#  Table 2-2 "CH32V005 Pin definitions"; CH32V00X Reference Manual V1.4 (RM).
+#
+#  This file lists ONLY what differs from CH32V006. `mcu.inherits` pulls in the
+#  parent's packages, pins, peripherals, exti, dma and clock; see
+#  app/engine/inherit.js for the merge rules. The short version:
+#      maps merge key by key and the child wins
+#      lists REPLACE wholesale — never concatenate
+#      mcu.variants replaces, because a derived part shares no part numbers
+#      mcu.remove takes dotted paths and errors if one matches nothing
+#
+#  Why a list replaces instead of merging matters here: a `remaps:` index IS the
+#  AFIO_PCFR1 field value, so appending to an inherited remap list would silently
+#  re-number every mapping. That is also why this file never touches `remaps:`.
+#
+#  What the DS actually says is different (model table columns, lines 106-109,
+#  compared against the CH32V006 rows directly above them):
+#      flash 32K not 62K, SRAM 6K not 8K, 85 °C only, no QFN32 part
+#      Capacitive touchkey column: "-"     -> no TKEY          (DS note, 3 places)
+#      TIM3 column:                "-"     -> no TIM3          (DS note, 3 places)
+#      OPA polling column:         "-"     -> OPA has no polling mode (RM 14, line 14330:
+#                                             "CH32V005 products do not have OPA polling
+#                                             functionality")
+#      OPA itself:                 "1"     -> OPA is present, so OPA1 stays
+#      ADC 8+2, serial 2, I2C 1, SPI 1     -> identical to CH32V006
+#
+#  Pinout: verified equal to CH32V006 for all four shared packages with
+#  `python tools/extract_pins.py --table "Table 2-2 CH32V005 Pin definitions"
+#   --columns QFN12,TSSOP20,QFN20,QSOP24 --yaml data/mcus/CH32V005.yaml`.
+#  See CH32V005.notes.md for the result and the rows that tool could not read.
+# =============================================================================
+
+mcu:
+  name: CH32V005
+  inherits: CH32V006
+  flash_kb: 32
+  sram_kb: 6
+  default_package: TSSOP20
+
+  # Dotted paths into the MERGED document. Each must match something or the load fails,
+  # so a parent rename cannot leave a stale removal silently doing nothing.
+  remove:
+    - packages.QFN32                        # no QFN32 orderable part exists for V005
+    - peripherals.TKEY                      # DS: "CH32V005 no TouchKey,TIM3"
+    - peripherals.TIM3                      # same note
+    - peripherals.SYS.remap_by_package.QFN32   # the package it pointed at is gone
+    - dma.requests                          # replaced below, minus the TIM3 requests
+
+  # DS §1 model table, lines 106-109. Replaces the parent's list outright.
+  variants:
+    CH32V005E6R6: { package: QSOP24,  flash_kb: 32, sram_kb: 6, temp: 85, io_count: 22 }
+    CH32V005F6U6: { package: QFN20,   flash_kb: 32, sram_kb: 6, temp: 85, io_count: 18 }
+    CH32V005F6P6: { package: TSSOP20, flash_kb: 32, sram_kb: 6, temp: 85, io_count: 18 }
+    CH32V005D6U6: { package: QFN12,   flash_kb: 32, sram_kb: 6, temp: 85, io_count: 11 }
+
+# -----------------------------------------------------------------------------
+peripherals:
+
+  # OPA is present but cannot poll its positive inputs (RM ch.14). `settings` is a list,
+  # so it replaces the parent's wholesale — which means every OPA1 setting has to be
+  # restated here, not just the one that changed. The P0..P3 / N0..N2 / OUT0..OUT1 pin
+  # assignments come from the parent's `remaps:` and are untouched.
+  OPA1:
+    notes: OPA/PGA/CMP. No polling mode on CH32V005 (RM ch.14) — one positive input at a time.
+    settings:
+      - name: Positive input (PSEL)
+        choices:
+          - { name: Disable }
+          - { name: P0 — PA2, signals: [P0] }
+          - { name: P1 — PD7, signals: [P1] }
+          - { name: P2 — PD3, signals: [P2] }
+          - { name: P3 — PD1, signals: [P3] }
+      - name: Negative input (NSEL)
+        choices:
+          - { name: Disable }
+          - { name: N0 — PA1, signals: [N0] }
+          - { name: N1 — PD0, signals: [N1] }
+          - { name: N2 — PA4, signals: [N2] }
+          - { name: PGA internal feedback (no pin) }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: OUT0 — PD4, signals: [OUT0] }
+          - { name: OUT1 — PA5, signals: [OUT1] }
+          - { name: Internal to ADC IN9 only }
+
+# -----------------------------------------------------------------------------
+# DMA1 — the parent's map with every TIM3 request dropped (RM Table 8-2 note 2 applies
+# to CH32V006/V007; CH32V005 has no TIM3 at all). Channel numbering is unchanged.
+dma:
+  requests:
+    1: [ADC1, TIM2_CH3]
+    2: [SPI1_RX, TIM1_CH1, TIM2_UP]
+    3: [SPI1_TX, TIM1_CH2]
+    4: [USART1_TX, TIM1_TRIG, TIM1_COM, TIM1_CH4]
+    5: [USART1_RX, TIM2_CH1, TIM1_UP]
+    6: [I2C1_TX, TIM1_CH3, USART2_TX]
+    7: [I2C1_RX, TIM2_CH2, TIM2_CH4, USART2_RX]
+
+# -----------------------------------------------------------------------------
+# Clock tree is identical (DS 1.3 Figure 1-3 is drawn for "CH32V005, CH32V006", and RM
+# Figure 3-3 likewise). Only the bus membership list changes, and a list replaces.
+clock:
+  buses:
+    HB: [TIM1, TIM2, GPIO, AFIO, USART1, USART2, I2C1, SPI1, ADC1, DMA1, WWDG, OPA1, PWR]
 
 </script>
 <script type="text/x-yaml" id="yaml-mcu-CH32V006" data-file="data/mcus/CH32V006.yaml">
@@ -2977,6 +3108,14 @@ function generateAll() {
 
     <div class="tree">
       <div class="search"><label class="sr" for="tree-search">Search peripherals</label><input id="tree-search" placeholder="🔍 search peripherals"></div>
+      <div class="treebar" role="toolbar" aria-label="Peripheral list options">
+        <div class="seg" role="radiogroup" aria-label="Sort peripherals">
+          <button data-sort="cat" class="on" role="radio" aria-checked="true" title="Group by category, like CubeMX">Categories</button>
+          <button data-sort="az" role="radio" aria-checked="false" title="One flat list, A to Z">A→Z</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="ic" id="tree-gear" title="List options" aria-haspopup="menu" aria-expanded="false">⚙</button>
+      </div>
       <div class="cats" id="cats"></div>
     </div>
 
@@ -3624,6 +3763,11 @@ document.getElementById('pin-search').addEventListener('keydown', e => {
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
 const collapsed = new Set();
+// List options, UI-only: never part of S, never saved into a .wchproj.
+const TREE = { sort: 'cat', enabledOnly: false };
+const isEnabledPeriph = pid => pid === 'GPIO'
+  ? Object.keys(S.manual).length > 0
+  : !!(E.status[pid] && E.status[pid] !== 'na');
 // "MOSI" should find SPI1, not nothing.
 function periphHasSignal(pid, q) {
   const P = M.peripherals[pid];
@@ -3632,44 +3776,112 @@ function periphHasSignal(pid, q) {
 }
 function renderTree() {
   const q = document.getElementById('tree-search').value.trim().toLowerCase();
+  document.querySelectorAll('.treebar .seg button').forEach(b => {
+    const on = b.dataset.sort === TREE.sort;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  document.getElementById('tree-gear').classList.toggle('on', TREE.enabledOnly);
   const conf = {};                    // pid -> how many physical pins it fights over
   for (const c of E.conflictList || []) for (const who of new Set(c.owners)) conf[who] = (conf[who] || 0) + 1;
   const res = {};                     // pid -> shared resources it contends for (EXTI line, DMA channel)
   for (const r of E.resourceIssues || []) for (const who of new Set(r.owners)) res[who] = (res[who] || 0) + 1;
+  const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
+  const itemHtml = pid => {
+    const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
+    const cn = conf[pid] || 0, rn = res[pid] || 0;
+    const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
+    const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
+    const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
+    const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
+      + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
+    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([cnTxt, rnTxt].filter(Boolean).join('; ') || pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
+  };
+  const shown = pid => (!q || pid.toLowerCase().includes(q) || periphHasSignal(pid, q))
+    && (!TREE.enabledOnly || isEnabledPeriph(pid));
+
+  // A→Z: one flat list, no headings. Same items, same badges, different order.
+  if (TREE.sort === 'az') {
+    const all = ['GPIO', ...Object.keys(M.peripherals)].filter(shown).sort((a, b) => a.localeCompare(b));
+    paintTree(all.length ? `<div class="azlist">${all.map(itemHtml).join('')}</div>` : emptyTree(q));
+    return;
+  }
+
   const cats = {};
   cats['System Core'] = ['GPIO'];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
   const order = [...CAT_ORDER.filter(c => cats[c]), ...Object.keys(cats).filter(c => !CAT_ORDER.includes(c))];
-  const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
   let h = '';
   for (const c of order) {
-    const items = cats[c].filter(p => !q || p.toLowerCase().includes(q) || periphHasSignal(p, q));
+    const items = cats[c].filter(shown);
     if (!items.length) continue;
     const ccnt = items.reduce((n, p) => n + (conf[p] || 0), 0);
     const rcnt = items.reduce((n, p) => n + (res[p] || 0), 0);
     const cbadge = (ccnt ? ` <span class="cnt" title="pin conflicts">${ccnt}</span>` : '')
       + (rcnt ? ` <span class="cnt res" title="shared-resource issues">${rcnt}</span>` : '');
     h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${cbadge}</span></button><div class="items">`;
-    for (const pid of items) {
-      const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
-      const cn = conf[pid] || 0, rn = res[pid] || 0;
-      const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
-      const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
-      const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
-      const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
-        + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
-      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([cnTxt, rnTxt].filter(Boolean).join('; ') || pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
-    }
+    for (const pid of items) h += itemHtml(pid);
     h += '</div></div>';
   }
+  paintTree(h || emptyTree(q));
+}
+
+function emptyTree(q) {
+  if (TREE.enabledOnly) return `<div class="treenone">Nothing is switched on yet${q ? ' that matches “' + esc(q) + '”' : ''}.<br>Turn “Show enabled only” off in ⚙ to see every peripheral.</div>`;
+  return `<div class="treenone">No peripheral matches “${esc(q)}”.</div>`;
+}
+
+function paintTree(html) {
   const hadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('item')
     ? document.activeElement.dataset.p : null;
-  document.getElementById('cats').innerHTML = h;
+  document.getElementById('cats').innerHTML = html;
   if (hadFocus) {                                   // innerHTML threw the focused item away
     const back = document.querySelector(`.item[data-p="${window.CSS && CSS.escape ? CSS.escape(hadFocus) : hadFocus}"]`);
     if (back) back.focus();
   }
 }
+
+// ---- list options: sort toggle and the gear menu ----------------------------
+document.querySelector('.treebar .seg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-sort]'); if (!b) return;
+  TREE.sort = b.dataset.sort;
+  renderTree();
+});
+
+function closeTreeMenu() {
+  const m = document.getElementById('treemenu'); if (m) m.remove();
+  document.getElementById('tree-gear').setAttribute('aria-expanded', 'false');
+}
+document.getElementById('tree-gear').addEventListener('click', e => {
+  if (document.getElementById('treemenu')) { closeTreeMenu(); return; }
+  const cats = [...document.querySelectorAll('.cat')].map(d => d.querySelector('button[data-cat]').dataset.cat);
+  const d = document.createElement('div');
+  d.className = 'treemenu'; d.id = 'treemenu'; d.setAttribute('role', 'menu');
+  d.innerHTML =
+    `<div class="mi" data-a="expand" role="menuitem"><span class="tick"></span>Expand all</div>` +
+    `<div class="mi" data-a="collapse" role="menuitem"><span class="tick"></span>Collapse all</div>` +
+    `<div class="sep"></div>` +
+    `<div class="mi" data-a="enabled" role="menuitemcheckbox" aria-checked="${TREE.enabledOnly}">` +
+    `<span class="tick">${TREE.enabledOnly ? '✔' : ''}</span>Show enabled only</div>`;
+  d.addEventListener('click', ev => {
+    const mi = ev.target.closest('.mi'); if (!mi) return;
+    if (mi.dataset.a === 'expand') { collapsed.clear(); TREE.sort = 'cat'; }
+    if (mi.dataset.a === 'collapse') { cats.forEach(c => collapsed.add(c)); TREE.sort = 'cat'; }
+    if (mi.dataset.a === 'enabled') TREE.enabledOnly = !TREE.enabledOnly;
+    closeTreeMenu(); renderTree();
+  });
+  document.body.appendChild(d);
+  const r = e.currentTarget.getBoundingClientRect(), W = d.offsetWidth;
+  d.style.left = Math.max(4, Math.min(r.left, window.innerWidth - W - 8)) + 'px';
+  d.style.top = (r.bottom + 2) + 'px';
+  e.currentTarget.setAttribute('aria-expanded', 'true');
+});
+window.addEventListener('mousedown', e => {
+  if (!document.getElementById('treemenu')) return;
+  if (e.target.closest('#treemenu') || e.target.closest('#tree-gear')) return;
+  closeTreeMenu();
+});
+window.addEventListener('keydown', e => { if (e.key === 'Escape') closeTreeMenu(); });
 document.getElementById('cats').addEventListener('keydown', e => {
   const it = e.target.closest && e.target.closest('.item');
   if (!it || (e.key !== 'Enter' && e.key !== ' ')) return;

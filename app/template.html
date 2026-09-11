@@ -116,6 +116,26 @@
   .cnt.res{background:var(--res)}
   .item.selected .cnt.res{background:#fff;color:var(--res)}
   .cat>button .cnt{margin-left:8px}
+  /* list options: sort toggle + gear, sitting under the search box */
+  .treebar{display:flex;align-items:center;gap:6px;padding:4px 8px;border-bottom:1px solid var(--line);background:var(--bar)}
+  .treebar .spacer{flex:1}
+  .treebar .seg{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+  .treebar .seg button{border:0;background:var(--panel);color:var(--muted);font-size:11.5px;padding:2px 9px}
+  .treebar .seg button+button{border-left:1px solid var(--line)}
+  .treebar .seg button:hover{background:var(--blue-pale);color:var(--ink-strong)}
+  .treebar .seg button.on{background:var(--blue-hdr);color:var(--on-accent)}
+  .treebar .ic{border:0;background:none;color:var(--blue);font-size:14px;padding:1px 5px;border-radius:3px}
+  .treebar .ic:hover{background:var(--blue-pale)}
+  .treebar .ic.on{background:var(--blue-pale)}
+  .azlist{padding:4px 0 8px}
+  .azlist .item{padding-left:10px}
+  .treemenu{position:fixed;z-index:60;background:var(--panel);border:1px solid var(--line);border-radius:4px;
+            box-shadow:0 6px 18px var(--shadow);min-width:190px;padding:4px 0;font-size:12.5px}
+  .treemenu .mi{padding:5px 12px;display:flex;gap:10px;align-items:center;cursor:pointer;color:var(--text)}
+  .treemenu .mi:hover{background:var(--blue-pale)}
+  .treemenu .mi .tick{width:12px;color:var(--blue)}
+  .treemenu .sep{height:1px;background:var(--line);margin:4px 0}
+  .treenone{padding:14px 10px;color:var(--muted);font-size:12px}
   .config{flex:1;display:flex;flex-direction:column;min-height:0;background:var(--panel);margin-top:8px}
   .ctabs{display:flex;gap:2px;padding:6px 8px 0;background:var(--bg)}
   .ctab{border:1px solid var(--line);border-bottom:0;background:var(--tab-off);padding:4px 12px;color:var(--text)}
@@ -354,6 +374,14 @@
 
     <div class="tree">
       <div class="search"><label class="sr" for="tree-search">Search peripherals</label><input id="tree-search" placeholder="🔍 search peripherals"></div>
+      <div class="treebar" role="toolbar" aria-label="Peripheral list options">
+        <div class="seg" role="radiogroup" aria-label="Sort peripherals">
+          <button data-sort="cat" class="on" role="radio" aria-checked="true" title="Group by category, like CubeMX">Categories</button>
+          <button data-sort="az" role="radio" aria-checked="false" title="One flat list, A to Z">A→Z</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="ic" id="tree-gear" title="List options" aria-haspopup="menu" aria-expanded="false">⚙</button>
+      </div>
       <div class="cats" id="cats"></div>
     </div>
 
@@ -1001,6 +1029,11 @@ document.getElementById('pin-search').addEventListener('keydown', e => {
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
 const collapsed = new Set();
+// List options, UI-only: never part of S, never saved into a .wchproj.
+const TREE = { sort: 'cat', enabledOnly: false };
+const isEnabledPeriph = pid => pid === 'GPIO'
+  ? Object.keys(S.manual).length > 0
+  : !!(E.status[pid] && E.status[pid] !== 'na');
 // "MOSI" should find SPI1, not nothing.
 function periphHasSignal(pid, q) {
   const P = M.peripherals[pid];
@@ -1009,44 +1042,112 @@ function periphHasSignal(pid, q) {
 }
 function renderTree() {
   const q = document.getElementById('tree-search').value.trim().toLowerCase();
+  document.querySelectorAll('.treebar .seg button').forEach(b => {
+    const on = b.dataset.sort === TREE.sort;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  });
+  document.getElementById('tree-gear').classList.toggle('on', TREE.enabledOnly);
   const conf = {};                    // pid -> how many physical pins it fights over
   for (const c of E.conflictList || []) for (const who of new Set(c.owners)) conf[who] = (conf[who] || 0) + 1;
   const res = {};                     // pid -> shared resources it contends for (EXTI line, DMA channel)
   for (const r of E.resourceIssues || []) for (const who of new Set(r.owners)) res[who] = (res[who] || 0) + 1;
+  const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
+  const itemHtml = pid => {
+    const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
+    const cn = conf[pid] || 0, rn = res[pid] || 0;
+    const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
+    const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
+    const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
+    const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
+      + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
+    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([cnTxt, rnTxt].filter(Boolean).join('; ') || pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
+  };
+  const shown = pid => (!q || pid.toLowerCase().includes(q) || periphHasSignal(pid, q))
+    && (!TREE.enabledOnly || isEnabledPeriph(pid));
+
+  // A→Z: one flat list, no headings. Same items, same badges, different order.
+  if (TREE.sort === 'az') {
+    const all = ['GPIO', ...Object.keys(M.peripherals)].filter(shown).sort((a, b) => a.localeCompare(b));
+    paintTree(all.length ? `<div class="azlist">${all.map(itemHtml).join('')}</div>` : emptyTree(q));
+    return;
+  }
+
   const cats = {};
   cats['System Core'] = ['GPIO'];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
   const order = [...CAT_ORDER.filter(c => cats[c]), ...Object.keys(cats).filter(c => !CAT_ORDER.includes(c))];
-  const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
   let h = '';
   for (const c of order) {
-    const items = cats[c].filter(p => !q || p.toLowerCase().includes(q) || periphHasSignal(p, q));
+    const items = cats[c].filter(shown);
     if (!items.length) continue;
     const ccnt = items.reduce((n, p) => n + (conf[p] || 0), 0);
     const rcnt = items.reduce((n, p) => n + (res[p] || 0), 0);
     const cbadge = (ccnt ? ` <span class="cnt" title="pin conflicts">${ccnt}</span>` : '')
       + (rcnt ? ` <span class="cnt res" title="shared-resource issues">${rcnt}</span>` : '');
     h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${cbadge}</span></button><div class="items">`;
-    for (const pid of items) {
-      const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '') : E.status[pid];
-      const cn = conf[pid] || 0, rn = res[pid] || 0;
-      const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
-      const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
-      const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
-      const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
-        + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
-      h += `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([cnTxt, rnTxt].filter(Boolean).join('; ') || pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
-    }
+    for (const pid of items) h += itemHtml(pid);
     h += '</div></div>';
   }
+  paintTree(h || emptyTree(q));
+}
+
+function emptyTree(q) {
+  if (TREE.enabledOnly) return `<div class="treenone">Nothing is switched on yet${q ? ' that matches “' + esc(q) + '”' : ''}.<br>Turn “Show enabled only” off in ⚙ to see every peripheral.</div>`;
+  return `<div class="treenone">No peripheral matches “${esc(q)}”.</div>`;
+}
+
+function paintTree(html) {
   const hadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('item')
     ? document.activeElement.dataset.p : null;
-  document.getElementById('cats').innerHTML = h;
+  document.getElementById('cats').innerHTML = html;
   if (hadFocus) {                                   // innerHTML threw the focused item away
     const back = document.querySelector(`.item[data-p="${window.CSS && CSS.escape ? CSS.escape(hadFocus) : hadFocus}"]`);
     if (back) back.focus();
   }
 }
+
+// ---- list options: sort toggle and the gear menu ----------------------------
+document.querySelector('.treebar .seg').addEventListener('click', e => {
+  const b = e.target.closest('button[data-sort]'); if (!b) return;
+  TREE.sort = b.dataset.sort;
+  renderTree();
+});
+
+function closeTreeMenu() {
+  const m = document.getElementById('treemenu'); if (m) m.remove();
+  document.getElementById('tree-gear').setAttribute('aria-expanded', 'false');
+}
+document.getElementById('tree-gear').addEventListener('click', e => {
+  if (document.getElementById('treemenu')) { closeTreeMenu(); return; }
+  const cats = [...document.querySelectorAll('.cat')].map(d => d.querySelector('button[data-cat]').dataset.cat);
+  const d = document.createElement('div');
+  d.className = 'treemenu'; d.id = 'treemenu'; d.setAttribute('role', 'menu');
+  d.innerHTML =
+    `<div class="mi" data-a="expand" role="menuitem"><span class="tick"></span>Expand all</div>` +
+    `<div class="mi" data-a="collapse" role="menuitem"><span class="tick"></span>Collapse all</div>` +
+    `<div class="sep"></div>` +
+    `<div class="mi" data-a="enabled" role="menuitemcheckbox" aria-checked="${TREE.enabledOnly}">` +
+    `<span class="tick">${TREE.enabledOnly ? '✔' : ''}</span>Show enabled only</div>`;
+  d.addEventListener('click', ev => {
+    const mi = ev.target.closest('.mi'); if (!mi) return;
+    if (mi.dataset.a === 'expand') { collapsed.clear(); TREE.sort = 'cat'; }
+    if (mi.dataset.a === 'collapse') { cats.forEach(c => collapsed.add(c)); TREE.sort = 'cat'; }
+    if (mi.dataset.a === 'enabled') TREE.enabledOnly = !TREE.enabledOnly;
+    closeTreeMenu(); renderTree();
+  });
+  document.body.appendChild(d);
+  const r = e.currentTarget.getBoundingClientRect(), W = d.offsetWidth;
+  d.style.left = Math.max(4, Math.min(r.left, window.innerWidth - W - 8)) + 'px';
+  d.style.top = (r.bottom + 2) + 'px';
+  e.currentTarget.setAttribute('aria-expanded', 'true');
+});
+window.addEventListener('mousedown', e => {
+  if (!document.getElementById('treemenu')) return;
+  if (e.target.closest('#treemenu') || e.target.closest('#tree-gear')) return;
+  closeTreeMenu();
+});
+window.addEventListener('keydown', e => { if (e.key === 'Escape') closeTreeMenu(); });
 document.getElementById('cats').addEventListener('keydown', e => {
   const it = e.target.closest && e.target.closest('.item');
   if (!it || (e.key !== 'Enter' && e.key !== ' ')) return;

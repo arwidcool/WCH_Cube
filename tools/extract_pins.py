@@ -40,6 +40,10 @@ DEFAULT_DS = ROOT / "data" / "sources" / "CH32V006DS0.md"
 PIN_RE = re.compile(r"^P[A-D][0-7]$")
 # A data row: one cell per package (a pin number or "-"), then the pin name.
 ROW_RE = re.compile(r"^((?:(?:\d+|-)\s+){2,8})(P[A-D][0-7])\b")
+# Pieces of a row the conversion split onto their own lines.
+CELLS_ONLY_RE = re.compile(r"^(?:\d+|-)(?:\s+(?:\d+|-))*$")
+NAME_ONLY_RE = re.compile(r"^(P[A-D][0-7])\s*(?:\(\d+\))?\s*$")
+FOOTNOTE_RE = re.compile(r"^\(\d+\)\s*$")
 
 # Lines the PDF conversion sprinkles through the table. None of them can match ROW_RE
 # once the "## " prefix is gone, but the end-of-table marker has to be explicit.
@@ -59,15 +63,42 @@ def read_table(ds_path, table_title, columns):
 
     out = {c: {} for c in columns}
     seen, ambiguous = [], []
+    pending = []          # cells seen on their own line(s), waiting for a pin name
     for ln in lines[start:]:
         s = ln.strip()
         if s.startswith("##"):
             s = s[2:].strip()
         if any(m in s for m in END_MARKERS):
             break
+
+        # Some rows are broken across lines by the PDF conversion, cells first:
+        #     ## 12 4 1     ## 14     ## PD7     ## (4)     ## (5)
+        # Collect bare number/dash lines and attach them to the next bare pin name.
+        # The exact-cell-count rule below is what keeps this safe: if a stray page
+        # number gets swept up, the count stops matching and the row is reported as
+        # ambiguous instead of landing a pin on the wrong package.
+        if CELLS_ONLY_RE.match(s):
+            pending.extend(s.split())
+            continue
+        bare = NAME_ONLY_RE.match(s)
+        if bare and pending:
+            cells, name = pending, bare.group(1)
+            pending = []
+            if len(cells) != len(columns):
+                ambiguous.append((name, cells, " ".join(cells) + " " + name))
+                continue
+            seen.append(name)
+            for col, cell in zip(columns, cells):
+                if cell != "-":
+                    out[col].setdefault(int(cell), set()).add(name)
+            continue
+
         m = ROW_RE.match(s)
         if not m:
+            if s and not FOOTNOTE_RE.match(s):
+                pending = []      # any other content breaks the association
             continue
+        pending = []
         cells = m.group(1).split()
         name = m.group(2)
         if len(cells) != len(columns):
@@ -82,7 +113,11 @@ def read_table(ds_path, table_title, columns):
         for col, cell in zip(columns, cells):
             if cell == "-":
                 continue
-            out[col][int(cell)] = name
+            # A pin number can carry TWO names: DS notes 3 and 4 short PA1+PA6 and
+            # PD7+PA4 inside the package, and the table gives each its own row. Keying
+            # by number alone made the second row overwrite the first and the pair then
+            # read as missing from the datasheet.
+            out[col].setdefault(int(cell), set()).add(name)
     if not seen:
         raise LookupError("no pin rows parsed under " + repr(table_title))
     return out, seen, ambiguous
@@ -173,22 +208,25 @@ def main():
         if got is None:
             problems.append(pkg + ": in the datasheet, absent from the YAML")
             continue
-        # YAML -> {name: number}, expanding internally shorted pairs.
+        # YAML -> {name: number}, keeping both names of an internally shorted pair.
         where = {}
         for num, names in got.items():
             for n in names:
                 if PIN_RE.match(n):
                     where[n] = num
-        for num, name in sorted(ds[pkg].items()):
-            have = where.get(name)
-            if have is None:
-                problems.append(pkg + ": DS puts " + name + " on pin " + str(num)
-                                + ", the YAML does not bond it at all")
-            elif have != num:
-                problems.append(pkg + " " + name + ": DS says pin " + str(num)
-                                + ", YAML says pin " + str(have))
+        ds_names = set()
+        for num, names in sorted(ds[pkg].items()):
+            ds_names |= names
+            for name in sorted(names):
+                have = where.get(name)
+                if have is None:
+                    problems.append(pkg + ": DS puts " + name + " on pin " + str(num)
+                                    + ", the YAML does not bond it at all")
+                elif have != num:
+                    problems.append(pkg + " " + name + ": DS says pin " + str(num)
+                                    + ", YAML says pin " + str(have))
         for name, num in sorted(where.items()):
-            if name not in ds[pkg].values():
+            if name not in ds_names:
                 problems.append(pkg + ": YAML bonds " + name + " on pin " + str(num)
                                 + ", the DS table does not list it")
 

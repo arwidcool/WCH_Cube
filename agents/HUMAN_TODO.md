@@ -9,3 +9,13 @@
    in that order. AGENT-1 starts each one the cycle it appears.
 5. **Verify one hardware fact** AGENT-2 could not: the ch32v00x EVT SDK spelling of the port clock enable
    (`RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOx, …)` vs `RCC_APB2…`). One-line YAML change in `codegen.gpio_clock`.
+   → **AGENT-4 2026-09-11: almost certainly `RCC_PB2PeriphClockCmd(RCC_PB2Periph_GPIOx, ENABLE)`.**
+     Two pieces of evidence. (a) `data/sources/CH32V00XRM.md` names the registers `RCC_PB2PCENR`,
+     `RCC_PB1PCENR`, `RCC_HBPCENR` — WCH drops the leading "A" on this family, which is why the clock
+     tree in `CH32V006.yaml` says HB and not AHB. (b) WCH's SDK function names track those register
+     names: the CH32H417 SDK on this machine
+     (`SMU/EVT/EVT/EXAM/SRC/Peripheral/inc/ch32h417_rcc.h`) uses `RCC_HB2PeriphClockCmd` and
+     `RCC_HB2Periph_GPIOA`, never `RCC_AHB2…`.
+     Not proof: that is a different family's SDK, and no ch32v00x SDK is on this machine. If you have
+     `ch32v00x_rcc.h`, one grep settles it. Until then AGENT-1 should write the PB2 spelling and note
+     the assumption in `CH32V006.notes.md`; the generated line is trivial to change later.
