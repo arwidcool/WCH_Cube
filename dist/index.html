@@ -41,8 +41,11 @@
   .crumb{padding:0 14px;position:relative;line-height:30px}
   .crumb+.crumb::before{content:"";position:absolute;left:-2px;top:9px;width:12px;height:12px;border-right:1px solid #fff;border-top:1px solid #fff;transform:rotate(45deg)}
   .crumbs .spacer{flex:1}
-  .gen{background:var(--blue-lt);color:#fff;border:0;padding:4px 14px;font-weight:600;letter-spacing:.3px;opacity:.45;cursor:not-allowed}
-  .gen[title]{}
+  .gen{background:var(--blue-lt);color:#fff;border:0;padding:4px 14px;font-weight:600;letter-spacing:.3px;cursor:pointer}
+  .gen:hover{background:#4ab6e6}
+  .gen:active{background:#1a7fbd}
+  .gen:focus-visible{outline:2px solid #fff;outline-offset:-3px}
+  .gen[disabled]{opacity:.45;cursor:not-allowed}
 
   /* ---- main tabs ---- */
   .tabs{display:flex;background:var(--navy)}
@@ -2417,7 +2420,7 @@ function generateAll() {
     <span class="crumb" id="crumb-mcu">MCU</span>
     <span class="crumb" id="crumb-proj">Untitled.wchproj - Pinout &amp; Configuration</span>
     <div class="spacer"></div>
-    <button class="gen" title="Phase 3 — pin table &amp; clock code generation (not built yet)">GENERATE CODE</button>
+    <button class="gen" title="Export the pin table (Markdown + CSV) and the clock summary (Markdown)">GENERATE CODE</button>
   </div>
 
   <div class="tabs">
@@ -2746,15 +2749,9 @@ function openPicker(pin, cx, cy) {
   for (const s of sigs) {
     const P = M.peripherals[s.periph], rn = P.remaps.length > 1 ? P.remaps[s.remap].name : '';
     const isCur = !!(cur && cur.claims.some(c => c.who === s.periph && c.signal === sigName(s.periph, s.signal)) && S.periph[s.periph].remap === s.remap);
-    // warn if choosing this would collide: pin already used by someone else, or the remap switch would move
-    // this peripheral's other active signals onto pins that are taken
-    let warn = '';
-    if (cur && !isCur && cur.claims.some(c => c.who !== s.periph)) warn = '⚠ pin in use';
-    else if (!isCur && S.periph[s.periph].remap !== s.remap && requiredSignals(s.periph).size) {
-      const r = M.peripherals[s.periph].remaps[s.remap];
-      const hit = [...requiredSignals(s.periph)].filter(sig => sig !== s.signal).map(sig => r.pins[sig]).filter(px => px && E.pins[canon(px)] && E.pins[canon(px)].claims.some(c => c.who !== s.periph));
-      if (hit.length) warn = '⚠ remap collides on ' + [...new Set(hit)].join(', ');
-    }
+    // the engine decides whether picking this would collide (AGENT-2's previewAssign)
+    const why = previewAssign(pin, s);          // engine decides; '' means no collision
+    const warn = why ? '⚠ ' + why : '';
     h += opt(sigName(s.periph, s.signal), s, (warn ? `<span style="color:var(--bad)">${warn}</span> ` : '') + rn + (grp.length > 1 ? ` <i>via ${s.via}</i>` : ''), isCur, !isAvailable(s.periph));
   }
   d.innerHTML = h;
@@ -2955,7 +2952,7 @@ function renderSystem() {
       g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}"` : ''}>`);
       g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
       g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
-      const iss = known ? (E.issues[p] || []).length : 0;
+      const iss = known ? ((E.issueCount || {})[p] || 0) : 0;
       const note = !known ? 'fabric'
         : st === 'na' ? 'not on this package'
         : conf ? `${conf} conflict${conf > 1 ? 's' : ''}`
@@ -2992,7 +2989,7 @@ const collapsed = new Set();
 function renderTree() {
   const q = document.getElementById('tree-search').value.trim().toLowerCase();
   const conf = {};                    // pid -> how many physical pins it fights over
-  for (const v of Object.values(E.pins)) if (v.state === 'conflict') for (const c of v.claims) conf[c.who] = (conf[c.who] || 0) + 1;
+  for (const c of E.conflictList || []) for (const who of new Set(c.owners)) conf[who] = (conf[who] || 0) + 1;
   const cats = {};
   cats['System Core'] = ['GPIO'];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
@@ -3025,11 +3022,11 @@ document.querySelector('.ctabs').addEventListener('click', e => { const b = e.ta
 
 // conflict banner: every claimant is a link that jumps to its peripheral
 function conflictBanner() {
-  const rows = Object.entries(E.pins).filter(([, v]) => v.state === 'conflict');
+  const rows = E.conflictList || [];
   if (!rows.length) return '';
-  const items = rows.map(([pin, v]) =>
-    `<span class="cf"><b>${esc(pinLabel(pin))}</b>: ` +
-    v.claims.map(c => `<a data-goto="${attr(c.who)}" title="Go to ${attr(c.who)}">${esc(c.signal)}</a>`).join(' ↔ ') +
+  const items = rows.map(c =>
+    `<span class="cf"><b>${esc(c.label)}</b>${c.shorted ? '<span title="these pins are shorted inside the package"> ⧉</span>' : ''}: ` +
+    c.signals.map((sig, i) => `<a data-goto="${attr(c.owners[i] || c.owners[0])}" title="Go to ${attr(c.owners[i] || c.owners[0])}">${esc(sig)}</a>`).join(' ↔ ') +
     `</span>`).join('');
   return `<div class="conflicts">⚠ ${rows.length} pin conflict${rows.length > 1 ? 's' : ''} — click a signal to open its peripheral<br>${items}</div>`;
 }

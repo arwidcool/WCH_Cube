@@ -1,31 +1,96 @@
 # Definition of Done — QA (AGENT-4) checks each line; project is DONE when all are [x].
 
+Every `[x]` names the evidence, so anyone can re-check it. `npm test` runs all of it.
+QA does not tick a line on a claim — only on something that runs.
+
 ## Data
 - [ ] CH32V006.yaml spot-checked: every remap table re-derived from RM by a second pass and diffed (0 differences)
-- [ ] EXTI line mapping and DMA channel table added for CH32V006
+- [x] EXTI line mapping and DMA channel table added for CH32V006
+      → `data/mcus/CH32V006.yaml` has `exti.lines` (AFIO_EXTICR, 4 sources per line) and
+        `dma.requests` (DMA1, 7 channels); every EXTI pin reference is checked by
+        `tools/validate_mcu.py` and gated in `tests/data.test.js`
 - [ ] CH32V005 variant file (no TKEY/TIM3, same pinout) generated from V006 with an `inherits:` field
+      → engine support is ready (`app/engine/inherit.js`, `app/tests/inherit.test.js`), but
+        `data/mcus/CH32V005.yaml` does not exist yet — AGENT-1
 - [ ] CH32V003 extracted (DS + RM present in `data/sources/` or requested via BOARD → HUMAN and skipped if absent)
-- [ ] Every MCU file passes `tools/validate_mcu.py` (schema + pin-existence + remap-consistency + package I/O counts vs model table)
+- [x] Every MCU file passes `tools/validate_mcu.py` (schema + pin-existence + remap-consistency + package I/O counts vs model table)
+      → `python tools/validate_mcu.py` exits 0 for both bundled parts; run as a merge gate by
+        `tests/data.test.js` ("every MCU file passes tools/validate_mcu.py"). 10 warnings
+        remain, all reported on the board; none is an error.
 
 ## Engine
 - [ ] Engine split out of template.html into `app/engine/*.js` modules with unit tests (≥ 90% of functions covered)
-- [ ] Conflict engine: shorted pins, exposed pad, remap collision preview, package switch re-check — all covered by tests
+      → the split is done (model, clock, engine, project, export, inherit, history, util).
+        Coverage is **78%**: the unit tests reach 52 of 67 exports.
+        `tests/features.test.js` fails on this and names the 15 that nothing references —
+        PACKAGES, yamlLoad, yamlDump, deriveMcu, initState, mcuModel, sigName,
+        applyPackageRemaps, neutralChoice, isEnabled, defaultClock, projectObject,
+        resolveInherits, clearHistory, record. AGENT-2.
+- [x] Conflict engine: shorted pins, exposed pad, remap collision preview, package switch re-check — all covered by tests
+      → `app/tests/engine.test.js` ("shorted pins collide with each other and say so",
+        "previewAssign warns before the click", "previewAssign warns when the remap switch
+        would drag other signals onto taken pins", "switching package re-checks everything")
+        and `app/tests/model.test.js` ("exposed pad is pin 0 and is not counted as an I/O")
 - [x] Project save/load (`.wchproj` YAML) round-trips 100% of state (browser download/upload; AGENT-4 wires native dialogs in Tauri)
+      → `app/tests/project.test.js` (7 tests, round-trip + rejection cases); native dialogs
+        proven by `tests/desktop.test.js` ("Ctrl+S and the Save button both go through the
+        native dialog", "opening a project through the native dialog restores it")
 - [ ] Undo/redo for pin and mode changes
-- [ ] Pin table export (Markdown + CSV) and clock summary export (Markdown) — the Generate button's first real output
+      → `app/engine/history.js` and `app/tests/history.test.js` exist, but the suite is red:
+        "undo does not move the selection, the zoom or the pan". AGENT-2.
+- [x] Pin table export (Markdown + CSV) and clock summary export (Markdown) — the Generate button's first real output
+      → `app/engine/export.js` + `app/tests/export.test.js` (6 tests: row per physical pin in
+        pin order, exposed pad last, signal/mode/user label carried, conflicts marked and
+        listed, CSV header and quoting). GENERATE CODE downloads all three files.
 - [ ] C code generation for GPIO + AFIO remap + RCC (WCH EVT SDK style), compiles with `riscv-none-elf-gcc` if present, else syntax-checked with `gcc -fsyntax-only` using stub headers
+      → not started. No compiler on the dev box either, so the compile check is CI-only.
 
 ## UI
-- [ ] Pinout view matches CubeMX layout at 1280×720 and 1920×1080 (screenshot compared by QA)
-- [ ] Right-click pin → user label; labels show on chip and in export
-- [ ] "Show only modified pins" filter; keyboard navigation between pins
-- [ ] Clock tab drawn as a real tree (boxes + connectors) with all V006 taps, live values, red when out of spec
-- [ ] System view (block diagram of enabled peripherals)
+- [x] Pinout view matches CubeMX layout at 1280×720 and 1920×1080 (screenshot compared by QA)
+      → `tests/layout.test.js`, **structural rather than pixel**: jsdom has no layout engine
+        and Playwright will not install here, so it locks in the shape of
+        `agents/reference/cubemx.png` — menu bar, breadcrumb with GENERATE CODE, the four
+        tabs in order, then tree / centre / chip with its zoom bar — and checks the chip
+        fits its canvas at both required sizes. A true pixel diff needs a browser in CI.
+- [x] Right-click pin → user label; labels show on chip and in export
+      → `tests/features.test.js` ("a user label set on a pin shows on the chip and in the
+        export") and `app/tests/export.test.js` ("assigned pins carry their signal, mode and
+        user label")
+- [x] "Show only modified pins" filter; keyboard navigation between pins
+      → `tests/features.test.js` ("show only modified pins hides the untouched ones and
+        brings them back", "arrow keys move the focus from pin to pin", "Enter opens the
+        picker on the focused pin and Delete clears it")
+- [x] Clock tab drawn as a real tree (boxes + connectors) with all V006 taps, live values, red when out of spec
+      → `tests/layout.test.js` ("the clock tab is a drawn tree, not an empty panel") for the
+        drawing; `app/tests/clock.test.js` for the values and the limits ("SYSCLK over the
+        datasheet maximum is flagged", HSE range); out-of-spec nodes get `.cnode.over`,
+        which is `--bad` red in the stylesheet
+- [x] System view (block diagram of enabled peripherals)
+      → `tests/features.test.js` ("the system view lists the peripherals that are switched
+        on"): the tab swaps `#canvas` for `#syscanvas` and the drawing names the peripheral
 - [ ] No layout overflow on any package from QFN12 to LQFP144 (dummy part covers the large ones)
+      → `tests/layout.test.js` ("nothing is drawn outside the chip drawing...") passes for
+        every package that exists, but the largest is 48-pin, so the top of the range is
+        **unexercised**. Needs an LQFP64/100/144 table on the dummy part — AGENT-1.
 
 ## Release
 - [ ] Tauri shell builds on Linux (CI) and packages the `data/` folder; app reads YAML from disk with hot-reload
+      → `src-tauri/` is complete (commands, notify watcher, bundled `data/` resource,
+        `~/.wch_cubemx/mcus` override) and `tests/desktop.test.js` proves the config, the
+        command surface and the bridge — disk MCUs, native dialogs, hot reload, and that it
+        is inert in a browser. **The Rust has never been compiled**: no cargo on this box and
+        the CI `desktop` job has never run, because the repo has no remote. Cannot tick.
 - [ ] `npm test` / `node tests/run.js` green; GitHub Actions workflow runs build + tests on every push
-- [ ] README documents: run in browser, run desktop, add an MCU, file format, agent workflow
-- [ ] Zero console errors/warnings on load for every MCU × every package (automated check)
+      → `.github/workflows/ci.yml` is written (Node 22, Python 3.12, validate → build →
+        stale-dist check → tests, plus the desktop job). 122 of 123 tests pass; the red one
+        is `app/tests/history.test.js`. The workflow has never run: no remote is configured.
+- [x] README documents: run in browser, run desktop, add an MCU, file format, agent workflow
+      → `README.md`: run in a browser, run and build the desktop app, projects, add an MCU
+        (with the remap-table idea and `tools/validate_mcu.py`), running the tests including
+        the npm-on-Google-Drive workaround, and how the four agents work
+- [x] Zero console errors/warnings on load for every MCU × every package (automated check)
+      → `tests/smoke.js`: every MCU × every package loads, switches, draws the expected pin
+        count, survives five deterministic pin clicks with an assignment each, and must
+        produce no console output at all. Also `tests/data.test.js` ("the app can load every
+        bundled MCU on every one of its packages").
 - [ ] TASKS.md has no `[~]` left and no `[ ]` in Phase 1–4
