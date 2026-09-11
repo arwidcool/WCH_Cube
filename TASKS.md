@@ -809,3 +809,45 @@ nothing about a part; `app/engine/constraints.js` is the only place it is interp
       on every package and demands zero complaints, which is the coverage hole it hid in.
 
 
+
+### CH32H417 — the per-pin AF mechanism  (AGENT-4, human-directed, spans AGENT-1 + AGENT-2 areas)
+
+Posted on `agents/BOARD.md` 2026-09-11T23:14Z with the file hold list. CH32H417 selects its
+alternate function **per pin** (`GPIOx_AFRL`/`AFRH`, `AFRy[3:0]` = AF0..AF15, RM 9.3.2.2;
+`GPIO_PinAFConfig`), which `remaps:` cannot express: 418 signals, 70 % of them reach more than
+one pin, and a whole-peripheral enumeration is 8.5e20 entries. Measured by
+`tools/extract_h417_pins.py --audit`.
+
+- [x] `data/packages/packages.yaml` — `QFN128`, `QFN88`, `QFN60X6` added; `QFN68` confirmed (AGENT-4)
+- [x] `tools/extract_h417_pins.py` — package tables + AF map + the format audit (AGENT-4)
+- [x] `data/mcus/CH32H417.notes.md` — the finding, the extraction, the open questions (AGENT-4)
+- [~] `codegen.remap.style: af` + `signal_pins:` in `data/FORMAT.md` (AGENT-4, AGENT-1's file)
+- [~] engine: `signalPins(pid)` seam, pin grid, conflict engine, codegen (AGENT-4, AGENT-2's files)
+- [~] `tools/validate_mcu.py` — checks for the new keys, in the same commit as the keys (AGENT-4)
+- [ ] `data/mcus/CH32H417.yaml` (AGENT-4, blocked on the three above)
+- [ ] Which family owns MEU6/WEU6 — DS contradicts itself 3 sources to 1 (AGENT-1)
+- [ ] `data/sources/H417/` rename to the documented `Datasheets/` + `Evt/` layout (AGENT-1)
+- [ ] How the dual core (RISC-V5F 400 MHz + RISC-V3F 160 MHz) is modelled (AGENT-1)
+- [ ] Draw a 128-pin QFN — 32 pins a side, no existing layout/legibility case (AGENT-2)
+      → **Measured 2026-09-12 (AGENT-3), and the answer is that the UI job does not change.**
+        `tests/layout.test.js` has the case permanently: QFN128 synthesised into the layout fixture
+        at runtime from its own LQFP144 order, fitted at both viewports, compared against LQFP144.
+        QFN128 is better on every metric at both sizes — 32 pins a side against 36, so its labels
+        are further apart and drawn larger (1280x720: gap 14.28px vs 13.20px, smallest label 6.17px
+        vs 5.70px; 1920x1080: 21.42px vs 19.80px, 9.25px vs 8.55px). The 12.3mm body costs nothing
+        because `fitChip()` scales the whole drawing. Planted break included.
+        **What is still open:** the real-browser half. `tests/legibility.test.js` sweeps only what
+        `#mcusel` offers, so it cannot see a synthesised package — that case arrives with the first
+        real part shipping QFN128, i.e. `CH32H417.yaml`. Until then this is structural (jsdom)
+        evidence about the app's own SVG arithmetic, not a rendering measurement.
+- [ ] (AGENT-1) **`data/mcus/CH32H417.yaml` will be the first part whose package tables exercise
+      three brand-new geometries at once (QFN60X6/QFN88/QFN128).** A package map that disagrees
+      with its geometry is accepted **silently** at runtime — fewer pins drawn, empty console, no
+      problem reported (measured: 127 entries → 127 pins, 130 → 128, 92 valid → 92). The gate is
+      `tests/data.test.js` "the pin count in each package table matches its geometry", which runs
+      against `data/mcus/` and will therefore cover the new part. Recorded so that "fewer pins than
+      expected and no console output" is recognised as this and not as an extraction bug.
+
+Regression rule for the whole block, and it is absolute: **CH32V003/V005/V006/X035 byte-identical,
+530 tests green, `--strict` 0 on all five fixtures.** A part with no `signal_pins:` behaves exactly
+as it did before the key existed — the same rule a part with no `constraints:` follows.
