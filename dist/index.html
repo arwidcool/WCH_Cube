@@ -146,7 +146,8 @@
   .siglabel{font-family:var(--font);font-size:10.5px;fill:#222}
   .siglabel.conflict{fill:var(--bad);font-weight:600}
   .pinnum{font-family:var(--font);font-size:7.5px;fill:#555}
-  .siglabel.userlabel{fill:#0b57a4;font-style:italic;font-size:9.5px}
+  .siglabel .userlabel,.siglabel.userlabel{fill:#0b57a4;font-style:italic}
+  .siglabel .lsep{fill:#9aa3ad}
   .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
   .pin.dim rect{opacity:.22}
   .pin.dim text{opacity:.28}
@@ -512,6 +513,12 @@ peripherals:
       # function turns on, which is a glitch filter, not a different pin.
       # RM 18 writes this value as "PD7 for I/O function"; the pin is actually the
       # package's reset pin — PA7 on QFN32 and PC5 on QSOP24 (DS note 5, see `remaps`).
+      #
+      # `validate_mcu.py` warns that choices[0] here carries a signal, because the engine
+      # reads choices[0] as a peripheral's "off" state. That is deliberate and must stay:
+      # the factory option byte is RST_MODE=10, so a blank part really does hold the reset
+      # pin, and the pin is not available until the option byte is reprogrammed. Reordering
+      # these to silence the warning would tell the user the pin is free when it is not.
       - name: External reset pin
         choices:
           - { name: "RST enabled — ignore 12 ms (RST_MODE=10, factory default)", signals: [RST], default: true }
@@ -1037,6 +1044,7 @@ packages:
     48: VDD
 
   QFN48:
+    0: VSS                        # exposed pad — the geometry declares epad: true
     1: VBAT
     2: PC13
     3: PC14
@@ -1109,6 +1117,7 @@ packages:
     20: BOOT0
 
   QFN20:
+    0: VSS                        # exposed pad — the geometry declares epad: true
     1: VDD
     2: PC13
     3: PD0
@@ -2348,7 +2357,7 @@ let geom = null;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const attr = s => esc(s).replace(/"/g, '&quot;');
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
-const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastW: 0, lastH: 0, clockPending: false };
+const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false };
 
 const userLabel = name => ((S.gpio[name] || {}).label || '').trim();
 const pinModified = name => !!(E && E.pins[name]) || !!userLabel(name);
@@ -2357,11 +2366,10 @@ function labelRoom() {
   if (!E) return 190;
   let n = 8;
   for (const grp of Object.values(pkgPins())) {
-    const nm = grp[0], i = E.pins[nm];
-    if (i) n = Math.max(n, i.label.length);
-    const ul = userLabel(nm); if (ul) n = Math.max(n, ul.length);
+    const nm = grp[0], i = E.pins[nm], ul = userLabel(nm);
+    n = Math.max(n, (i ? i.label.length : 0) + (i && ul ? 3 : 0) + (ul ? ul.length : 0));
   }
-  return Math.max(120, Math.min(340, 34 + n * 5.9));
+  return Math.max(120, Math.min(420, 34 + n * 6.6));
 }
 
 function layout() {
@@ -2435,21 +2443,18 @@ function renderChip() {
     if (numPos) g.push(`<text class="pinnum" x="${numPos[0]}" y="${numPos[1]}" text-anchor="${numPos[2]}">${p.num}</text>`);
     else g.push(`<text class="pinnum" transform="translate(${cx + 2.5},${p.side === 3 ? p.y - 6 : p.y + h + 6}) rotate(-90)" text-anchor="${p.side === 3 ? 'start' : 'end'}">${p.num}</text>`);
     g.push('</g>');
-    // labels outside the chip: signal on the first line, user label under it
+    // One label line per pin: "SIGNAL \u00b7 user_label". One line is the only shape that
+    // cannot collide with the neighbouring pin's label at any pitch.
     if ((info || ul) && !hidden) {
       const lc = 'siglabel' + (info && info.state === 'conflict' ? ' conflict' : '');
-      const off = 22, lines = [];
-      if (info) lines.push([lc, info.label]);
-      if (ul) lines.push(['siglabel userlabel', ul]);
-      lines.forEach(([klass, txt], li) => {
-        const dy = lines.length > 1 ? (li === 0 ? 0 : 10.5) : 4;      // two lines straddle the pin centre
-        const y = cy + (lines.length > 1 ? dy : 4);
-        const perp = li * 11;
-        if (p.side === 0) g.push(`<text class="${klass}" x="${p.x - off}" y="${y}" text-anchor="end">${esc(txt)}</text>`);
-        if (p.side === 2) g.push(`<text class="${klass}" x="${p.x + w + off}" y="${y}" text-anchor="start">${esc(txt)}</text>`);
-        if (p.side === 3) g.push(`<text class="${klass}" transform="translate(${cx + 4 + perp},${p.y - off}) rotate(-90)" text-anchor="start">${esc(txt)}</text>`);
-        if (p.side === 1) g.push(`<text class="${klass}" transform="translate(${cx + 4 + perp},${p.y + h + off}) rotate(-90)" text-anchor="end">${esc(txt)}</text>`);
-      });
+      const txt = (info ? esc(info.label) : '')
+        + (info && ul ? `<tspan class="lsep">\u00a0\u00b7\u00a0</tspan>` : '')
+        + (ul ? `<tspan class="userlabel">${esc(ul)}</tspan>` : '');
+      const off = 22;
+      if (p.side === 0) g.push(`<text class="${lc}" x="${p.x - off}" y="${cy + 4}" text-anchor="end">${txt}</text>`);
+      if (p.side === 2) g.push(`<text class="${lc}" x="${p.x + w + off}" y="${cy + 4}" text-anchor="start">${txt}</text>`);
+      if (p.side === 3) g.push(`<text class="${lc}" transform="translate(${cx + 4},${p.y - off}) rotate(-90)" text-anchor="start">${txt}</text>`);
+      if (p.side === 1) g.push(`<text class="${lc}" transform="translate(${cx + 4},${p.y + h + off}) rotate(-90)" text-anchor="end">${txt}</text>`);
     }
   }
   g.push('</g>');
@@ -2459,11 +2464,13 @@ function renderChip() {
   const used = io.filter(n => E.pins[n]).length;
   document.getElementById('unused').textContent = `${io.length - used} / ${io.length}`;
   decoratePkgSel();
-  // the label margin grows and shrinks with the longest label, so the drawing changes size as
-  // signals are assigned. Re-fit automatically until the user pans or zooms themselves.
-  const grew = geom.W !== U.lastW || geom.H !== U.lastH;
-  U.lastW = geom.W; U.lastH = geom.H;
-  if (grew && U.autoFit) fitChip();
+  // The drawing changes size as signals and labels come and go. Re-fit automatically
+  // until the user pans or zooms themselves.
+  if (U.autoFit) {
+    const b = rootBox(), o = U.lastBox;
+    const moved = !o || ['x', 'y', 'width', 'height'].some(kk => Math.abs(b[kk] - o[kk]) > 0.5);
+    if (moved) fitChip();
+  }
 }
 
 // package selector shows I/O count and the part numbers that use that package
@@ -2489,12 +2496,22 @@ function decoratePkgSel() {
   }
 }
 
+// Real extent of the drawing, text included. Estimating from character counts is not
+// accurate enough to guarantee nothing is clipped, so measure it.
+function rootBox() {
+  const r = document.getElementById('root');
+  if (r && r.getBBox) { try { const b = r.getBBox(); if (b.width > 0 && b.height > 0) return b; } catch (e) { /* jsdom */ } }
+  return geom ? { x: 0, y: 0, width: geom.W, height: geom.H } : { x: 0, y: 0, width: 1, height: 1 };
+}
 function fitChip() {
   const c = document.getElementById('canvas'), W = c.clientWidth, H = c.clientHeight;
   if (!geom) geom = layout();
   U.autoFit = true;
-  S.zoom = Math.min(W / geom.W, H / geom.H) * 0.98;
-  S.panX = (W - geom.W * S.zoom) / 2; S.panY = (H - geom.H * S.zoom) / 2;
+  const b = rootBox();
+  S.zoom = Math.min(W / b.width, H / b.height) * 0.97;
+  S.panX = (W - b.width * S.zoom) / 2 - b.x * S.zoom;
+  S.panY = (H - b.height * S.zoom) / 2 - b.y * S.zoom;
+  U.lastBox = b;
   applyTransform();
 }
 function applyTransform() {
@@ -2974,12 +2991,29 @@ function updateCrumb() {
   document.getElementById('crumb-mcu').textContent = PROJECT.variant || M.mcu.name;
   document.title = `WCHCube — ${PROJECT.name} (${PROJECT.variant || M.mcu.name} ${S.pkg})`;
 }
-function saveProject() {
-  const blob = new Blob([projectSerialize()], { type: 'application/x-yaml' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${PROJECT.name.replace(/[^\w.-]+/g, '_')}.wchproj`; a.click();
+function downloadText(filename, text, mime = 'text/plain') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: mime }));
+  a.download = filename;
+  a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  PROJECT.dirty = false; updateCrumb(); toast(`Saved ${a.download}`);
+  return filename;
 }
+function saveProject() {
+  const name = downloadText(`${PROJECT.name.replace(/[^\w.-]+/g, '_')}.wchproj`, projectSerialize(), 'application/x-yaml');
+  PROJECT.dirty = false; updateCrumb(); toast(`Saved ${name}`);
+}
+// GENERATE CODE — Phase 3 step one: the pin table (Markdown + CSV) and the clock
+// summary (Markdown). C code generation joins generateAll() later.
+(() => {
+  const btn = document.querySelector('.gen');
+  btn.title = 'Export the pin table (Markdown + CSV) and the clock summary (Markdown)';
+  btn.onclick = () => {
+    const files = generateAll();
+    for (const [name, text] of Object.entries(files)) downloadText(name, text, name.endsWith('.csv') ? 'text/csv' : 'text/markdown');
+    toast(`Generated ${Object.keys(files).join(', ')}`);
+  };
+})();
 // New-project dialog
 function openNewProject() {
   const dlg = document.getElementById('newproj'), sel = document.getElementById('np-mcu');
@@ -2988,7 +3022,7 @@ function openNewProject() {
 }
 let npPick = null;
 function fillVariants() {
-  const name = document.getElementById('np-mcu').value, y = jsyaml.load(MCU_FILES[name]);
+  const name = document.getElementById('np-mcu').value, y = mcuModel(name);   // resolves mcu.inherits
   const box = document.getElementById('np-variants'), rows = [];
   const pkgIo = pk => { const map = y.packages[pk]; return Object.entries(map).filter(([n]) => n !== '0').map(([, v]) => Array.isArray(v) ? v[0] : v).filter(p => ((y.pins[p] || {}).type || 'io') === 'io').length; };
   if (y.mcu.variants) for (const [v, info] of Object.entries(y.mcu.variants)) rows.push({ variant: v, pkg: info.package, desc: `${info.flash_kb || y.mcu.flash_kb} KB flash · ${info.sram_kb || y.mcu.sram_kb} KB SRAM · ${pkgIo(info.package)} I/O · ${info.temp ? info.temp + ' °C' : ''}${info.notes ? ' · ' + info.notes : ''}` });

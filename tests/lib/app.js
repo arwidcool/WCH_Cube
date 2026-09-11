@@ -82,6 +82,9 @@ export function boot(options) {
           width: viewport.width, height: viewport.height, toJSON() { return this; },
         };
       };
+      // Globals a test wants in place BEFORE any page script runs (e.g. a fake window.__TAURI__,
+      // which the injected desktop bridge checks for at parse time).
+      for (const [k, v] of Object.entries(opts.globals || {})) win[k] = v;
       win.addEventListener('error', e => errors.push({ level: 'uncaught', text: (e.error && e.error.stack) || e.message }));
       win.addEventListener('unhandledrejection', e => errors.push({ level: 'rejection', text: String((e.reason && e.reason.stack) || e.reason) }));
     },
