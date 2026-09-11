@@ -184,10 +184,18 @@ export function gpioSpeeds() {
 // lists the five real modes and `gpio.input_modes` the three the SPL reaches through
 // the PULL column - the SDK folds pull into the mode, so `Input` has no single macro
 // and the list is keyed by pull name rather than by a fourth mode.
+//
+// `class:` is the direction the mode drives - `out`, `in` or `analog` - and it is
+// carried here because a constraint says "not an output function" once, by class,
+// instead of listing mode names that go stale the day a mode is added. It is optional
+// in the file; `null` means this part does not say, and a `classes:` constraint on such
+// a part matches nothing rather than guessing (data/FORMAT.md).
 export function gpioModes() {
   const list = ((M && M.gpio) || {}).modes;
   if (!Array.isArray(list)) return [];
-  return list.filter(x => x && x.name).map(x => ({ name: String(x.name), macro: x.macro || null }));
+  return list.filter(x => x && x.name).map(x => ({
+    name: String(x.name), macro: x.macro || null, class: x.class ? String(x.class) : null,
+  }));
 }
 
 export function gpioInputModes() {

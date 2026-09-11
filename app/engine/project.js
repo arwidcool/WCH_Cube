@@ -12,6 +12,7 @@ import {
   setNvicVector, setNvicGroup, nvicGroups,
 } from './resources.js';
 import { generatorOptions, setGeneratorOption } from './export.js';
+import { normaliseGpioConstraints } from './constraints.js';
 import { applyParams, paramsObject, applyChannelParams, channelParamsObject } from './params.js';
 import { clearHistory } from './history.js';
 
@@ -234,6 +235,11 @@ export function projectApply(src) {
   S.manual = obj.gpio_manual || {};
   S.gpio = obj.gpio_settings || {};
   dropped.push(...normaliseGpioSpeeds());
+  // A file written before the part stated a constraint, or one that violates it, opens
+  // with no console error and says what it dropped - the same contract as the speed
+  // above, through the same list. A stale value must never reach the GPIO table or the
+  // generated C, where it would compile and not work on the board.
+  dropped.push(...normaliseGpioConstraints());
   dropped.push(...applyDma(obj.dma));
   dropped.push(...applyNvic(obj.nvic));
   dropped.push(...applyGenerator(obj.generator));

@@ -22,6 +22,7 @@ import {
 import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
 import { hseFeedsSysclk } from './clock.js';
+import { constraintFor, constraintSentence, gpioEffectiveMode } from './constraints.js';
 
 export let E = null;
 
@@ -75,6 +76,42 @@ export function compute() {
     }
   }
 
+  // Constraints: a per-pin capability the silicon states and the model can express.
+  // A claim that violates one is an issue naming the constraint, exactly as an EXTI
+  // or DMA clash is, so it shows up on the peripheral and in the conflict banner
+  // rather than only in the generated C. This is the second of the three consumers;
+  // the GPIO table (which must not OFFER the value) and codegen (which must not EMIT
+  // it) are the other two, and all three read the same data.
+  //
+  // The value checked is the one that will be USED, from the same derivation the
+  // generator uses (`gpioEffectiveMode()`), so a rule this reports and a rule codegen
+  // enforces cannot drift apart. The pull is checked only when the mode is Input,
+  // because the SPL ignores the pull column for every other mode - a stale pull on an
+  // output pin is inert, not a violation.
+  const constraintIssues = [];
+  for (const [canonPin, info] of Object.entries(pins)) {
+    const pin = (info.claims.find(c => c.via) || {}).via || canonPin;
+    const g = S.gpio[pin] || S.gpio[canonPin] || {};
+    const eff = gpioEffectiveMode(pin, info.claims, g);
+    const effective = [['mode', eff.mode], ['speed', g.speed]];
+    if (eff.mode === 'Input') effective.push(['pull', g.pull]);
+    for (const [field, value] of effective) {
+      if (value === undefined || value === null || value === '') continue;
+      const c = constraintFor(pin, field, value);
+      if (!c) continue;
+      const sentence = constraintSentence(c, pin, field, value);
+      constraintIssues.push({
+        pin, field, value, id: c.id, sentence,
+        reason: c.reason || null, source: c.source || null,
+      });
+      const owners = [...new Set(info.claims.map(cl => cl.who))];
+      for (const owner of owners) {
+        if (owner === 'GPIO' || !M.peripherals[owner]) continue;
+        (issues[owner] ||= []).push(sentence);
+      }
+    }
+  }
+
   const status = {}, issueCount = {};
   for (const pid of Object.keys(M.peripherals)) {
     status[pid] = !isAvailable(pid) ? 'na' : issues[pid] ? 'warn' : isEnabled(pid) ? 'ok' : '';
@@ -84,6 +121,7 @@ export function compute() {
   E = {
     pins, issues, status, issueCount, conflictList, resources,
     resourceIssues: resources.issues,
+    constraintIssues,
     conflicts: conflictList.map(c => `${c.label}: ${c.signals.join(' / ')}`),
   };
   return E;

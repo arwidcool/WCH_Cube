@@ -39,6 +39,9 @@ import { E, compute } from './engine.js';
 import { generatorOption, userSection } from './export.js';
 import { clockCalc, firstPre } from './clock.js';
 import { PROJECT } from './project.js';
+import {
+  constraintFor, constraintSentence, skippedClaim, gpioEffectiveMode,
+} from './constraints.js';
 
 const PIN_RE = /^P([A-Z])(\d+)$/;
 const hex = (v, digits = 8) => '0x' + (v >>> 0).toString(16).toUpperCase().padStart(digits, '0') + 'U';
@@ -84,31 +87,13 @@ function modeMacro(mode, pull) {
 // Exported because export.js's project generator needs the part's own SPL header
 // name for the generated main.c, and there must be one place that answers it.
 export const cfg = () => M.codegen || {};
-const bareSignal = claim => claim.signal.slice(claim.who.length + 1);
 
-// Signals that are NOT set up with GPIO_Init: the debug interface and the reset
-// pin are controlled by option bytes and the debug hardware, and driving the
-// reset pin as a push-pull output would be actively harmful. Overridable per
-// family through codegen.skip_signals; SYS is the default because every WCH part
-// puts SWIO/SWCLK/RST there.
-const DEFAULT_SKIP = { SYS: true };
-function skipped(claim) {
-  const rule = (cfg().skip_signals || DEFAULT_SKIP)[claim.who];
-  return rule === true || (Array.isArray(rule) && rule.includes(bareSignal(claim)));
-}
-
-// An analog function needs GPIO_Mode_AIN, not AF_PP. codegen.analog_signals is
-// the authoritative list; without it, fall back to "an Analog-category
-// peripheral on an analog-capable pin" and say in the code that it was inferred.
-// The fallback cannot tell ADC1_IN4 from ADC1_RETR0 — they share PD3, and only
-// one of them is analog — which is why the data should say so.
-function analogClaim(claim, pin) {
-  const table = (cfg().analog_signals || {})[claim.who];
-  if (table) return { analog: table.includes(bareSignal(claim)), inferred: false };
-  const P = M.peripherals[claim.who];
-  const guess = !!(P && P.category === 'Analog' && (M.pins[pin] || {}).analog);
-  return { analog: guess, inferred: guess };
-}
+// Signals that are NOT set up with GPIO_Init, and whether a function is analog, now
+// live in constraints.js as `skippedClaim()` / `analogClaim()`. They moved there rather
+// than being copied because the CONFLICT ENGINE needs the same two answers to decide
+// which mode a pin will be configured with, and a second copy is how the two consumers
+// would start disagreeing about a constraint. `constraintFor()` is the third consumer.
+const skipped = claim => skippedClaim(claim);
 
 // ---- what to configure -------------------------------------------------------
 // One entry per physical GPIO the configuration uses, named by the pin the
@@ -125,26 +110,42 @@ export function gpioPlan() {
       if (!m || pinType(pin) !== 'io') continue;
       if (out.some(x => x.pin === pin)) continue;         // one register setup per pin
       const g = S.gpio[pin] || S.gpio[canonPin] || {};
-      const isAf = usable.some(c => c.who !== 'GPIO');
-      const manual = claim.who === 'GPIO' ? claim.signal : null;
-      const an = usable.map(c => analogClaim(c, claim.via || canonPin)).find(x => x.analog);
-      let mode = g.mode;
-      let inferred = false;
-      if (!mode) {
-        if (an) { mode = 'Analog'; inferred = an.inferred; }
-        else if (isAf) mode = 'Alternate Function Push Pull';
-        else if (manual === 'GPIO_Output') mode = 'Output Push Pull';
-        else if (manual === 'GPIO_Analog') mode = 'Analog';
-        else mode = 'Input';
-      }
+      // ONE derivation, shared with the conflict engine (constraints.js), so a rule the
+      // engine reports and the generator refuses cannot be two different rules.
+      const eff = gpioEffectiveMode(pin, usable, g);
+      const mode = eff.mode, inferred = eff.inferred;
       const pull = g.pull || 'No pull';
       const m2 = modeMacro(mode, pull);
+      const speed = gpioSpeedFor(g.speed);
+
+      // Constraints - the third consumer, and the last line of defence. The GPIO
+      // table does not offer a forbidden value and `compute()` reports one that got
+      // in anyway, but a hand-written `.wchproj`, or a mode DERIVED for a signal
+      // nobody chose a mode for, can still arrive here. It must never become
+      // plausible-looking bits: it becomes a TODO naming the constraint, exactly as
+      // a missing `gpio.modes` entry does (PROJECT.md A.2).
+      //
+      // The pull is only part of the mode when the mode is Input - the SPL ignores
+      // the pull column for every other mode - so that is when it is checked.
+      const cPull = mode === 'Input' ? constraintFor(pin, 'pull', pull) : null;
+      const cMode = constraintFor(pin, 'mode', mode) || cPull;
+      const cSpeed = constraintFor(pin, 'speed', speed);
+      const modeMissing = cMode
+        ? constraintSentence(cMode, pin, cMode === cPull ? 'pull' : 'mode', cMode === cPull ? pull : mode)
+        : m2.missing || null;
+
       out.push({
         pin, port: m[1], bit: +m[2],
         signal: usable.map(c => c.signal).join(' / '),
         label: (g.label || '').trim(),
-        mode, pull, speed: gpioSpeedFor(g.speed),
-        macro: m2.macro || null, macroMissing: m2.missing || null, inferred,
+        mode, pull, speed,
+        macro: cMode ? null : m2.macro || null,
+        macroMissing: modeMissing,
+        constrainedBy: cMode ? cMode.id : null,
+        speedMacro: cSpeed ? null : (speedMacro(speed).macro || null),
+        speedMissing: cSpeed ? constraintSentence(cSpeed, pin, 'speed', speed) : null,
+        speedConstrainedBy: cSpeed ? cSpeed.id : null,
+        inferred,
         conflict: info.state === 'conflict',
       });
     }
@@ -385,7 +386,8 @@ function gpioSection() {
     // one GPIO_Init call per distinct mode+speed on the port, the way CubeMX groups them
     const groups = new Map();
     for (const p of mine) {
-      const key = `${p.macro || `?${p.mode}/${p.pull}`}|${p.speed}`;
+      const key = `${p.macro || `?${p.mode}/${p.pull}`}|${p.speed}|${p.constrainedBy || ''}`
+        + `|${p.speedMacro || ''}|${p.speedConstrainedBy || ''}`;
       (groups.get(key) || groups.set(key, []).get(key)).push(p);
     }
     for (const [key, pins] of groups) {
@@ -398,13 +400,24 @@ function gpioSection() {
       L.push(`    GPIO_InitStructure.GPIO_Pin = ${pins.map(p => `GPIO_Pin_${p.bit}`).join(' | ')};`);
       if (macro) {
         L.push(`    GPIO_InitStructure.GPIO_Mode = ${macro};`);
+      } else if (pins[0].constrainedBy) {
+        // The macro exists; the SILICON forbids this combination on these pins. Saying
+        // "no SPL macro for ..." here would send the reader to the YAML, so it says
+        // what actually happened and which constraint said so.
+        L.push(`    /* TODO: ${pins[0].macroMissing}`);
+        L.push('       The data forbids this mode on this pin; the generator will not emit it. */');
       } else {
         L.push(`    /* TODO: no SPL macro for GPIO mode "${pins[0].mode}"`
           + `${pins[0].mode === 'Input' ? ` with pull "${pins[0].pull}"` : ''} — ${pins[0].macroMissing}.`);
         L.push('       GPIOMode_TypeDef is per family; this generator does not guess a mode macro. */');
       }
       const sp = speedMacro(speed);
-      if (sp.macro) {
+      if (pins[0].speedConstrainedBy) {
+        L.push(`    /* TODO: ${pins[0].speedMissing}`);
+        L.push('       The data forbids this output speed on this pin; the generator will not emit it. */');
+      } else if (pins[0].speedMacro) {
+        L.push(`    GPIO_InitStructure.GPIO_Speed = ${pins[0].speedMacro};`);
+      } else if (sp.macro) {
         L.push(`    GPIO_InitStructure.GPIO_Speed = ${sp.macro};`);
       } else {
         L.push(`    /* TODO: no SPL macro for output speed ${sp.name === null ? '(unstated)' : `"${sp.name}"`}.`);

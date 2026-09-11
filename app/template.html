@@ -1964,6 +1964,17 @@ function resourceBanner() {
   return `<div class="resbar" role="status" aria-live="polite">${n} shared-resource issue${n > 1 ? 's' : ''}` +
     ` <span class="note">(EXTI lines and DMA channels, not pin conflicts)</span>${rows.map(line).join('')}</div>`;
 }
+// A value the part's data forbids on a pin: a per-pin capability, not a contention and
+// not a pin conflict, so it gets its own strip for the same reason EXTI and DMA do. The
+// GPIO table's row already refuses to OFFER the value; this is where the reason lives
+// when a value got in anyway (an older project, or a mode nobody chose).
+function constraintBanner() {
+  const rows = E.constraintIssues || [];
+  if (!rows.length) return '';
+  const line = c => `<span class="rw">⚠ ${esc(c.sentence || c.reason || c.id)}</span>`;
+  return `<div class="resbar" role="status" aria-live="polite">${rows.length} pin restriction${rows.length > 1 ? 's' : ''}` +
+    ` <span class="note">(stated by this part's data, per pin)</span>${rows.map(line).join('')}</div>`;
+}
 
 document.getElementById('ptitle').addEventListener('click', e => {
   const a = e.target.closest('a[data-goto]'); if (!a) return;
@@ -1994,7 +2005,7 @@ function dmaRequestNamesOf(pid) {
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
   document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral')
-    + conflictBanner() + resourceBanner();
+    + conflictBanner() + resourceBanner() + constraintBanner();
   renderCtabs(pid);
   if (!pid) {
     mode.innerHTML = '<div class="empty" style="grid-column:1/-1">Pick a peripheral on the left, or click a pin on the chip.</div>';
@@ -2548,19 +2559,11 @@ document.getElementById('cbody').addEventListener('change', e => {
  * why `gpio.input_modes` is keyed by pull name, and why the pull list comes from it.
  *
  * A part whose file says nothing keeps the old lists, so no part regresses while its data
- * is being written - and the Tools tab names that fallback as a gap.
+ * is being written - and the Tools tab names that fallback as a gap. **The lists live in
+ * `app/engine/constraints.js` now**, because the constraint matcher has to name the same
+ * options this table renders: two copies of the list would let a constraint forbid a name
+ * the table never offers, or offer one the constraint cannot see.
  */
-const LEGACY_MODES = ['Input', 'Output Push Pull', 'Output Open Drain',
-  'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
-const LEGACY_PULLS = ['No pull', 'Pull-up', 'Pull-down'];
-function gpioModeNames() {
-  const m = typeof gpioModes === 'function' ? gpioModes() : [];
-  return m.length ? ['Input', ...m.map(x => x.name)] : LEGACY_MODES;
-}
-function gpioPullNames() {
-  const p = typeof gpioInputModes === 'function' ? gpioInputModes() : [];
-  return p.length ? p.map(x => x.name) : LEGACY_PULLS;
-}
 /**
  * The GPIO table.
  *
@@ -2580,16 +2583,36 @@ function gpioTable(pinsList) {
   const speeds = typeof gpioSpeeds === 'function' ? gpioSpeeds() : [];
   const speedIsChoice = typeof gpioSpeedIsChoice === 'function' ? gpioSpeedIsChoice() : speeds.length > 1;
   const speedOf = g => (typeof gpioSpeedFor === 'function' ? gpioSpeedFor(g.speed) : g.speed) || (speeds[0] || {}).name || '';
-  const MODES = gpioModeNames(), PULLS = gpioPullNames();
   const rows = pinsList.slice().sort(pinSort).map(pin => {
     const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
     const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
     const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
+
+    // Per ROW, from the data: the part's options for this column minus whatever the
+    // silicon forbids on this pin (app/engine/constraints.js). A mechanism that greyed
+    // a whole column while only some pins are affected would not solve the round's
+    // problem, so this is asked once per pin and answered once per pin.
+    //
+    // When every option is forbidden the control is ABSENT and the value is text - the
+    // same rule the one-speed column follows. Greying is for an option the part has and
+    // cannot use right now; it is never for an option this pin does not have.
+    const why = field => {
+      const notes = typeof gpioRowNotes === 'function' ? gpioRowNotes(pin, field) : [];
+      return notes.map(c => `${c.reason || c.id}${c.source ? ` (${c.source})` : ''}`).join(' ')
+        || `${gpioFieldLabel(field)} is fixed on this pin`;
+    };
+    const cell = (field, cur) => {
+      const opts = typeof gpioFieldOptions === 'function' ? gpioFieldOptions(pin, field) : gpioFieldOptionNames(field);
+      if (!opts.length) return `<td class="fixedval" title="${attr(why(field))}">${esc(cur || '\u2014')}</td>`;
+      const notes = typeof gpioRowNotes === 'function' ? gpioRowNotes(pin, field) : [];
+      const tip = notes.length ? ` title="${attr(notes.map(c => `${c.reason || c.id}${c.source ? ` (${c.source})` : ''}`).join(' '))}"` : '';
+      return `<td${tip}>${sel(opts, opts.includes(cur) ? cur : opts[0], field)}</td>`;
+    };
     const speedCell = !speeds.length ? ''
-      : speedIsChoice ? `<td>${sel(speeds.map(s => s.name), speedOf(g), 'speed')}</td>`
+      : speedIsChoice ? cell('speed', speedOf(g))
         : `<td class="fixedval" title="${attr(`${M.mcu.name} has one output speed${speeds[0].macro ? ` (${speeds[0].macro})` : ''}, so there is nothing to choose`)}">${esc(speedOf(g))}</td>`;
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
-      <td>${sel(MODES, MODES.includes(g.mode || defMode) ? (g.mode || defMode) : MODES[0], 'mode')}</td><td>${sel(PULLS, PULLS.includes(g.pull) ? g.pull : PULLS[0], 'pull')}</td>${speedCell}
+      ${cell('mode', g.mode || defMode)}${cell('pull', g.pull || (gpioFieldOptionNames('pull')[0] || 'No pull'))}${speedCell}
       <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';

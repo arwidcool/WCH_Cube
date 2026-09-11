@@ -87,11 +87,48 @@ against the shape, and if the shape is wrong say so in the same cycle rather tha
 
 ## Current
 
-**Opening round 5.** Round 4 closed with 468 green, all four firmware environments building, the
-generated-project gate green in the system temp directory, and `--strict` **failing** on a
-`codegen.nvic` comment and a parked `TIM_OCInitTypeDef` emitter (E1, E2).
+**Round 5, cycle 1 — deliverable A's three consumers are wired, to the DOCUMENTED schema.**
 
-Also inherited from round 4 and unaddressed: the constraint mechanism does not exist yet, so
-CH32X035's GPIO table offers **Pull-down on every row** when the part only supports it on
-PA0–PA15 and PC16–PC17, and offers a drive mode on shorted pairs that the datasheet prohibits.
-DATA posts the schema; you build the three consumers.
+`data/FORMAT.md` `## constraints` is the contract (AGENT-1 posted it 22:02Z) and
+`app/engine/constraints.js` is the only place it is interpreted. All three consumers read the
+same `constraintFor(pin, field, choice)`:
+
+- **the GPIO table** reduces the option list **per row** and puts the constraint's `reason` and
+  `source` in that row's tooltip — never a greyed column;
+- **the conflict engine** reports a violating claim as an issue carrying the author's reason and
+  the constraint id (`E.constraintIssues`, plus the owning peripheral's issue list);
+- **codegen** declines and emits the TODO the strict gate looks for.
+
+`normaliseGpioConstraints()` is called from `projectApply()`, so a `.wchproj` that violates a
+constraint opens with no console error and says what it dropped. **`gpioEffectiveMode()` is now
+shared** — the engine used to look only at what the user stored while the generator derives a
+mode for a peripheral's pin, which was one rule with two answers; it was moved, not copied, and
+the generated C is byte-identical to the baseline.
+
+Evidence: 510 tests ALL GREEN with no skips; `--strict` 0 on all four fixtures in both formats;
+all four fixtures' `.c`/`.h` byte-identical to the pre-change baseline; verified in browser at
+1280×720 and 1920×1080, light and dark, 100 % and 125 % zoom, no viewport overflow.
+
+**Two things I got wrong and the gates caught, both worth remembering:**
+
+1. My first consumer read a shape I invented (`gpio.constraints` with `field:`/`deny:`/`allow:`)
+   because DATA's post was 20 minutes old and I had not seen it. The documented shape was
+   already in `FORMAT.md` and already gated by `tests/constraints.test.js`. **Read the board and
+   the data document before designing a schema, not after** — the whole point of shape-first is
+   that the second mover does not re-design it.
+2. I had `only_on`/`not_on` inverted. `only_on` is an allow-list, so the refused region is the
+   **complement**; `not_on` is the exact deny-list. Inverted, it refused outputs on PA0 because
+   PA0 was not in a `not_on` list — a mechanism that looked like it worked and was exactly
+   backwards. QA's one-sided-check control ("an unshorted pin keeps the output mode") is what
+   caught it.
+
+**Next in my area, in order:** the USBFS/`classes: [out]` question I sent to AGENT-1
+(2026-09-12T01:22Z) — if it is unanswered for two of my cycles it becomes my call, and the
+least-invasive call is a `choices:`-based entry, which needs a DATA commit, not an APP one. Then
+deliverable B's remaining evidence: `--strict` is already 0 on every fixture and every part ×
+package, so what is left there is the tracked CH32X035 `params:` gaps arriving from DATA and
+being consumed without an engine change — and if one needs one, that is a finding. Then the
+`when: {peripheral}` shape is only used by two entries; a third consumer of it (a peripheral's
+own state making another pin illegal) is where a part with a different coupling would prove the
+mechanism was not built for one chip.
+

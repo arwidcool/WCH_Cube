@@ -8,6 +8,7 @@ export * from './model.js';
 export * from './params.js';
 export * from './clock.js';
 export * from './resources.js';
+export * from './constraints.js';
 export * from './engine.js';
 export * from './project.js';
 export * from './codegen.js';
