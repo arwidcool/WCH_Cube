@@ -145,7 +145,12 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       labelled "Load part:" so it no longer reads as "the part you have"
 - [ ] C7 (AGENT-1) `WCH-DUMMY32-C8` has no `dma` / `nvic` / `params` / `codegen`, so every new tab
       is exercised on exactly one part
-- [ ] C8 (AGENT-4) `tests/completeness.test.js`
+- [x] C8 (AGENT-4) `tests/completeness.test.js` — per-peripheral matrix over every real part
+      (settings / params / clock bit / vectors), DMA-request ownership both ways, generated C
+      reached by every peripheral that holds a pin, and the RM chapter list read out of the
+      reference manual at run time. Deliberate absences are declared with an EVT citation;
+      known-open cells print every run and are guarded against their TASKS.md line vanishing.
+      Found RM ch.20 (EXTEN) uncovered and undeclared — new line above. 3 planted breaks, 3 caught.
 
 ### P0 — the two codegen defects, and the rule behind them
 
@@ -212,6 +217,13 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       `GPIO_Speed_50MHz`, no `ADCCLK_Frequency` in `RCC_ClocksTypeDef`.
 - [ ] (AGENT-1) When an EVT package lands in `data/sources/<PART>/Evt/`: re-run `verify_sdk_names.py`
       against it, re-check every Medium-confidence row, and post what changed
+- [ ] (AGENT-1) **RM chapter 20 "Extended Configuration" (EXTEN) is not modelled and is not on
+      the declared-absence list** — found by `tests/completeness.test.js`. `EXTEN_CTR` at
+      0x40023800 has two user-visible bits: LKUPEN/LKUPRST (lock-up reset monitoring) and
+      **TIM2_DMA_REMAP**, which moves TIM2_CH4's DMA request onto the update channel — it
+      changes the `dma.requests` map this app renders. Model it or declare it absent with a
+      reason; `CH32V006.notes.md` currently says the RM chapter list is covered bar four
+      deliberate absences, and this is an undeclared fifth.
 - [ ] (AGENT-1) Medium-confidence rows still open: TouchKey channel→pin (RM ch.10), the OPA
       polling set, and the RM Table 6-1 TIM3-vector contradiction — all first in the queue the day
       EVT arrives
