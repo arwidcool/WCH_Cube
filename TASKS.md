@@ -317,6 +317,9 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [x] D8 (AGENT-1) RM chapter 20 "Extended Configuration" (EXTEN) on V006 — MODELLED, plus a new
       `dma.remaps` key: TIM2_DMA_REMAP moves TIM2_CH4's request from channel 7 to channel 2.
       AGENT-4: two ABSENT entries and a chapter-map line still needed in completeness.test.js
+- [ ] (AGENT-1) **CH32X035 extraction: `params:` for the peripherals that have none** — USBFS
+      and USBPD carry settings but no parameters yet; `tests/completeness.test.js` prints them
+      every run as tracked-open rather than failing.
 - [~] (AGENT-4) D9 `#m-open` / `#m-openproj` sweep — still open. `Taskfile.yml` **ADOPTED**:
       `task` 3.53.1 is installed, so the human'''s stub became the real runner — build, test,
       gate, validate, firmware, firmware:native, firmware:check, tauri, tauri:test, fixtures,
@@ -345,25 +348,35 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       mechanical drawing rather than assuming it is `LQFP64`
 - [ ] (AGENT-1) Ports **A/B/C only**, **24 bits wide** (`GPIO_Pin_0..23`), and **PC has a hole** —
       PC0–PC7 then PC14–PC19. Post the pin list on the board early; it unblocks ENGINE and UI.
-- [ ] (AGENT-1) `clock:` with **no HSE** — `grep -c HSE ch32x035_rcc.h` = 0. One 48 MHz RC, SYSCLK
+      — DONE: all seven packages diff to **0 differences** against the DS I/O column. Port C is
+      PC0-PC7, PC10-PC11, PC14-PC19 (TWO holes); A and B are contiguous, 24 and 22 pins. Posted.
+- [x] (AGENT-1) `clock:` with **no HSE** — `grep -c HSE ch32x035_rcc.h` = 0. One 48 MHz RC, SYSCLK
       48/24/16/12/8. No HSE branch "for symmetry", not even a disabled one. Post it early.
-- [ ] (AGENT-1) Remap schema: a **`macro:` per remap index** alongside `lsb`/`bits`, because this
+      — DONE. Also found: `RCC_CFGR0` has **no SW field at all**, and HCLK resets to SYSCLK/6.
+- [~] (AGENT-1) Remap schema: a **`macro:` per remap index** alongside `lsb`/`bits`, because this
       part's EVT exposes 40 named macros applied with `GPIO_PinRemapConfig`. Agree it with AGENT-2
       before filling 40 entries. Re-derive from RM AFIO_PCFR1 independently and diff.
-- [ ] (AGENT-1) Peripherals incl. four kinds this repo has never modelled: **USBFS** (host+device),
+- [~] (AGENT-1) SYS/RCC/DMA1/IWDG/WWDG/USBFS/USBPD landed; the rest wait on the Table 2-3 decode.
+      Peripherals incl. four kinds this repo has never modelled: **USBFS** (host+device),
       **USBPD** (Type-C source/sink/DRP), **PIOC**, **AWU** — plus 4×USART, TIM1/2/3, SPI1, I2C1,
       ADC1, 2×OPA, 3×CMP, PWR, FLASH, EXTI, IWDG, WWDG. No "Activated" stubs.
-- [ ] (AGENT-1) `dma:` with **8 channels**; `nvic:` with **47 vectors** and the three **grouped**
-      EXTI vectors covering 26 lines; PFIC priority scheme read for the **V4C**, not assumed from
-      the V2A
-- [ ] (AGENT-1) `codegen:` — header `ch32x035.h`, `RCC_APB2PeriphClockCmd` / `RCC_APB2Periph_GPIO$PORT`,
-      domains **AHB/APB1/APB2**, one speed `GPIO_Speed_50MHz`
+- [~] (AGENT-1) `dma:` with **8 channels**; `nvic:` with ~~47~~ **45 vectors** and the three
+      **grouped** EXTI vectors covering 26 lines; PFIC priority scheme read for the **V4C**, not
+      assumed from the V2A — NVIC scheme DONE (V4C has **three** priority bits at [7:5], not the
+      V2A's two, so 8 levels not 4). Vector COUNT is **45**, not 47: `IRQn_Type` and the startup
+      `.word` table agree on every one, and there is **no RCC vector**. 20 of 45 emitted; the rest
+      arrive with their peripherals. `dma:` still to do.
+- [x] (AGENT-1) `codegen:` — header `ch32x035.h`, `RCC_APB2PeriphClockCmd` / `RCC_APB2Periph_GPIO$PORT`,
+      domains **AHB/APB1/APB2**, one speed `GPIO_Speed_50MHz` — DONE, plus `codegen.rcc`. Found:
+      **no open-drain modes on this part** (6 members of GPIOMode_TypeDef, not 8).
 - [ ] (AGENT-1) `params:` with `struct:`/`field:`/`sdk_call` for every peripheral landed;
       `pio_board`/`pio_env` per variant, omitted rather than approximated where no board ships
-- [ ] (AGENT-1) `verify_sdk_names.py` prefers `data/sources/<PART>/Evt/` over the PlatformIO package
-      and **says which headers it used**; both parts 0 errors
-- [ ] (AGENT-1) `CH32X035.notes.md` cites a DS/RM table or an EVT `file:line` per fact, and records
-      the EVT/DS TouchKey disagreement (DS says 14 channels; EVT ships no tkey header)
+- [x] (AGENT-1) `verify_sdk_names.py` prefers `data/sources/<PART>/Evt/` over the PlatformIO package
+      and **says which headers it used**; both parts 0 errors — already built that way in round 3;
+      confirmed reporting "checked against EVT data/sources/X035/Evt (97 files)".
+- [x] (AGENT-1) `CH32X035.notes.md` cites a DS/RM table or an EVT `file:line` per fact, and records
+      the EVT/DS TouchKey disagreement (DS says 14 channels; EVT ships no tkey header) — DONE,
+      including every open question rather than a guess for it.
 - [ ] (AGENT-2) 24-bit pin masks — hunt `uint16_t`, `0xFFFF`, 4-digit hex, implied-16 shifts
 - [ ] (AGENT-2) Never iterate a port 0..N — PC is not contiguous
 - [ ] (AGENT-2) A part with **no HSE**: `clockCalc().selectable` from the data, the HSE auto-enable
