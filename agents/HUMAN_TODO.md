@@ -27,3 +27,47 @@
      (`AFIO_TypeDef`, line 197). No YAML change needed. **Items 2 and 4 have also moved**: `cargo 1.98.1`
      is on PATH, and the CH32X035 DS + RM have landed in `data/sources/X035/Datasheets/`.
      Two defects the same source *did* find are on the board and in `PROGRESS.md` §6.
+
+---
+
+6. **Flash one generated project.** ← *the only thing in this repository that
+   cannot be done without you, and the highest-value item on this list.*
+
+   **Every green result in this project is a compile.** Nothing here has ever
+   been flashed or run on silicon. `pio run` exits 0 for four configurations
+   across two MCU families, the generated C links, and `SystemCoreClock` is
+   computed rather than measured. We do not know that a single one of these
+   configurations produces a chip that starts.
+
+   If you have **any CH32V006, CH32V005 or CH32X035 board and a WCH-Link**, this
+   is now a five-minute job, and it is the easiest thing this project has ever
+   asked of you — the generated project exists precisely so that it is:
+
+   ```
+   # 1. In the app: pick your part and package, assign at least one pin as
+   #    Output Push Pull (the banner will name it), then
+   #    Project Manager -> GENERATE PROJECT.
+   # 2. Open the folder it wrote:
+   cd <the folder>
+   pio run                 # should already be green — this is what CI proves
+   pio run -t upload       # <- THE NEW INFORMATION. Needs the WCH-Link attached.
+   pio device monitor      # printf goes over the WCH-Link SDI channel, no pin used
+   ```
+
+   **What to send back**, whichever way it goes — a failure here is worth as much
+   as a success, and arguably more:
+
+   - the text of the SDI banner (it prints the part, the package, the SYSCLK the
+     configuration asked for, and `SystemCoreClock` read back after init);
+   - whether the pin you configured as an output actually toggles;
+   - if it does not start at all, the output of `pio run -t upload` verbatim.
+
+   **The banner deliberately prints two clock numbers and they may differ.** That
+   is expected, not a bug: the board file's `SYSCLK_FREQ_*` macro is applied by
+   `SystemInit()` before `main()` runs, and the generated `WCHCube_RCC_Init()`
+   then overrides it. A project configured for 24 MHz boots at 48 and drops to
+   24. CubeMX behaves the same way. Seeing the two numbers is the point.
+
+   Result goes in `tests/evidence/round4/` and would be **the first hardware
+   result this project has**. Until it happens, the round-4 DONE line reads
+   "builds, not flashed", in exactly those words, and nobody may round that up.
