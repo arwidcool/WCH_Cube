@@ -110,11 +110,18 @@ anything else.** Where EVT and the RM disagree, EVT describes what the SDK will
 compile and the RM describes what the silicon does — record the contradiction, do
 not average it.
 
-Until the EVT drop arrives, the same authority is carried by the SDK PlatformIO
-already installs, `~/.platformio/packages/framework-wch-noneos-sdk`, which is a
-packaged copy of the same vendor code. That is where the `codegen:` defects
-recorded in `../../PROGRESS.md` were found. It is not a substitute: it lags the
-vendor's own releases and does not cover every part.
+**Both EVT packages have now landed** — `data/sources/V006/Evt/` (988 files) and
+`data/sources/X035/Evt/` (2 239 files), each with `EXAM/SRC/Peripheral/{inc,src}`
+and a worked example per peripheral. Anything that needs a NAME is checked
+against those, and `tools/verify_sdk_names.py` does it mechanically.
+
+The SDK PlatformIO installs, `~/.platformio/packages/framework-wch-noneos-sdk`,
+is what the build actually LINKS against, and it is a packaged copy of the same
+vendor code — but it is not the same bytes and it is not the authority. The V006
+drop carries StdPeriph sub-version `0x05` against the package's `0x04` and
+supersedes two macro values (`GPIO_Remap_LSI_CAL` `0x00200080` → `0x001A3000`,
+`FLASH_FLAG_OPTERR` `0x00000001` → `0x80000001`). Where they differ, the drop
+wins for what a name IS; the package decides what compiles today.
 
 **Nothing is assumed that these sources do not support.** Not an API, not a
 peripheral, not a register behaviour, not a startup detail. The concrete cost of

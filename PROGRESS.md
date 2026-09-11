@@ -3,28 +3,34 @@
 The ongoing source of truth for where this project stands. Keep it current: if a
 statement here stops being true, change it here first.
 
-- **Last updated:** 2026-09-11T14:36Z
+- **Last updated:** 2026-09-11T17:12Z (round 4)
 - **Branch:** `main` (no remote)
 - **Verified this pass:** `python build.py` → OK · `pio run` in `data/firmware`
   → **4 of 4 environments build** (drop zone empty) · `pio check` → **no
-  defects** · `node tests/run.js` → **the compile gate's 8 checks green**;
-  the full run has 2 red lines belonging to work in flight in `app/` (§6).
-- **New this pass, and the point of the round:** generated C from a
-  configuration **with pins, remaps and params assigned** now compiles and links
-  for CH32V006 TSSOP20, CH32V006 QFN32 and CH32V005 TSSOP20. Section 7's
-  "generated C is NOT yet known to compile in general" no longer holds for GPIO,
-  AFIO and RCC — see §7 for what it still does not cover.
+  defects** · `pio test -e native` → **10/10 host unit tests** · `cargo test` in
+  `src-tauri` → **7/7** · `node tests/run.js` → **413 green, 9 skipped** (the
+  nine are round 4's generated-project gate, waiting on `projectFiles()`).
+- **New this pass, and the point of the round: a SECOND FAMILY compiles.**
+  CH32X035's generated C builds for `CH32X035G8U6` through the same gate as the
+  three CH32V00x fixtures, and the fixture that produces it contains no
+  part-specific code — the data decides that the clock enable is
+  `RCC_APB2PeriphClockCmd` rather than `RCC_PB2PeriphClockCmd` and that the one
+  GPIO speed is 50 MHz rather than 30. `tests/no_part_names.test.js` holds that
+  line: `app/engine/` and `app/template.html` name no part outside comments.
+- **Not yet true, and the words matter:** nothing here has been **flashed**.
+  Every green result in this repository is a compile. See §6 and `HUMAN_TODO` 6.
 
 Related documents, none of which this file duplicates:
 
 | Read this | For |
 |---|---|
 | `TASKS.md` | the backlog, claimed and unclaimed |
-| `Agents Rounds 3/00_PROJECT.md` | **the current round brief** and its definition of done |
-| `Agents Rounds 3/AGENT_n_*.md` | the four agents' standing instructions |
-| `Agents Rounds 3/BOARD.md` | the current message board — decisions, handoffs, QA results |
-| `Agents Rounds 3/WALKTHROUGH.md` | the round-3 acceptance script: configuration → C → a binary |
-| `Agents Rounds 2/*` | round 2, whose P0s are not finished and carry over as C1–C8 |
+| `Agents Rounds 4/00_PROJECT.md` | **the current round brief** and its definition of done |
+| `Agents Rounds 4/AGENT_n_*.md` | the four agents' standing instructions |
+| `Agents Rounds 4/BOARD.md` | the current message board — decisions, handoffs, QA results |
+| `Agents Rounds 4/WALKTHROUGH.md` | the round-4 acceptance script: a second family, and a folder you can flash |
+| `Agents Rounds 3/*` | round 3, whose open lines carry over as D1–D9 |
+| `Agents Rounds 2/*` | round 2 |
 | `agents/README.md` | the working agreement: ownership, cycle, rules |
 | `agents/HUMAN_TODO.md` | things only the human can do |
 | `data/FORMAT.md` | the MCU YAML schema — the DATA↔ENGINE contract |
@@ -134,22 +140,34 @@ held shut by a test that compiles.**
 
 ## 3. Current work
 
-**Round 3 — "the generated code is the product"** is open. Brief and per-agent instructions in
-`Agents Rounds 3/`; launcher `Agents Rounds 3/run_round3.ps1`. Round 2 is **not** finished, and its
-open P0s carry over as C1–C8 and outrank everything in round 3.
+**Round 4 — "a second family, and a project you can flash"** is open. Brief and per-agent
+instructions in `Agents Rounds 4/`; launcher `Agents Rounds 4/run_round4.ps1`. Round 3's open lines
+carry over as D1–D9 and come first.
 
-The round's rule: **a name nobody compiled is a guess.** `data/firmware/` builds the generated C for
-real silicon, so "generated C compiles" is a gate rather than an aspiration — which is what surfaced
-the two defects in §6.
+Two deliverables, and they prove each other:
 
-| Agent | Round 3, in order |
+**A. CH32X035 end to end.** Everything in `data/mcus/` today is one family — CH32V005 is CH32V006
+with things removed, and the dummy part was built to look like them. CH32X035 is a different shape
+in nine confirmed ways (no HSE at all, 24-bit ports, a port with a hole, remaps as named SDK macros,
+AHB/APB1/APB2 domains, 8 DMA channels, 47 vectors with grouped EXTI, four USARTs, USB + USB-PD +
+PIOC + AWU). Each one is a place where the repo either reads the MCU file or has a CH32V006
+assumption baked in, **and today nobody knows which.** The real deliverable is the proof that adding
+a part is a data job.
+
+**B. "Generate PlatformIO project".** The app emits a complete standalone folder — `platformio.ini`,
+`src/main.c`, the generated init, a README — that a user opens in VS Code and flashes. Today they
+can generate `wchcube_init.c` and still be several manual steps from a running board.
+
+**Both EVT packages have landed** — `data/sources/V006/Evt/` (988 files) and `data/sources/X035/Evt/`
+(2 239 files) — so every "until the EVT package arrives" sentence in this repo is stale, this one
+included once AGENT-4 sweeps them.
+
+| Agent | Round 4, in order |
 |---|---|
-| DATA | Fix `codegen.header` and `codegen.speeds` on CH32V006; add a GPIO-speed capability key so the UI can stop offering a choice the silicon lacks; build `tools/verify_sdk_names.py` so no SPL name reaches a build unchecked. Then C7 (the dummy part has no `dma`/`nvic`/`params`/`codegen`), `struct:`/`field:` on `params:`, then `CH32X035.yaml`. |
-| ENGINE | C4 (`mcu.remove` ordering) and C5 (`setSetting` on a `checkboxes` setting). Then configuration reaching the C: `params:` → init structs, DMA → `DMA_InitTypeDef`, NVIC → vectors, byte-identical regeneration, and `--pio` / `--strict` on the CLI. |
-| UI | C1 (the 8 legibility findings), C6 (stale selectors), C2/C3 (DMA and NVIC Settings tabs). Then the round's feature: the **Project Manager tab** — project info, toolchain, generator options, and a read-only preview of the generated text before the user takes it. |
-| QA | ~~The compile gate~~ **done** — `tests/codegen_compile.test.js`, three part/package/environment combinations, fixtures that assign pins, planted-break tested. ~~`src-tauri` compiled locally~~ **done**. Next: C8 (`completeness.test.js`), `legibility.test.js`, the round-2 walkthrough re-run, a round-3 walkthrough section, and the fixtures grown to DMA and NVIC as AGENT-2 lands them. |
-
----
+| DATA | The bulk of A. Extract CH32X035 with a **parser** (the DS markdown is mangled — rows split across lines, seven package columns merged into single cells) and diff it with a second pass. 8 variants, 7 packages, `QSOP28` geometry, `LQFP64M` resolved. Post the `clock:` block (no HSE), the `pins:` block (24-bit, PC has a hole) and the remap `macro:` schema **early** — each unblocks someone else. Then D8. |
+| ENGINE | D1–D3 first (they block AGENT-3). Then make the engine genuinely generic: 24-bit masks, no port iterated 0..N, a part with no HSE that neither throws nor renders a placeholder, remaps as `GPIO_PinRemapConfig` where the data gives a macro, grouped NVIC vectors. Then B's generator: the whole project file set, `platformio.ini` from `pio_board`, an honest `main.c`, a CLI flag, and a ZIP writer for the browser. |
+| UI | D4. Then the clock tab on a part with no HSE — no box, no mux entry, no greyed placeholder — with CH32V006 unchanged. Seven packages incl. LQFP64 at 60 I/O. DMA sized from the data at 8 channels, NVIC showing three grouped EXTI rows not twenty-six. Then B's button: Generate PlatformIO project, previewing every file, refusing by name where no board exists. |
+| QA | D5–D7, D9. Then `tests/generated_project.test.js` — generate a whole project to a scratch dir and `pio run` it standalone. Extend every suite to CH32X035 × 7 packages without costing CH32V006 anything, add `tests/no_part_names.test.js`, sweep the stale EVT language, and put a specific flash request to the human. |
 
 ## 4. Remaining work
 
@@ -185,9 +203,15 @@ Ordered by what blocks the most.
 |---|---|---|---|---|
 | CH32V006 | DS v2.0 + RM v1.4, `data/sources/V006/Datasheets/` | complete | `CH32V006F8P6`, `CH32V006K8U6` | the reference part. 7 packages, 18 peripherals, 29 vectors, 23 DMA requests |
 | CH32V005 | same RM (family) | `inherits: CH32V006` | `CH32V005F6P6` | drops TKEY, TIM3, QFN32 |
-| CH32X035 | DS + RM, `data/sources/X035/Datasheets/` | **none** | `CH32X035G8U6` | builds; the configurator knows nothing about it |
+| CH32X035 | DS v2.2 + RM, `data/sources/X035/Datasheets/` + **EVT, 2 239 files** | **landed, in progress** | `CH32X035G8U6` | the second family. 7 packages, 8 variants, all packages draw with 0 conflicts; generated C **compiles**. Extraction is not finished — 7 peripherals so far, and `gpio.modes` still claims two open-drain modes this part does not have (§6) |
 | WCH-DUMMY32-C8 | n/a — synthetic | complete | n/a | layout/scale fixture, QFN12 → LQFP144 |
 | CH32V003, V203, V307 | none | none | none | waiting on sources |
+
+**Both EVT packages have landed** — `data/sources/V006/Evt/` (988 files) and
+`data/sources/X035/Evt/` (2 239 files). Every "until the EVT package arrives"
+sentence in this repository is stale; the ones in `PROGRESS.md`,
+`data/firmware/ARCHITECTURE.md` and `data/firmware/README.md` are corrected,
+and `data/sources/README.md` is AGENT-1's.
 
 **EVT packages: BOTH HAVE LANDED.** `data/sources/V006/Evt/` and
 `data/sources/X035/Evt/` are populated — 84 MB, ~3 200 files, `EXAM/` + `PUB/`
@@ -287,6 +311,30 @@ declares `void RCC_PB2PeriphClockCmd(uint32_t, FunctionalState)` (line 157) and
 `RCC_PB2Periph_GPIOA..GPIOD` (lines 89–92) and `RCC_PB2Periph_AFIO` (line 88).
 `AFIO->PCFR1` is also confirmed (`AFIO_TypeDef`, line 197). No YAML change needed;
 the assumption note in `CH32V006.notes.md` can be marked confirmed.
+
+### Open — CH32X035, found by the gates this round
+
+- **`gpio.modes` claims two modes this silicon does not have.**
+  `GPIOMode_TypeDef` in `data/sources/X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035_gpio.h:29-37`
+  has **six** members and no open-drain at all, yet `data/mcus/CH32X035.yaml`
+  lines 686 and 688 carry `GPIO_Mode_Out_OD` and `GPIO_Mode_AF_OD` — the CH32V006
+  list copied across. `verify_sdk_names.py` fails on it, so **`task validate` is
+  currently red, correctly.** Generated C naming either would not compile. This is
+  round 3's `GPIO_Speed_50MHz` defect one field over.
+- **`codegen.periph_handle.USBFS: USBFS_DEVICE` does not exist** — 0 occurrences
+  in the X035 EVT tree. The real names are `USBFSD` (device) and `USBFSH` (host),
+  two separate `*_TypeDef`s, plus `USBFS_BASE` and `USBFS_IRQn`.
+- **The GPIO table's mode list is hardcoded in the UI.** `app/template.html:2434`
+  has `const MODES = [...]` including both open-drain entries, while the engine
+  reads them from the data (`gpioModes()`). So even once the data is fixed, the
+  table would still offer them. Round 3 made the SPEED column data-driven and left
+  the mode list directly underneath it behind.
+- **`GPIO_Mode_IPD` is per-pin on this part** — the header comments it "Only
+  PA0--PA15 and PC16--PC17 support input pull-down". Nothing in the model can
+  express a mode that only some pins have.
+- **Three variants have no `pio_board`** and so cannot produce a generated
+  project: `CH32V006F4U6`, `CH32V006D8U7`, `CH32X035D8U6`. The refusal is correct
+  — F4U6 is 16 KB of flash against F8U6's 62 KB, so the nearest board would lie.
 
 ### Open, from the board
 
@@ -397,6 +445,7 @@ the source in `src/`, and builds:
 | `CH32V006_TSSOP20_full.wchproj` | CH32V006 TSSOP20 | `CH32V006F8P6` | **compiles and links** |
 | `CH32V006_QFN32_full.wchproj` | CH32V006 QFN32 | `CH32V006K8U6` | **compiles and links** |
 | `CH32V005_TSSOP20_full.wchproj` | CH32V005 TSSOP20 | `CH32V005F6P6` | **compiles and links** |
+| `CH32X035_QFN28_full.wchproj` | CH32X035 QFN28 | `CH32X035G8U6` | **compiles and links** |
 
 These fixtures **assign pins**. Between them: ports A/C/D and A/B/C/D, non-default
 USART1 and SPI1 remaps, an HSE crystal, a PWM output, an ADC channel, a labelled
@@ -413,6 +462,11 @@ code compiles and links against the real WCH SPL for the right part — verified
 with `-DCH32V006` actually reaching the compiler, because `ch32v00X.h` picks the
 part in a `#if !defined(...)` block whose first branch is CH32V002, and
 everything would otherwise still compile, as a different chip.
+
+*Does:* the same for **CH32X035**, a second family, through the same gate and the
+same fixture generator, with no part-specific code anywhere in `app/`. That is
+the round-4 thesis — adding a part is a data job — as a green line rather than an
+argument.
 
 *Does not:* nothing has been **flashed or run**. The gate is a build-time claim.
 It covers GPIO, AFIO and RCC only — `params:` are carried in the fixtures but

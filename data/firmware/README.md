@@ -40,7 +40,7 @@ pio check                            # cppcheck over src/, lib/ and include/
 | `CH32V006F8P6` | `genericCH32V006F8P6` | CH32V006 TSSOP20 | default; matches `data/mcus/CH32V006.yaml`'s own `default_package` |
 | `CH32V006K8U6` | `genericCH32V006K8U6` | CH32V006 QFN32   | the widest V006 pinout |
 | `CH32V005F6P6` | `genericCH32V005F6P6` | CH32V005 TSSOP20 | `data/mcus/CH32V005.yaml` (inherits CH32V006) |
-| `CH32X035G8U6` | `genericCH32X035G8U6` | CH32X035        | **no configurator data yet** — builds, but nothing can be generated for it |
+| `CH32X035G8U6` | `genericCH32X035G8U6` | CH32X035        | the second family. `data/mcus/CH32X035.yaml` landed in round 4 and its generated C compiles — `tests/codegen_compile.test.js` |
 
 Flash size, RAM size, core, `-march`/`-mabi` and the 48 MHz HSI+PLL clock setup
 all come from the platform's board JSON. This project does not restate them.
