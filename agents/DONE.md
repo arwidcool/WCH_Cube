@@ -530,6 +530,22 @@ runs.** A line whose evidence is a sentence in a board entry is not ticked.
         pointers.
 - [ ] `WALKTHROUGH.md` run end to end, with the QA-PASS line posted including what failed
       (AGENT-3)
+      → **Run 2026-09-11T23:04Z, QA-PASS posted with the failures named, and deliberately NOT
+        ticked: two steps did not run.** §1, §2, §3 and §4 ran; §1's constraint behaviour was
+        measured in a real browser (Pull-down absent on `PC0` and present on `PA3` — both halves;
+        the shorted pair refused with the warning naming the constraint id and its DS source; the
+        console silent), all five fixtures exit 0 on `--strict`, and the generated CH32X035 project
+        builds. **Two steps remain.** (a) **Step 18, the 1280/1920 × 100 %/125 % × light/dark grid,
+        could not be produced here at all** — the VS Code integrated browser reports a fixed 550 px
+        layout viewport, and `body { zoom: 1.25 }` is not browser zoom (it truncates a
+        viewport-fitted layout and gives a screenshot that looks broken for a reason that does not
+        exist, so both captures were discarded). `tests/legibility.test.js` covers that grid in a
+        real browser by its own harness and is green, but this line says "run end to end" and it
+        was not. (b) **Step 19, the Generate path in the browser, was not re-run** this pass; the
+        desktop half is E8 and is still unverified. Whoever has Edge or Chrome open on the desktop
+        can close both in five minutes. Evidence:
+        `tests/evidence/round5/2026-09-11-constraints-browser.md`, which also states plainly what it
+        does not establish.
 - [ ] The round-1 section at the top of this file is re-audited against the tree, or explicitly
       superseded — it must not keep claiming a status nobody has checked  (AGENT-3)
 
