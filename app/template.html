@@ -2462,8 +2462,35 @@ document.getElementById('cbody').addEventListener('change', e => {
   renderAll();
 });
 
-const MODES = ['Input', 'Output Push Pull', 'Output Open Drain', 'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
-const PULLS = ['No pull', 'Pull-up', 'Pull-down'];
+/**
+ * The GPIO table's mode and pull lists, from the MCU file.
+ *
+ * These were two hardcoded arrays, and AGENT-4 was right that the comment above them made
+ * it worse rather than better: round 3 made the SPEED column data-driven and wrote the
+ * reasoning out directly above the mode list it left behind. `GPIOMode_TypeDef` is per
+ * family exactly as `GPIOSpeed_TypeDef` is - CH32X035's has six members and **neither
+ * open-drain mode among them** (`ch32x035_gpio.h:29-37`) - so a hardcoded list offers two
+ * modes that part cannot express and generates macros that compile nowhere.
+ *
+ * `Input` is prepended rather than listed in `gpio.modes` because the SPL folds the pull
+ * setting into the mode: there is no single "input" macro, and which of
+ * `GPIO_Mode_IN_FLOATING` / `_IPU` / `_IPD` applies is decided by the PULL column. That is
+ * why `gpio.input_modes` is keyed by pull name, and why the pull list comes from it.
+ *
+ * A part whose file says nothing keeps the old lists, so no part regresses while its data
+ * is being written - and the Tools tab names that fallback as a gap.
+ */
+const LEGACY_MODES = ['Input', 'Output Push Pull', 'Output Open Drain',
+  'Alternate Function Push Pull', 'Alternate Function Open Drain', 'Analog'];
+const LEGACY_PULLS = ['No pull', 'Pull-up', 'Pull-down'];
+function gpioModeNames() {
+  const m = typeof gpioModes === 'function' ? gpioModes() : [];
+  return m.length ? ['Input', ...m.map(x => x.name)] : LEGACY_MODES;
+}
+function gpioPullNames() {
+  const p = typeof gpioInputModes === 'function' ? gpioInputModes() : [];
+  return p.length ? p.map(x => x.name) : LEGACY_PULLS;
+}
 /**
  * The GPIO table.
  *
@@ -2483,6 +2510,7 @@ function gpioTable(pinsList) {
   const speeds = typeof gpioSpeeds === 'function' ? gpioSpeeds() : [];
   const speedIsChoice = typeof gpioSpeedIsChoice === 'function' ? gpioSpeedIsChoice() : speeds.length > 1;
   const speedOf = g => (typeof gpioSpeedFor === 'function' ? gpioSpeedFor(g.speed) : g.speed) || (speeds[0] || {}).name || '';
+  const MODES = gpioModeNames(), PULLS = gpioPullNames();
   const rows = pinsList.slice().sort(pinSort).map(pin => {
     const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
     const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
@@ -2491,7 +2519,7 @@ function gpioTable(pinsList) {
       : speedIsChoice ? `<td>${sel(speeds.map(s => s.name), speedOf(g), 'speed')}</td>`
         : `<td class="fixedval" title="${attr(`${M.mcu.name} has one output speed${speeds[0].macro ? ` (${speeds[0].macro})` : ''}, so there is nothing to choose`)}">${esc(speedOf(g))}</td>`;
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
-      <td>${sel(MODES, g.mode || defMode, 'mode')}</td><td>${sel(PULLS, g.pull || 'No pull', 'pull')}</td>${speedCell}
+      <td>${sel(MODES, MODES.includes(g.mode || defMode) ? (g.mode || defMode) : MODES[0], 'mode')}</td><td>${sel(PULLS, PULLS.includes(g.pull) ? g.pull : PULLS[0], 'pull')}</td>${speedCell}
       <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';
