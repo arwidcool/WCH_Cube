@@ -19,8 +19,9 @@ import {
   M, S, canon, pinExists, pinLabel, pinNum, groupOf, sigName,
   requiredSignals, isEnabled, isAvailable, neutralChoice,
 } from './model.js';
-import { record } from './history.js';
+import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
+import { hseFeedsSysclk } from './clock.js';
 
 export let E = null;
 
@@ -201,12 +202,88 @@ export function setGpioField(pin, key, value) {
 export const userLabel = pin => ((S.gpio[pin] || {}).label || '').trim();
 export const pinModified = pin => !!(E && E.pins[canon(pin)]) || !!userLabel(pin);
 
-// Clock tab: { sys, hse, pllIn, pllMul, pre: { HB: 2 } } — partial, merged in.
+/**
+ * The RCC setting that switches the external crystal on, read from the data:
+ * `clock.hse_peripheral` / `clock.hse_setting` / `clock.hse_signals`. A file
+ * that carries none of them still works — the peripheral called RCC, and the
+ * setting whose choices claim the crystal pins (or whose name says HSE).
+ * Nothing here knows that those pins are usually called XI and XO: the dummy
+ * part names them OSC_IN/OSC_OUT on purpose.
+ * Returns { pid, setting, crystal, neutral, signals } or null.
+ */
+export function hseSetting(m = M) {
+  const c = m.clock || {};
+  const pid = c.hse_peripheral || 'RCC';
+  const P = (m.peripherals || {})[pid];
+  if (!P || !P.settings) return null;
+  const want = c.hse_signals || ['XI', 'XO'];
+  const carries = ch => want.every(sig => (ch.signals || []).includes(sig));
+  const s = (c.hse_setting && P.settings.find(x => x.name === c.hse_setting))
+    || P.settings.find(x => x.choices.some(carries))
+    || P.settings.find(x => /\bHSE\b/i.test(x.name));
+  if (!s) return null;
+  // the crystal choice claims every HSE signal; BYPASS claims only the input
+  const crystal = s.choices.find(carries);
+  if (!crystal) return null;
+  return { pid, setting: s.name, crystal: crystal.name, neutral: neutralChoice(s).name, signals: want };
+}
+
+/**
+ * Clock tab: { sys, hse, pllIn, pllMul, pre: { HB: 2 } } — partial, merged in.
+ *
+ * Every source the MCU file lists is always accepted: the muxes are never
+ * gated on RCC state, which is the whole point of the round-2 P0. Picking HSE
+ * (directly, or as the PLL input feeding SYSCLK) turns the crystal on in RCC
+ * the way CubeMX does, as ONE undo step with the clock change. Switching back
+ * to HSI deliberately leaves the crystal on — that is the user's setting now.
+ *
+ * Returns what else changed, for the toast: { hse: { pid, setting, choice, pins } } or {}.
+ */
 export function setClock(patch) {
-  record('Clock');
+  if (!M.clock) throw new Error('this MCU file has no clock: block');
+  const c = M.clock;
+  const bad = (k, v, allowed) =>
+    new Error(`setClock: ${k} "${v}" is not offered by ${M.mcu.name} (has ${allowed.join(', ')})`);
   for (const [k, v] of Object.entries(patch)) {
-    if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+    if (k === 'sys') {
+      if (!c.sysclk.sources.includes(v)) throw bad('sys', v, c.sysclk.sources);
+    } else if (k === 'pllIn') {
+      const inputs = (c.pll || {}).inputs || [];
+      if (!inputs[v]) throw bad('pllIn', v, inputs.map((i, n) => `${n}=${i.name}`));
+    } else if (k === 'pllMul') {
+      const muls = (c.pll || {}).multipliers || [];
+      if (!muls.some(m => String(m) === String(v))) throw bad('pllMul', v, muls.map(String));
+    } else if (k === 'hse') {
+      // out of the datasheet range is ALLOWED and shows red — only nonsense is refused
+      if (!Number.isFinite(v) || v <= 0) throw new Error(`setClock: hse must be a positive number, got ${v}`);
+    } else if (k === 'pre') {
+      for (const [name, val] of Object.entries(v)) {
+        const pre = (c.prescalers || {})[name];
+        if (!pre) throw bad('prescaler', name, Object.keys(c.prescalers || {}));
+        if (!pre.options.some(o => String(o) === String(val))) throw bad(`pre.${name}`, val, pre.options.map(String));
+      }
+    } else {
+      throw new Error(`setClock: unknown field "${k}"`);
+    }
   }
+
+  const changed = {};
+  batch('Clock', () => {
+    for (const [k, v] of Object.entries(patch)) {
+      if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+    }
+    if (!hseFeedsSysclk()) return;
+    const h = hseSetting();
+    if (!h || S.periph[h.pid].settings[h.setting] !== h.neutral) return;   // already the user's choice: leave it
+    setSetting(h.pid, h.setting, h.crystal);
+    const r = (M.peripherals[h.pid].remaps || [])[S.periph[h.pid].remap] || { pins: {} };
+    changed.hse = {
+      pid: h.pid, setting: h.setting, choice: h.crystal,
+      pins: h.signals.map(sig => r.pins[sig]).filter(Boolean),
+      signals: h.signals,
+    };
+  });
+  return changed;
 }
 
 // selectPeripheral() stays in the UI: it re-renders, and the engine never touches
