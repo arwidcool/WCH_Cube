@@ -429,8 +429,19 @@ function rccSection() {
     }
     L.push(`    ${rcc.register} = (${rcc.register} & ~${hex(rcc.mask)}) | ${hex(rcc.value)};`);
     L.push('');
-    L.push('    /* NOTE: this writes the mux and prescaler fields only. Starting HSE or the');
-    L.push('       PLL and waiting for them to lock is the SDK SystemInit()\'s job. */');
+    // Name what THIS part has to start, not what CH32V006 has. A source the data marks
+    // `fixed: true` runs from reset and needs no start-up; the rest do. A part with none
+    // - CH32X035 has no HSE at all - must not be told about an oscillator it lacks.
+    const starts = Object.entries(M.clock.sources || {})
+      .filter(([, v]) => v && !v.fixed).map(([n]) => n);
+    if (M.clock.pll) starts.push('the PLL');
+    if (starts.length) {
+      L.push(`    /* NOTE: this writes the mux and prescaler fields only. Starting ${starts.join(' and ')}`);
+      L.push('       and waiting for it to lock is the SDK SystemInit()\'s job. */');
+    } else {
+      L.push('    /* NOTE: this writes the mux and prescaler fields only. Every clock source on');
+      L.push('       this part runs from reset, so there is nothing to start or wait for. */');
+    }
   } else {
     L.push('    /* TODO: the MCU file has no codegen.rcc block, so the register word cannot');
     L.push('       be computed. The settings above are what the configuration asks for. */');

@@ -8809,9 +8809,28 @@ function previewAssign(pin, opt) {
   return '';
 }
 
+/**
+ * A pin has to exist on the CURRENT package before anything may be written about it.
+ * Without this the writers accepted a name the part does not have and stored it: on
+ * CH32X035 `assignSignal('PC8', …)` silently put a pin the datasheet never names into
+ * S, where compute() ignored it, the plan never mentioned it, and `.wchproj` saved it
+ * for ever. That port runs PC0-PC7, PC10-PC11, PC14-PC19 - iterate the pins the data
+ * lists, never a range, and refuse the gaps by name (round 4, P0b item 5).
+ */
+function requirePin(pin, what) {
+  if (pinExists(pin)) return;
+  const port = /^P([A-Z])/.exec(String(pin));
+  const siblings = port
+    ? Object.keys(M.pins).filter(p => p.startsWith(`P${port[1]}`) && pinExists(p))
+    : [];
+  throw new Error(`Cannot ${what} "${pin}": ${M.mcu.name} ${S.pkg} has no such pin`
+    + (siblings.length ? `. Port ${port[1]} here is ${siblings.join(', ')}` : ''));
+}
+
 // Assign an option from the pin picker: either a plain GPIO mode, or a
 // peripheral signal (which also selects the remap that routes it to this pin).
 function assignSignal(pin, opt) {
+  requirePin(pin, 'assign a signal to');
   record(`${opt.gpio || sigName(opt.periph, opt.signal)} on ${pinLabel(pin)}`);
   if (opt.gpio) {
     for (const n of groupOf(pin)) delete S.manual[n];
@@ -8842,6 +8861,7 @@ function assignSignal(pin, opt) {
 // Put a pin back to its reset state: drop the manual GPIO and switch off
 // whichever peripheral choices were driving it.
 function resetPin(pin) {
+  requirePin(pin, 'reset');
   record(`Reset ${pinLabel(pin)}`);
   const cl = ((E && E.pins[canon(pin)]) || {}).claims || [];
   for (const n of groupOf(pin)) { delete S.manual[n]; delete S.gpio[n]; }
@@ -8910,6 +8930,7 @@ function setRemap(pid, index) {
 
 // One cell of the GPIO settings table (mode, pull, speed, label).
 function setGpioField(pin, key, value) {
+  requirePin(pin, 'configure');
   // Round-3 P0b: S must never carry an output speed the part cannot express.
   // `gpio.speeds` in the MCU file says what the part HAS. A part with exactly one
   // speed has no choice to make, so whatever arrives is stored as that one name -
@@ -9691,8 +9712,19 @@ function rccSection() {
     }
     L.push(`    ${rcc.register} = (${rcc.register} & ~${hex(rcc.mask)}) | ${hex(rcc.value)};`);
     L.push('');
-    L.push('    /* NOTE: this writes the mux and prescaler fields only. Starting HSE or the');
-    L.push('       PLL and waiting for them to lock is the SDK SystemInit()\'s job. */');
+    // Name what THIS part has to start, not what CH32V006 has. A source the data marks
+    // `fixed: true` runs from reset and needs no start-up; the rest do. A part with none
+    // - CH32X035 has no HSE at all - must not be told about an oscillator it lacks.
+    const starts = Object.entries(M.clock.sources || {})
+      .filter(([, v]) => v && !v.fixed).map(([n]) => n);
+    if (M.clock.pll) starts.push('the PLL');
+    if (starts.length) {
+      L.push(`    /* NOTE: this writes the mux and prescaler fields only. Starting ${starts.join(' and ')}`);
+      L.push('       and waiting for it to lock is the SDK SystemInit()\'s job. */');
+    } else {
+      L.push('    /* NOTE: this writes the mux and prescaler fields only. Every clock source on');
+      L.push('       this part runs from reset, so there is nothing to start or wait for. */');
+    }
   } else {
     L.push('    /* TODO: the MCU file has no codegen.rcc block, so the register word cannot');
     L.push('       be computed. The settings above are what the configuration asks for. */');

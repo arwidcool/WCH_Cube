@@ -112,9 +112,28 @@ export function previewAssign(pin, opt) {
   return '';
 }
 
+/**
+ * A pin has to exist on the CURRENT package before anything may be written about it.
+ * Without this the writers accepted a name the part does not have and stored it: on
+ * CH32X035 `assignSignal('PC8', …)` silently put a pin the datasheet never names into
+ * S, where compute() ignored it, the plan never mentioned it, and `.wchproj` saved it
+ * for ever. That port runs PC0-PC7, PC10-PC11, PC14-PC19 - iterate the pins the data
+ * lists, never a range, and refuse the gaps by name (round 4, P0b item 5).
+ */
+function requirePin(pin, what) {
+  if (pinExists(pin)) return;
+  const port = /^P([A-Z])/.exec(String(pin));
+  const siblings = port
+    ? Object.keys(M.pins).filter(p => p.startsWith(`P${port[1]}`) && pinExists(p))
+    : [];
+  throw new Error(`Cannot ${what} "${pin}": ${M.mcu.name} ${S.pkg} has no such pin`
+    + (siblings.length ? `. Port ${port[1]} here is ${siblings.join(', ')}` : ''));
+}
+
 // Assign an option from the pin picker: either a plain GPIO mode, or a
 // peripheral signal (which also selects the remap that routes it to this pin).
 export function assignSignal(pin, opt) {
+  requirePin(pin, 'assign a signal to');
   record(`${opt.gpio || sigName(opt.periph, opt.signal)} on ${pinLabel(pin)}`);
   if (opt.gpio) {
     for (const n of groupOf(pin)) delete S.manual[n];
@@ -145,6 +164,7 @@ export function assignSignal(pin, opt) {
 // Put a pin back to its reset state: drop the manual GPIO and switch off
 // whichever peripheral choices were driving it.
 export function resetPin(pin) {
+  requirePin(pin, 'reset');
   record(`Reset ${pinLabel(pin)}`);
   const cl = ((E && E.pins[canon(pin)]) || {}).claims || [];
   for (const n of groupOf(pin)) { delete S.manual[n]; delete S.gpio[n]; }
@@ -213,6 +233,7 @@ export function setRemap(pid, index) {
 
 // One cell of the GPIO settings table (mode, pull, speed, label).
 export function setGpioField(pin, key, value) {
+  requirePin(pin, 'configure');
   // Round-3 P0b: S must never carry an output speed the part cannot express.
   // `gpio.speeds` in the MCU file says what the part HAS. A part with exactly one
   // speed has no choice to make, so whatever arrives is stored as that one name -

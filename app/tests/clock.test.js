@@ -1,5 +1,5 @@
 // clock.js — the clock tree maths (CH32V006: single HB domain, HSI 24 MHz, PLL x2).
-import { test, assert, fresh } from './_harness.js';
+import { test, assert, fresh, eng, read } from './_harness.js';
 
 test('defaults come from the file: HSI 24 MHz straight through', () => {
   const e = fresh();
@@ -295,4 +295,115 @@ test('the coupling is read from the data, never hard-coded to RCC or to XI/XO', 
   e.compute();
   const held = Object.entries(e.E.pins).filter(([, v]) => v.claims.some(c => /OSC_(IN|OUT)/.test(c.signal)));
   assert.equal(held.length, 2, 'both crystal pins are claimed on the dummy part too');
+});
+
+// =============================================================================
+//  Round 4 P0b — the engine reads the MCU file, or it has a CH32V006 assumption
+// =============================================================================
+//  CH32X035 is the first part that is not shaped like CH32V006: no HSE at all,
+//  24-bit ports, a port with holes in it, different clock-domain names. Each test
+//  here is a place where the engine could have baked one of those in, and the point
+//  is that the answer is checkable rather than assumed.
+
+test('a part with no HSE has no HSE anywhere - not in the state, the maths or the C', () => {
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  e.compute();
+
+  assert.equal(e.M.clock.sources.HSE, undefined, 'setup: ch32x035_rcc.h mentions HSE zero times');
+  assert.deepEqual(e.M.clock.sysclk.sources, ['HSI'], 'one source, and the data says which');
+
+  // nothing throws, nothing warns, nothing is placed
+  assert.equal(e.hseFeedsSysclk(), false);
+  const r = e.clockCalc();
+  assert.ok(Number.isFinite(r.SYSCLK) && r.SYSCLK > 0, `SYSCLK is a number (${r.SYSCLK})`);
+  assert.deepEqual(r.over, [], 'and it is in specification');
+  assert.deepEqual(r.selectable.sys, ['HSI'], 'the clock tab offers exactly what the data lists');
+  assert.deepEqual(e.E.conflictList, []);
+  assert.deepEqual(Object.values(e.E.issues).flat(), []);
+
+  // asking for it is refused by name rather than half-applied
+  assert.throws(() => e.setClock({ sys: 'HSE' }), /is not offered by CH32X035/);
+  assert.deepEqual(e.clockCalc().selectable.sys, ['HSI'], 'and the refusal changed nothing');
+});
+
+test('the generated clock note names the sources this part actually has to start', () => {
+  const withHse = fresh('CH32V006', 'TSSOP20');
+  withHse.compute();
+  assert.match(withHse.cSource(), /Starting HSE[\s\S]{0,40}waiting for it to lock/,
+    'CH32V006 has an HSE and a PLL to start');
+
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  e.compute();
+  const c = e.cSource();
+  assert.equal(/HSE/.test(c), false,
+    'a part with no HSE must not be told about one, not even in a comment');
+  assert.match(c, /runs from reset, so there is nothing to start or wait for/);
+});
+
+test('the engine names no part and no peripheral', () => {
+  // Round-4 DONE line, not a style note. Citations in comments are required by the
+  // round rules and are not code, so only real code counts.
+  const files = ['util', 'inherit', 'history', 'model', 'params', 'clock',
+    'resources', 'engine', 'project', 'codegen', 'export'];
+  const offenders = [];
+  for (const name of files) {
+    const src = read(`app/engine/${name}.js`);
+    // Block comments are stripped from the WHOLE file first - a citation spans lines,
+    // and the round rules require citations, so only real code counts.
+    const lines = src.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' ')).split(/\r?\n/);
+    lines.forEach((line, i) => {
+      const code = line.replace(/\/\/.*$/, '');
+      if (/CH32|x035|X035|V006|v00[0-9]/.test(code)) {
+        offenders.push(`${name}.js:${i + 1}  ${src.split(/\r?\n/)[i].trim()}`);
+      }
+    });
+  }
+  assert.deepEqual(offenders, [], 'a part name in engine CODE is a part the engine special-cases');
+});
+
+test('every bundled part computes a clock tree, whatever shape it is', () => {
+  for (const name of Object.keys(eng.MCU_FILES)) {
+    const e = fresh();
+    e.loadMcu(name);
+    e.compute();
+    if (!e.M.clock) continue;
+    const r = e.clockCalc();
+    assert.ok(Number.isFinite(r.SYSCLK), `${name}: SYSCLK is ${r.SYSCLK}`);
+    assert.ok(Number.isFinite(r.HCLK), `${name}: HCLK is ${r.HCLK}`);
+    for (const [k, v] of Object.entries(r)) {
+      if (k === 'over' || k === 'under' || k === 'selectable') continue;
+      if (typeof v === 'number') assert.ok(Number.isFinite(v), `${name}: ${k} is ${v}`);
+    }
+    // and every source the data offers is selectable, on every part
+    for (const src of e.M.clock.sysclk.sources) {
+      assert.ok(r.selectable.sys.includes(src), `${name}: ${src} is listed but not selectable`);
+    }
+  }
+});
+
+test('a port is iterated as the pins the data lists, never as a range', () => {
+  const e = fresh();
+  if (!eng.MCU_FILES.CH32X035) return;
+  e.loadMcu('CH32X035');
+  e.setPackage('LQFP64M');
+  e.compute();
+  // PC has holes. Anything doing `for (i = 0; i <= max; i++)` over a port would produce
+  // pins the datasheet never names, and they would silently reach the generated C.
+  const pc = Object.keys(e.M.pins).filter(p => /^PC\d+$/.test(p)).map(p => +p.slice(2));
+  const max = Math.max(...pc);
+  const missing = [];
+  for (let i = 0; i <= max; i++) if (!pc.includes(i)) missing.push(i);
+  assert.ok(missing.length, `setup: PC really has holes (${missing.join(',')})`);
+
+  for (const n of missing) {
+    assert.equal(e.pinExists(`PC${n}`), false, `PC${n} is not a pin on this part`);
+    assert.throws(() => e.assignSignal(`PC${n}`, { gpio: 'GPIO_Output' }),
+      /./, `assigning PC${n} must fail rather than invent it`);
+  }
+  assert.deepEqual(e.gpioPlan().filter(r => r.port === 'C' && missing.includes(r.bit)), [],
+    'and no hole ever reaches the plan');
 });
