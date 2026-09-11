@@ -169,6 +169,29 @@ the reason in the warning below.
 Record 5 V tolerance only where the datasheet states it per pin. The CH32V006 datasheet
 does not, so that field is absent there. Do not carry it over from another family.
 
+### Ports are not all the same shape, and two of the assumptions are load-bearing
+
+Nothing in `pins:` states a port's width or its range — they are implied by the names —
+so the two facts below are implied too, and both were false the moment a second family
+arrived. **CH32X035 is the part to test any pin code against.**
+
+| | CH32V005 / CH32V006 | CH32X035 |
+|---|---|---|
+| Ports | A, C, D | A, B, C |
+| Width | 16 bits, `uint16_t` masks | **24 bits, `uint32_t`** — `GPIO_Pin_0 … GPIO_Pin_23` |
+| Contiguous? | yes | **no** — port C is PC0–PC7, PC10–PC11, PC14–PC19 |
+
+Two rules follow, and they are rules rather than advice because each has already broken
+something in this repo:
+
+- **Never write a 16-bit pin mask.** `uint16_t`, `0xFFFF` and a four-digit hex literal are
+  all wrong on a 24-bit port. Take the width from the highest pin number the part has.
+- **Never iterate a port `0..max`.** Port C of CH32X035 has holes at 8–9 and 12–13, and an
+  iteration invents four pins that do not exist. Iterate the names in `pins:`.
+
+`tools/extract_pins.py` carried the first assumption itself — it matched `P[A-D][0-7]` —
+and silently failed to find two thirds of this part's pins until round 4.
+
 ## `peripherals`
 
 ```yaml
@@ -398,6 +421,58 @@ until the engine can express it.
 - **Do not duplicate a setting.** Hardware flow control decides whether CTS and RTS claim
   pins, so it is a setting; adding a `flow` parameter beside it would let the two disagree.
 
+### Two ways a remap reaches the silicon, and the data says which
+
+A `remaps[]` entry lists which pin each signal lands on for one AFIO setting. **How that
+setting is written differs by family**, so `codegen.remap.style` names the route and
+neither family is special-cased.
+
+**`style: register`** — the default, and what CH32V005/CH32V006 do. `codegen.remap` carries
+a register and a field per peripheral, and the generator builds the word:
+
+```yaml
+codegen:
+  remap:
+    register: "AFIO->PCFR1"
+    fields:
+      USART1: [{ lsb: 6, bits: 4 }]
+```
+
+**`style: macro`** — what CH32X035 does. Its EVT exposes forty named macros applied with
+one call, and each `remaps[]` entry carries the one that selects it:
+
+```yaml
+codegen:
+  remap:
+    style: macro
+    fn: GPIO_PinRemapConfig
+    enable: ENABLE
+
+peripherals:
+  USART2:
+    remaps:
+      - name: No remap                                     # index 0 has no macro
+        pins: { TX: PA2, RX: PA3 }
+      - name: Full remap
+        macro: GPIO_FullRemap_USART2
+        pins: { TX: PC0, RX: PC1 }
+```
+
+The generator emits one `GPIO_PinRemapConfig(<macro>, ENABLE)` per enabled peripheral whose
+selected index has a macro, and **emits nothing for an index with none** — which is how
+"No remap" stays silent without a special case.
+
+Why macro rather than raw fields where both would work: the EVT examples all use
+`GPIO_PinRemapConfig`, so it is the spelling a user reading WCH's own code recognises; the
+macro packs register position *and* value into one constant that the SDK decodes, so
+building the mask by hand means re-deriving an encoding the SDK already knows; and a wrong
+macro name fails to compile and is caught by `verify_sdk_names.py` first, where a wrong
+hand-built mask is silent.
+
+**`remaps[].macro` is checked**, and it was not always: CH32X035 landed 44 of them and a
+planted `GPIO_FullRemap_USART2X` passed the gate, because the key was new and nothing
+looked at it. Every new schema key needs its checker in the same commit.
+
 ## `exti`
 
 ```yaml
@@ -513,6 +588,35 @@ range, and with nesting on it splits one and one. A tab offering priorities 0–
 offering settings the silicon throws away. `validate_mcu.py` checks that each group's
 `max` fits in its `bits` and that the halves add up to `priority_bits`.
 
+### Grouped vectors (`lines:`)
+
+One vector may serve a whole range of EXTI lines. CH32X035 has three that cover
+twenty-six between them, so a `lines: [first, last]` range — inclusive — says which:
+
+```yaml
+- { name: EXTI7_0,   vector: 20, irqn: EXTI7_0_IRQn,   handler: EXTI7_0_IRQHandler,
+    lines: [0, 7],   peripheral: EXTI }
+- { name: EXTI15_8,  vector: 40, irqn: EXTI15_8_IRQn,  handler: EXTI15_8_IRQHandler,
+    lines: [8, 15],  peripheral: EXTI }
+- { name: EXTI25_16, vector: 41, irqn: EXTI25_16_IRQn, handler: EXTI25_16_IRQHandler,
+    lines: [16, 25], peripheral: EXTI }
+```
+
+**The NVIC tab lists three rows, not twenty-six**, and the EXTI tab answers "which vector
+does line 11 raise" by finding the range that contains it. CH32V006's single `EXTI7_0`
+carries `lines: [0, 7]` too, so there is one code path rather than two.
+
+Do not assume the grouped vectors cover every line the part has. CH32X035 defines **thirty**
+EXTI lines: 26–29 are internal events — PVD, auto-wake-up, USBFS wake-up, USBPD wake-up —
+each with its own vector, outside the grouped three.
+
+### A peripheral this part does not interrupt on
+
+CH32V006 has `RCC_IRQn = 19`. **CH32X035 has no RCC vector at all** — number 19 is a gap in
+the enum and a `.word 0` in the startup table. "Every family has an RCC interrupt" is the
+kind of assumption a second family exists to break. A vector that is absent is absent; do
+not add one for symmetry.
+
 ## `clock`
 
 ```yaml
@@ -539,6 +643,23 @@ clock:
 A prescaler with no `source` hangs off SYSCLK. Otherwise `source` names another
 prescaler, an oscillator, `SYSCLK` or `PLLCLK`. `min_mhz` / `max_mhz` drive the red
 out-of-spec warnings.
+
+### A part with no HSE at all
+
+Round 2's P0 was *"HSE must ALWAYS be selectable"*. That was right about CH32V006 and is
+wrong as a general rule: **CH32X035 has no HSE** — `grep -c HSE ch32x035_rcc.h` returns 0.
+One internal 48 MHz RC, and SYSCLK is that divided to 48/24/16/12/8 MHz.
+
+So on that part `clock:` has **one source, no `pll:`, no `hse_peripheral`, no
+`hse_setting`, no `hse_signals`, and no crystal pins**, and the clock tab must show an
+HSI-only tree: no HSE box, no HSE row in RCC, **and no greyed placeholder**. Round 2's rule
+is that a control is justified by the MCU data or it does not exist; greying is for an
+option the part has and cannot use right now.
+
+The absence reaches further than the tab. `RCC_CFGR0` on that part has **no `SW` field** —
+there is nothing to switch between — so `codegen.rcc` has no `sw:` key and the generator
+correctly writes nothing for the source mux. And its MCO offers two sources rather than
+four, for the same reason.
 
 ### Selecting HSE (`hse_peripheral` / `hse_setting` / `hse_signals`)
 
@@ -587,6 +708,18 @@ gpio:
 | `speeds` | ordered list of the output speeds the part has. `name` is what the GPIO table shows and what a `.wchproj` stores; `macro` is the SPL enum member, and it must exist in that part's headers. |
 | `modes` | the GPIO-table modes and their `GPIOMode_TypeDef` macros |
 | `input_modes` | mode `Input` has no single macro — the SPL folds the **pull** setting into it, so these are keyed by the pull name |
+
+**The set of modes is per part, not per project.** CH32X035's `GPIOMode_TypeDef` has
+**six** members and CH32V006's has eight: **there is no open-drain at all on CH32X035** —
+no `GPIO_Mode_Out_OD`, no `GPIO_Mode_AF_OD`. Its `modes` list therefore has three entries
+where CH32V006's has five, and the GPIO table must render what the part offers rather than
+a fixed five. Copying CH32V006's list across is how this was nearly shipped; the gate
+caught it.
+
+A mode entry may also carry `pins_note:` — CH32X035's `GPIO_Mode_IPD` is annotated in the
+header *"Only PA0--PA15 and PC16--PC17 support input pull-down"*, which is a **per-pin**
+capability the schema cannot express yet. The note records the constraint until it can;
+see `CH32X035.notes.md`.
 
 Between them, `modes` and `input_modes` must account for every member of
 `GPIOMode_TypeDef`: a mode the silicon has but the table cannot ask for is a mode the user
