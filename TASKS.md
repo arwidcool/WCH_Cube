@@ -99,8 +99,8 @@ See `Agents Rounds 2/00_PROJECT.md`. Data lines only; the other three areas trac
       planted breaks, 14 caught
 - [ ] (AGENT-1) WCH-DUMMY32-C8 has no `dma` / `nvic` / `params` / `codegen` blocks, so the
       new tabs have nothing to render on a large package
-- [~] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1 — OPA1 done (6 params from EVT);
-      TKEY needs none of its own, being an ADC mode; TIM3/IWDG/WWDG still open
+- [x] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1 — all done. OPA1 6 params; TIM3 5;
+      IWDG 3 and WWDG 3, both struct-free and handle-free; TKEY needs none, being an ADC mode
 - [ ] (AGENT-1) Medium-confidence rows: TouchKey channel→pin (RM ch.10), OPA polling set
 
 ### Firmware / project setup  (AGENT-4) — done; the follow-ups are round-3 lines below
@@ -235,11 +235,14 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 ### P3 — more parts, now that there is a compiler
 
-- [ ] (AGENT-1) `data/mcus/CH32X035.yaml` from `data/sources/X035/Datasheets/`. Confirmed and
+- [~] (AGENT-1) `data/mcus/CH32X035.yaml` from `data/sources/X035/Datasheets/`. Groundwork in
+      `data/sources/README.md`; NOT started, the DS markdown needs a script (see the board).
+      Also confirmed: 24-BIT ports, and PC is not contiguous. Confirmed and
       **different from the V00x family**: ports A/B/C only, `RCC_APB2PeriphClockCmd`, one speed
       `GPIO_Speed_50MHz`, no `ADCCLK_Frequency` in `RCC_ClocksTypeDef`.
-- [ ] (AGENT-1) When an EVT package lands in `data/sources/<PART>/Evt/`: re-run `verify_sdk_names.py`
-      against it, re-check every Medium-confidence row, and post what changed
+- [x] (AGENT-1) When an EVT package lands in `data/sources/<PART>/Evt/`: re-run `verify_sdk_names.py`
+      against it, re-check every Medium-confidence row, and post what changed — both drops have
+      landed; headers are under `EXAM/SRC/Peripheral/inc`, and `data/sources/README.md` says so
 - [ ] (AGENT-1) **RM chapter 20 "Extended Configuration" (EXTEN) is not modelled and is not on
       the declared-absence list** — found by `tests/completeness.test.js`. `EXTEN_CTR` at
       0x40023800 has two user-visible bits: LKUPEN/LKUPRST (lock-up reset monitoring) and
@@ -262,8 +265,10 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       shell had never compiled; fix and `Cargo.lock` committed.
 - [ ] (AGENT-4) Finish the dead-control sweep; `#m-open` / `#m-openproj` need a human or a stub
 - [ ] (AGENT-4) Round-3 section in `agents/DONE.md`; re-audit the round-1 and round-2 lines
-- [~] (AGENT-1) Stale source paths in `data/FORMAT.md`, `CH32V006.notes.md` and
+- [x] (AGENT-1) Stale source paths in `data/FORMAT.md`, `CH32V006.notes.md` and
       `tools/extract_remaps.py` — they still name the pre-reorganisation `data/sources/*.md`
+      — `extract_pins.py` and `extract_remaps.py` fixed and both re-run; the two docs were
+      already clean
 - [ ] (AGENT-4) The human's `Taskfile.yml` is a stub. Make it the real task runner (build, test,
       firmware, validate) or leave it alone and say so — do not half-adopt it.
 
