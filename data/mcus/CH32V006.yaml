@@ -1365,38 +1365,55 @@ nvic:
       claimed for the switch itself. Do not invent one.
   vectors:
     # `vector` is the No. column of RM Table 6-1 - the index into the vector table,
-    # which is also what the SDK's IRQn enum uses. `irqn` follows the usual WCH EVT
-    # spelling; like the DMA macros it is convention, not something this repo can
-    # confirm against a ch32v00x SDK copy (HUMAN_TODO 5).
-    - { name: NMI,        vector: 2,  irqn: NMI_Handler,          system: true,  fixed: true,  description: Non-maskable interrupt }
-    - { name: HardFault,  vector: 3,  irqn: HardFault_Handler,    system: true,  fixed: true,  description: Abnormal interrupt (exception) }
-    - { name: SysTick,    vector: 12, irqn: SysTick_IRQn,         system: true,  description: System timer interrupt }
-    - { name: SW,         vector: 14, irqn: Software_IRQn,        system: true,  description: Software interrupt }
-    - { name: WWDG,       vector: 16, irqn: WWDG_IRQn,            peripheral: WWDG,   description: Window watchdog timer interrupt }
-    - { name: PVD,        vector: 17, irqn: PVD_IRQn,             peripheral: PWR,    description: Supply voltage detection interrupt (through EXTI line 8) }
-    - { name: FLASH,      vector: 18, irqn: FLASH_IRQn,           peripheral: FLASH,  description: Flash global interrupt }
-    - { name: RCC,        vector: 19, irqn: RCC_IRQn,             peripheral: RCC,    description: Reset and clock control interrupt }
-    - { name: EXTI7_0,    vector: 20, irqn: EXTI7_0_IRQn,         peripheral: EXTI,   description: EXTI line 0-7 interrupt (one vector for all eight lines) }
-    - { name: AWU,        vector: 21, irqn: AWU_IRQn,             peripheral: PWR,    description: Automatic wake-up interrupt (through EXTI line 9) }
-    - { name: DMA1_CH1,   vector: 22, irqn: DMA1_Channel1_IRQn,   peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
-    - { name: DMA1_CH2,   vector: 23, irqn: DMA1_Channel2_IRQn,   peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
-    - { name: DMA1_CH3,   vector: 24, irqn: DMA1_Channel3_IRQn,   peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
-    - { name: DMA1_CH4,   vector: 25, irqn: DMA1_Channel4_IRQn,   peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
-    - { name: DMA1_CH5,   vector: 26, irqn: DMA1_Channel5_IRQn,   peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
-    - { name: DMA1_CH6,   vector: 27, irqn: DMA1_Channel6_IRQn,   peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
-    - { name: DMA1_CH7,   vector: 28, irqn: DMA1_Channel7_IRQn,   peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
-    - { name: ADC,        vector: 29, irqn: ADC1_IRQn,            peripheral: ADC1,   description: ADC global interrupt }
-    - { name: I2C1_EV,    vector: 30, irqn: I2C1_EV_IRQn,         peripheral: I2C1,   description: I2C1 event interrupt }
-    - { name: I2C1_ER,    vector: 31, irqn: I2C1_ER_IRQn,         peripheral: I2C1,   description: I2C1 error interrupt }
-    - { name: USART1,     vector: 32, irqn: USART1_IRQn,          peripheral: USART1, description: USART1 global interrupt }
-    - { name: SPI1,       vector: 33, irqn: SPI1_IRQn,            peripheral: SPI1,   description: SPI1 global interrupt }
-    - { name: TIM1BRK,    vector: 34, irqn: TIM1_BRK_IRQn,        peripheral: TIM1,   description: TIM1 break interrupt }
-    - { name: TIM1UP,     vector: 35, irqn: TIM1_UP_IRQn,         peripheral: TIM1,   description: TIM1 update interrupt }
-    - { name: TIM1TRG,    vector: 36, irqn: TIM1_TRG_COM_IRQn,    peripheral: TIM1,   description: TIM1 trigger and commutation interrupt }
-    - { name: TIM1CC,     vector: 37, irqn: TIM1_CC_IRQn,         peripheral: TIM1,   description: TIM1 capture/compare interrupt }
-    - { name: TIM2,       vector: 38, irqn: TIM2_IRQn,            peripheral: TIM2,   description: TIM2 global interrupt }
-    - { name: USART2,     vector: 39, irqn: USART2_IRQn,          peripheral: USART2, description: USART2 global interrupt }
-    - { name: OPCM,       vector: 40, irqn: OPCM_IRQn,            peripheral: OPA1,   description: Operational amplifier and comparator global interrupt }
+    # which is also what the SDK's IRQn enum uses.
+    #
+    # TWO names per vector, because the SDK uses two and they are NOT interchangeable:
+    #   irqn     the IRQn_Type member, what NVIC_InitStructure.NVIC_IRQChannel takes
+    #   handler  the symbol in the startup vector table, what the user's ISR must be
+    #            called to be linked in (it is `.weak` and defaults to an endless loop)
+    #
+    # The vendor is not consistent between the two and neither may we pretend to be:
+    # vector 29 is `ADC_IRQn` in the enum but `ADC1_IRQHandler` in the startup table,
+    # and vector 2 is `NonMaskableInt_IRQn` but `NMI_Handler`. This file claimed
+    # `ADC1_IRQn`, which exists in NEITHER - generated NVIC code naming it would not
+    # have compiled. Found by tools/verify_sdk_names.py, round 3.
+    #
+    # Every pair below is taken mechanically from the EVT package, not transcribed:
+    #   irqn     IRQn_Type in data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X.h:45-82
+    #   handler  the .word table in .../Evt/EXAM/SRC/Startup/startup_ch32v00X.S:19-58
+    # The two sources agree on all 29 vector NUMBERS, which is an independent check on
+    # RM Table 6-1 - and both confirm the contradiction recorded in the notes:
+    # **there is no TIM3 vector**, although this part has a TIM3. The enum ends at
+    # OPCM_IRQn = 40 and the startup table ends at OPCM_IRQHandler. Nothing invented.
+    - { name: NMI,       vector: 2,  irqn: NonMaskableInt_IRQn, handler: NMI_Handler,              system: true, fixed: true, description: Non-maskable interrupt }
+    - { name: HardFault, vector: 3,  irqn: HardFault_IRQn,      handler: HardFault_Handler,        system: true, fixed: true, description: Abnormal interrupt (exception) }
+    - { name: SysTick,   vector: 12, irqn: SysTick_IRQn,        handler: SysTick_Handler,          system: true, description: System timer interrupt }
+    - { name: SW,        vector: 14, irqn: Software_IRQn,       handler: SW_Handler,               system: true, description: Software interrupt }
+    - { name: WWDG,      vector: 16, irqn: WWDG_IRQn,           handler: WWDG_IRQHandler,          peripheral: WWDG, description: Window watchdog timer interrupt }
+    - { name: PVD,       vector: 17, irqn: PVD_IRQn,            handler: PVD_IRQHandler,           peripheral: PWR, description: Supply voltage detection interrupt (through EXTI line 8) }
+    - { name: FLASH,     vector: 18, irqn: FLASH_IRQn,          handler: FLASH_IRQHandler,         peripheral: FLASH, description: Flash global interrupt }
+    - { name: RCC,       vector: 19, irqn: RCC_IRQn,            handler: RCC_IRQHandler,           peripheral: RCC, description: Reset and clock control interrupt }
+    - { name: EXTI7_0,   vector: 20, irqn: EXTI7_0_IRQn,        handler: EXTI7_0_IRQHandler,       peripheral: EXTI, description: EXTI line 0-7 interrupt (one vector for all eight lines) }
+    - { name: AWU,       vector: 21, irqn: AWU_IRQn,            handler: AWU_IRQHandler,           peripheral: PWR, description: Automatic wake-up interrupt (through EXTI line 9) }
+    - { name: DMA1_CH1,  vector: 22, irqn: DMA1_Channel1_IRQn,  handler: DMA1_Channel1_IRQHandler, peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
+    - { name: DMA1_CH2,  vector: 23, irqn: DMA1_Channel2_IRQn,  handler: DMA1_Channel2_IRQHandler, peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
+    - { name: DMA1_CH3,  vector: 24, irqn: DMA1_Channel3_IRQn,  handler: DMA1_Channel3_IRQHandler, peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
+    - { name: DMA1_CH4,  vector: 25, irqn: DMA1_Channel4_IRQn,  handler: DMA1_Channel4_IRQHandler, peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
+    - { name: DMA1_CH5,  vector: 26, irqn: DMA1_Channel5_IRQn,  handler: DMA1_Channel5_IRQHandler, peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
+    - { name: DMA1_CH6,  vector: 27, irqn: DMA1_Channel6_IRQn,  handler: DMA1_Channel6_IRQHandler, peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
+    - { name: DMA1_CH7,  vector: 28, irqn: DMA1_Channel7_IRQn,  handler: DMA1_Channel7_IRQHandler, peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
+    - { name: ADC,       vector: 29, irqn: ADC_IRQn,            handler: ADC1_IRQHandler,          peripheral: ADC1, description: ADC global interrupt }
+    - { name: I2C1_EV,   vector: 30, irqn: I2C1_EV_IRQn,        handler: I2C1_EV_IRQHandler,       peripheral: I2C1, description: I2C1 event interrupt }
+    - { name: I2C1_ER,   vector: 31, irqn: I2C1_ER_IRQn,        handler: I2C1_ER_IRQHandler,       peripheral: I2C1, description: I2C1 error interrupt }
+    - { name: USART1,    vector: 32, irqn: USART1_IRQn,         handler: USART1_IRQHandler,        peripheral: USART1, description: USART1 global interrupt }
+    - { name: SPI1,      vector: 33, irqn: SPI1_IRQn,           handler: SPI1_IRQHandler,          peripheral: SPI1, description: SPI1 global interrupt }
+    - { name: TIM1BRK,   vector: 34, irqn: TIM1_BRK_IRQn,       handler: TIM1_BRK_IRQHandler,      peripheral: TIM1, description: TIM1 break interrupt }
+    - { name: TIM1UP,    vector: 35, irqn: TIM1_UP_IRQn,        handler: TIM1_UP_IRQHandler,       peripheral: TIM1, description: TIM1 update interrupt }
+    - { name: TIM1TRG,   vector: 36, irqn: TIM1_TRG_COM_IRQn,   handler: TIM1_TRG_COM_IRQHandler,  peripheral: TIM1, description: TIM1 trigger and commutation interrupt }
+    - { name: TIM1CC,    vector: 37, irqn: TIM1_CC_IRQn,        handler: TIM1_CC_IRQHandler,       peripheral: TIM1, description: TIM1 capture/compare interrupt }
+    - { name: TIM2,      vector: 38, irqn: TIM2_IRQn,           handler: TIM2_IRQHandler,          peripheral: TIM2, description: TIM2 global interrupt }
+    - { name: USART2,    vector: 39, irqn: USART2_IRQn,         handler: USART2_IRQHandler,        peripheral: USART2, description: USART2 global interrupt }
+    - { name: OPCM,      vector: 40, irqn: OPCM_IRQn,           handler: OPCM_IRQHandler,          peripheral: OPA1, description: Operational amplifier and comparator global interrupt }
   notes: >
     RM Table 6-1 ends at vector 40 and lists NO TIM3 interrupt, while CH32V006 does
     have TIM3 (RM Table 8-2 note 2 describes its DMA requests on this very part).
@@ -1434,6 +1451,14 @@ codegen:
   # data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X.h line 2 "File Name : ch32v00X.h",
   # guard `__CH32V00X_H` line 12.
   header: ch32v00X.h
+
+  # Which SDK this part's names must be checked against. NOT guessable from the part
+  # number - CH32V005/CH32V006 are series `ch32v00Xx` while CH32V003 is `ch32v00x`, and
+  # both are installed side by side. `tools/verify_sdk_names.py` reads this, prefers the
+  # EVT drop, and falls back to the PlatformIO package.
+  sdk:
+    evt: V006          # data/sources/<evt>/Evt   - the EVT package covering this part
+    series: ch32v00Xx  # framework-wch-noneos-sdk/Peripheral/<series>/inc
 
   # RM 3.4.7: the GPIO ports and AFIO sit in RCC_PB2PCENR — AFIOEN bit 0, IOPAEN..IOPDEN
   # bits 2..5. The register really is named "PB2" on this family, not "APB2" (RM Table

@@ -363,13 +363,25 @@ nvic:
         preempt: { bits: 1, lsb: 7, min: 0, max: 1 }
         sub:     { bits: 1, lsb: 6, min: 0, max: 1 }
   vectors:
-    - { name: USART1, vector: 32, irqn: USART1_IRQn, peripheral: USART1,
-        description: USART1 global interrupt }
-    - { name: SysTick, vector: 12, irqn: SysTick_IRQn, system: true,
-        description: System timer interrupt }
-    - { name: DMA1_CH1, vector: 22, irqn: DMA1_Channel1_IRQn, peripheral: DMA1,
-        channel: 1, description: DMA1 channel 1 global interrupt }
+    - { name: USART1, vector: 32, irqn: USART1_IRQn, handler: USART1_IRQHandler,
+        peripheral: USART1, description: USART1 global interrupt }
+    - { name: ADC, vector: 29, irqn: ADC_IRQn, handler: ADC1_IRQHandler,
+        peripheral: ADC1, description: ADC global interrupt }
+    - { name: DMA1_CH1, vector: 22, irqn: DMA1_Channel1_IRQn, handler: DMA1_Channel1_IRQHandler,
+        peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
 ```
+
+**A vector has TWO names and they are not interchangeable.** `irqn` is the `IRQn_Type`
+member — what `NVIC_InitStructure.NVIC_IRQChannel` takes. `handler` is the symbol in the
+startup vector table — what the user's ISR must be called to be linked in; it is declared
+`.weak` and defaults to an endless loop, so a misspelled handler silently never runs.
+
+The vendor is not consistent between them, so neither may this file be: on CH32V006
+vector 29 is `ADC_IRQn` in the enum but `ADC1_IRQHandler` in the startup table, and
+vector 2 is `NonMaskableInt_IRQn` but `NMI_Handler`. Take each from its own source rather
+than deriving one from the other, and let `tools/verify_sdk_names.py` check both — it
+found `ADC1_IRQn` in this repo, a name that exists in neither place and would not have
+compiled.
 
 `peripheral:` groups the vector under that peripheral's NVIC Settings tab. `system: true`
 puts it under the NVIC entry in System Core instead — SysTick, the software interrupt, NMI
@@ -520,6 +532,28 @@ wrong case resolves anyway, so the mistake is invisible on Windows, fails outrig
 Linux, and on a machine with both include paths silently compiles the other part. The
 series a part belongs to is not guessable from its part number; it is written down in
 `data/sources/README.md` and checked by `tools/verify_sdk_names.py`.
+
+**`sdk:` says which SDK this part's names are checked against**, because it is not
+guessable from the part number and getting it wrong is how round 2 shipped a defect:
+
+```yaml
+codegen:
+  sdk:
+    evt: V006          # data/sources/<evt>/Evt   - the EVT package covering this part
+    series: ch32v00Xx  # framework-wch-noneos-sdk/Peripheral/<series>/inc
+```
+
+`tools/verify_sdk_names.py` reads it, prefers the EVT drop, falls back to the PlatformIO
+package, and **reports "NOT CHECKED" with a reason rather than passing silently** when
+neither is present. A part that is not real silicon says so instead:
+
+```yaml
+codegen:
+  sdk: { synthetic: true }     # WCH-DUMMY32-C8: a layout fixture, not a chip
+```
+
+That is how a synthetic part is skipped — by its own declaration, not by a name
+hardcoded in the tool, so adding a second fixture part needs no change to the checker.
 
 **`speeds:` is a translation table, not an offer.** What the part offers is `gpio.speeds`.
 Keys here are stored GPIO-table speed names — including names kept only so an older

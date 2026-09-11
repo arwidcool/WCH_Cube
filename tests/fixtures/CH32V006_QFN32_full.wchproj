@@ -169,22 +169,22 @@ gpio_settings:
   PA5:
     mode: Output Push Pull
     pull: No pull
-    speed: Low
+    speed: 30 MHz
     label: ''
   PA6:
     mode: Input
     pull: No pull
-    speed: Low
+    speed: 30 MHz
     label: ''
   PB3:
     mode: Output Push Pull
     pull: No pull
-    speed: Low
+    speed: 30 MHz
     label: HEARTBEAT
   PD0:
     mode: Output Push Pull
     pull: No pull
-    speed: Low
+    speed: 30 MHz
     label: ''
 clock:
   hse: 24

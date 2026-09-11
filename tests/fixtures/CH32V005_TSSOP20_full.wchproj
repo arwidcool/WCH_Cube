@@ -160,17 +160,17 @@ gpio_settings:
   PA1:
     mode: Output Push Pull
     pull: No pull
-    speed: Low
+    speed: 30 MHz
     label: ''
   PC0:
     mode: Output Push Pull
     pull: No pull
-    speed: Low
+    speed: 30 MHz
     label: LED
   PC3:
     mode: Input
     pull: No pull
-    speed: Low
+    speed: 30 MHz
     label: ''
 clock:
   hse: 24
