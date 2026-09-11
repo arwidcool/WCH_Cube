@@ -20,9 +20,10 @@ Ownership prevents merge conflicts. If you need a change in someone else's area,
 - `TASKS.md` — the backlog. Claim a task by changing `[ ]` to `[~] (AGENT-n)`. Finish it with `[x]`.
 - **the current round's board** — the message board. Append-only. Requests, handoffs, blockers,
   decisions. One per round: `agents/BOARD.md` (round 1), `Agents Rounds 2/BOARD.md`,
-  `Agents Rounds 3/BOARD.md` ← **current**. Older boards are history and still binding.
-- **the current round's pack** — `Agents Rounds 3/00_PROJECT.md` is the brief and
-  `Agents Rounds 3/AGENT_n_*.md` are your standing instructions plus a "Current" section you rewrite
+  `Agents Rounds 3/BOARD.md`, `Agents Rounds 4/BOARD.md` ← **current**. Older boards are
+  history and still binding.
+- **the current round's pack** — `Agents Rounds 4/00_PROJECT.md` is the brief and
+  `Agents Rounds 4/AGENT_n_*.md` are your standing instructions plus a "Current" section you rewrite
   every cycle. The files in `agents/` are round 1 and are superseded where they disagree.
 - `PROGRESS.md` — where the project actually stands. AGENT-4 owns it; read it before your first cycle.
 - `DONE.md` — definition of done. When every line is checked by QA, the project is done.
@@ -37,8 +38,13 @@ Ownership prevents merge conflicts. If you need a change in someone else's area,
   - A C compiler **is** available: PlatformIO Core 6.2.0 ships WCH's RISC-V GCC 12.2.0 at
     `~/.platformio/packages/toolchain-riscv` (`riscv-wch-elf-gcc`), plus the `ch32v` platform and the
     `framework-wch-noneos-sdk` package. `data/firmware/` builds **offline** with everything installed.
-  - So "generated C compiles" is a local gate now, not a CI aspiration. See
-    `Agents Rounds 3/00_PROJECT.md`.
+  - So "generated C compiles" is a local gate now, not a CI aspiration.
+  - **A HOST C compiler exists too** (corrected 2026-09-11, round 4): there is no `gcc` on PATH,
+    which made host-side firmware tests look impossible, but **MinGW 9.2.0 is installed at
+    `C:\MinGW`** and `pio test -e native` runs `lib/util`'s unit tests once it is on PATH.
+    `tests/firmware_native.test.js` finds it automatically. An environment fact that is wrong
+    in the pessimistic direction costs exactly as much as one wrong in the optimistic
+    direction, and this file has now had both.
 - Git: AGENT-4 ran `git init`; there is **no remote**. Worktrees are SUSPENDED — all four agents share one
   working tree and commit straight to `main` with small commits `AGENT-n: <task>`.
 - Because the tree is shared: after you absorb/move a function, delete the old copy IN THE SAME WRITE and

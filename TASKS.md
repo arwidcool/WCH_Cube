@@ -305,7 +305,10 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       tested in Rust over 5 real paths and 9 escapes; `cargo test` is in `node tests/run.js`
       now. Bridge: `window.desktopWriteProject(name, files)`. In round 4 it
       writes a whole project tree, so agree the signature on the board first
-- [ ] D6 (AGENT-4) Host-side unit tests for `lib/util` under `[env:native]`
+- [x] D6 (AGENT-4) Host-side unit tests for `lib/util` under `[env:native]` — 10 Unity tests
+      over the ring buffer's wrap-around and full/empty cases, run by `node tests/run.js` via
+      `tests/firmware_native.test.js`. Found a host compiler nobody knew was here: MinGW 9.2.0
+      at C:\MinGW, not on PATH.
 - [ ] D7 (AGENT-4) `agents/README.md` "Environment facts"; round-3 section in `agents/DONE.md`
 - [x] D8 (AGENT-1) RM chapter 20 "Extended Configuration" (EXTEN) on V006 — MODELLED, plus a new
       `dma.remaps` key: TIM2_DMA_REMAP moves TIM2_CH4's request from channel 7 to channel 2.
