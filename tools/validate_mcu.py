@@ -35,6 +35,7 @@ import argparse
 import glob
 import os
 import pathlib
+import re
 import sys
 
 try:
@@ -523,6 +524,44 @@ def resolve_inherits(doc, folder, r, seen=None):
     return merged
 
 
+def check_flow_mappings(text: str, r: Report) -> None:
+    """Catch the unquoted-comma trap in the raw text, before YAML hides it.
+
+    In `{ a: 1, b: 2 }` a comma separates entries, so an unquoted comma inside a VALUE
+    silently ends it and starts a new key:
+
+        - { name: IN8 (Vrefint, internal) }
+          -> {name: "IN8 (Vrefint", "internal)": None}
+
+    The key whitelists elsewhere catch this once the stray fragment lands somewhere they
+    inspect. This check is the general one and needs no whitelist: every comma-separated
+    segment of a flow mapping must be a `key: value` pair, so a segment with no colon is
+    always a value that got cut in half. It reads the source text rather than the parsed
+    document, which is the only place the evidence still exists.
+    """
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.split(" #", 1)[0] if " #" in raw and not _in_quotes(raw, raw.find(" #")) else raw
+        for span in re.findall(r"\{[^{}]*\}", line):
+            body = span[1:-1]
+            if not body.strip():
+                continue
+            # Blank out quoted strings and [ ... ] list values so their commas, which are
+            # legitimate separators inside their own brackets, are not counted here.
+            masked = re.sub(r'"[^"]*"', lambda m: "_" * len(m.group(0)), body)
+            masked = re.sub(r"'[^']*'", lambda m: "_" * len(m.group(0)), masked)
+            masked = re.sub(r"\[[^\[\]]*\]", lambda m: "_" * len(m.group(0)), masked)
+            for seg in masked.split(","):
+                if seg.strip() and ":" not in seg:
+                    r.error(f"line {n}",
+                            f"`{seg.strip()}` is not a `key: value` pair - an unquoted comma "
+                            f"split the value before it. Quote the whole value: {span.strip()[:70]}")
+                    break
+
+
+def _in_quotes(line: str, idx: int) -> bool:
+    return line.count('"', 0, idx) % 2 == 1 or line.count("'", 0, idx) % 2 == 1
+
+
 def validate_file(path: pathlib.Path, geom: dict) -> Report:
     r = Report(path)
     try:
@@ -551,6 +590,7 @@ def validate_file(path: pathlib.Path, geom: dict) -> Report:
     check_io_counts(doc, tables, r)
     check_clock(doc, r)
     check_exti(doc, r)
+    check_flow_mappings(path.read_text(encoding="utf-8"), r)
     return r
 
 
