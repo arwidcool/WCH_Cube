@@ -93,7 +93,7 @@ PIN_ENTRY_KEYS = {"type", "analog", "notes", "five_volt_tolerant", "drive"}
 # `gpio.*` entries. `class` is only meaningful on a mode - it is the direction the mode
 # drives, and `constraints:` selects modes by it (see GPIO_MODE_CLASSES).
 GPIO_ENTRY_KEYS = {"name", "macro", "pins_note"}
-GPIO_MODE_CLASSES = {"in", "out", "analog"}
+GPIO_MODE_CLASSES = {"in", "out", "af", "analog"}
 
 # Which `gpio:` list an `option:` in a constraint is about. Dotted because the same
 # mechanism has to reach a future column without a second schema.

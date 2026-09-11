@@ -93,7 +93,7 @@ CASES = [
      "duplicate `id`"),
 
     ("no `reason`",
-     "    reason: \"PB1 and PB5 are shorted and sealed inside the chip; neither may be configured as an output function.\"\n",
+     "    reason: \"PB1 and PB5 are shorted and sealed inside the chip; neither may be configured as a GPIO output.\"\n",
      "",
      "has no `reason`"),
 

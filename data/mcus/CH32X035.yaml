@@ -2305,13 +2305,23 @@ gpio:
   # which is the whole argument for the gate: they are real, correctly spelled SPL
   # names that belong to a different chip.
   #
-  # `class:` is the silicon's own direction and it exists so a constraint can say "no
-  # output function" once, rather than list mode names that go stale the day a mode is
-  # added. Closed set: `out`, `in`, `analog`. `Input` is not listed here - it is the
-  # implicit fourth mode and is always `in`; `input_modes` is the pull list under it.
+  # `class:` is WHICH PART OF THE CHIP drives the pin, and it exists so a constraint can
+  # say "no output function" once rather than list mode names that go stale the day a mode
+  # is added. Closed set: `out` (the GPIO output register drives it), `af` (a peripheral
+  # drives it), `analog`, `in`. Input is not listed here - it is the implicit fourth mode
+  # and its class is always `in`; `input_modes` is the pull list under it.
+  #
+  # `out` and `af` are SEPARATE on purpose, and the DS's shorted-pin notes are why they
+  # had to be. Those notes prohibit an "output function", which is the GPIO output
+  # register, not a peripheral driving its own pin. Reading it the other way refuses
+  # `GPIO_Mode_AF_PP` on PC16/PC17 - which USBFS needs, because its own remap puts
+  # UDM/UDP exactly there, and DS Note 4 says in the same breath that PC10/PC11 must be
+  # floating inputs "in USB applications". The EVT's own USB examples configure no GPIO
+  # at all on those pins. So the shorted-pair rule blocks `out` only; the entries below
+  # say which classes each one means.
   modes:
     - { name: Output Push Pull,             macro: GPIO_Mode_Out_PP, class: out }
-    - { name: Alternate Function Push Pull, macro: GPIO_Mode_AF_PP, class: out }
+    - { name: Alternate Function Push Pull, macro: GPIO_Mode_AF_PP, class: af }
     - { name: Analog,                       macro: GPIO_Mode_AIN,    class: analog }
 
   # Mode `Input` folds the PULL setting into the macro, so these are keyed by pull name.
@@ -2367,12 +2377,19 @@ constraints:
   # and PC17 are bonded and NOT shorted, and driving them is legal. Scoping the entry is
   # therefore not bookkeeping - leaving it unscoped would refuse a choice the silicon
   # honours, which is the same defect as offering one it does not.
+  #
+  # `classes: [out]` is the GPIO output register only, NOT `af`. See the note on `class:`
+  # above: the DS prohibits an "output function", and its own USB guidance for this very
+  # pin pair requires USBFS to drive PC16/PC17. Blocking `af` too made USBFS fail
+  # `--strict` on five of seven packages - a rule that refused a choice the silicon
+  # honours, found by AGENT-2's measurement, not by reading. It cost a cycle and it is
+  # the reason the class split exists.
   - id: shorted-pc10-pc11-pc16-pc17-not-output
     option: gpio.mode
     classes: [out]
     not_on: [PC10, PC11, PC16, PC17]
     packages: [LQFP64M, LQFP48, QFN28, QSOP28, TSSOP20]
-    reason: "PC10 and PC17 are short-joined inside the chip, as are PC11 and PC16; neither pin of a shorted pair may be configured as an output function."
+    reason: "PC10 and PC17 are short-joined inside the chip, as are PC11 and PC16; neither pin of a shorted pair may be configured as a GPIO output. A peripheral may still drive it."
     source: "CH32X035DS0.md Note 4 (p.19)"
 
   - id: shorted-pb1-pb5-not-output
@@ -2380,7 +2397,7 @@ constraints:
     classes: [out]
     not_on: [PB1, PB5]
     packages: [QFN28, QSOP28]
-    reason: "PB1 and PB5 are shorted and sealed inside the chip; neither may be configured as an output function."
+    reason: "PB1 and PB5 are shorted and sealed inside the chip; neither may be configured as a GPIO output."
     source: "CH32X035DS0.md Note 5 (p.19)"
 
   - id: shorted-pa12-pc14-pa13-pc15-not-output
@@ -2388,7 +2405,7 @@ constraints:
     classes: [out]
     not_on: [PA12, PC14, PA13, PC15]
     packages: [QSOP28]
-    reason: "PA12 and PC14 are shorted and sealed inside the chip, as are PA13 and PC15; neither pin of either pair may be configured as an output function."
+    reason: "PA12 and PC14 are shorted and sealed inside the chip, as are PA13 and PC15; neither pin of either pair may be configured as a GPIO output."
     source: "CH32X035DS0.md Note 6 (p.19)"
 
   - id: shorted-pa7-pc7-not-output
@@ -2396,7 +2413,7 @@ constraints:
     classes: [out]
     not_on: [PA7, PC7]
     packages: [QFN12]
-    reason: "PA7 and PC7 are short-circuited inside the chip; neither may be configured as an output function."
+    reason: "PA7 and PC7 are short-circuited inside the chip; neither may be configured as a GPIO output."
     source: "CH32X035DS0.md Note 7 (p.19)"
 
   # ---- Case 3: the choice is illegal while another peripheral is on ------------
@@ -2414,7 +2431,7 @@ constraints:
   # can act on and one they cannot.
   - id: usb-pc10-pc11-not-driven
     option: gpio.mode
-    classes: [out, analog]
+    classes: [out, af, analog]
     not_on: [PC10, PC11]
     when: { peripheral: USBFS, enabled: true }
     reason: "PC10 and PC11 are short-joined to the USBFS data pins, so while USBFS is enabled they must stay floating inputs."

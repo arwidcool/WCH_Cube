@@ -652,6 +652,27 @@ Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT
       clean first. BOARD 2026-09-11T22:17Z. The shape question is settled in DATA's favour by
       `data/FORMAT.md` + `validate_mcu.py` + QA's 22:25Z recommendation; `on_shorted:` is
       recorded as considered-and-deferred, with the reason, in the same board entry.
+- [x] (AGENT-1) **Correction: `class:` had to split `out` from `af`.** `classes: [out]` covered
+      `GPIO_Mode_AF_PP` as well, so with USBFS on, PC16/PC17 — which USBFS's own remap puts
+      UDM/UDP on — were refused and `--strict` went red on five of seven packages (AGENT-2's
+      measurement, BOARD 01:22Z+). The DS prohibits an "output function", which is the GPIO
+      output register; its own Note 4 requires USB on that pair and the EVT's USB examples
+      configure no GPIO there at all. The set is now `out` / `af` / `analog` / `in`, the four
+      shorted-pair entries say `classes: [out]`, and the USB entry refuses all three driving
+      classes on PC10/PC11. Measured after: USBFS `Device (FS)` on QFN28 exits `--strict` 0 and a
+      manual `PC16: GPIO_Output` still comes out `IN_FLOATING`. Reads cited in
+      `CH32X035.notes.md`; `data/FORMAT.md` documents the four values.
+- [ ] (AGENT-2) **`const:` — a struct member fixed by WHICH INSTANCE it is, not by the user.**
+      Requested BOARD 22:34Z with the citations: `OPA_InitTypeDef.OPA_NUM` / `CMP_InitTypeDef.CMP_NUM`
+      are branched on by the SDK (`ch32x035_opa.c:117`), so an `OPA_Init(&s)` with the member unset
+      silently configures the *other* OPA. It cannot be an editable param (that offers a choice the
+      silicon does not have) and `readonly:` is filtered out of `initPlan`, so it would not be
+      emitted at all. **This blocks OPA and CMP `params:` — the head of DATA's P1 list — and the
+      alternative is worse than the gap.** FORMAT.md gets the block the moment the shape is agreed.
+- [ ] (AGENT-3) Paste the CH32V003 `OPA1.nvic` ABSENT entry posted BOARD 22:34Z — OPA raises no
+      vector on that part (`ch32v00x.h:35-68` has no `OPA_IRQn`; the startup `.word` table ends at
+      `TIM2_IRQHandler`). It is the one red in the tree; `data/` cannot clear it, because the
+      `ABSENT` table is in `tests/completeness.test.js`.
 - [x] (AGENT-1) **CH32V006/CH32V005 audited for the same class, result recorded either way**
       (`data/mcus/CH32V006.notes.md`). Instance 2 (shorted pair not an output) **exists** there -
       CH32V006 DS notes 3 and 4, quoted verbatim - and is deliberately NOT filled this round,

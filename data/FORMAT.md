@@ -717,13 +717,26 @@ where CH32V006's has five, and the GPIO table must render what the part offers r
 a fixed five. Copying CH32V006's list across is how this was nearly shipped; the gate
 caught it.
 
-### `class:` — the direction a mode drives
+### `class:` — which part of the chip drives the pin
 
-A `modes` entry may carry `class:`, one of **`out`, `in`, `analog`**. It is the silicon's
-own direction, and it exists so a constraint can say *"not an output function"* once
-instead of listing mode names that go stale the day a mode is added. `Input` is not a
-`modes` entry — it is the implicit fourth mode and its class is always `in`, with
-`input_modes` as the pull list underneath it.
+A `modes` entry may carry `class:`, one of **`out`, `af`, `analog`, `in`**:
+
+| class | meaning | example |
+|---|---|---|
+| `out` | the **GPIO output register** drives the pin | `GPIO_Mode_Out_PP` |
+| `af` | a **peripheral** drives the pin | `GPIO_Mode_AF_PP` |
+| `analog` | the pin is an analog input, no digital drive | `GPIO_Mode_AIN` |
+| `in` | input; `Input` is the implicit fourth mode and is always this class, with `input_modes` as the pull list underneath it | — |
+
+`class:` exists so a constraint can say *"not an output function"* once instead of
+listing mode names that go stale the day a mode is added. **`out` and `af` are separate
+because a datasheet's word for one is not its word for the other.** CH32X035 DS Notes 4–7
+prohibit a shorted pin from being configured as an "output function" — the GPIO output
+register — and the same note says PC10/PC11 must be floating inputs "in USB applications",
+while `USBFS`'s own remap puts its data lines on PC16/PC17 of that very pair. A rule that
+covered `af` would refuse the peripheral the note is about: measured, that made USBFS fail
+`--strict` on five of seven packages. The EVT's own USB examples configure no GPIO at all
+on those pins, which is the third sign that `af` is not what the note means.
 
 `class:` is optional, but a file that writes a `classes:` constraint must give **every**
 `modes` entry a `class:` — `validate_mcu.py` fails otherwise. A class-based constraint
@@ -799,7 +812,7 @@ constraints:
 | `id` | yes | unique slug. A conflict message and a test name the constraint by it, so it must read as the rule, not as the part. |
 | `option` | yes | which control the choice comes from, dotted: `gpio.mode`, `gpio.pull`, `gpio.speed`. |
 | `choices` | one of | the restricted choice names, **verbatim as the GPIO table spells them** |
-| `classes` | one of | every choice of these classes, read off `gpio.modes[].class` — how "an output function" is said without listing modes |
+| `classes` | one of | every choice of these classes, read off `gpio.modes[].class` — how "an output function" is said without listing modes. `out` is the GPIO output register, `af` a peripheral drive: see `class:` above for why the two are not one |
 | `only_on` | one of | the pin **allow**-list: the choice is legal on these pins and refused everywhere else |
 | `not_on` | one of | the pin **deny**-list: the choice is refused on exactly these pins |
 | `packages` | no | scope the entry to these packages. Omitted = every package. |
