@@ -1065,6 +1065,14 @@ clock:
   sysclk:
     sources: [HSI, HSE, PLLCLK]
     max_mhz: 144
+
+  # Same HSE coupling as the real parts (see data/FORMAT.md). This fixture deliberately
+  # names its crystal pins OSC_IN / OSC_OUT rather than XI / XO, so an engine that
+  # hardcoded the CH32V006 spelling would pass on V006 and silently fail here.
+  hse_peripheral: RCC
+  hse_setting: High Speed Clock (HSE)
+  hse_signals: [OSC_IN, OSC_OUT]
+
   prescalers:
     AHB:  { options: [1, 2, 4, 8, 16, 64, 128, 256, 512], max_mhz: 144 }
     APB1: { options: [1, 2, 4, 8, 16], max_mhz: 72 }

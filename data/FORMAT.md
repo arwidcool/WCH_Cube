@@ -30,6 +30,7 @@ peripheral about what it can do.
 | `exti` | no | external-interrupt line → pin, via AFIO_EXTICR |
 | `dma` | no | DMA channel → peripheral requests |
 | `clock` | no | the Clock Configuration tab |
+| `codegen` | no | register encodings the C generator cannot derive |
 
 The loader only *requires* `mcu`, `packages`, `pins` and `peripherals`. Unknown top-level
 keys are ignored, which is how `exti:` and `dma:` could be added as data before anything
@@ -267,11 +268,14 @@ channel is a conflict worth warning about.
 clock:
   sources:
     HSI: { mhz: 24, fixed: true }
-    HSE: { mhz: 24, min_mhz: 3, max_mhz: 25 }
+    HSE: { mhz: 24, min_mhz: 3, max_mhz: 32 }
   pll:
     inputs: [{ name: HSI, source: HSI, div: 1 }]
     multipliers: [2]
   sysclk: { sources: [HSI, HSE, PLLCLK], max_mhz: 48 }
+  hse_peripheral: RCC                     # see "Selecting HSE" below
+  hse_setting: High Speed Clock (HSE)
+  hse_signals: [XI, XO]
   prescalers:
     HB:  { options: [1, 2, 4], max_mhz: 48, label: HB prescaler (HPRE) → HCLK }
     ADC: { options: [1, 2, 4], source: HB, min_mhz: 16, max_mhz: 48 }
@@ -284,6 +288,89 @@ clock:
 A prescaler with no `source` hangs off SYSCLK. Otherwise `source` names another
 prescaler, an oscillator, `SYSCLK` or `PLLCLK`. `min_mhz` / `max_mhz` drive the red
 out-of-spec warnings.
+
+### Selecting HSE (`hse_peripheral` / `hse_setting` / `hse_signals`)
+
+A crystal is two facts at once: a frequency in the clock tree, and two pins claimed on the
+chip. The clock tab owns the first, the peripheral table owns the second, and these three
+keys are the only thing joining them.
+
+| Key | What it names |
+|---|---|
+| `hse_peripheral` | the peripheral holding the crystal setting, e.g. `RCC` |
+| `hse_setting` | that peripheral's `settings[]` entry, matched by `name` |
+| `hse_signals` | the signals the crystal choice claims, e.g. `[XI, XO]` |
+
+The rule the app implements, from CubeMX: **picking HSE anywhere in the clock tree — as
+SYSCLK's source or as the PLL's — switches that setting on** (to the first choice claiming
+every signal in `hse_signals`, i.e. the crystal rather than the bypass), and the pins go
+through the ordinary conflict engine. Selecting *away* from HSE does **not** switch it back
+off: the user wired a crystal to the board, and only the user un-wires it.
+
+Do not hardcode `XI`/`XO` anywhere. `WCH-DUMMY32-C8` deliberately calls the same two pins
+`OSC_IN`/`OSC_OUT`, so an engine that assumed the CH32V006 spelling passes on the real part
+and silently fails on the fixture. `validate_mcu.py` checks that all three keys still
+resolve and that some choice of that setting really claims those signals.
+
+`sources.HSE.min_mhz` / `max_mhz` bound the editable crystal frequency. For CH32V006 that
+is 3 to 32 MHz — DS Tables 3-9 and 3-10, min/typ/max 3 / 24 / 32, for the external-clock
+and crystal cases respectively. (It read 25 until round 2; 25 MHz appears in the datasheet
+only in a footnote about crystal ESR, not as a limit.)
+
+---
+
+## `codegen`
+
+Everything the C generator cannot work out from the model: which register field a remap
+index is written to, which signals are analog, and how the clock choices encode. The
+generator never guesses a bit position — without this block it emits a `TODO` naming
+exactly what is missing, so a part with no `codegen:` still generates a useful file.
+
+```yaml
+codegen:
+  header: ch32v00x.h
+  gpio_clock: { fn: RCC_PB2PeriphClockCmd, port: RCC_PB2Periph_GPIO$PORT, afio: RCC_PB2Periph_AFIO }
+  speeds: { Low: GPIO_Speed_2MHz, Medium: GPIO_Speed_10MHz, High: GPIO_Speed_50MHz }
+  remap:
+    register: "AFIO->PCFR1"
+    fields:
+      SPI1: [{ lsb: 0, bits: 3 }]
+      TIM2: [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }]   # split field
+  analog_signals:
+    ADC1: [IN0, IN1]
+  rcc:
+    register: "RCC->CFGR0"
+    sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }
+    pllsrc: { lsb: 16, bits: 1, values: { HSI: 0, HSE: 1 } }
+    mco:
+      peripheral: RCC                       # whose choice names the `values` keys are
+      setting: Master Clock Output (MCO)
+      lsb: 24
+      bits: 3
+      values: { Disable: 0, SYSCLK: 4, HSI: 5, HSE: 6, PLLCLK: 7 }
+    prescalers:
+      HB: { lsb: 4, bits: 4, values: { 1: 0, 2: 1 } }
+  ctlr:
+    register: "RCC->CTLR"
+    fields: { HSEON: { lsb: 16, bits: 1 }, HSEBYP: { lsb: 18, bits: 1 } }
+    hse_choices:                            # keys = choices of clock.hse_setting
+      Disable:                     { HSEON: 0, HSEBYP: 0 }
+      Crystal / ceramic resonator: { HSEON: 1, HSEBYP: 0 }
+```
+
+Two registers are involved in a clock change, not one: `CFGR0` carries the muxes and
+prescalers, `CTLR` the oscillator *enables*. Selecting HSE therefore needs `HSEON` in
+`ctlr` as well as `sw`/`pllsrc` in `rcc`, which is why `ctlr` exists.
+
+**`remap.fields` only lists peripherals whose `remaps:` index IS the register field
+value.** A peripheral whose remap list means something else — `SYS`, whose remaps select
+the package's reset pin — must be left out, or the generator writes a package index into
+an AFIO field. A field must also be wide enough for its remap list; the validator checks
+that arithmetic.
+
+**Value maps keyed by a choice name** (`mco.values`, `ctlr.hse_choices`) say where their
+keys come from, so renaming a choice in `peripherals:` is caught rather than quietly
+turning into a reset value. `hse_choices` must cover *every* choice of the setting.
 
 ---
 

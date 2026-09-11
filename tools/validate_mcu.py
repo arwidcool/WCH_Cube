@@ -22,7 +22,16 @@ What it checks
   I/O counts         mcu.variants[*].io_count vs the io pins actually in that package
                      table (a shorted pair counts once) - catches a dropped or
                      duplicated row in `packages:`
-  clock              every source/prescaler reference points at a node that exists
+  clock              every source/prescaler reference points at a node that exists,
+                     and the HSE coupling (clock.hse_peripheral / hse_setting /
+                     hse_signals) still names a real setting whose choice claims
+                     those signals - the round-2 "picking HSE enables the crystal"
+                     path has nothing else holding it together
+  codegen            every NAME in `codegen:` still points at something in this file:
+                     remap fields wide enough for their remap list, analog signals
+                     the peripheral really routes, and value maps keyed by choice
+                     names that still exist. The bit NUMBERS are the RM's word and
+                     only a human re-reading it can check those.
 
 Output is deliberately ASCII only: the Windows console here is cp1252 and chokes
 on arrows and box characters.
@@ -430,6 +439,169 @@ def check_clock(doc: dict, r: Report) -> None:
         if src and src not in known:
             r.error(f"clock.derived[{i}]", f"source `{src}` is not a known clock node")
 
+    check_hse_coupling(doc, clock, sources, r)
+
+
+def _setting_named(periph: dict, name: str):
+    for st in periph.get("settings") or []:
+        if isinstance(st, dict) and st.get("name") == name:
+            return st
+    return None
+
+
+def _signals_routed_by(periph: dict) -> set:
+    routed = set()
+    for rm in periph.get("remaps") or []:
+        routed |= set((rm or {}).get("pins") or {})
+    return routed
+
+
+def check_hse_coupling(doc: dict, clock: dict, sources: dict, r: Report) -> None:
+    """Picking HSE as a clock source has to switch on the peripheral setting that wires
+    the crystal up, and that setting claims pins. clock.hse_peripheral / hse_setting /
+    hse_signals are the only thing tying the clock tree to the peripheral table, so a
+    rename on either side has to be caught here: the app would otherwise quietly stop
+    enabling the crystal, with nothing on screen to say why."""
+    periphs = doc.get("peripherals") or {}
+    pid = clock.get("hse_peripheral")
+    sname = clock.get("hse_setting")
+    signals = clock.get("hse_signals") or []
+
+    if "HSE" not in sources:
+        if pid or sname or signals:
+            r.warn("clock.hse_peripheral", "declared, but this part has no HSE oscillator")
+        return
+    if not pid:
+        r.warn("clock.hse_peripheral",
+               "the part has an HSE oscillator but nothing says which peripheral setting "
+               "enables it, so the app has to guess a setting whose name contains `HSE`")
+        return
+
+    periph = periphs.get(pid)
+    if not isinstance(periph, dict):
+        r.error("clock.hse_peripheral", f"`{pid}` is not in peripherals")
+        return
+
+    have = [str(st.get("name")) for st in periph.get("settings") or [] if isinstance(st, dict)]
+    if not sname:
+        r.error("clock.hse_setting", f"missing; `{pid}` offers: {', '.join(have)}")
+        return
+    st = _setting_named(periph, sname)
+    if st is None:
+        r.error("clock.hse_setting",
+                f"`{pid}` has no setting named `{sname}` (it has: {', '.join(have)})")
+        return
+    if not signals:
+        r.error("clock.hse_signals",
+                "missing; the engine cannot tell which pins the crystal claims")
+        return
+
+    want = set(signals)
+    choices = [c for c in st.get("choices") or [] if isinstance(c, dict)]
+    if not any(want <= set(c.get("signals") or []) for c in choices):
+        r.error("clock.hse_signals",
+                f"no choice of `{pid}` / `{sname}` claims all of {sorted(want)}, so picking "
+                "HSE would switch on a setting that never reserves the crystal pins")
+    for sig in sorted(want - _signals_routed_by(periph)):
+        r.error("clock.hse_signals", f"`{sig}` is not routed to a pin by any `{pid}` remap")
+
+
+def check_codegen(doc: dict, r: Report) -> None:
+    """`codegen:` holds the register encodings the C generator cannot derive. The bit
+    numbers are the reference manual's word and only a human re-reading it can check
+    them (CH32V006.notes.md records that pass). What can be checked mechanically is that
+    every NAME in here still points at something in this file, because those links rot
+    quietly: a renamed choice leaves the generator emitting a reset value."""
+    cg = doc.get("codegen")
+    if cg is None:
+        return
+    if not isinstance(cg, dict):
+        r.error("codegen", "must be a mapping")
+        return
+    periphs = doc.get("peripherals") or {}
+
+    for pid, slices in ((cg.get("remap") or {}).get("fields") or {}).items():
+        where = f"codegen.remap.fields.{pid}"
+        periph = periphs.get(pid)
+        if not isinstance(periph, dict):
+            r.error(where, "no such peripheral")
+            continue
+        if not isinstance(slices, list):
+            r.error(where, "must be a list of {lsb, bits} slices")
+            continue
+        bits = sum(int(sl.get("bits", 0)) for sl in slices if isinstance(sl, dict))
+        count = len(periph.get("remaps") or [])
+        if bits and count > (1 << bits):
+            r.error(where, f"{bits} bits hold {1 << bits} values but the peripheral has "
+                           f"{count} remaps, so the high ones cannot be encoded")
+
+    for pid, sigs in (cg.get("analog_signals") or {}).items():
+        where = f"codegen.analog_signals.{pid}"
+        periph = periphs.get(pid)
+        if not isinstance(periph, dict):
+            r.error(where, "no such peripheral")
+            continue
+        routed = _signals_routed_by(periph)
+        for sig in sigs or []:
+            if sig not in routed:
+                r.error(where, f"`{sig}` is not a signal this peripheral routes to a pin")
+
+    # periph_clock names the clock-enable bit per peripheral. Plenty of legitimate names
+    # here are not modelled peripherals (AFIO, SRAM, the GPIO ports), so an unknown name
+    # is a warning - but it does catch the real case: a child part that removed a
+    # peripheral and inherited its parent's clock-enable bit anyway.
+    known_extra = {"AFIO", "SRAM", "FLASH", "PWR", "BKP", "CRC"}
+    for reg, blk in (cg.get("periph_clock") or {}).items():
+        if not isinstance(blk, dict):
+            continue
+        for name in (blk.get("bits") or {}):
+            if name in periphs or str(name).startswith("GPIO") or name in known_extra:
+                continue
+            r.warn(f"codegen.periph_clock.{reg}.bits",
+                   f"`{name}` is not a peripheral in this file; if the part does not have "
+                   "it, the generator will emit a clock enable for hardware that is absent")
+
+    mco = (cg.get("rcc") or {}).get("mco")
+    if isinstance(mco, dict) and mco.get("values"):
+        _check_choice_keys(doc, r, "codegen.rcc.mco.values",
+                           mco.get("peripheral"), mco.get("setting"), mco["values"])
+
+    ctlr = cg.get("ctlr")
+    if isinstance(ctlr, dict) and ctlr.get("hse_choices"):
+        clock = doc.get("clock") or {}
+        _check_choice_keys(doc, r, "codegen.ctlr.hse_choices",
+                           clock.get("hse_peripheral"), clock.get("hse_setting"),
+                           ctlr["hse_choices"], exhaustive=True)
+
+
+def _check_choice_keys(doc, r, where, pid, sname, mapping, exhaustive: bool = False) -> None:
+    """A value map keyed by the NAME of a choice. Every key must still be a choice; with
+    `exhaustive`, every choice must also have an encoding, so adding a choice without one
+    is caught rather than silently generating nothing for it."""
+    periphs = doc.get("peripherals") or {}
+    if not pid or not sname:
+        r.error(where, "does not say which peripheral setting its keys come from")
+        return
+    periph = periphs.get(pid)
+    if not isinstance(periph, dict):
+        r.error(where, f"peripheral `{pid}` does not exist")
+        return
+    st = _setting_named(periph, sname)
+    if st is None:
+        r.error(where, f"`{pid}` has no setting named `{sname}`")
+        return
+    names = [str(c.get("name")) for c in st.get("choices") or [] if isinstance(c, dict)]
+    for key in mapping:
+        if str(key) not in names:
+            r.error(where, f"`{key}` is not a choice of `{pid}` / `{sname}` "
+                           f"(choices: {', '.join(names)})")
+    if exhaustive:
+        keys = {str(k) for k in mapping}
+        for name in names:
+            if name not in keys:
+                r.error(where, f"choice `{name}` has no encoding, so the generator "
+                               "cannot emit it")
+
 
 def check_exti(doc: dict, r: Report) -> None:
     exti = doc.get("exti")
@@ -589,6 +761,7 @@ def validate_file(path: pathlib.Path, geom: dict) -> Report:
     check_peripherals(doc, r)
     check_io_counts(doc, tables, r)
     check_clock(doc, r)
+    check_codegen(doc, r)
     check_exti(doc, r)
     check_flow_mappings(path.read_text(encoding="utf-8"), r)
     return r

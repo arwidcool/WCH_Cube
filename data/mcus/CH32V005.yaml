@@ -48,6 +48,11 @@ mcu:
     - peripherals.TIM3                      # same note
     - peripherals.SYS.remap_by_package.QFN32   # the package it pointed at is gone
     - dma.requests                          # replaced below, minus the TIM3 requests
+    # The parent's codegen block mentions both dropped peripherals. Left inherited, the
+    # generator would mark TouchKey pins analog and emit a TIM3 clock enable on a part
+    # that has neither. Found by validate_mcu.py's codegen name check, round 2.
+    - codegen.analog_signals.TKEY
+    - codegen.periph_clock.PB1.bits.TIM3
 
   # DS §1 model table, lines 106-109. Replaces the parent's list outright.
   variants:

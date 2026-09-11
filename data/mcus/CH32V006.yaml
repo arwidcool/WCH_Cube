@@ -1004,6 +1004,16 @@ codegen:
     register: "RCC->CFGR0"
     sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }   # SW[1:0]
     pllsrc: { lsb: 16, bits: 1, values: { HSI: 0, HSE: 1 } }              # PLLSRC
+    # MCO[2:0] — RM 3.4.2. The field is not a dense enum: 0xx all mean "no clock output",
+    # so Disable encodes as 0 and the four real sources start at 100b. Keys are the choice
+    # names of peripherals.RCC "Master Clock Output (MCO)", so a rename there has to be
+    # made here too — validate_mcu.py checks that they still line up.
+    mco:
+      peripheral: RCC
+      setting: Master Clock Output (MCO)
+      lsb: 24
+      bits: 3
+      values: { Disable: 0, SYSCLK: 4, HSI: 5, HSE: 6, PLLCLK: 7 }
     prescalers:
       # HPRE[3:0]. The RM gives two encodings for /2, /4 and /8; these are the ones from
       # the 0000..0111 run, which covers every divider the clock tree offers below 16.
@@ -1028,6 +1038,30 @@ codegen:
              values: { 2: 0, 4: 4, 6: 16, 8: 12, 12: 20, 16: 28,
                        24: 21, 32: 29, 48: 22, 64: 30, 96: 23, 128: 31 } }
 
+  # RCC_CTLR — RM 3.4.1, offset 0x00, reset 0x0050XX83. The oscillator ENABLES live here,
+  # not in CFGR0, so selecting HSE takes two registers: SW/PLLSRC in CFGR0 and HSEON here.
+  # `hse_choices` is keyed by the choice names of peripherals.RCC "High Speed Clock (HSE)".
+  # Write order matters: RM 3.4.1 bit 18 says HSEBYP may only be written while HSEON is 0,
+  # so a generator clears HSEON, writes HSEBYP, then sets HSEON and polls HSERDY.
+  ctlr:
+    register: "RCC->CTLR"
+    fields:
+      HSION:  { lsb: 0,  bits: 1 }
+      HSIRDY: { lsb: 1,  bits: 1, access: ro }
+      HSEON:  { lsb: 16, bits: 1 }
+      HSERDY: { lsb: 17, bits: 1, access: ro }
+      HSEBYP: { lsb: 18, bits: 1 }
+      CSSON:  { lsb: 19, bits: 1 }
+      PLLON:  { lsb: 24, bits: 1 }
+      PLLRDY: { lsb: 25, bits: 1, access: ro }
+    hse_choices:
+      Disable:                     { HSEON: 0, HSEBYP: 0 }
+      BYPASS clock source:         { HSEON: 1, HSEBYP: 1 }
+      Crystal / ceramic resonator: { HSEON: 1, HSEBYP: 0 }
+    # PLLON is not a user setting: it follows from the clock tree. Set it whenever PLLCLK
+    # feeds SYSCLK or the MCO, and poll PLLRDY before switching SW to 10b.
+    pll_follows_tree: true
+
   # Not consumed by the generator yet — data first, so it is ready when it is.
   # Which enable register each peripheral's clock bit lives in (RM 3.4.6 / 3.4.7 / 3.4.8).
   # This is NOT a frequency split: there is only one prescaler (HPRE), so HB, PB1 and PB2
@@ -1050,7 +1084,12 @@ codegen:
 clock:
   sources:
     HSI: { mhz: 24, fixed: true }
-    HSE: { mhz: 24, min_mhz: 3, max_mhz: 25 }
+    # DS Table 3-9 (from an external high-speed clock) and Table 3-10 (crystal / ceramic
+    # resonator) both give 3 / 24 / 32 MHz as min / typ / max, so the ceiling is 32.
+    # This said 25 before round 2 and that number is in neither table: 25 MHz appears
+    # only in Table 3-10 note 1, an ESR recommendation for a 25 MHz crystal, not a limit.
+    # Nothing is loosened by the fix - sysclk.max_mhz still reddens HSE x2 above 24.
+    HSE: { mhz: 24, min_mhz: 3, max_mhz: 32 }
     LSI: { khz: 128, fixed: true }
   pll:
     inputs:
@@ -1060,6 +1099,16 @@ clock:
   sysclk:
     sources: [HSI, HSE, PLLCLK]
     max_mhz: 48
+
+  # Picking HSE anywhere in the clock tree must switch the RCC crystal on and let it claim
+  # its pins, the way CubeMX does (round-2 P0). These three keys name the setting that
+  # represents "HSE is wired up" and the signals its crystal choice claims, so the engine
+  # never hardcodes XI/XO - the dummy part calls the same two pins OSC_IN/OSC_OUT.
+  # The engine must never do the reverse: switching SYSCLK away from HSE leaves RCC alone.
+  hse_peripheral: RCC                    # -> peripherals.RCC
+  hse_setting: High Speed Clock (HSE)    # -> that peripheral's settings[] entry, by name
+  hse_signals: [XI, XO]                  # the crystal choice claims both; BYPASS claims XI only
+
   prescalers:
     HB:  { options: [1, 2, 3, 4, 5, 6, 7, 8, 16, 32, 64, 128, 256], max_mhz: 48, label: HB prescaler (HPRE) → HCLK }
     ADC: { options: [1, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128], source: HB, min_mhz: 16, max_mhz: 48,
