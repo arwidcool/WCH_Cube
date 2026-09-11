@@ -66,6 +66,30 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 - [x] Per-pin notes (SWIO/SWCLK, XI/XO, RST-per-package); [-] 5V-tolerance — the V006 DS does not state it per pin, nothing to extract (AGENT-1)
 - [x] V00x clock tree (HB domain, ADCPRE incl. /1 ADC_CLK_MODE)  [ ] other families (V003: HSI 24 MHz & PLL x2; V20x/V30x: F1-style with PLL mults; L103; X035)
 
+## Round 2 — fully functional and polished  (CURRENT)
+
+See `Agents Rounds 2/00_PROJECT.md`. Data lines only; the other three areas track their own.
+
+- [x] (AGENT-1) HSE coupling data — `clock.hse_peripheral` / `hse_setting` / `hse_signals` on
+      CH32V006, CH32V005 (inherited) and the dummy part, which spells the same pins
+      OSC_IN/OSC_OUT so a hardcoded XI/XO cannot hide
+- [x] (AGENT-1) HSE range corrected 25 → 32 MHz (DS Tables 3-9 and 3-10); the old value had
+      no citation and came from a footnote about crystal ESR
+- [x] (AGENT-1) `codegen.ctlr` (RCC_CTLR: HSEON/HSEBYP/PLLON and the write-order rules) and
+      `codegen.rcc.mco`, so picking HSE or an MCO source reaches generated C
+- [x] (AGENT-1) `dma.channel_params` + `dma.request_defaults` + `dma.register` — every
+      DMA_InitTypeDef field the user picks, all 23 requests given starting values
+- [x] (AGENT-1) `nvic:` — 29 vectors from RM Table 6-1 with owners, plus the PFIC priority
+      scheme (two bits, not the Cortex-M four)
+- [x] (AGENT-1) PWR, FLASH and EXTI added as real peripherals; RM chapter list now covered
+      except four deliberate absences recorded in CH32V006.notes.md
+- [x] (AGENT-1) validate_mcu.py: HSE coupling, codegen names, dma and nvic checks — 14
+      planted breaks, 14 caught
+- [ ] (AGENT-1) WCH-DUMMY32-C8 has no `dma` / `nvic` / `params` / `codegen` blocks, so the
+      new tabs have nothing to render on a large package
+- [ ] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1
+- [ ] (AGENT-1) Medium-confidence rows: TouchKey channel→pin (RM ch.10), OPA polling set
+
 ## Phase 3 — Code / report generation  (FUTURE — keep hooks, do not build yet)
 
 - [x] (AGENT-2) Pin table export (markdown + CSV) + clock summary (markdown) — `app/engine/export.js`
@@ -166,6 +190,21 @@ real combobox with a result list the arrow keys walk. The Parameter Settings tab
 against `app/assets/params.stub.yaml` — grouped, foldable, one editor per type, dependency greying, read-only
 computed rows — and turns editable the moment AGENT-2's setParam() lands. The package selector shows temp
 grades. With AGENT-1's big dummy packages in place, the QFN12→LQFP144 overflow line is now genuinely covered.
+
+**2026-09-11 (AGENT-1, round 2 cycle 1)** — The data behind the reported clock bug, then the
+data the DMA/NVIC gap needs. Three facts were wrong or missing rather than merely absent, and
+each was found by checking rather than by reading: HSE's maximum was 25 MHz with no citation
+anywhere (both datasheet tables say 32; the 25 is a footnote about crystal ESR); CH32V005
+inherited two `codegen` entries for peripherals it does not have, so its generated code would
+have configured TouchKey pins and a TIM3 clock; and CH32V005 has been shipping with **no DMA
+request map at all**, because `mcu.remove` runs after the merge and deleted the replacement the
+child defined right below it — reproduced through the app's own `resolveInherits()`, not just
+the validator. Added `dma.channel_params` (every DMA_InitTypeDef field, DMA_CFGRx encodings from
+RM 8.3.3) deliberately in the same schema as `params:` so the UI needs no new editors, all 23
+`request_defaults`, `nvic:` with the whole vector table, and PWR / FLASH / EXTI as real
+peripherals. The PFIC's priority scheme is two bits, not the Cortex-M four — worth knowing
+before anyone builds a 0-15 priority spinner. validate_mcu.py grew four checks covering all of
+it, each negative-tested; 14 planted breaks, 14 caught.
 
 **2026-09-11 (AGENT-1 cycle 2)** — Worked the queue in `agents/AGENT_1_DATA.md`. CH32V005 shipped via
 `inherits`, with a new `tools/extract_pins.py` that re-derives package tables from the datasheet and

@@ -46,3 +46,51 @@ Every item below is unblocked. Work top to bottom; post DONE on the board after 
 ## When idle
 - Any part whose DS+RM appears in data/sources/ (CH32V003, V203, V307, X035 in that order).
 - 5 V-tolerance, drive-strength, input-only flags per pin where the DS states them.
+
+---
+
+## Current — round 2, cycle 1 (2026-09-11)
+
+Commits: `cb6873a` (clock/HSE + validator), `d7c9efb` (DMA), `86e1e88` (NVIC + peripherals).
+Gate after each: `validate_mcu` 0 errors, `python build.py`, `node tests/run.js` ALL GREEN 267.
+
+| # | Brief item | State |
+|---|---|---|
+| 1 | P0 clock data | done — `hse_peripheral` / `hse_setting` / `hse_signals`; PLLSRC and MCO re-verified against the RM; HSE range corrected |
+| 2 | CH32V005 | was already shipped; round 2 found and fixed two real defects in it |
+| 3 | Large dummy packages | already shipped in cycle 2 |
+| 4 | `codegen:` block | extended with `ctlr` (RCC_CTLR) and `rcc.mco` |
+| 5 | `codegen.analog_signals` | already shipped; a stale inherited copy removed from CH32V005 |
+| 6 | validate_mcu warnings | already applied by the human's decisions; four new checks added |
+| 6b | DMA data | done — `channel_params`, `request_defaults`, `register`, `request_notes` |
+| 6c | NVIC data | done — 29 vectors, PFIC scheme with its real two bits |
+| 6d | Missing peripherals | done — PWR, FLASH, EXTI; four deliberate absences recorded |
+| 7 | `params:` | shipped in cycle 2 for the big seven; five small peripherals still have none |
+
+**Three defects found by checking rather than reading.** All three were invisible to every
+existing test, and two of them were live in the shipped app:
+
+1. **HSE maximum was 25 MHz and had no citation.** DS Tables 3-9 and 3-10 both say 3 / 24 / 32.
+   The 25 appears once in the datasheet, in a footnote about the ESR of a 25 MHz crystal.
+2. **CH32V005 inherited `codegen` entries for hardware it does not have** — TouchKey analog
+   pins and a TIM3 clock enable. Its generated C would have configured both.
+3. **CH32V005 had no DMA request map at all.** `mcu.remove` is applied after the parent is
+   merged, so removing `dma.requests` deleted the child's own replacement defined right below
+   it. Reproduced through `app/engine/inherit.js` itself: the engine's channel-clash detection
+   has been dead on that part since it shipped. Data-side fixed; the engine semantics are a
+   `QA-FAIL(→AGENT-2)` on the board, because any future child part will hit the same trap.
+
+**One thing the PFIC will catch people out with.** `nvic.scheme` says two priority bits
+because that is what `PFIC_IPRIORx` implements — RM 6.5.2.21 calls [5:0] "reserved, fixed to 0,
+write invalid". Anyone building the NVIC tab from CubeMX muscle memory will reach for four bits
+and a group selector; the validator now fails a range wider than its bits, so that mistake
+cannot ship quietly.
+
+**Two things the sources will not settle, recorded rather than guessed.** RM Table 6-1 has no
+TIM3 vector although this part has a TIM3, and the PFIC's nesting depth is configured in a core
+CSR this manual never mentions. Both are in `CH32V006.notes.md`.
+
+Next, in order: the dummy part has no `dma` / `nvic` / `params` / `codegen` at all, so the new
+tabs have nothing to render on a large package; then `params:` for TIM3, IWDG, WWDG, TKEY and
+OPA1; then the Medium-confidence rows (TouchKey channel→pin from RM ch.10, the OPA polling
+set). Not blocked on anyone.
