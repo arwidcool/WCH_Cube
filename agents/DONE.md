@@ -87,9 +87,10 @@ toolchain here, so `src-tauri/` has never been compiled.
         is inert in a browser. **The Rust has never been compiled**: no cargo on this box and
         the CI `desktop` job has never run, because the repo has no remote. Cannot tick.
 - [ ] `npm test` / `node tests/run.js` green; GitHub Actions workflow runs build + tests on every push
-      → `.github/workflows/ci.yml` is written (Node 22, Python 3.12, validate → build →
-        stale-dist check → tests, plus the desktop job). 122 of 123 tests pass; the red one
-        is `app/tests/history.test.js`. The workflow has never run: no remote is configured.
+      → `node tests/run.js` is **green: 145 tests**, and `.github/workflows/ci.yml` is written
+        (Node 22, Python 3.12, validate → build → stale-dist check → tests, plus a Linux
+        desktop job). Half of this line is therefore done; the workflow itself has never run
+        because the repo has no remote, so it cannot be ticked.
 - [x] README documents: run in browser, run desktop, add an MCU, file format, agent workflow
       → `README.md`: run in a browser, run and build the desktop app, projects, add an MCU
         (with the remap-table idea and `tools/validate_mcu.py`), running the tests including

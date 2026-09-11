@@ -6,6 +6,7 @@
 import { M, S, pinType } from './model.js';
 import { E, compute } from './engine.js';
 import { clockCalc, firstPre } from './clock.js';
+import { cFiles } from './codegen.js';
 
 const num = v => (Math.round(v * 1000) / 1000).toString();
 
@@ -80,13 +81,15 @@ export function clockSummaryMarkdown() {
   return lines.join('\n');
 }
 
-// Everything the Generate button can produce right now, as {filename: text}.
+// Everything the Generate button produces, as {filename: text}: the reports
+// plus the C initialisation code.
 export function generateAll() {
   const base = `${M.mcu.name}_${S.pkg}`;
   return {
     [`${base}_pinout.md`]: pinTableMarkdown(),
     [`${base}_pinout.csv`]: pinTableCsv(),
     [`${base}_clocks.md`]: clockSummaryMarkdown(),
+    ...cFiles(),
   };
 }
 

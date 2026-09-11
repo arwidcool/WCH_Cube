@@ -7,4 +7,5 @@ export * from './model.js';
 export * from './clock.js';
 export * from './engine.js';
 export * from './project.js';
+export * from './codegen.js';
 export * from './export.js';

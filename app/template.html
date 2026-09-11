@@ -820,13 +820,13 @@ function renderSystem() {
       const known = !!M.peripherals[p];
       const st = known ? (E.status[p] || '') : 'na';
       const conf = known ? Object.values(E.pins).filter(v => v.state === 'conflict' && v.claims.some(c => c.who === p)).length : 0;
+      const pins = known ? Object.values(E.pins).filter(v => v.claims.some(c => c.who === p)).length : 0;
       const iss = known ? ((E.issueCount || {})[p] || 0) : 0;
       const note = !known ? 'fabric'
         : st === 'na' ? 'not on this package'
         : conf ? `${conf} conflict${conf > 1 ? 's' : ''}`
         : iss ? `${iss} issue${iss > 1 ? 's' : ''}`
         : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
-      const pins = known ? Object.values(E.pins).filter(v => v.claims.some(c => c.who === p)).length : 0;
       const blkTip = `${p}${known ? ` \u2014 ${note}` : ' \u2014 not a configurable peripheral'}`;
       g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}" role="button" tabindex="0"` : ' role="img"'} aria-label="${attr(blkTip)}"><title>${esc(blkTip)}</title>`);
       g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
