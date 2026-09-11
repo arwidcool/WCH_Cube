@@ -30,6 +30,9 @@ What it checks
   dma                every request names a peripheral that exists, every request has
                      starting values, and every value names a real channel parameter
                      and one of its options
+  nvic               every vector has a number nothing else uses and an owner that
+                     exists, and the priority scheme's bit widths match the ranges
+                     it offers
   codegen            every NAME in `codegen:` still points at something in this file:
                      remap fields wide enough for their remap list, analog signals
                      the peripheral really routes, and value maps keyed by choice
@@ -618,6 +621,67 @@ def check_dma(doc: dict, r: Report) -> None:
                 r.error(f"dma.register.fields.{name}", f"bit {bit} is also used by `{seen[bit]}`")
             seen[bit] = name
 
+def check_nvic(doc: dict, r: Report) -> None:
+    """`nvic:` is what the NVIC Settings tab and the System Core NVIC panel are built
+    from. Two vectors on one number, or a vector owned by a peripheral that does not
+    exist on this part, both produce a tab that lies about the silicon - which is what
+    a derived part is most likely to do, since it inherits the parent's whole table."""
+    nvic = doc.get("nvic")
+    if nvic is None:
+        return
+    if not isinstance(nvic, dict):
+        r.error("nvic", "must be a mapping")
+        return
+    periphs = doc.get("peripherals") or {}
+
+    seen_num, seen_name = {}, set()
+    for i, v in enumerate(nvic.get("vectors") or []):
+        where = f"nvic.vectors[{i}]"
+        if not isinstance(v, dict):
+            r.error(where, "must be a mapping")
+            continue
+        name = v.get("name")
+        if not name:
+            r.error(where, "no `name`")
+        else:
+            where = f"nvic.vectors.{name}"
+            if name in seen_name:
+                r.error(where, "duplicate vector name")
+            seen_name.add(name)
+        num = v.get("vector")
+        if num is None:
+            r.error(where, "no `vector` number")
+        elif num in seen_num:
+            r.error(where, f"vector number {num} is already used by `{seen_num[num]}`")
+        else:
+            seen_num[num] = name
+        owner = v.get("peripheral")
+        if owner and owner not in periphs:
+            r.error(where, f"owned by `{owner}`, which is not a peripheral in this file")
+        if not owner and not v.get("system"):
+            r.warn(where, "has no `peripheral` and is not marked `system: true`, so no "
+                          "NVIC tab will list it")
+
+    scheme = nvic.get("scheme") or {}
+    bits = scheme.get("priority_bits")
+    for g in scheme.get("groups") or []:
+        if not isinstance(g, dict):
+            continue
+        gname = g.get("name", "(unnamed)")
+        total = 0
+        for half in ("preempt", "sub"):
+            part = g.get(half) or {}
+            b = int(part.get("bits", 0))
+            total += b
+            hi = part.get("max")
+            if hi is not None and b is not None and hi > (1 << b) - 1:
+                r.error(f"nvic.scheme.groups.{gname}.{half}",
+                        f"offers up to {hi} but {b} bit(s) only reach {(1 << b) - 1}")
+        if bits is not None and total != int(bits):
+            r.error(f"nvic.scheme.groups.{gname}",
+                    f"splits into {total} bit(s) but the scheme has {bits}")
+
+
 def check_codegen(doc: dict, r: Report) -> None:
     """`codegen:` holds the register encodings the C generator cannot derive. The bit
     numbers are the reference manual's word and only a human re-reading it can check
@@ -874,6 +938,7 @@ def validate_file(path: pathlib.Path, geom: dict) -> Report:
     check_io_counts(doc, tables, r)
     check_clock(doc, r)
     check_dma(doc, r)
+    check_nvic(doc, r)
     check_codegen(doc, r)
     check_exti(doc, r)
     check_flow_mappings(path.read_text(encoding="utf-8"), r)

@@ -272,6 +272,195 @@ peripherals:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
 
+  # RM ch.2. Nothing here claims a pin: the supply monitor and the auto-wake-up are
+  # internal, and their interrupts reach the core over EXTI lines 8 and 9, which have no
+  # pins either (see `exti.internal`). It is still a real configuration - PVD threshold,
+  # regulator mode and the wake-up period are all choices with consequences.
+  PWR:
+    category: System Core
+    settings:
+      - name: Power voltage detector (PVD)
+        choices:
+          - { name: Disable }
+          - { name: Enable }                      # PWR_CTLR PVDE, bit 4
+      - name: Auto wake-up (AWU)
+        choices:
+          - { name: Disable }
+          - { name: Enable }                      # PWR_AWUCSR AWUEN, bit 1
+      - name: Low-power mode entered on WFI/WFE
+        choices:
+          - { name: Sleep }                       # PWR_CTLR PDDS = 0
+          - { name: Standby }                     # PWR_CTLR PDDS = 1
+    params:
+      - key: pvd_level
+        name: PVD threshold
+        type: enum
+        group: Basic
+        default: 2.43 V rising / 2.41 V falling
+        options:
+          - { name: 1.87 V rising / 1.85 V falling, value: 0 }
+          - { name: 2.23 V rising / 2.21 V falling, value: 1 }
+          - { name: 2.43 V rising / 2.41 V falling, value: 2 }
+          - { name: 2.66 V rising / 2.60 V falling, value: 3 }
+        when:
+          Power voltage detector (PVD): Enable
+        help: "PWR_CTLR PLS[6:5]. The two figures are the rising and falling thresholds - the gap is the comparator's hysteresis, not a tolerance. RM 2.4.1 notes these levels apply to CH32V002/005/006/007 and M007."
+      - key: ldo_mode
+        name: Voltage regulator mode
+        type: enum
+        group: Advanced
+        default: Normal - LDO 1.2 V
+        options:
+          - { name: Normal - LDO 1.2 V,        value: 2 }
+          - { name: Low power - LDO 1.0 V,     value: 1 }
+          - { name: Energy saving - LDO 1.0 V, value: 3 }
+        help: "PWR_CTLR LDO_MODE[3:2], reset 10b. Code 00 is documented as \"unable to configure\" and is deliberately not offered. RM 2.4.1: standby turns low-power mode on in hardware regardless, and running code from flash in energy-saving mode is not recommended."
+      - key: awu_prescaler
+        name: Auto wake-up prescaler
+        type: enum
+        group: Basic
+        default: /4096
+        options:
+          - { name: Off,     value: 0 }
+          - { name: /2,      value: 2 }
+          - { name: /4,      value: 3 }
+          - { name: /8,      value: 4 }
+          - { name: /16,     value: 5 }
+          - { name: /32,     value: 6 }
+          - { name: /64,     value: 7 }
+          - { name: /128,    value: 8 }
+          - { name: /256,    value: 9 }
+          - { name: /512,    value: 10 }
+          - { name: /1024,   value: 11 }
+          - { name: /2048,   value: 12 }
+          - { name: /4096,   value: 13 }
+          - { name: /10240,  value: 14 }
+          - { name: /61440,  value: 15 }
+        when:
+          Auto wake-up (AWU): Enable
+        help: "PWR_AWUPSC[3:0], counting off the 128 kHz LSI. Codes 0000 and 0001 both mean \"prescaler off\", so only one Off entry is offered. The last two steps are 10240 and 61440, not the powers of two the rest of the list suggests."
+      - key: awu_window
+        name: Auto wake-up window
+        type: int
+        group: Basic
+        default: 63
+        min: 0
+        max: 63
+        unit: counts
+        when:
+          Auto wake-up (AWU): Enable
+        help: "PWR_AWUWR[5:0], reset 0x3F. The wake-up period is (window + 1) prescaled LSI ticks - RM 2.4.4 is explicit that the hardware adds the one."
+
+  # RM ch.18. Two different things live here and both are real: the wait-state setting the
+  # core needs at speed (FLASH_ACTLR, changed at runtime) and the user option bytes, which
+  # are programmed once and take effect at the next power-on. RST_MODE is the third option
+  # byte and is deliberately NOT here - it decides whether a PIN is a reset, so it belongs
+  # to SYS where the conflict engine can see it. Modelling it twice would let the two
+  # disagree.
+  FLASH:
+    category: System Core
+    settings:
+      - name: Independent watchdog start (IWDG_SW)
+        choices:
+          - { name: "Started by software (IWDG_SW = 1, factory default)" }
+          - { name: "Started by hardware at power-on (IWDG_SW = 0)" }
+      - name: Reset on entering Standby (STANDBY_RST)
+        choices:
+          - { name: "No reset (STANDBY_RST = 1, factory default)" }
+          - { name: "System reset (STANDBY_RST = 0)" }
+      - name: Power-on start mode (START_MODE)
+        choices:
+          - { name: "Boot from BOOT area (START_MODE = 1, factory default)" }
+          - { name: "Boot from user area (START_MODE = 0)" }
+      - name: Read protection (RDPR)
+        choices:
+          - { name: "Unprotected (RDPR = 0xA5, factory default)" }
+          - { name: "Read-protected (any other value)" }
+    params:
+      - key: latency
+        name: Wait states
+        type: enum
+        group: Basic
+        default: 2 wait states
+        options:
+          - { name: 0 wait states, value: 0 }
+          - { name: 1 wait state,  value: 1 }
+          - { name: 2 wait states, value: 2 }
+        help: "FLASH_ACTLR LATENCY[1:0]. RM 18.3.1 recommends 0 up to 15 MHz, 1 above 15 up to 24, and 2 above 24 up to 48. Code 11 is reserved. Too few wait states at speed is a fetch that returns garbage, so the default here is the value that is safe at every SYSCLK this part offers."
+    notes: >
+      Wait states are the one setting on this part that has to follow the clock tree. The
+      app does not couple them yet: it neither recomputes LATENCY when SYSCLK changes nor
+      reddens a value that is too low for the selected clock. Until it does, the default
+      is the conservative one. WRPR0-WRPR3 (write protection, one bit per 2 sectors) and
+      Data0/Data1 (two user bytes) are the remaining option bytes and are not modelled -
+      they are per-project values rather than a configuration choice, and the format has
+      nothing to express "one bit per sector" with.
+
+  # RM 6.4. Which PIN each line watches is `exti:` at the top level, because AFIO_EXTICR
+  # picks one port per line and that is a pin question the conflict engine has to see.
+  # What is configurable here is what each line does once it has a pin: whether it fires,
+  # and on which edge (EXTI_RTENR / EXTI_FTENR, RM 6.4.3). No signals, so nothing here
+  # claims a pin - the pin arrives when a GPIO is set to an interrupt mode.
+  EXTI:
+    category: System Core
+    settings:
+      - name: EXTI line 0 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 1 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 2 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 3 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 4 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 5 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 6 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+      - name: EXTI line 7 trigger
+        choices:
+          - { name: Disable }
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+    notes: >
+      All eight lines share one vector, EXTI7_0 (RM Table 6-1), so the NVIC tab shows a
+      single entry however many lines are on. Lines 8 and 9 are internal - PVD and the
+      auto-wake-up - and are configured on PWR, not here; they are listed in
+      `exti.internal` because they occupy lines but can never conflict over a pin.
+      Interrupt versus event (EXTI_INTENR versus EXTI_EVENR, RM 6.4.2) is not modelled:
+      an event wakes the core from WFE without running a handler, which is a code
+      decision rather than a pinout one.
+
   # ---------------- Analog ----------------
   ADC1:
     category: Analog
@@ -1133,6 +1322,89 @@ dma:
     (channels 1-3 and 4-6) applies to CH32M007, not to this part.
     TIM1_TRIG, TIM1_COM and TIM1_CH4 share channel 4 as one hardware request line.
 
+
+# -----------------------------------------------------------------------------
+# Interrupts - RM Table 6-1 (the CH32V00X vector table) and RM 6.5.2.21
+# (PFIC_IPRIORx). Every vector the part owns, grouped by the peripheral that owns
+# it, so each peripheral's NVIC Settings tab lists only its own and the NVIC panel
+# in System Core can list them all.
+#
+# THE PRIORITY SCHEME IS NOT THE CORTEX-M ONE. Anyone arriving from STM32CubeMX
+# expects 4 priority bits and a configurable group split. The PFIC has TWO usable
+# bits: PFIC_IPRIORx gives each interrupt a byte, but only [7:6] are implemented and
+# [5:0] are "reserved, fixed to 0, write invalid" (RM 6.5.2.21). Maximum nesting
+# depth is 2 (RM 6.1.1), and the register description spells out what the two bits
+# mean in each case:
+#   nesting off -> both bits are plain priority, 4 levels, nothing preempts
+#   nesting on  -> bit 7 is the preemption level (2), bit 6 the sub-priority (2)
+# So "preemption priority 0-1, sub priority 0-1" is the whole range. A UI offering
+# 0-15 would be offering settings the silicon discards.
+nvic:
+  controller: PFIC
+  scheme:
+    register: { name: PFIC_IPRIORx, address: 0xE000E400, bits_per_vector: 8 }
+    priority_bits: 2                  # [7:6]; [5:0] are reserved and write-invalid
+    priority_lsb: 6
+    max_nesting: 2                    # RM 6.1.1
+    groups:
+      - name: 2 levels of nesting (1 preemption bit, 1 sub-priority bit)
+        default: true
+        preempt: { bits: 1, lsb: 7, min: 0, max: 1 }
+        sub:     { bits: 1, lsb: 6, min: 0, max: 1 }
+      - name: No nesting (2 priority bits, no preemption)
+        preempt: { bits: 0, min: 0, max: 0 }
+        sub:     { bits: 2, lsb: 6, min: 0, max: 3 }
+    enable:  { register: PFIC_IENR1, address: 0xE000E100, note: "one bit per vector number; IENR2 covers 32-40" }
+    disable: { register: PFIC_IRER1, address: 0xE000E180 }
+    notes: >
+      Where the nesting depth itself is configured is NOT in this reference manual.
+      PFIC_CFGR (RM 6.5.2.6) is only KEYCODE and RSTSYS, and no other PFIC register
+      carries it; on this core it is a CSR of the QingKe V2 core, documented in the
+      core manual rather than here. The two groups above are therefore offered as a
+      choice with the meaning of the bits spelled out, and no register write is
+      claimed for the switch itself. Do not invent one.
+  vectors:
+    # `vector` is the No. column of RM Table 6-1 - the index into the vector table,
+    # which is also what the SDK's IRQn enum uses. `irqn` follows the usual WCH EVT
+    # spelling; like the DMA macros it is convention, not something this repo can
+    # confirm against a ch32v00x SDK copy (HUMAN_TODO 5).
+    - { name: NMI,        vector: 2,  irqn: NMI_Handler,          system: true,  fixed: true,  description: Non-maskable interrupt }
+    - { name: HardFault,  vector: 3,  irqn: HardFault_Handler,    system: true,  fixed: true,  description: Abnormal interrupt (exception) }
+    - { name: SysTick,    vector: 12, irqn: SysTick_IRQn,         system: true,  description: System timer interrupt }
+    - { name: SW,         vector: 14, irqn: Software_IRQn,        system: true,  description: Software interrupt }
+    - { name: WWDG,       vector: 16, irqn: WWDG_IRQn,            peripheral: WWDG,   description: Window watchdog timer interrupt }
+    - { name: PVD,        vector: 17, irqn: PVD_IRQn,             peripheral: PWR,    description: Supply voltage detection interrupt (through EXTI line 8) }
+    - { name: FLASH,      vector: 18, irqn: FLASH_IRQn,           peripheral: FLASH,  description: Flash global interrupt }
+    - { name: RCC,        vector: 19, irqn: RCC_IRQn,             peripheral: RCC,    description: Reset and clock control interrupt }
+    - { name: EXTI7_0,    vector: 20, irqn: EXTI7_0_IRQn,         peripheral: EXTI,   description: EXTI line 0-7 interrupt (one vector for all eight lines) }
+    - { name: AWU,        vector: 21, irqn: AWU_IRQn,             peripheral: PWR,    description: Automatic wake-up interrupt (through EXTI line 9) }
+    - { name: DMA1_CH1,   vector: 22, irqn: DMA1_Channel1_IRQn,   peripheral: DMA1, channel: 1, description: DMA1 channel 1 global interrupt }
+    - { name: DMA1_CH2,   vector: 23, irqn: DMA1_Channel2_IRQn,   peripheral: DMA1, channel: 2, description: DMA1 channel 2 global interrupt }
+    - { name: DMA1_CH3,   vector: 24, irqn: DMA1_Channel3_IRQn,   peripheral: DMA1, channel: 3, description: DMA1 channel 3 global interrupt }
+    - { name: DMA1_CH4,   vector: 25, irqn: DMA1_Channel4_IRQn,   peripheral: DMA1, channel: 4, description: DMA1 channel 4 global interrupt }
+    - { name: DMA1_CH5,   vector: 26, irqn: DMA1_Channel5_IRQn,   peripheral: DMA1, channel: 5, description: DMA1 channel 5 global interrupt }
+    - { name: DMA1_CH6,   vector: 27, irqn: DMA1_Channel6_IRQn,   peripheral: DMA1, channel: 6, description: DMA1 channel 6 global interrupt }
+    - { name: DMA1_CH7,   vector: 28, irqn: DMA1_Channel7_IRQn,   peripheral: DMA1, channel: 7, description: DMA1 channel 7 global interrupt }
+    - { name: ADC,        vector: 29, irqn: ADC1_IRQn,            peripheral: ADC1,   description: ADC global interrupt }
+    - { name: I2C1_EV,    vector: 30, irqn: I2C1_EV_IRQn,         peripheral: I2C1,   description: I2C1 event interrupt }
+    - { name: I2C1_ER,    vector: 31, irqn: I2C1_ER_IRQn,         peripheral: I2C1,   description: I2C1 error interrupt }
+    - { name: USART1,     vector: 32, irqn: USART1_IRQn,          peripheral: USART1, description: USART1 global interrupt }
+    - { name: SPI1,       vector: 33, irqn: SPI1_IRQn,            peripheral: SPI1,   description: SPI1 global interrupt }
+    - { name: TIM1BRK,    vector: 34, irqn: TIM1_BRK_IRQn,        peripheral: TIM1,   description: TIM1 break interrupt }
+    - { name: TIM1UP,     vector: 35, irqn: TIM1_UP_IRQn,         peripheral: TIM1,   description: TIM1 update interrupt }
+    - { name: TIM1TRG,    vector: 36, irqn: TIM1_TRG_COM_IRQn,    peripheral: TIM1,   description: TIM1 trigger and commutation interrupt }
+    - { name: TIM1CC,     vector: 37, irqn: TIM1_CC_IRQn,         peripheral: TIM1,   description: TIM1 capture/compare interrupt }
+    - { name: TIM2,       vector: 38, irqn: TIM2_IRQn,            peripheral: TIM2,   description: TIM2 global interrupt }
+    - { name: USART2,     vector: 39, irqn: USART2_IRQn,          peripheral: USART2, description: USART2 global interrupt }
+    - { name: OPCM,       vector: 40, irqn: OPCM_IRQn,            peripheral: OPA1,   description: Operational amplifier and comparator global interrupt }
+  notes: >
+    RM Table 6-1 ends at vector 40 and lists NO TIM3 interrupt, while CH32V006 does
+    have TIM3 (RM Table 8-2 note 2 describes its DMA requests on this very part).
+    Either the table is written for the base family and V006 adds a vector the
+    manual does not print, or TIM3 on this part is usable only through DMA and
+    polling. The table is the only statement available, so no TIM3 vector is
+    invented here; see CH32V006.notes.md. If a WCH SDK header for ch32v00x turns up,
+    this is the first thing to check.
 
 # -----------------------------------------------------------------------------
 # Code generation — register encodings the C generator cannot derive from the model.

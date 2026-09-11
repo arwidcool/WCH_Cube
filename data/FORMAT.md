@@ -28,7 +28,8 @@ peripheral about what it can do.
 | `pins` | yes | every pin name that exists on the die, with its type |
 | `peripherals` | yes | the left-hand tree: settings, signals, remap tables |
 | `exti` | no | external-interrupt line → pin, via AFIO_EXTICR |
-| `dma` | no | DMA channel → peripheral requests |
+| `dma` | no | DMA channel → peripheral requests, and how a request is configured |
+| `nvic` | no | every interrupt vector, its owner, and the priority scheme |
 | `clock` | no | the Clock Configuration tab |
 | `codegen` | no | register encodings the C generator cannot derive |
 
@@ -255,12 +256,85 @@ selects a port pin the part does not have.
 dma:
   controller: DMA1
   channels: 7
+  init_struct: DMA_InitTypeDef
   requests:
     1: [ADC1, TIM2_CH3, TIM3_CH3]
+  register:
+    name: DMA_CFGRx
+    address: 0x40020008        # channel 1
+    stride: 20                 # bytes to the next channel's register
+    fields: { DIR: { lsb: 4, bits: 1 }, CIRC: { lsb: 5, bits: 1 } }
+  channel_params:              # same schema as `params:` - see below
+    - key: dir
+      name: Direction
+      type: enum
+      field: DIR               # which register field it writes
+      sdk_field: DMA_DIR       # which DMA_InitTypeDef member it is
+      default: Peripheral to memory
+      options:
+        - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+        - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+  request_defaults:            # what a request starts as when the user adds it
+    ADC1: { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Circular }
+  request_notes:
+    ADC1: why those values, in prose
 ```
 
 No pins are involved, so this never affects the pinout. Two enabled peripherals on one
-channel is a conflict worth warning about.
+channel is a conflict.
+
+**`channel_params` is deliberately the same schema as a peripheral's `params:`** — same
+`key` / `name` / `type` / `default` / `options` with `{ name, value }`. The DMA Settings
+tab therefore renders with the Parameter Settings editors instead of growing its own, and
+one set of rules covers both.
+
+**`request_defaults` is hardware, not taste.** A USART data register is eight bits wide,
+so a half-word transfer to it is a bug; `ADC_RDATAR` is twelve bits inside a sixteen-bit
+field, so a byte transfer truncates every sample. Where the data genuinely cannot decide —
+`TIMx_CHy` serves PWM output *and* input capture, which run in opposite directions — pick
+the common case and say so in `request_notes`. Do not leave it blank: the user gets a row
+of generic defaults to fix by hand, and `validate_mcu.py` warns about it.
+
+What is **not** here: the buffer address and the transfer count. `DMA_PeripheralBaseAddr`,
+`DMA_MemoryBaseAddr` and `DMA_BufferSize` are the application's, not a configuration
+choice, and CubeMX does not ask for them either. The generator emits them as named TODOs.
+
+## `nvic`
+
+```yaml
+nvic:
+  controller: PFIC
+  scheme:
+    register: { name: PFIC_IPRIORx, address: 0xE000E400, bits_per_vector: 8 }
+    priority_bits: 2               # how many of those bits the silicon implements
+    priority_lsb: 6
+    max_nesting: 2
+    groups:
+      - name: 2 levels of nesting (1 preemption bit, 1 sub-priority bit)
+        default: true
+        preempt: { bits: 1, lsb: 7, min: 0, max: 1 }
+        sub:     { bits: 1, lsb: 6, min: 0, max: 1 }
+  vectors:
+    - { name: USART1, vector: 32, irqn: USART1_IRQn, peripheral: USART1,
+        description: USART1 global interrupt }
+    - { name: SysTick, vector: 12, irqn: SysTick_IRQn, system: true,
+        description: System timer interrupt }
+    - { name: DMA1_CH1, vector: 22, irqn: DMA1_Channel1_IRQn, peripheral: DMA1,
+        channel: 1, description: DMA1 channel 1 global interrupt }
+```
+
+`peripheral:` groups the vector under that peripheral's NVIC Settings tab. `system: true`
+puts it under the NVIC entry in System Core instead — SysTick, the software interrupt, NMI
+and HardFault belong to no peripheral. `fixed: true` marks a vector whose priority cannot
+be set at all. `channel:` ties a DMA vector to its channel, so enabling a DMA request can
+offer the matching interrupt.
+
+**Read `priority_bits` off the manual; do not assume the Cortex-M answer.** The PFIC in
+CH32V00X gives each vector a byte in `PFIC_IPRIORx` but implements only bits [7:6] —
+[5:0] are "reserved, fixed to 0, write invalid" (RM 6.5.2.21). Two bits is the whole
+range, and with nesting on it splits one and one. A tab offering priorities 0–15 would be
+offering settings the silicon throws away. `validate_mcu.py` checks that each group's
+`max` fits in its `bits` and that the halves add up to `priority_bits`.
 
 ## `clock`
 
