@@ -38,30 +38,62 @@ peripherals:
       Mode: Disable
       Hardware Flow Control (RS232): Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USART2:
     settings:
       Mode: Disable
       Hardware Flow Control (RS232): Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USART3:
     settings:
       Mode: Disable
       Hardware Flow Control (RS232): Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USART4:
     settings:
       Mode: Disable
       Hardware Flow Control (RS232): Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   SPI1:
     settings:
       Mode: Disable
       Hardware NSS Signal: Disable
     remap: 0
+    params:
+      prescaler: '16'
+      cpol: Low
+      cpha: 1 Edge
+      datasize: 8 bits
+      firstbit: MSB First
+      crc: false
   I2C1:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      speed: 100000
+      duty: '2:1'
+      addrmode: 7-bit
+      addr: 0
   TIM1:
     settings:
       Channel1: Disable
@@ -71,6 +103,14 @@ peripherals:
       Clock Source: Internal Clock
       Break Input: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
+      rcr: 0
+      deadtime: 0
   TIM2:
     settings:
       Channel1: Disable
@@ -80,15 +120,33 @@ peripherals:
       Clock Source: Internal Clock
       Break Input: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
   TIM3:
     settings:
       Channel1: Disable
       Channel2: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
   ADC1:
     settings:
       Channels: []
     remap: 0
+    params:
+      sample: 11 cycles
+      lowpower: false
+      cont: false
+      scan: false
+      align: Right
   CMP1:
     settings:
       Positive input: Disable
