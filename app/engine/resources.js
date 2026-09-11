@@ -24,7 +24,7 @@
 //  everything else. The setters below are the only way to change it.
 // =============================================================================
 import { M, S, isEnabled, pinExists } from './model.js';
-import { normaliseParamDefs, validateParam } from './params.js';
+import { normaliseParamDefs, validateParam, paramDefs, paramValue } from './params.js';
 import { record } from './history.js';
 
 // EXTI line a pin can drive, or null. `lines` maps a selector value to a pin.
@@ -412,6 +412,42 @@ export function setNvicGroup(index) {
   return i;
 }
 
+/**
+ * Parameters set on a peripheral that is switched OFF. Round-3 P2 is "configuration
+ * must reach the C", and this is the one way it silently does not: the generator only
+ * emits a section for an enabled peripheral, so a baud rate typed into a USART nobody
+ * turned on is a value the user believes they set and the code has never heard of.
+ *
+ * A warning rather than a conflict - nothing is wrong with the silicon, the user just
+ * has not finished. It names the peripheral so the UI can link to it, the same way the
+ * NVIC warning does.
+ */
+function paramReachWarnings() {
+  const out = [];
+  for (const pid of Object.keys(M.peripherals)) {
+    if (isEnabled(pid)) continue;
+    const changed = [];
+    for (const d of paramDefs(pid)) {
+      if (d.readonly) continue;
+      const v = paramValue(pid, d.key);
+      if (v === undefined || String(v) === String(d.default)) continue;
+      changed.push(d.name);
+    }
+    const store = (S.periph[pid] || {}).channelParams || {};
+    for (const [ch, vals] of Object.entries(store)) {
+      if (vals && Object.keys(vals).length) changed.push(`channel ${ch}`);
+    }
+    if (!changed.length) continue;
+    out.push({
+      kind: 'params', severity: 'warning', owners: [pid],
+      text: `${pid} has ${changed.length === 1 ? '' : changed.length + ' settings changed ('}`
+        + `${changed.join(', ')}${changed.length === 1 ? ' set' : ')'} but is switched off`
+        + ' — none of it reaches the generated code until the peripheral is enabled',
+    });
+  }
+  return out;
+}
+
 /** A vector the user enabled on a peripheral that is now off. */
 function nvicIssues() {
   const out = [];
@@ -454,6 +490,7 @@ export function resourceState() {
     ...((dma && dma.issues) || []),
     ...hard,
     ...dmaCouplingWarnings(),
+    ...paramReachWarnings(),
     ...((nvic && nvic.issues) || []),
   ];
   return { exti, dma, nvic, issues };

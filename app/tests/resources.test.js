@@ -550,3 +550,40 @@ test('a saved priority that no longer fits loses the priority, not the enable', 
   assert.ok(v.sub <= 1, 'and its priority is inside the grouping that is actually active');
   assert.ok(e.PROJECT.warnings.some(w => /TIM2/.test(w)), 'reported rather than silent');
 });
+
+// Round-3 P2 is "configuration must reach the C", and this is the one way it silently
+// did not. Found by running the round-3 walkthrough §8.4 through the engine: it says
+// "TIM1: prescaler and period set to something that is not the default" without
+// switching TIM1 on, and those values went nowhere with nothing said.
+test('parameters set on a switched-off peripheral are a warning, not silence', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.compute();
+  assert.deepEqual(e.E.resources.issues.filter(i => i.kind === 'params'), [],
+    'a peripheral at its defaults says nothing');
+
+  e.setParam('TIM1', 'prescaler', 47);
+  e.setParam('TIM1', 'period', 999);
+  e.compute();
+  const w = e.E.resources.issues.filter(i => i.kind === 'params');
+  assert.equal(w.length, 1);
+  assert.deepEqual(w[0].owners, ['TIM1'], 'so the UI can link to the peripheral');
+  assert.equal(w[0].severity, 'warning', 'nothing is wrong with the silicon; the user is not finished');
+  assert.match(w[0].text, /Prescaler \(PSC\)/);
+  assert.match(w[0].text, /switched off/);
+  assert.equal(e.cSource().includes('TIM_TimeBaseInitStructure'), false, 'and it really does not reach the C');
+
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.compute();
+  assert.deepEqual(e.E.resources.issues.filter(i => i.kind === 'params'), [],
+    'switching it on clears the warning');
+  assert.ok(e.cSource().includes('TIM_TimeBaseInitStructure.TIM_Prescaler = 47;'), 'and the value arrives');
+});
+
+test('a per-channel value on a switched-off peripheral is warned about too', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setChannelParam('TIM1', 2, 'pulse', 100);
+  e.compute();
+  const w = e.E.resources.issues.filter(i => i.kind === 'params');
+  assert.equal(w.length, 1);
+  assert.match(w[0].text, /channel 2/);
+});
