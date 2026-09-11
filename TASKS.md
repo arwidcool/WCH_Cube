@@ -247,13 +247,16 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 - [x] (AGENT-1) When an EVT package lands in `data/sources/<PART>/Evt/`: re-run `verify_sdk_names.py`
       against it, re-check every Medium-confidence row, and post what changed — both drops have
       landed; headers are under `EXAM/SRC/Peripheral/inc`, and `data/sources/README.md` says so
-- [ ] (AGENT-1) **RM chapter 20 "Extended Configuration" (EXTEN) is not modelled and is not on
-      the declared-absence list** — found by `tests/completeness.test.js`. `EXTEN_CTR` at
-      0x40023800 has two user-visible bits: LKUPEN/LKUPRST (lock-up reset monitoring) and
-      **TIM2_DMA_REMAP**, which moves TIM2_CH4's DMA request onto the update channel — it
-      changes the `dma.requests` map this app renders. Model it or declare it absent with a
-      reason; `CH32V006.notes.md` currently says the RM chapter list is covered bar four
-      deliberate absences, and this is an undeclared fifth.
+- [x] (AGENT-1) **RM chapter 20 "Extended Configuration" (EXTEN)** — found uncovered and
+      undeclared by `tests/completeness.test.js`, and AGENT-1 MODELLED it rather than
+      whitelisting it, which was the right call: `TIM2_DMA_REMAP` moves TIM2_CH4's DMA request
+      onto the update channel, so it changes the `dma.requests` map this app renders. It was
+      never cosmetic. `LKUPRST` is deliberately not offered — a write-1-to-clear status flag is
+      something firmware reads at startup, not something a configurator sets.
+      QA closed its side 2026-09-11T20:10Z: the chapter map now points ch.20 at EXTEN, and
+      EXTEN's missing clock bit and vector are declared ABSENT with EVT citations
+      (`ch32v00X.h:438` puts it at `HBPERIPH_BASE + 0x3800`, so it is clocked by HB with no gate
+      of its own; `IRQn_Type` ends at `OPCM_IRQn = 40`, so it raises no interrupt).
 - [x] (AGENT-1) Medium-confidence rows still open: TouchKey channel→pin (RM ch.10), the OPA
       polling set, and the RM Table 6-1 TIM3-vector contradiction — all first in the queue the day
       EVT arrives — **all three settled.** TouchKey confirmed (it is a MODE OF THE ADC, not a

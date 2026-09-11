@@ -95,11 +95,21 @@ const ABSENT = {
   'EXTI.clock': 'EXTI sits behind AFIO, and the GPIO section already enables RCC_PB2Periph_AFIO. No RCC_*Periph_EXTI exists',
   'TKEY.clock': 'TouchKey is a mode of the ADC (RM ch.10), not a separate unit, and shares RCC_PB2Periph_ADC1. No RCC_*Periph_TKEY exists',
   'OPA1.clock': 'the OPA/CMP block has no clock gate of its own. No RCC_*Periph_OPA exists',
+  'EXTEN.clock': 'the extended-configuration unit sits on the HB domain and is clocked with it, '
+    + 'with no gate of its own: `ch32v00X.h:438` puts it at `HBPERIPH_BASE + 0x3800` (= the RM\'s '
+    + '0x40023800) and there is no RCC_*Periph_EXTEN anywhere in ch32v00X_rcc.h. Same shape as '
+    + 'FLASH, EXTI, TKEY and OPA1 above',
+  'EXTEN.params': 'both of its user-visible bits are switches, not numbers: LKUPEN on/off and '
+    + 'TIM2_DMA_REMAP on/off. LKUPRST is deliberately not offered at all — it is a write-1-to-clear '
+    + 'STATUS flag saying a lock-up already reset the part, which firmware reads at startup and a '
+    + 'configurator has no business setting (AGENT-1, round 3 board 16:29Z)',
 
   // --- no interrupt vector exists for it (IRQn_Type, ch32v00X.h:45-82)
   'SYS.nvic': 'the debug interface and the reset pin are not interrupt sources',
   'IWDG.nvic': 'the independent watchdog RESETS the part, it does not interrupt. No IWDG_IRQn in the enum',
   'TKEY.nvic': 'TouchKey raises the ADC vector, which is declared with peripheral: ADC1. No TKEY_IRQn in the enum',
+  'EXTEN.nvic': 'the extended-configuration unit raises no interrupt: IRQn_Type in ch32v00X.h:45-82 '
+    + 'ends at OPCM_IRQn = 40 and contains no EXTEN entry. LKUPRST is a polled status flag, not a vector',
   'TIM3.nvic': 'THE RECORDED CONTRADICTION, and it survived the EVT drop: this part HAS a TIM3, and there is no TIM3 vector. '
     + 'RM Table 6-1 omits it, IRQn_Type ends at OPCM_IRQn = 40, and startup_ch32v00X.S agrees. Two independent sources, '
     + 'so it is recorded rather than invented. See CH32V006.notes.md',
@@ -311,12 +321,11 @@ const RM_CHAPTERS = {
   // Found by this test. Not modelled, and NOT one of the four deliberate absences
   // CH32V006.notes.md declares — an undeclared fifth. Now tracked in TASKS.md and
   // owned, so it prints rather than failing; see OPEN above for why.
-  20: {
-    open: ['AGENT-1', 'the EXTEN unit (EXTEN_CTR at 0x40023800) is not modelled',
-      'two user-visible bits: LKUPEN/LKUPRST (lock-up reset monitoring) and TIM2_DMA_REMAP, '
-      + 'which moves TIM2_CH4\'s DMA request onto the update channel — so it changes the '
-      + 'dma.requests map this app renders'],
-  },
+  // Found uncovered by this test in round 3, and AGENT-1 MODELLED it rather than
+  // whitelisting it — the right call, because TIM2_DMA_REMAP moves TIM2_CH4's DMA
+  // request onto the update channel, which changes the dma.requests map this app
+  // renders. It was never cosmetic.
+  20: { peripherals: ['EXTEN'] },
   21: { not_a_peripheral: 'notes.md: "DBG (ch.21) is covered by SYS\'s debug setting"' },
 };
 
@@ -367,12 +376,19 @@ test('the RM chapter list is accounted for, chapter by chapter', () => {
 test('every RM chapter parked as open still has a live TASKS.md line', () => {
   // Same guard as for OPEN cells: an uncovered chapter may only stop failing
   // because someone owns it, and ownership means a backlog line that exists.
+  // The chapter-20 version of this hardcoded "RM chapter 20" and "EXTEN", which
+  // stopped meaning anything the moment AGENT-1 modelled it. An `open` entry now
+  // carries the backlog phrase it is claiming, and the guard checks THAT — so the
+  // next uncovered chapter is guarded the same way without anyone editing this.
   const tasks = fs.readFileSync(path.join(ROOT, 'TASKS.md'), 'utf8');
   const orphans = [];
   for (const [n, entry] of Object.entries(RM_CHAPTERS)) {
     if (!entry.open) continue;
-    if (!/RM chapter 20/.test(tasks) || !tasks.includes('EXTEN')) {
-      orphans.push(`RM chapter ${n} is parked as open but TASKS.md no longer tracks it`);
+    const [owner, what, , task] = entry.open;
+    if (!task) {
+      orphans.push(`RM chapter ${n} is parked as open ("${what}") but names no TASKS.md line to check`);
+    } else if (!tasks.includes(task)) {
+      orphans.push(`RM chapter ${n} is parked as open citing ${owner}'s task "${task}", which is no longer in TASKS.md`);
     }
   }
   assert.empty(orphans, 'RM chapters parked as open with no backlog line');
