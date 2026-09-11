@@ -11,6 +11,8 @@
 //    issueCount:   { periphId: n },
 //    conflicts:    [ 'PD7/PA4: TIM1_CH1 / USART1_TX', ... ]        // legacy string form
 //    conflictList: [ { pin, label, num, signals, owners, shorted, text } ]
+//    resources:    { exti, dma }  — see resources.js
+//    resourceIssues: [ { kind:'exti'|'dma', severity:'conflict'|'warning', text, owners } ]
 //  }
 // =============================================================================
 import {
@@ -18,6 +20,7 @@ import {
   requiredSignals, isEnabled, isAvailable, neutralChoice,
 } from './model.js';
 import { record } from './history.js';
+import { resourceState } from './resources.js';
 
 export let E = null;
 
@@ -62,6 +65,15 @@ export function compute() {
     }
   }
 
+  // Conflicts that are not about pins: EXTI lines and DMA channels.
+  const resources = resourceState();
+  for (const r of resources.issues) {
+    for (const owner of r.owners) {
+      if (owner === 'GPIO' || !M.peripherals[owner]) continue;
+      (issues[owner] ||= []).push(r.text);
+    }
+  }
+
   const status = {}, issueCount = {};
   for (const pid of Object.keys(M.peripherals)) {
     status[pid] = !isAvailable(pid) ? 'na' : issues[pid] ? 'warn' : isEnabled(pid) ? 'ok' : '';
@@ -69,7 +81,8 @@ export function compute() {
   }
 
   E = {
-    pins, issues, status, issueCount, conflictList,
+    pins, issues, status, issueCount, conflictList, resources,
+    resourceIssues: resources.issues,
     conflicts: conflictList.map(c => `${c.label}: ${c.signals.join(' / ')}`),
   };
   return E;

@@ -29,6 +29,8 @@
   .logo small{display:block;color:var(--muted);font-size:10px;margin-top:-2px}
   .menu{padding:6px 14px;border:0;background:none;color:#222;border-radius:3px}
   .menu:hover{background:var(--blue-pale)}
+  .menu[disabled]{opacity:.38;cursor:default;background:none}
+  .menu.icon{padding:6px 9px;font-size:15px;line-height:1}
   .menubar .spacer{flex:1}
   .menubar .mcu-name{color:var(--muted)}
 
@@ -276,6 +278,8 @@
     <button class="menu" id="m-save">Save project</button>
     <button class="menu" id="m-open">Open MCU file…</button>
     <button class="menu" id="m-reset">Reset configuration</button>
+    <button class="menu icon" id="m-undo" disabled>↶</button>
+    <button class="menu icon" id="m-redo" disabled>↷</button>
     <button class="menu" id="m-help">Help</button>
     <div class="spacer"></div>
     <select id="mcusel" class="menu" style="border:1px solid var(--line)"></select>
@@ -516,6 +520,7 @@ function renderChip() {
   const used = io.filter(n => E.pins[n]).length;
   document.getElementById('unused').textContent = `${io.length - used} / ${io.length}`;
   decoratePkgSel();
+  syncHistoryButtons();
   // The drawing changes size as signals and labels come and go. Re-fit automatically
   // until the user pans or zooms themselves.
   if (U.cview === 'system') renderSystem();
@@ -862,6 +867,27 @@ document.querySelector('.chiptabs').addEventListener('click', e => {
   if (U.cview === 'system') renderSystem(); else fitChip();
 });
 
+// Undo / redo affordance. The keyboard shortcuts live in section 8; AGENT-2, please
+// point that handler at runHistory() so there is one implementation.
+function runHistory(wantRedo) {
+  const label = wantRedo ? redo() : undo();
+  if (!label) { toast(wantRedo ? 'Nothing to redo' : 'Nothing to undo'); return; }
+  closeCtx(); closePicker();
+  document.getElementById('pkgsel').value = S.pkg;     // undo can move the package
+  renderAll();
+  toast(`${wantRedo ? 'Redo' : 'Undo'}: ${label}`);
+}
+function syncHistoryButtons() {
+  const u = document.getElementById('m-undo'), r = document.getElementById('m-redo');
+  if (!u || !r) return;
+  u.disabled = !canUndo(); r.disabled = !canRedo();
+  u.title = canUndo() ? `Undo ${undoLabel()}  (Ctrl+Z)` : 'Nothing to undo';
+  r.title = canRedo() ? `Redo ${redoLabel()}  (Ctrl+Y)` : 'Nothing to redo';
+  u.setAttribute('aria-label', u.title); r.setAttribute('aria-label', r.title);
+}
+document.getElementById('m-undo').onclick = () => runHistory(false);
+document.getElementById('m-redo').onclick = () => runHistory(true);
+
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
 const collapsed = new Set();
@@ -961,9 +987,10 @@ function renderCentre() {
   for (const m of E.issues[pid] || []) h += `<div class="issue">${m}</div>`;
   if (!(P.settings || []).length) h += `<div class="hint">No modes for this peripheral.</div>`;
   mode.innerHTML = h;
-  mode.querySelectorAll('select[data-s]').forEach(el => el.onchange = () => { st.settings[el.dataset.s] = el.value; renderAll(); });
-  mode.querySelectorAll('input[data-s]').forEach(el => el.onchange = () => { el.checked ? st.settings[el.dataset.s].add(el.dataset.c) : st.settings[el.dataset.s].delete(el.dataset.c); renderAll(); });
-  const rs = mode.querySelector('select[data-remap]'); if (rs) rs.onchange = () => { st.remap = +rs.value; renderAll(); };
+  // every write goes through the engine so it lands on the undo stack (AGENT-2, 05:12Z)
+  mode.querySelectorAll('select[data-s]').forEach(el => el.onchange = () => { setSetting(pid, el.dataset.s, el.value); renderAll(); });
+  mode.querySelectorAll('input[data-s]').forEach(el => el.onchange = () => { toggleSetting(pid, el.dataset.s, el.dataset.c, el.checked); renderAll(); });
+  const rs = mode.querySelector('select[data-remap]'); if (rs) rs.onchange = () => { setRemap(pid, +rs.value); renderAll(); };
 
   if (ctab === 'gpio') {
     const mine = Object.entries(E.pins).filter(([, v]) => v.claims.some(c => c.who === pid)).map(([k]) => k);
@@ -1136,11 +1163,12 @@ function renderClock() {
   }).join('');
 
   // ---- 4. handlers (same contract as before) ---------------------------------
-  const hse = el.querySelector('#ck-hse'); if (hse) hse.onchange = () => { k.hse = +hse.value; renderClock(); };
-  const pi = el.querySelector('#ck-pllin'); if (pi) pi.onchange = () => { k.pllIn = +pi.value; renderClock(); };
-  const pm = el.querySelector('#ck-pllmul'); if (pm) pm.onchange = () => { k.pllMul = +pm.value; renderClock(); };
-  const sy = el.querySelector('#ck-sys'); if (sy) sy.onchange = () => { k.sys = sy.value; renderClock(); };
-  el.querySelectorAll('select[data-pre]').forEach(s => s.onchange = () => { k.pre[s.dataset.pre] = +s.value; renderClock(); });
+  const apply = patch => { setClock(patch); renderClock(); PROJECT.dirty = true; updateCrumb(); };
+  const hse = el.querySelector('#ck-hse'); if (hse) hse.onchange = () => apply({ hse: +hse.value });
+  const pi = el.querySelector('#ck-pllin'); if (pi) pi.onchange = () => apply({ pllIn: +pi.value });
+  const pm = el.querySelector('#ck-pllmul'); if (pm) pm.onchange = () => apply({ pllMul: +pm.value });
+  const sy = el.querySelector('#ck-sys'); if (sy) sy.onchange = () => apply({ sys: sy.value });
+  el.querySelectorAll('select[data-pre]').forEach(s => s.onchange = () => apply({ pre: { [s.dataset.pre]: +s.value } }));
 }
 // The clock tab is display:none until selected, and hidden boxes measure 0, so
 // lay the tree out the moment the tab becomes visible.
