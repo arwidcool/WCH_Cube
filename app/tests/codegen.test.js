@@ -97,10 +97,12 @@ test('the AFIO word is built from the remap indices', () => {
   const w = e.remapWord();
   assert.equal(w.register, 'AFIO->PCFR1');
   assert.equal(w.value, 0x0d0);
-  assert.equal(w.mask, 0x7fffff & ~(0 << 0) & 0x7fffff, 'every declared field is in the mask');
+  // bits 17-19 (PA1PA2_RM, ADC_ETRGINJ_RM, ADC_ETRGREG_RM) are not declared as
+  // remap fields, so the mask must leave them alone
   assert.equal(w.mask, (0x7 << 0) | (0x7 << 3) | (0xf << 6) | (0xf << 10) | (0x3 << 14) | (0x1 << 16) | (0x7 << 20));
+  assert.equal(w.mask, 0x0071ffff);
   const c = e.cSource();
-  assert.ok(c.includes('AFIO->PCFR1 = (AFIO->PCFR1 & ~0x0077FFFFU) | 0x000000D0U;'), c.split('\n').filter(l => l.includes('PCFR1')).join('\n'));
+  assert.ok(c.includes('AFIO->PCFR1 = (AFIO->PCFR1 & ~0x0071FFFFU) | 0x000000D0U;'), c.split('\n').filter(l => l.includes('PCFR1')).join('\n'));
   assert.ok(c.includes('/*   USART1_RM = 0011'));
 });
 
@@ -193,7 +195,8 @@ test('the generated C is structurally sound: balanced braces, every statement cl
     assert.equal((code.match(/\/\*/g) || []).length, 0, `${name}: unterminated comment`);
     for (const line of code.split('\n')) {
       const s = line.trim();
-      if (!s || s.startsWith('#') || s.endsWith('{') || s.endsWith('}') || s.endsWith(';')) continue;
+      // a statement ends in ';'; a signature or a continued expression does not
+      if (!s || s.startsWith('#') || /[{};,)|]$/.test(s)) continue;
       assert.fail(`${name}: statement without a semicolon: ${s}`);
     }
   }
