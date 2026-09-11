@@ -108,9 +108,20 @@
   /* right: chip */
   .chipwrap{display:flex;flex-direction:column;min-height:0;background:#fff;position:relative}
   .chiptabs{display:flex;justify-content:center;gap:24px;padding:4px;border-bottom:1px solid var(--line);font-size:12.5px}
-  .chiptabs span{padding:2px 4px}
-  .chiptabs .on{border-bottom:2px solid var(--blue-lt);color:var(--navy)}
-  .chiptabs .off{color:var(--muted)}
+  .chiptabs button{border:0;background:none;font:inherit;padding:2px 4px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+  .chiptabs button:hover{color:var(--navy)}
+  .chiptabs button.on{border-bottom-color:var(--blue-lt);color:var(--navy)}
+  .canvas[hidden]{display:none}
+  #syscanvas{cursor:default}
+  .chipwrap.sysmode .chipbar .ic,.chipwrap.sysmode #pin-search,.chipwrap.sysmode .flt{display:none}
+  .sysblk rect{stroke:#fff;stroke-width:1}
+  .sysblk text{font-family:var(--font);font-size:11px;pointer-events:none}
+  .sysblk.clickable{cursor:pointer}
+  .sysblk.clickable:hover rect{stroke:var(--pin-hover);stroke-width:2}
+  .sysblk.sel rect{stroke:#0033cc;stroke-width:2.5}
+  .sysedge{fill:none;stroke:#8a94a0;stroke-width:1.6}
+  .sysspine{stroke:#8a94a0;stroke-width:2.5;stroke-linecap:round}
+  .systxt{font-family:var(--font);fill:#333}
   .canvas{flex:1;overflow:hidden;position:relative;cursor:grab;background:#fff}
   .canvas.grabbing{cursor:grabbing}
   .canvas svg{width:100%;height:100%;display:block}
@@ -293,8 +304,9 @@
     </div>
 
     <div class="chipwrap">
-      <div class="chiptabs"><span class="on">▦ Pinout view</span><span class="off">☰ System view</span></div>
+      <div class="chiptabs"><button class="on" data-cview="pinout">▦ Pinout view</button><button data-cview="system">☰ System view</button></div>
       <div class="canvas" id="canvas"><svg id="svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+      <div class="canvas" id="syscanvas" hidden><svg id="syssvg" xmlns="http://www.w3.org/2000/svg"></svg></div>
       <div class="chipbar">
         <button class="ic" id="z-in" title="Zoom in">⊕</button>
         <button class="ic" id="z-fit" title="Fit">⛶</button>
@@ -374,7 +386,7 @@ let geom = null;
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const attr = s => esc(s).replace(/"/g, '&quot;');
 // UI-only state. Never serialised into a .wchproj - the engine owns S, this is chrome.
-const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false };
+const U = { onlyMod: false, focus: null, prevConflicts: new Set(), autoFit: true, lastBox: null, clockPending: false, cview: 'pinout' };
 
 const userLabel = name => ((S.gpio[name] || {}).label || '').trim();
 const pinModified = name => !!(E && E.pins[name]) || !!userLabel(name);
@@ -483,6 +495,7 @@ function renderChip() {
   decoratePkgSel();
   // The drawing changes size as signals and labels come and go. Re-fit automatically
   // until the user pans or zooms themselves.
+  if (U.cview === 'system') renderSystem();
   if (U.autoFit) {
     const b = rootBox(), o = U.lastBox;
     const moved = !o || ['x', 'y', 'width', 'height'].some(kk => Math.abs(b[kk] - o[kk]) > 0.5);
@@ -522,6 +535,7 @@ function rootBox() {
 }
 function fitChip() {
   const c = document.getElementById('canvas'), W = c.clientWidth, H = c.clientHeight;
+  if (!W || !H) return;                    // pinout canvas is hidden (system view)
   if (!geom) geom = layout();
   U.autoFit = true;
   const b = rootBox();
@@ -720,6 +734,89 @@ window.addEventListener('keydown', e => {
   if (e.key === 'l' || e.key === 'L') { e.preventDefault(); const r = focusRect(); if (r) openLabelEditor(U.focus, r.right, r.bottom); }
 });
 document.getElementById('only-mod').addEventListener('change', e => { U.onlyMod = e.target.checked; renderChip(); toast(U.onlyMod ? 'Showing only pins with a signal or a label' : 'Showing all pins'); });
+
+// ---------- 4c. system view: what is enabled, on which bus -----------------------
+// Pure arithmetic layout into a viewBox, so it scales to the panel without pan/zoom.
+function renderSystem() {
+  const sv = document.getElementById('syssvg');
+  if (!sv || !M) return;
+  const r = M.clock ? clockCalc() : null, fpre = M.clock ? firstPre(M.clock) : null;
+  const f = v => Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : null;
+
+  // group every peripheral by the bus its MCU file puts it on
+  const groups = [], placed = new Set();
+  for (const [bus, list] of Object.entries((M.clock && M.clock.buses) || {})) {
+    const freq = r ? (r[bus] !== undefined ? r[bus] : (bus === fpre ? r.HCLK : undefined)) : undefined;
+    groups.push({ bus, freq, items: list.slice() });
+    list.forEach(p => placed.add(p));
+  }
+  const rest = Object.keys(M.peripherals).filter(p => !placed.has(p));
+  if (rest.length) groups.push({ bus: groups.length ? 'Not on a documented bus' : 'Peripherals', items: rest });
+
+  const W = 1040, PAD = 18, COREW = 176, BX = PAD + COREW + 66;
+  const BW = 108, BH = 30, GX = 9, GY = 9, HDR = 21, BANDGAP = 16;
+  const perRow = Math.max(1, Math.floor((W - BX - PAD + GX) / (BW + GX)));
+  let y = PAD;
+  for (const g of groups) {
+    g.y = y;
+    g.rows = Math.ceil(g.items.length / perRow);
+    g.h = HDR + g.rows * (BH + GY) - GY;
+    y += g.h + BANDGAP;
+  }
+  const H = Math.max(y - BANDGAP + PAD, 180);
+  const coreH = 78, coreY = Math.max(PAD, (H - coreH) / 2);
+
+  const COLOR = { ok: 'var(--pin-set)', warn: 'var(--pin-conflict)', na: '#e3e6ea', '': '#eceff1' };
+  const FG = { ok: '#fff', warn: '#fff', na: '#98a1aa', '': '#4b5563' };
+  const g = [];
+  g.push(`<rect x="${PAD}" y="${coreY}" width="${COREW}" height="${coreH}" rx="5" fill="var(--chip)"/>`);
+  g.push(`<text class="systxt" x="${PAD + COREW / 2}" y="${coreY + 26}" text-anchor="middle" fill="#fff" font-size="13" font-weight="700">${esc(M.mcu.name)}</text>`);
+  g.push(`<text class="systxt" x="${PAD + COREW / 2}" y="${coreY + 44}" text-anchor="middle" fill="#d7dbdf" font-size="10.5">${esc(M.mcu.core || 'core')}</text>`);
+  if (r) g.push(`<text class="systxt" x="${PAD + COREW / 2}" y="${coreY + 62}" text-anchor="middle" fill="#fff" font-size="11.5">SYSCLK ${f(r.SYSCLK)} MHz</text>`);
+
+  for (const grp of groups) {
+    const sy = grp.y + 9;
+    // core -> bus spine
+    g.push(`<path class="sysedge" d="M${PAD + COREW} ${coreY + coreH / 2} H${BX - 40} V${sy} H${BX - 8}"/>`);
+    g.push(`<line class="sysspine" x1="${BX - 8}" y1="${sy}" x2="${W - PAD}" y2="${sy}"/>`);
+    const label = grp.freq !== undefined ? `${grp.bus} \u2014 ${f(grp.freq)} MHz` : grp.bus;
+    g.push(`<rect x="${BX - 8}" y="${sy - 9}" width="${8 + label.length * 6.4}" height="17" rx="3" fill="#fff"/>`);
+    g.push(`<text class="systxt" x="${BX - 3}" y="${sy + 4}" font-size="11.5" font-weight="600" fill="var(--navy)">${esc(label)}</text>`);
+    grp.items.forEach((p, i) => {
+      const col = i % perRow, row = Math.floor(i / perRow);
+      const x = BX + col * (BW + GX), by = grp.y + HDR + row * (BH + GY);
+      const known = !!M.peripherals[p];
+      const st = known ? (E.status[p] || '') : 'na';
+      const conf = known ? Object.values(E.pins).filter(v => v.state === 'conflict' && v.claims.some(c => c.who === p)).length : 0;
+      const pins = known ? Object.values(E.pins).filter(v => v.claims.some(c => c.who === p)).length : 0;
+      g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}"` : ''}>`);
+      g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
+      g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
+      const note = !known ? 'fabric' : st === 'na' ? 'no pins here' : conf ? `${conf} conflict${conf > 1 ? 's' : ''}` : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
+      g.push(`<text x="${x + 8}" y="${by + 25}" fill="${FG[st]}" font-size="9.5" opacity=".85">${esc(note)}</text>`);
+      g.push(`</g>`);
+    });
+  }
+  const onCount = Object.keys(M.peripherals).filter(p => E.status[p] === 'ok' || E.status[p] === 'warn').length;
+  g.push(`<text class="systxt" x="${PAD}" y="${H - 4}" font-size="11" fill="var(--muted)">${onCount} peripheral${onCount === 1 ? '' : 's'} enabled \u00b7 ${E.conflicts.length} pin conflict${E.conflicts.length === 1 ? '' : 's'} \u00b7 click a block to configure it</text>`);
+
+  sv.setAttribute('viewBox', `0 0 ${W} ${H + 8}`);
+  sv.setAttribute('preserveAspectRatio', 'xMidYMin meet');
+  sv.innerHTML = g.join('');
+}
+document.getElementById('syssvg').addEventListener('click', e => {
+  const b = e.target.closest('.sysblk[data-p]'); if (!b) return;
+  selectPeripheral(b.dataset.p);
+});
+document.querySelector('.chiptabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-cview]'); if (!b) return;
+  U.cview = b.dataset.cview;
+  document.querySelectorAll('.chiptabs [data-cview]').forEach(x => x.classList.toggle('on', x === b));
+  document.getElementById('canvas').hidden = U.cview !== 'pinout';
+  document.getElementById('syscanvas').hidden = U.cview !== 'system';
+  document.querySelector('.chipwrap').classList.toggle('sysmode', U.cview === 'system');
+  if (U.cview === 'system') renderSystem(); else fitChip();
+});
 
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];

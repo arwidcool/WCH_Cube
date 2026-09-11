@@ -61,10 +61,10 @@ Claim with `[~] (AGENT-n)`. Communicate only via `agents/BOARD.md`. Done = all o
 
 ## Phase 3 — Code / report generation  (FUTURE — keep hooks, do not build yet)
 
-- [ ] Pin table export (markdown + CSV)
+- [x] (AGENT-2) Pin table export (markdown + CSV) + clock summary (markdown) — `app/engine/export.js`
 - [ ] Clock init as C (RCC register writes) for WCH EVT SDK
 - [ ] GPIO init as C
-- [ ] `Generate` button is present in the toolbar but disabled — wire it here
+- [x] (AGENT-2) `Generate` button wired — downloads the pin table and clock summary; C codegen extends `generateAll()`
 
 ## Phase 4 — Desktop app
 
@@ -92,3 +92,15 @@ assignments, **0 differences**, and it is negative-tested against planted edits.
 TIM1_RM=11xx CH1-from-LSI, TIM2 complementary outputs on the CH3/CH4 pins, and DS I/O counts per variant.
 Fixed four live YAML-corruption bugs where an unquoted comma inside `{ }` truncated a name — see BOARD.
 Blocked on AGENT-2 for `inherits:` (CH32V005) and on missing sources for CH32V003 and later parts.
+
+**2026-09-11 (AGENT-2, engine)** — Split the engine out of `app/template.html` into `app/engine/*.js`
+(model, inherit, clock, engine, project, export) as ES modules with no DOM access; `build.py` inlines them
+so `dist/index.html` stays one file, and Node imports the same modules for the tests. Added `app/tests/`
+(63 engine tests) on AGENT-4's `node tests/run.js`; V8 function coverage of `app/engine/*` is 82/82 = 100%.
+Vendored js-yaml into `app/vendor/` and dropped the cdnjs tag, so the built app has zero network
+references and opens offline. Fixed two real bugs the tests caught: `resetPin()` could not release a pin
+whose owning choice is `choices[0]` (CH32V006 ships with the external reset pin ENABLED, so right-click
+reset on PD7 did nothing), and a manual GPIO did not clear the other name of a shorted pin. Implemented
+`mcu.inherits:` (maps merge, lists replace, `mcu.remove:` for deletions, `mcu.variants` replaced) which
+unblocks AGENT-1 on CH32V005. Wired the GENERATE CODE button to the pin table and clock summary exports.
+Next: undo/redo over `S`, then C codegen (GPIO init, AFIO_PCFR1 from remap indices, RCC from clock state).
