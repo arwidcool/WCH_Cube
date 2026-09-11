@@ -376,10 +376,22 @@ pins:
   PC19:  { type: io, analog: true }
 
 # -----------------------------------------------------------------------------
-# Peripherals. THIS IS A PARTIAL SET AND SAYS SO: the pin-bearing peripherals whose
-# remap tables still need deriving from DS Table 2-3 are absent rather than stubbed,
-# per the round rule that a partial part beats a fake one. What is missing and why is
-# tracked in CH32X035.notes.md under "Not modelled yet".
+# Peripherals.
+#
+# Every `remaps:` block below is GENERATED from DS Table 2-3 by
+# tools/extract_x035_remaps.py - 60 pins, 101 tokens, 101 decoded, 0 refused - and
+# cross-checked against the EVT macro counts in ch32x035_gpio.h from the opposite
+# direction: Table 2-3 says which remap INDICES a pin appears under, the header says how
+# many remap MACROS a peripheral has, index 0 is the default and has no macro, so N
+# macros must give N+1 indices. Ten peripherals, ten agreements, zero disagreements.
+#
+# `settings:` are hand-written, because which signals a MODE needs is a judgement about
+# the peripheral rather than something Table 2-3 states.
+#
+# STILL ABSENT, deliberately, and tracked in CH32X035.notes.md: AWU, PWR, FLASH, EXTI
+# and TouchKey. No "Activated" stubs - a peripheral with nothing configurable is a dead
+# control, and TouchKey in particular must not be modelled until it is known whether it
+# is a mode of the ADC here as it turned out to be on CH32V006.
 peripherals:
 
   # ---------------- System Core ----------------
@@ -514,6 +526,582 @@ peripherals:
         max: 127
         help: "WWDG_Enable takes the counter, so this value and switching the watchdog on are one call."
 
+  USART1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+      - name: Hardware Flow Control (RS232)
+        choices:
+          - { name: Disable }
+          - { name: CTS Only, signals: [CTS] }
+          - { name: RTS Only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    remaps:
+      - name: No remap
+        pins: { CK: PB9, CTS: PC16, RTS: PC17, RX: PB11, TX: PB10 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_USART1
+        pins: { CK: PB9, CTS: PC16, RTS: PC17, RX: PA11, TX: PA10 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_USART1
+        pins: { CK: PB5, CTS: PA9, RTS: PA8, RX: PB11, TX: PB10 }
+      - name: Full remap
+        macro: GPIO_FullRemap_USART1
+        pins: { CK: PB12, CTS: PA13, RTS: PA14, RX: PB2, TX: PA7 }
+
+  USART2:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+      - name: Hardware Flow Control (RS232)
+        choices:
+          - { name: Disable }
+          - { name: CTS Only, signals: [CTS] }
+          - { name: RTS Only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    remaps:
+      - name: No remap
+        pins: { CK: PA4, CTS: PA0, RTS: PA1, RX: PA3, TX: PA2 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_USART2
+        pins: { CK: PA23, CTS: PA1, RTS: PA2, RX: PA19, TX: PA20 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_USART2
+        pins: { CK: PA22, CTS: PA17, RTS: PA21, RX: PA16, TX: PA15 }
+      - name: Partial remap 3
+        macro: GPIO_PartialRemap3_USART2
+        pins: { CK: PB20, CTS: PC2, RTS: PC3, RX: PC1, TX: PC0 }
+      - name: Full remap
+        macro: GPIO_FullRemap_USART2
+        pins: { CK: PA22, CTS: PA17, RTS: PC3, RX: PA16, TX: PA15 }
+
+  USART3:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+      - name: Hardware Flow Control (RS232)
+        choices:
+          - { name: Disable }
+          - { name: CTS Only, signals: [CTS] }
+          - { name: RTS Only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    remaps:
+      - name: No remap
+        pins: { CK: PB5, CTS: PB6, RTS: PB7, RX: PB4, TX: PB3 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_USART3
+        pins: { CK: PB5, CTS: PB6, RTS: PB7, RX: PC19, TX: PC18 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_USART3
+        pins: { CK: PB8, CTS: PA3, RTS: PA4, RX: PB14, TX: PA18 }
+      - name: Full remap
+        macro: GPIO_FullRemap_USART3
+        pins: { CTS: PB18, RTS: PB19, RX: PB17, TX: PB16 }
+
+  USART4:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+      - name: Hardware Flow Control (RS232)
+        choices:
+          - { name: Disable }
+          - { name: CTS Only, signals: [CTS] }
+          - { name: RTS Only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    remaps:
+      - name: No remap
+        pins: { CK: PB2, CTS: PB15, RTS: PA8, RX: PB1, TX: PB0 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_USART4
+        pins: { CK: PA6, CTS: PA7, RTS: PB21, RX: PA9, TX: PA5 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_USART4
+        pins: { CK: PB2, CTS: PB15, RTS: PA8, RX: PC17, TX: PC16 }
+      - name: Partial remap 3
+        macro: GPIO_PartialRemap3_USART4
+        pins: { CK: PB8, CTS: PA14, RTS: PA13, RX: PA10, TX: PB9 }
+      - name: Partial remap 4
+        macro: GPIO_PartialRemap4_USART4
+        pins: { CK: PA8, CTS: PA5, RTS: PA6, RX: PC19, TX: PB13 }
+      - name: Full remap
+        macro: GPIO_FullRemap_USART4
+        pins: { CK: PB2, CTS: PB15, RTS: PA8, RX: PC16, TX: PC17 }
+
+  SPI1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Full-Duplex Master, signals: [SCK, MISO, MOSI] }
+          - { name: Full-Duplex Slave, signals: [SCK, MISO, MOSI] }
+          - { name: Half-Duplex Master, signals: [SCK, MOSI] }
+          - { name: Receive Only Master, signals: [SCK, MISO] }
+      - name: Hardware NSS Signal
+        choices:
+          - { name: Disable }
+          - { name: Hardware NSS Input Signal, signals: [CS] }
+          - { name: Hardware NSS Output Signal, signals: [CS] }
+    remaps:
+      - name: No remap
+        pins: { CS: PA4, MISO: PA6, MOSI: PA7, SCK: PA5 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_SPI1
+        pins: { CS: PB21, MISO: PA8, MOSI: PA9, SCK: PB15 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_SPI1
+        pins: { CS: PA12, MISO: PA9, MOSI: PA10, SCK: PA11 }
+      - name: Full remap
+        macro: GPIO_FullRemap_SPI1
+        pins: { CS: PC4, MISO: PC6, MOSI: PC7, SCK: PC5 }
+
+  I2C1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: I2C, signals: [SCL, SDA] }
+    remaps:
+      - name: No remap
+        pins: { SCL: PA10, SDA: PA11 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_I2C1
+        pins: { SCL: PA13, SDA: PA14 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_I2C1
+        pins: { SCL: PC16, SDA: PC17 }
+      - name: Partial remap 3
+        macro: GPIO_PartialRemap3_I2C1
+        pins: { SCL: PC19, SDA: PC18 }
+      - name: Partial remap 4
+        macro: GPIO_PartialRemap4_I2C1
+        pins: { SCL: PC17, SDA: PC16 }
+      - name: Full remap
+        macro: GPIO_FullRemap_I2C1
+        pins: { SCL: PC18, SDA: PC19 }
+
+  TIM1:
+    category: Timers
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH1] }
+          - { name: PWM Generation CH1, signals: [CH1] }
+          - { name: PWM Generation CH1 CH1N, signals: [CH1, CH1N] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+          - { name: PWM Generation CH2 CH2N, signals: [CH2, CH2N] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+          - { name: PWM Generation CH3 CH3N, signals: [CH3, CH3N] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR, signals: [ETR] }
+      - name: Break Input
+        choices:
+          - { name: Disable }
+          - { name: Activate-Break-Input, signals: [BKIN] }
+    remaps:
+      - name: No remap
+        pins: { BKIN: PB5, CH1: PB9, CH1N: PB6, CH2: PB10, CH2N: PB7, CH3: PB11, CH3N: PB8, CH4: PC16, ETR: PC17 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_TIM1
+        pins: { BKIN: PA6, CH1: PB9, CH1N: PA7, CH2: PB10, CH2N: PB0, CH3: PB11, CH3N: PB1, CH4: PC16, ETR: PC17 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_TIM1
+        pins: { BKIN: PB5, CH1: PB9, CH1N: PB6, CH2: PB10, CH2N: PB7, CH3: PB11, CH3N: PB8, CH4: PB12, ETR: PC18 }
+      - name: Partial remap 3
+        macro: GPIO_PartialRemap3_TIM1
+        pins: { BKIN: PC4, CH1: PC0, CH1N: PC5, CH2: PC1, CH2N: PC6, CH3: PC2, CH3N: PC7, CH4: PC3, ETR: PC18 }
+      - name: Full remap
+        macro: GPIO_FullRemap_TIM1
+        pins: { CH3: PC14, ETR: PC15 }
+
+  TIM2:
+    category: Timers
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH1] }
+          - { name: PWM Generation CH1, signals: [CH1] }
+          - { name: PWM Generation CH1 CH1N, signals: [CH1, CH1N] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+          - { name: PWM Generation CH2 CH2N, signals: [CH2, CH2N] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+          - { name: PWM Generation CH3 CH3N, signals: [CH3, CH3N] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR, signals: [ETR] }
+      - name: Break Input
+        choices:
+          - { name: Disable }
+          - { name: Activate-Break-Input, signals: [BKIN] }
+    remaps:
+      - name: No remap
+        pins: { BKIN: PA20, CH1: PA0, CH1N: PA21, CH2: PA1, CH2N: PA22, CH3: PA2, CH3N: PA23, CH4: PA3, ETR: PA19 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_TIM2
+        pins: { BKIN: PA9, CH1: PB21, CH1N: PA12, CH2: PB15, CH2N: PA13, CH3: PA2, CH3N: PA14, CH4: PA3, ETR: PA18 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_TIM2
+        pins: { BKIN: PA20, CH1: PA0, CH1N: PC3, CH2: PA1, CH2N: PA22, CH3: PB3, CH3N: PA23, CH4: PB4, ETR: PA19 }
+      - name: Partial remap 3
+        macro: GPIO_PartialRemap3_TIM2
+        pins: { BKIN: PA9, CH1: PB21, CH1N: PA12, CH2: PB15, CH2N: PA13, CH3: PB3, CH3N: PA14, CH4: PB4, ETR: PA18 }
+      - name: Partial remap 4
+        macro: GPIO_PartialRemap4_TIM2
+        pins: { BKIN: PC0, CH1: PB16, CH1N: PC1, CH2: PB17, CH2N: PC2, CH3: PB18, CH3N: PC3, CH4: PB19, ETR: PC4 }
+      - name: Partial remap 5
+        macro: GPIO_PartialRemap5_TIM2
+        pins: { BKIN: PB4, CH1: PC19, CH1N: PC18, CH2: PA12, CH2N: PB12, CH3: PA13, CH3N: PB3, CH4: PC0, ETR: PA2 }
+      - name: Full remap
+        macro: GPIO_FullRemap_TIM2
+        pins: { BKIN: PB4, CH1: PC19, CH1N: PB11, CH2: PC14, CH2N: PB12, CH3: PC15, CH3N: PB3, CH4: PC0, ETR: PA2 }
+
+  TIM3:
+    category: Timers
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH1] }
+          - { name: PWM Generation CH1, signals: [CH1] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture direct mode, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+    remaps:
+      - name: No remap
+        pins: { CH1: PA6, CH2: PA7 }
+      - name: Partial remap 1
+        macro: GPIO_PartialRemap1_TIM3
+        pins: { CH1: PB4, CH2: PB5 }
+      - name: Partial remap 2
+        macro: GPIO_PartialRemap2_TIM3
+        pins: { CH1: PC19, CH2: PC18 }
+      - name: Full remap
+        macro: GPIO_FullRemap_TIM3
+        pins: { CH1: PA3, CH2: PA4 }
+
+  ADC1:
+    category: Analog
+    notes: >
+      Fourteen channels. DS note 1 is a SILICON-REVISION caveat, not a package or
+      variant fact: "Channel 3, channel 7, channel 11, channel 15 and I2C functions of
+      the ADC are not available for products with a lot number with a penultimate 5
+      digit of 0". It cannot be expressed per package or per variant and we cannot know
+      which lot a user has, so it is recorded and neither silently applied nor dropped.
+    settings:
+      - name: Channels
+        type: checkboxes
+        choices:
+          - { name: IN0, signals: [IN0] }
+          - { name: IN1, signals: [IN1] }
+          - { name: IN2, signals: [IN2] }
+          - { name: IN3, signals: [IN3] }
+          - { name: IN4, signals: [IN4] }
+          - { name: IN5, signals: [IN5] }
+          - { name: IN6, signals: [IN6] }
+          - { name: IN7, signals: [IN7] }
+          - { name: IN8, signals: [IN8] }
+          - { name: IN9, signals: [IN9] }
+          - { name: IN10, signals: [IN10] }
+          - { name: IN11, signals: [IN11] }
+          - { name: IN12, signals: [IN12] }
+          - { name: IN13, signals: [IN13] }
+    remaps:
+      - name: No remap
+        pins: { IN0: PA0, IN1: PA1, IN10: PC0, IN11: PC1, IN12: PC2, IN13: PC3, IN2: PA2, IN3: PA3, IN4: PA4, IN5: PA5, IN6: PA6, IN7: PA7, IN8: PB0, IN9: PB1 }
+
+  CMP1:
+    category: Analog
+    settings:
+      - name: Positive input
+        choices:
+          - { name: Disable }
+          - { name: P0, signals: [P0] }
+          - { name: P1, signals: [P1] }
+      - name: Negative input
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N0] }
+          - { name: N1, signals: [N1] }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: OUT, signals: [OUT] }
+    remaps:
+      - name: No remap
+        pins: { N0: PC3, N1: PA23, OUT: PA1, P0: PC19, P1: PA0 }
+
+  CMP2:
+    category: Analog
+    settings:
+      - name: Positive input
+        choices:
+          - { name: Disable }
+          - { name: P0, signals: [P0] }
+          - { name: P1, signals: [P1] }
+      - name: Negative input
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N0] }
+          - { name: N1, signals: [N1] }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: OUT, signals: [OUT] }
+    remaps:
+      - name: No remap
+        pins: { N0: PA22, N1: PC3, OUT: PB2, P0: PA12, P1: PA11 }
+
+  CMP3:
+    category: Analog
+    settings:
+      - name: Positive input
+        choices:
+          - { name: Disable }
+          - { name: P0, signals: [P0] }
+          - { name: P1, signals: [P1] }
+      - name: Negative input
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N0] }
+          - { name: N1, signals: [N1] }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: OUT, signals: [OUT] }
+    remaps:
+      - name: No remap
+        pins: { N0: PA2, N1: PC3, OUT: PB3, P0: PA13, P1: PA14 }
+
+  OPA1:
+    category: Analog
+    settings:
+      - name: Positive input
+        choices:
+          - { name: Disable }
+          - { name: P0, signals: [P0] }
+          - { name: P1, signals: [P1] }
+          - { name: P2, signals: [P2] }
+      - name: Negative input
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N0] }
+          - { name: N1, signals: [N1] }
+          - { name: N2, signals: [N2] }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: O0, signals: [O0] }
+          - { name: O1, signals: [O1] }
+    remaps:
+      - name: No remap
+        pins: { N0: PA6, N1: PB6, N2: PA1, O0: PA3, O1: PB5, P0: PB0, P1: PB8, P2: PB4 }
+
+  OPA2:
+    category: Analog
+    settings:
+      - name: Positive input
+        choices:
+          - { name: Disable }
+          - { name: P0, signals: [P0] }
+          - { name: P1, signals: [P1] }
+          - { name: P2, signals: [P2] }
+      - name: Negative input
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N0] }
+          - { name: N1, signals: [N1] }
+          - { name: N2, signals: [N2] }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: O0, signals: [O0] }
+          - { name: O1, signals: [O1] }
+    remaps:
+      - name: No remap
+        pins: { N0: PA5, N1: PB1, N2: PA1, O0: PA4, O1: PA2, P0: PA7, P1: PB3, P2: PB7 }
+
+  PIOC:
+    category: System Core
+    notes: >
+      The programmable I/O controller. Its two pins are shared with the SDI debug
+      interface (PC18/PC19 are DIO/DCK), which is why enabling it and keeping SDI are
+      a genuine conflict rather than a warning. `GPIO_Remap_PIOC` moves them.
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Activated, signals: [IO0, IO1] }
+    remaps:
+      - name: No remap
+        pins: { IO0: PC18, IO1: PC19 }
+      - name: Partial remap 1
+        macro: GPIO_Remap_PIOC
+        pins: { IO0: PC7 }
+
+  PWR:
+    category: System Core
+    notes: >
+      Power control. The PVD thresholds are named twice in the header - PWR_PVDLevel_0..3
+      and the aliases PWR_PVDLevel_2V1/2V3/3V0/4V0 pointing at the same four values
+      (ch32x035_pwr.h). The voltage aliases are used here because a threshold a user picks
+      should read as a voltage, and the numeric form is the same constant.
+    settings:
+      - name: Programmable Voltage Detector (PVD)
+        choices:
+          - { name: Disable }
+          - { name: Enabled }
+    params:
+      - key: pvd_level
+        name: PVD threshold
+        sdk_call: PWR_PVDLevelConfig
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: 2.3 V
+        options:
+          - { name: 2.1 V, value: 0,  sdk: PWR_PVDLevel_2V1 }
+          - { name: 2.3 V, value: 32, sdk: PWR_PVDLevel_2V3 }
+          - { name: 3.0 V, value: 64, sdk: PWR_PVDLevel_3V0 }
+          - { name: 4.0 V, value: 96, sdk: PWR_PVDLevel_4V0 }
+        help: "PWR_CTLR PLS. The values are the register encodings, not indices."
+
+  FLASH:
+    category: System Core
+    notes: >
+      Only the user option bytes are offered. The programming API (unlock, erase,
+      program) is a runtime concern rather than a configuration, and the write-protection
+      words WRPR0-3 are one bit per pair of sectors, which this format cannot express -
+      the same call CH32V006 made, recorded there in FLASH's notes for the same reason.
+    settings:
+      - name: Independent watchdog start (IWDG_SW)
+        choices:
+          - { name: Started by software (factory default) }
+          - { name: Started by hardware }
+      - name: Reset on entering Standby (STANDBY_RST)
+        choices:
+          - { name: No reset (factory default) }
+          - { name: Reset }
+
+  EXTI:
+    category: System Core
+    notes: >
+      THIRTY lines, not the 26 the grouped vectors cover. Lines 0-25 reach pins through
+      AFIO_EXTICR and are served by the three grouped vectors EXTI7_0 / EXTI15_8 /
+      EXTI25_16; lines 26-29 are INTERNAL events with their own vectors - 26 PVD, 27
+      auto-wake-up, 28 USBFS wake-up, 29 USBPD wake-up (ch32x035_exti.h). Only the trigger
+      edge is configurable here; which pin a line watches is a pin question and lives in
+      the top-level `exti:` block where the conflict engine can see it.
+    settings:
+      - name: EXTI trigger edge
+        choices:
+          - { name: Rising edge }
+          - { name: Falling edge }
+          - { name: Both edges }
+
+  AWU:
+    category: System Core
+    notes: >
+      Automatic wake-up. Nothing here claims a pin: the AWU runs from the internal
+      low-speed clock and its event reaches the core through EXTI line 27. A peripheral
+      CH32V006 does not have at all.
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Activated }
+    params:
+      - key: prescaler
+        name: Prescaler
+        sdk_call: AWU_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        group: Basic
+        default: "4096"
+        options:
+          - { name: "1",     value: 0,  sdk: AWU_Prescaler_1 }
+          - { name: "2",     value: 2,  sdk: AWU_Prescaler_2 }
+          - { name: "4",     value: 3,  sdk: AWU_Prescaler_4 }
+          - { name: "8",     value: 4,  sdk: AWU_Prescaler_8 }
+          - { name: "16",    value: 5,  sdk: AWU_Prescaler_16 }
+          - { name: "32",    value: 6,  sdk: AWU_Prescaler_32 }
+          - { name: "64",    value: 7,  sdk: AWU_Prescaler_64 }
+          - { name: "128",   value: 8,  sdk: AWU_Prescaler_128 }
+          - { name: "256",   value: 9,  sdk: AWU_Prescaler_256 }
+          - { name: "512",   value: 10, sdk: AWU_Prescaler_512 }
+          - { name: "1024",  value: 11, sdk: AWU_Prescaler_1024 }
+          - { name: "2048",  value: 12, sdk: AWU_Prescaler_2048 }
+          - { name: "4096",  value: 13, sdk: AWU_Prescaler_4096 }
+          - { name: "10240", value: 14, sdk: AWU_Prescaler_10240 }
+          - { name: "61440", value: 15, sdk: AWU_Prescaler_61440 }
+        help: >
+          Divides the low-speed clock. Note the encoding is NOT a power-of-two index: /1 is
+          0 and /2 is 2, so 1 is skipped, and the last two steps are 10240 and 61440 rather
+          than 8192 and 16384. Read off ch32x035_awu.h rather than derived.
+      - key: window
+        name: Window value
+        sdk_call: AWU_SetWindowValue
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 63
+        min: 0
+        max: 63
+        help: "6-bit compare value; the wake-up period is prescaler x (window + 1) low-speed clocks."
+
   # ---------------- Connectivity ----------------
   USBFS:
     category: Connectivity
@@ -647,6 +1235,10 @@ nvic:
     - { name: SysTick       , vector: 12, irqn: SysTick_IRQn       , handler: SysTick_Handler         , system: true }
     - { name: Software      , vector: 14, irqn: Software_IRQn      , handler: SW_Handler              , system: true }
     - { name: WWDG          , vector: 16, irqn: WWDG_IRQn          , handler: WWDG_IRQHandler         , peripheral: WWDG }
+    - { name: PVD           , vector: 17, irqn: PVD_IRQn           , handler: PVD_IRQHandler          , peripheral: PWR }
+    - { name: FLASH         , vector: 18, irqn: FLASH_IRQn         , handler: FLASH_IRQHandler        , peripheral: FLASH }
+    - { name: EXTI7_0       , vector: 20, irqn: EXTI7_0_IRQn       , handler: EXTI7_0_IRQHandler      , lines: [0, 7], peripheral: EXTI }
+    - { name: AWU           , vector: 21, irqn: AWU_IRQn           , handler: AWU_IRQHandler          , peripheral: AWU }
     - { name: DMA1_CH1      , vector: 22, irqn: DMA1_Channel1_IRQn , handler: DMA1_Channel1_IRQHandler, peripheral: DMA1, channel: 1 }
     - { name: DMA1_CH2      , vector: 23, irqn: DMA1_Channel2_IRQn , handler: DMA1_Channel2_IRQHandler, peripheral: DMA1, channel: 2 }
     - { name: DMA1_CH3      , vector: 24, irqn: DMA1_Channel3_IRQn , handler: DMA1_Channel3_IRQHandler, peripheral: DMA1, channel: 3 }
@@ -654,12 +1246,32 @@ nvic:
     - { name: DMA1_CH5      , vector: 26, irqn: DMA1_Channel5_IRQn , handler: DMA1_Channel5_IRQHandler, peripheral: DMA1, channel: 5 }
     - { name: DMA1_CH6      , vector: 27, irqn: DMA1_Channel6_IRQn , handler: DMA1_Channel6_IRQHandler, peripheral: DMA1, channel: 6 }
     - { name: DMA1_CH7      , vector: 28, irqn: DMA1_Channel7_IRQn , handler: DMA1_Channel7_IRQHandler, peripheral: DMA1, channel: 7 }
+    - { name: ADC1          , vector: 29, irqn: ADC1_IRQn          , handler: ADC1_IRQHandler         , peripheral: ADC1 }
+    - { name: I2C1_EV       , vector: 30, irqn: I2C1_EV_IRQn       , handler: I2C1_EV_IRQHandler      , peripheral: I2C1 }
+    - { name: I2C1_ER       , vector: 31, irqn: I2C1_ER_IRQn       , handler: I2C1_ER_IRQHandler      , peripheral: I2C1 }
+    - { name: USART1        , vector: 32, irqn: USART1_IRQn        , handler: USART1_IRQHandler       , peripheral: USART1 }
+    - { name: SPI1          , vector: 33, irqn: SPI1_IRQn          , handler: SPI1_IRQHandler         , peripheral: SPI1 }
+    - { name: TIM1_BRK      , vector: 34, irqn: TIM1_BRK_IRQn      , handler: TIM1_BRK_IRQHandler     , peripheral: TIM1 }
+    - { name: TIM1_UP       , vector: 35, irqn: TIM1_UP_IRQn       , handler: TIM1_UP_IRQHandler      , peripheral: TIM1 }
+    - { name: TIM1_TRG_COM  , vector: 36, irqn: TIM1_TRG_COM_IRQn  , handler: TIM1_TRG_COM_IRQHandler , peripheral: TIM1 }
+    - { name: TIM1_CC       , vector: 37, irqn: TIM1_CC_IRQn       , handler: TIM1_CC_IRQHandler      , peripheral: TIM1 }
+    - { name: TIM2_UP       , vector: 38, irqn: TIM2_UP_IRQn       , handler: TIM2_UP_IRQHandler      , peripheral: TIM2 }
+    - { name: USART2        , vector: 39, irqn: USART2_IRQn        , handler: USART2_IRQHandler       , peripheral: USART2 }
+    - { name: EXTI15_8      , vector: 40, irqn: EXTI15_8_IRQn      , handler: EXTI15_8_IRQHandler     , lines: [8, 15], peripheral: EXTI }
+    - { name: EXTI25_16     , vector: 41, irqn: EXTI25_16_IRQn     , handler: EXTI25_16_IRQHandler    , lines: [16, 25], peripheral: EXTI }
+    - { name: USART3        , vector: 42, irqn: USART3_IRQn        , handler: USART3_IRQHandler       , peripheral: USART3 }
+    - { name: USART4        , vector: 43, irqn: USART4_IRQn        , handler: USART4_IRQHandler       , peripheral: USART4 }
     - { name: DMA1_CH8      , vector: 44, irqn: DMA1_Channel8_IRQn , handler: DMA1_Channel8_IRQHandler, peripheral: DMA1, channel: 8 }
     - { name: USBFS         , vector: 45, irqn: USBFS_IRQn         , handler: USBFS_IRQHandler        , peripheral: USBFS }
     - { name: USBFSWakeUp   , vector: 46, irqn: USBFSWakeUp_IRQn   , handler: USBFSWakeUp_IRQHandler  , peripheral: USBFS }
+    - { name: PIOC          , vector: 47, irqn: PIOC_IRQn          , handler: PIOC_IRQHandler         , peripheral: PIOC }
+    - { name: OPA           , vector: 48, irqn: OPA_IRQn           , handler: OPA_IRQHandler          , peripheral: OPA1 }
     - { name: USBPD         , vector: 49, irqn: USBPD_IRQn         , handler: USBPD_IRQHandler        , peripheral: USBPD }
     - { name: USBPDWakeUp   , vector: 50, irqn: USBPDWakeUp_IRQn   , handler: USBPDWakeUp_IRQHandler  , peripheral: USBPD }
-
+    - { name: TIM2_CC       , vector: 51, irqn: TIM2_CC_IRQn       , handler: TIM2_CC_IRQHandler      , peripheral: TIM2 }
+    - { name: TIM2_TRG_COM  , vector: 52, irqn: TIM2_TRG_COM_IRQn  , handler: TIM2_TRG_COM_IRQHandler , peripheral: TIM2 }
+    - { name: TIM2_BRK      , vector: 53, irqn: TIM2_BRK_IRQn      , handler: TIM2_BRK_IRQHandler     , peripheral: TIM2 }
+    - { name: TIM3          , vector: 54, irqn: TIM3_IRQn          , handler: TIM3_IRQHandler         , peripheral: TIM3 }
 # -----------------------------------------------------------------------------
 # Code generation - the family-level names, every one checked against the X035 EVT
 # headers by tools/verify_sdk_names.py.
@@ -673,6 +1285,26 @@ codegen:
   # APB2, not the PB2 that CH32V00x uses (ch32x035_rcc.h). Two live spellings in the
   # repo is the point: neither can be hardcoded in the generator.
   gpio_clock: { fn: RCC_APB2PeriphClockCmd, port: RCC_APB2Periph_GPIO$PORT, afio: RCC_APB2Periph_AFIO }
+
+  # REMAPS ARE NAMED MACROS ON THIS FAMILY, not raw register fields.
+  #
+  # CH32V006 writes AFIO->PCFR1 directly and `codegen.remap` carries lsb/bits per
+  # peripheral. CH32X035's EVT exposes 40 named macros applied with one call:
+  # `GPIO_PinRemapConfig(GPIO_FullRemap_USART2, ENABLE)`. `style:` says which route this
+  # part takes, so neither family is special-cased and the generator does not guess.
+  #
+  # Why macro rather than raw fields here: the EVT examples all use GPIO_PinRemapConfig,
+  # so it is the spelling a user reading WCH's own code recognises; the macro packs
+  # register position AND value into one constant that the SDK decodes, so building the
+  # mask by hand means re-deriving an encoding the SDK already knows; and a wrong macro
+  # name fails to compile and is caught by verify_sdk_names.py first, where a wrong
+  # hand-built mask is silent. Posted to AGENT-2 on the board before being filled.
+  #
+  # An index with no `macro:` emits nothing - which is how "No remap" stays silent.
+  remap:
+    style: macro
+    fn: GPIO_PinRemapConfig
+    enable: ENABLE
 
   init_structs:
     GPIO_InitTypeDef: { fn: GPIO_Init }
@@ -733,18 +1365,19 @@ codegen:
       register: RCC_APB2PCENR
       fn: RCC_APB2PeriphClockCmd
       prefix: RCC_APB2Periph_
-      bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4 }
+      bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4, ADC1: 9, TIM1: 11, SPI1: 12, USART1: 14 }
     APB1:
       register: RCC_APB1PCENR
       fn: RCC_APB1PeriphClockCmd
       prefix: RCC_APB1Periph_
-      bits: { WWDG: 11 }
+      bits: { TIM2: 0, TIM3: 1, WWDG: 11, USART2: 17, USART3: 18, USART4: 19, I2C1: 21, PWR: 28 }
     notes: >
-      Only the peripherals this file actually models are listed. The header also
-      defines RCC_AHBPeriph_SRAM/IO2W and RCC_APB2Periph_ADC1/TIM1/SPI1/USART1 and
-      RCC_APB1Periph_TIM2/TIM3/USART2/USART3/USART4/I2C1/PWR - they go in with their
-      peripherals, not before them, so that a clock enable can never name hardware the
-      tree does not offer.
+      Only the peripherals this file actually models are listed. The header also defines
+      RCC_AHBPeriph_SRAM and RCC_AHBPeriph_IO2W (the 1-wire controller) and
+      RCC_APB1Periph_PWR - they go in with their peripherals, not before them, so that a
+      clock enable can never name hardware the tree does not offer. Every bit number here
+      is the bit position of the macro in ch32x035_rcc.h, not a guess: RCC_APB1Periph_I2C1
+      is 0x00200000, which is bit 21.
 
 # What this part offers, so no renderer has to know a part name.
 gpio:

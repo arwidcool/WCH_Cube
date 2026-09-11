@@ -33,6 +33,118 @@ peripherals:
       prescaler: '1'
       window: 127
       counter: 127
+  USART1:
+    settings:
+      Mode: Disable
+      Hardware Flow Control (RS232): Disable
+    remap: 0
+  USART2:
+    settings:
+      Mode: Disable
+      Hardware Flow Control (RS232): Disable
+    remap: 0
+  USART3:
+    settings:
+      Mode: Disable
+      Hardware Flow Control (RS232): Disable
+    remap: 0
+  USART4:
+    settings:
+      Mode: Disable
+      Hardware Flow Control (RS232): Disable
+    remap: 0
+  SPI1:
+    settings:
+      Mode: Disable
+      Hardware NSS Signal: Disable
+    remap: 0
+  I2C1:
+    settings:
+      Mode: Disable
+    remap: 0
+  TIM1:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Break Input: Disable
+    remap: 0
+  TIM2:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Break Input: Disable
+    remap: 0
+  TIM3:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+    remap: 0
+  ADC1:
+    settings:
+      Channels: []
+    remap: 0
+  CMP1:
+    settings:
+      Positive input: Disable
+      Negative input: Disable
+      Output: Disable
+    remap: 0
+  CMP2:
+    settings:
+      Positive input: Disable
+      Negative input: Disable
+      Output: Disable
+    remap: 0
+  CMP3:
+    settings:
+      Positive input: Disable
+      Negative input: Disable
+      Output: Disable
+    remap: 0
+  OPA1:
+    settings:
+      Positive input: Disable
+      Negative input: Disable
+      Output: Disable
+    remap: 0
+  OPA2:
+    settings:
+      Positive input: Disable
+      Negative input: Disable
+      Output: Disable
+    remap: 0
+  PIOC:
+    settings:
+      Mode: Disable
+    remap: 0
+  PWR:
+    settings:
+      Programmable Voltage Detector (PVD): Disable
+    remap: 0
+    params:
+      pvd_level: 2.3 V
+  FLASH:
+    settings:
+      Independent watchdog start (IWDG_SW): Started by software (factory default)
+      Reset on entering Standby (STANDBY_RST): No reset (factory default)
+    remap: 0
+  EXTI:
+    settings:
+      EXTI trigger edge: Rising edge
+    remap: 0
+  AWU:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      prescaler: '4096'
+      window: 63
   USBFS:
     settings:
       Mode: Disable

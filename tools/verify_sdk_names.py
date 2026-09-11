@@ -31,6 +31,8 @@ What it checks, per part
   codegen.speeds            every value is a member of GPIOSpeed_TypeDef
   codegen.periph_clock      every domain's .fn is declared, and .prefix + each bit key
                             is a defined macro
+  codegen.remap             with style: macro, .fn and .enable exist
+  peripherals.*.remaps[]    every .macro is a defined macro (CH32X035 has 44 of them)
   codegen.init_structs      the struct is a type the SDK defines and .fn is a declared
                             function that could apply it
   codegen.periph_handle     each peripheral's register block is a defined macro
@@ -377,6 +379,27 @@ def check_gpio(doc: dict, idx: Index, r: Report) -> None:
                "Correct only if the silicon really lacks them - say so in the notes.")
 
 
+def check_remaps(doc: dict, idx: Index, r: Report) -> None:
+    """`peripherals.*.remaps[].macro` and `codegen.remap.fn` — the macro form.
+
+    CH32X035 carries 44 of these and every one of them went UNCHECKED until this existed:
+    a planted `GPIO_FullRemap_USART2X` passed the gate silently. A remap macro is exactly
+    the kind of name this tool was built for - plausible, per-family, and a compile error
+    if it is wrong - so the omission mattered more than the count suggests.
+    """
+    cg = doc.get("codegen") or {}
+    rm = cg.get("remap") or {}
+    if rm.get("style") == "macro":
+        want(r, idx, "codegen.remap.fn", rm.get("fn"), idx.functions, "a declared function")
+        want(r, idx, "codegen.remap.enable", rm.get("enable"),
+             idx.macros | idx.enum_members, "a defined macro or enum member")
+    for pid, P in (doc.get("peripherals") or {}).items():
+        for i, entry in enumerate((P or {}).get("remaps") or []):
+            if isinstance(entry, dict) and entry.get("macro"):
+                want(r, idx, f"peripherals.{pid}.remaps[{i}].macro", entry["macro"],
+                     idx.macros | idx.enum_members, "a defined macro or enum member")
+
+
 def check_init_structs(doc: dict, idx: Index, r: Report) -> None:
     """`codegen.init_structs` pairs a struct with the function that applies it, and
     `codegen.periph_handle` names each peripheral's register block. Both are claims."""
@@ -552,7 +575,7 @@ def check_pio(doc: dict, idx: Index, r: Report) -> None:
                             + idx.suggest(str(e), envs))
 
 
-CHECKS = (check_header, check_gpio, check_init_structs, check_periph_clock,
+CHECKS = (check_header, check_gpio, check_remaps, check_init_structs, check_periph_clock,
           check_params, check_nvic, check_pio)
 
 

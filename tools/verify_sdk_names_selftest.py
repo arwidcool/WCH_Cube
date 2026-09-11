@@ -138,6 +138,11 @@ def build_cases(doc: dict):
          lambda d: set_path(d, "peripherals.TIM1.channel_params.params.0.sdk_field", "TIM_OCMode_"),
          "peripherals.TIM1.channel_params.params[0]", "TIM_OCMode_"),
 
+        ("codegen.remap.fn under style: macro, a function that does not exist",
+         lambda d: (d["codegen"].setdefault("remap", {}).update(
+             {"style": "macro", "fn": "GPIO_PinRemapConfigure", "enable": "ENABLE"})),
+         "codegen.remap.fn", "GPIO_PinRemapConfigure"),
+
         ("dma.remaps macro, a plausible EXTEN bit name that does not exist",
          lambda d: set_path(d, "dma.remaps.0.macro", "EXTEN_TIM2_DMA_REMAP_EN"),
          "dma.remaps[0].macro", "EXTEN_TIM2_DMA_REMAP_EN"),
