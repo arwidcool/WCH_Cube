@@ -46,6 +46,25 @@ PACKAGES_YAML = ROOT / "data" / "packages" / "packages.yaml"
 PIN_TYPES = {"io", "power", "ground", "reset", "boot", "sys", "nc", "analog"}
 SETTING_TYPES = {"choice", "checkboxes"}
 
+# Key whitelists. These exist for one specific failure, which has already happened four
+# times in this repo: a YAML flow mapping treats a comma as a field separator, so an
+# unquoted comma inside { } silently truncates the value and turns the remainder into a
+# null-valued key.
+#
+#     - { name: IN8 (Vrefint, internal) }     parses as  {name: "IN8 (Vrefint",
+#                                                         "internal)": None}
+#
+# The file still parses and the app still loads, so nothing else catches it. Worse, the
+# app keys per-setting state by choice NAME, so two choices whose names both truncate to
+# the same string silently collapse into one. An unknown key is the only reliable tell.
+CHOICE_KEYS = {"name", "signals", "default"}
+SETTING_KEYS = {"name", "type", "choices", "notes"}
+PIN_ENTRY_KEYS = {"type", "analog", "notes", "five_volt_tolerant", "drive"}
+
+
+def unknown_keys(mapping, allowed):
+    return sorted(k for k in mapping if k not in allowed)
+
 
 class Report:
     """Collects problems for one file and prints them grouped."""
@@ -212,6 +231,10 @@ def check_pins(doc: dict, tables: dict, r: Report) -> None:
         kind = info.get("type", "io")
         if kind not in PIN_TYPES:
             r.error(where, f"unknown type `{kind}` (known: {', '.join(sorted(PIN_TYPES))})")
+        stray = unknown_keys(info, PIN_ENTRY_KEYS)
+        if stray:
+            r.error(where, f"unknown key(s) {stray} - almost always an unquoted comma "
+                           f"inside {{ }}, which truncates the value before it")
         if name not in bonded:
             r.warn(where, "declared but not bonded on any package")
 
@@ -275,10 +298,27 @@ def check_peripherals(doc: dict, r: Report) -> None:
             defaults = [c for c in choices if isinstance(c, dict) and c.get("default")]
             if len(defaults) > 1:
                 r.error(sw, f"{len(defaults)} choices marked `default: true`; at most one")
+            stray = unknown_keys(s, SETTING_KEYS)
+            if stray:
+                r.error(sw, f"unknown key(s) {stray} - almost always an unquoted comma "
+                            f"inside {{ }}, which truncates the value before it")
+            seen_choices: dict[str, int] = {}
             for k, c in enumerate(choices):
                 if not isinstance(c, dict) or not c.get("name"):
                     r.error(f"{sw}.choices[{k}]", "each choice needs a `name`")
                     continue
+                stray = unknown_keys(c, CHOICE_KEYS)
+                if stray:
+                    r.error(f"{sw}.choices[{k}]",
+                            f"`{c['name']}` has unknown key(s) {stray} - an unquoted comma "
+                            f"inside {{ }} truncates the name; quote it")
+                first = seen_choices.get(str(c["name"]))
+                if first is not None:
+                    r.error(f"{sw}.choices[{k}]",
+                            f"name `{c['name']}` is already used by choices[{first}]; the "
+                            f"engine keys this setting's state by choice name, so the two "
+                            f"collapse into one")
+                seen_choices[str(c["name"])] = k
                 for sig in c.get("signals") or []:
                     wanted.add(str(sig))
             # the engine treats choices[0] as the off state (isEnabled/resetPin rely on it)

@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: build + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Validate MCU data
+        run: python tools/validate_mcu.py
+
+      - name: Build dist/index.html
+        run: python build.py
+
+      # build.py output is committed; a diff here means someone shipped a stale build.
+      - name: dist/index.html is up to date
+        run: |
+          if ! git diff --quiet -- dist/index.html; then
+            echo "::error file=dist/index.html::dist/index.html is stale - run 'python build.py' and commit the result"
+            git diff --stat -- dist/index.html
+            exit 1
+          fi
+
+      - name: Run tests
+        run: node tests/run.js
+
+  desktop:
+    name: tauri shell (linux)
+    runs-on: ubuntu-latest
+    # Only once the shell exists; keeps CI green for everyone else until then.
+    if: ${{ hashFiles('src-tauri/Cargo.toml') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential curl wget file libssl-dev libgtk-3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build the web asset
+        run: |
+          pip install pyyaml
+          python build.py
+
+      - name: Build the desktop app
+        working-directory: src-tauri
+        run: cargo build --release --locked
+
+      - name: Check it packages
+        working-directory: src-tauri
+        run: cargo tauri build --no-bundle || cargo build --release
