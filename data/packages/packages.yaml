@@ -12,6 +12,12 @@
 # pitch : mm, informational
 # body  : [width, height] mm, informational
 # epad  : exposed pad present (drawn as a square in the middle)
+#
+# Round 4: QFN20, QFN28 and QFN32 said pitch 0.5 and QFN32 said body 5*5. Both
+# datasheets contradict that - CH32V006 DS ch.5 "QFN32 4*4mm 0.4mm", "QFN20 3*3mm
+# 0.4mm", "QFN12 2*2mm 0.4mm", and CH32X035 DS ch.4 "QFN28 4*4mm 0.4mm". Corrected.
+# Both fields are informational and neither changes the drawing, but a wrong number
+# here is a number the next part copies.
 
 packages:
   # ---- dual in line -------------------------------------------------------
@@ -25,16 +31,18 @@ packages:
   - { id: SSOP20,   kind: dual, pins: 20,  pitch: 0.65, body: [7.2, 5.3] }
   - { id: SSOP28,   kind: dual, pins: 28,  pitch: 0.65, body: [10.2, 5.3] }
   - { id: QSOP24,   kind: dual, pins: 24,  pitch: 0.635, body: [8.7, 3.9] }
+  # CH32X035 DS v2.2 ch.4: "QSOP28 3.9*9.9mm 0.635mm 25.0mil Quarter-sized Outline Package".
+  - { id: QSOP28,   kind: dual, pins: 28,  pitch: 0.635, body: [9.9, 3.9] }
   - { id: MSOP10,   kind: dual, pins: 10,  pitch: 0.5,  body: [3.0, 3.0] }
   - { id: DIP8,     kind: dual, pins: 8,   pitch: 2.54, body: [9.3, 6.4] }
   - { id: DIP20,    kind: dual, pins: 20,  pitch: 2.54, body: [26.2, 6.4] }
 
   # ---- quad, no leads -----------------------------------------------------
   - { id: QFN12,    kind: quad, pins: 12,  pitch: 0.4,  body: [2, 2],  epad: true }
-  - { id: QFN20,    kind: quad, pins: 20,  pitch: 0.5,  body: [3, 3],  epad: true }
+  - { id: QFN20,    kind: quad, pins: 20,  pitch: 0.4,  body: [3, 3],  epad: true }
   - { id: QFN24,    kind: quad, pins: 24,  pitch: 0.5,  body: [4, 4],  epad: true }
-  - { id: QFN28,    kind: quad, pins: 28,  pitch: 0.5,  body: [4, 4],  epad: true }
-  - { id: QFN32,    kind: quad, pins: 32,  pitch: 0.5,  body: [5, 5],  epad: true }
+  - { id: QFN28,    kind: quad, pins: 28,  pitch: 0.4,  body: [4, 4],  epad: true }
+  - { id: QFN32,    kind: quad, pins: 32,  pitch: 0.4,  body: [4, 4],  epad: true }
   - { id: QFN40,    kind: quad, pins: 40,  pitch: 0.5,  body: [6, 6],  epad: true }
   - { id: QFN48,    kind: quad, pins: 48,  pitch: 0.5,  body: [7, 7],  epad: true }
   - { id: QFN56,    kind: quad, pins: 56,  pitch: 0.5,  body: [8, 8],  epad: true }
@@ -46,6 +54,11 @@ packages:
   - { id: LQFP44,   kind: quad, pins: 44,  pitch: 0.8,  body: [10, 10] }
   - { id: LQFP48,   kind: quad, pins: 48,  pitch: 0.5,  body: [7, 7] }
   - { id: LQFP64,   kind: quad, pins: 64,  pitch: 0.5,  body: [10, 10] }
+  # CH32X035 DS v2.2 ch.4: "LQFP64M 10*10mm 0.5mm" - DIMENSIONALLY IDENTICAL to LQFP64
+  # above. Kept as its own id because that is what the part's model table calls it and a
+  # package id that does not match the datasheet is its own source of doubt; recorded here
+  # so nobody re-measures it. WCH's M suffix is a mould/body-option marker, not a size.
+  - { id: LQFP64M,  kind: quad, pins: 64,  pitch: 0.5,  body: [10, 10] }
   - { id: LQFP100,  kind: quad, pins: 100, pitch: 0.5,  body: [14, 14] }
   - { id: LQFP128,  kind: quad, pins: 128, pitch: 0.4,  body: [14, 14] }
   - { id: LQFP144,  kind: quad, pins: 144, pitch: 0.5,  body: [20, 20] }
