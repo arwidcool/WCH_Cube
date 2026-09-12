@@ -450,6 +450,17 @@
   table.rail th:nth-child(2),table.rail td:nth-child(2){width:17%}
   table.rail th:nth-child(3),table.rail td:nth-child(3){width:19%}
   table.rail .src{margin-top:3px;font-size:10.5px}
+  /* The "what is this thing" card at the top of a peripheral's panel. Deliberately quiet:
+     it is reference text, not a control, so it must not look like one of the labels below
+     it. `overflow-wrap` because the descriptions are sentences and the panel is narrow at
+     125 % zoom. */
+  .periphintro{margin:0 0 10px;padding:8px 10px;border-left:3px solid var(--line);
+    background:var(--blue-pale);border-radius:0 4px 4px 0}
+  .periphintro .pi-name{font-weight:600;font-size:12.5px}
+  .periphintro .pi-cat{color:var(--muted);font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.04em;margin-top:1px}
+  .periphintro .pi-what{margin-top:4px;font-size:11.5px;line-height:1.45;overflow-wrap:anywhere}
+  .periphintro .pi-notes{margin-top:4px;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
   .siglabel .userlabel,.siglabel.userlabel{fill:var(--link);font-style:italic}
   .siglabel .lsep{fill:var(--muted)}
   .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
@@ -2956,45 +2967,79 @@ peripherals:
       OC: [{ pin: PB13, af: 3 }]
   LTDC:
     category: Graphics
+    # THE OUTPUT WIDTH IS A WIRING CHOICE, NOT A REGISTER, and that is the whole reason
+    # this row exists. RM 43.4.5: the global control register `R32_LTDC_GCR` carries four
+    # polarity bits and an enable, and bits [27:1] are reserved - there is no field that
+    # narrows the bus. The controller always drives a 24-bit parallel RGB port; a 16- or
+    # 18-bit panel is wired to the HIGH bits of each channel and the low ones are simply
+    # not connected. So the choice below is "how many lines did you wire", and every line
+    # it does not claim stays an ordinary pin that any other peripheral may take.
+    #
+    # The subsets are the standard panel wiring (panel MSB to controller MSB), which is
+    # also how the datasheet numbers the pads: R7/G7/B7 are the most significant.
+    #
+    #   RGB888  24 lines  R0-R7  G0-G7  B0-B7      frees nothing
+    #   RGB666  18 lines  R2-R7  G2-G7  B2-B7      frees 6: R0-R1, G0-G1, B0-B1
+    #   RGB565  16 lines  R3-R7  G2-G7  B3-B7      frees 8: R0-R2, G0-G1, B0-B2
+    #
+    # NOT the same thing as an "8-bit mode", which is a question people ask of this
+    # controller and which has a different answer: `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18)
+    # offers L8, AL44 and AL88 - eight bits per pixel - but those describe the LAYER'S
+    # FRAME BUFFER IN MEMORY. The pixel format converter expands every one of them to
+    # ARGB8888 before the blender, so an 8-bit format saves RAM and frees no pin at all.
+    # It is not selectable here yet; see `notes:` below and TASKS.md.
     settings:
       - name: "Colour depth"
         choices:
           - { name: Disable }
           - { name: RGB888, signals: [R0, R1, R2, R3, R4, R5, R6, R7, G0, G1, G2, G3, G4, G5, G6, G7, B0, B1, B2, B3, B4, B5, B6, B7] }
+          - { name: RGB666, signals: [R2, R3, R4, R5, R6, R7, G2, G3, G4, G5, G6, G7, B2, B3, B4, B5, B6, B7] }
           - { name: RGB565, signals: [R3, R4, R5, R6, R7, G2, G3, G4, G5, G6, G7, B3, B4, B5, B6, B7] }
       - name: "Sync and clock"
         choices:
           - { name: Disable }
           - { name: Enabled, signals: [CLK, HSYNC, VSYNC, DE] }
+    notes: >
+      Parallel RGB output, always 24 bits wide at the pad - the width you pick here is
+      how many lines you WIRED, not a mode the silicon has (RM 43.4.5 gives the global
+      control register no width field). A 16-bit panel takes the top five red, top six
+      green and top five blue lines; an 18-bit panel the top six of each. Every line the
+      chosen depth does not claim is released and can be assigned to another peripheral
+      or used as GPIO - picking RGB565 hands back eight pins, RGB666 six.
+      An "8-bit mode" is a different thing and does not free pins: L8, AL44 and AL88
+      (RM 43.4.18) are eight-bit-per-pixel FRAME BUFFER formats, and the pixel format
+      converter expands them to ARGB8888 before the output stage. Choosing one saves
+      memory and changes no pin. Selecting it is not modelled yet - the generator has no
+      way to fill the per-layer init struct - so it is an open item rather than a gap.
     signal_pins:
-      B0: [{ pin: PE4, af: 14 }, { pin: PF1, af: 8 }, { pin: PF3, af: 14 }]
-      B1: [{ pin: PA10, af: 14 }, { pin: PC10, af: 10 }, { pin: PD0, af: 14 }, { pin: PD14, af: 8 }, { pin: PE0, af: 14 }]
+      B0: [{ pin: PF1, af: 8 }, { pin: PE4, af: 14 }, { pin: PF3, af: 14 }]
+      B1: [{ pin: PC10, af: 10 }, { pin: PA10, af: 14 }, { pin: PD0, af: 14 }, { pin: PD14, af: 8 }, { pin: PE0, af: 14 }]
       B2: [{ pin: PA13, af: 8 }, { pin: PA3, af: 9 }, { pin: PC9, af: 14 }, { pin: PD2, af: 14 }, { pin: PD6, af: 14 }, { pin: PF4, af: 14 }]
-      B3: [{ pin: PA8, af: 13 }, { pin: PD10, af: 14 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }]
-      B4: [{ pin: PA10, af: 12 }, { pin: PA15, af: 10 }, { pin: PC11, af: 14 }, { pin: PD4, af: 14 }, { pin: PE0, af: 9 }, { pin: PE1, af: 15 }, { pin: PE12, af: 14 }]
-      B5: [{ pin: PA3, af: 14 }, { pin: PB5, af: 3 }, { pin: PD5, af: 14 }, { pin: PF14, af: 15 }]
+      B3: [{ pin: PD10, af: 14 }, { pin: PA8, af: 13 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }]
+      B4: [{ pin: PA15, af: 10 }, { pin: PA10, af: 12 }, { pin: PC11, af: 14 }, { pin: PD4, af: 14 }, { pin: PE0, af: 9 }, { pin: PE1, af: 15 }, { pin: PE12, af: 14 }]
+      B5: [{ pin: PD5, af: 14 }, { pin: PA3, af: 14 }, { pin: PB5, af: 3 }, { pin: PF14, af: 15 }]
       B6: [{ pin: PA14, af: 14 }, { pin: PA15, af: 14 }, { pin: PB8, af: 14 }]
-      B7: [{ pin: PB9, af: 14 }, { pin: PD2, af: 9 }, { pin: PD8, af: 14 }]
-      CLK: [{ pin: PA15, af: 15 }, { pin: PB14, af: 14 }, { pin: PE14, af: 13 }, { pin: PF1, af: 14 }]
-      DE: [{ pin: PC12, af: 15 }, { pin: PC5, af: 14 }, { pin: PE13, af: 14 }, { pin: PF10, af: 14 }]
+      B7: [{ pin: PD2, af: 9 }, { pin: PB9, af: 14 }, { pin: PD8, af: 14 }]
+      CLK: [{ pin: PB14, af: 14 }, { pin: PA15, af: 15 }, { pin: PE14, af: 13 }, { pin: PF1, af: 14 }]
+      DE: [{ pin: PE13, af: 14 }, { pin: PC12, af: 15 }, { pin: PC5, af: 14 }, { pin: PF10, af: 14 }]
       G0: [{ pin: PB1, af: 14 }, { pin: PB14, af: 6 }, { pin: PE5, af: 14 }]
       G1: [{ pin: PB0, af: 14 }, { pin: PE6, af: 14 }]
-      G2: [{ pin: PA6, af: 14 }, { pin: PC0, af: 11 }, { pin: PD15, af: 7 }, { pin: PD5, af: 15 }]
+      G2: [{ pin: PD15, af: 7 }, { pin: PA6, af: 14 }, { pin: PC0, af: 11 }, { pin: PD5, af: 15 }]
       G3: [{ pin: PC9, af: 10 }, { pin: PD6, af: 15 }, { pin: PE11, af: 14 }, { pin: PF4, af: 9 }]
       G4: [{ pin: PB10, af: 14 }, { pin: PC8, af: 14 }, { pin: PD7, af: 15 }]
       G5: [{ pin: PB11, af: 14 }, { pin: PC1, af: 14 }, { pin: PF3, af: 15 }]
       G6: [{ pin: PC7, af: 14 }, { pin: PF4, af: 15 }]
-      G7: [{ pin: PB15, af: 14 }, { pin: PD3, af: 14 }, { pin: PF2, af: 14 }, { pin: PF5, af: 15 }]
-      HSYNC: [{ pin: PA6, af: 11 }, { pin: PC10, af: 15 }, { pin: PC6, af: 14 }]
-      R0: [{ pin: PA0, af: 14 }, { pin: PA14, af: 15 }, { pin: PE1, af: 14 }]
-      R1: [{ pin: PA2, af: 14 }, { pin: PF0, af: 11 }]
-      R2: [{ pin: PA1, af: 14 }, { pin: PC10, af: 14 }, { pin: PD13, af: 3 }]
-      R3: [{ pin: PA15, af: 9 }, { pin: PB0, af: 9 }, { pin: PD0, af: 15 }, { pin: PD12, af: 11 }]
-      R4: [{ pin: PA11, af: 14 }, { pin: PA5, af: 14 }, { pin: PD1, af: 15 }, { pin: PD11, af: 11 }]
-      R5: [{ pin: PA12, af: 14 }, { pin: PA9, af: 14 }, { pin: PC0, af: 14 }, { pin: PD2, af: 15 }]
-      R6: [{ pin: PA8, af: 14 }, { pin: PB1, af: 9 }, { pin: PC12, af: 14 }, { pin: PD3, af: 15 }, { pin: PE2, af: 14 }]
-      R7: [{ pin: PC4, af: 14 }, { pin: PD4, af: 15 }, { pin: PE15, af: 14 }, { pin: PF0, af: 14 }]
-      VSYNC: [{ pin: PA4, af: 14 }, { pin: PA7, af: 14 }, { pin: PB12, af: 10 }, { pin: PC11, af: 15 }]
+      G7: [{ pin: PD3, af: 14 }, { pin: PB15, af: 14 }, { pin: PF2, af: 14 }, { pin: PF5, af: 15 }]
+      HSYNC: [{ pin: PC6, af: 14 }, { pin: PA6, af: 11 }, { pin: PC10, af: 15 }]
+      R0: [{ pin: PE1, af: 14 }, { pin: PA0, af: 14 }, { pin: PA14, af: 15 }]
+      R1: [{ pin: PF0, af: 11 }, { pin: PA2, af: 14 }]
+      R2: [{ pin: PD13, af: 3 }, { pin: PA1, af: 14 }, { pin: PC10, af: 14 }]
+      R3: [{ pin: PD0, af: 15 }, { pin: PA15, af: 9 }, { pin: PB0, af: 9 }, { pin: PD12, af: 11 }]
+      R4: [{ pin: PA5, af: 14 }, { pin: PA11, af: 14 }, { pin: PD1, af: 15 }, { pin: PD11, af: 11 }]
+      R5: [{ pin: PC0, af: 14 }, { pin: PA12, af: 14 }, { pin: PA9, af: 14 }, { pin: PD2, af: 15 }]
+      R6: [{ pin: PC12, af: 14 }, { pin: PA8, af: 14 }, { pin: PB1, af: 9 }, { pin: PD3, af: 15 }, { pin: PE2, af: 14 }]
+      R7: [{ pin: PD4, af: 15 }, { pin: PC4, af: 14 }, { pin: PE15, af: 14 }, { pin: PF0, af: 14 }]
+      VSYNC: [{ pin: PB12, af: 10 }, { pin: PA4, af: 14 }, { pin: PA7, af: 14 }, { pin: PC11, af: 15 }]
   OPA:
     category: Analog
     settings:
@@ -16723,6 +16768,398 @@ function normaliseGpioConstraints() {
   return out;
 }
 
+// ===== app/engine/glossary.js =================================================
+// =============================================================================
+//  glossary.js — what a peripheral's name MEANS, and what that kind of block does.
+//
+//  The tree shows `USART1`, `SDIO`, `GPHA`, and three letters of abbreviation are not
+//  a description. This module answers the two questions a user asks on hover and on
+//  select: what does the name stand for, and what is that kind of block for.
+//
+//  WHY THIS IS IN THE ENGINE AND NOT IN THE MCU FILES. The same argument that put
+//  `PIN_KIND` in app/template.html and the GPIO mode lists in constraints.js: an
+//  acronym's expansion is VOCABULARY, not a hardware fact about a part. "SPI =
+//  serial peripheral interface" is one sentence in every part's file if it lives in
+//  the files, and six copies of a sentence is six places for a typo. What IS a fact
+//  about the part - how many controllers it has, what rates it reaches, which pads it
+//  reaches them on - stays in the MCU file, in `notes:`, and is shown under this.
+//
+//  The boundary is enforced rather than asserted: **the MCU file overrides this**.
+//  A peripheral carrying `title:` or `desc:` uses those instead, so the day a part
+//  needs to say something different, or a block this file has never heard of appears,
+//  it is a DATA change and not an engine change. An unknown peripheral gets NO title
+//  and NO description rather than a guess - the same rule as `modeMacro()` and
+//  `structVar()`. `app/tests/glossary.test.js` holds both halves of that line.
+//
+//  WHAT THE ENTRIES ARE TRACEABLE TO, per part, from the datasheet's own feature list:
+//    CH32H417DS0.md 1.2 (p.5-8)  - the block-by-block feature list, which names every
+//      one of these: `Programmable protocol I/O controller PIOC` (:94), `Graphics
+//      Processing Hardware Accelerator GPHA` (:161), `ECDC encryption module ... AES128/
+//      192/256 ... SM4` (:171), `500MBytes universal high-speed interface UHSIF` (:12),
+//      `SDIO master/slave interface: support SD/SDIO/MMC port` (:91), `200MHz SD/EMMC
+//      controller` (:84), `1-wire protocol main interface SWPMI` (:93), `SerDes
+//      high-speed isolated transceiver` (:11), `Digital Filter for ΣΔ Modulator DFSDM`
+//      (:158), `Serial Audio Interface SAI` (:159), `LCD-TFT Display Controller LTDC`
+//      (:160), `Flexible Memory Controller FMC: Support FSMC interface and SDRAM` (:162).
+//    The blocks every part here has (GPIO, RCC, EXTI, DMA, USART, SPI, I2C, ADC, TIM,
+//      IWDG, WWDG, CRC, PWR, FLASH, RTC, ...) are named in every one of the six
+//      datasheets' feature lists and described in the reference manual; the sentence
+//      here is the universal one, and the part's own `notes:` refines it.
+//
+//  Nothing here is a claim about a number of instances, a rate or a pad.
+// =============================================================================
+
+/**
+ * `{ title, what }` per peripheral, keyed by the peripheral's own name OR by the name
+ * with its instance number stripped (`USART3` looks up `USART`). An exact key wins, so
+ * `TIM1` can be the advanced-control timer while `TIM` stays the general sentence.
+ */
+const PERIPHERAL_VOCAB = {
+  // ---- the two virtual tree entries, which are not peripherals in `M.peripherals`
+  GPIO: {
+    title: 'General-purpose input/output',
+    what: 'The port pins themselves. Each one can be an input, an output, an analog '
+      + 'input, or carry a peripheral signal — and on a pin that several peripherals '
+      + 'can reach, only one of them gets it.',
+  },
+  NVIC: {
+    title: 'Vectored interrupt controller',
+    what: 'Gives every interrupt a handler and a priority. On this core the controller '
+      + 'is WCH\'s PFIC, which gives each vector one byte of priority and nests two deep.',
+  },
+
+  // ---- system
+  SYS: {
+    title: 'System configuration',
+    what: 'The debug interface and the reset pin: which debug protocol is enabled, and '
+      + 'whether the reset pin is the reset pin or a GPIO. Both are option-byte state '
+      + 'rather than a peripheral.',
+  },
+  RCC: {
+    title: 'Reset and clock control',
+    what: 'The clock tree: which oscillator drives the system, the PLL and its '
+      + 'multiplier, and the prescalers for each bus.',
+  },
+  PWR: {
+    title: 'Power control',
+    what: 'The voltage detector, the low-power modes and which events can wake the part '
+      + 'from them. It also owns the supply domains, listed as Supplies.',
+  },
+  FLASH: {
+    title: 'Flash memory controller',
+    what: 'The program memory: the wait states that let the bus run faster than the '
+      + 'flash, and the option bytes that decide the watchdog and reset behaviour.',
+  },
+  EXTI: {
+    title: 'External interrupt/event controller',
+    what: 'Routes a pin edge to an interrupt line. It is separate from the peripheral '
+      + 'that owns the pin, so one pin can raise an interrupt without the peripheral '
+      + 'being configured.',
+  },
+  DMA: {
+    title: 'Direct memory access controller',
+    what: 'Moves data between memory and a peripheral without the CPU. A channel is '
+      + 'bound to one request and cannot serve two at once.',
+  },
+  RTC: {
+    title: 'Real-time clock',
+    what: 'A counter clocked from a 32.768 kHz source, with an alarm and a calendar. It '
+      + 'runs from the backup supply, so it keeps time while the part is off.',
+  },
+  IWDG: {
+    title: 'Independent watchdog',
+    what: 'A counter on its own clock source. If the software fails to reload it in '
+      + 'time, it resets the part — so a hung program recovers instead of staying hung.',
+  },
+  WWDG: {
+    title: 'Window watchdog',
+    what: 'Like the independent watchdog, but it also resets if it is reloaded TOO '
+      + 'EARLY, which catches a loop that has stopped making progress.',
+  },
+  CRC: {
+    title: 'Cyclic redundancy check unit',
+    what: 'Computes a CRC over a block of data in hardware, and can carry its result '
+      + 'forward — a bit-by-bit loop in software is much slower.',
+  },
+  RNG: {
+    title: 'Random number generator',
+    what: 'Produces random numbers from an analog entropy source, for keys and nonces '
+      + 'rather than for anything repeatable.',
+  },
+  EXTEN: {
+    title: 'Extended control',
+    what: 'A few extra controls outside the clock unit, the most useful being the '
+      + 'lock-up reset: with it enabled, a CPU lock-up resets the chip instead of '
+      + 'leaving it stopped.',
+  },
+  DBGMCU: {
+    title: 'Debug configuration',
+    what: 'Decides what keeps running while the core is halted at a breakpoint — the '
+      + 'watchdogs, the timers, and the low-power modes.',
+  },
+  HSEM: {
+    title: 'Hardware semaphore',
+    what: 'A set of flags two cores use to take a lock on shared memory without a '
+      + 'software protocol.',
+  },
+  IPC: {
+    title: 'Inter-processor communication',
+    what: 'The mailbox between the cores: message registers and a way to raise an '
+      + 'interrupt on the other one.',
+  },
+
+  // ---- timers
+  TIM: {
+    title: 'Timer',
+    what: 'Counts clock edges. That gives delays, PWM output, input capture and output '
+      + 'compare — the same counter, arranged differently by its channels.',
+  },
+  TIM1: {
+    title: 'Advanced-control timer',
+    what: 'A timer with complementary outputs, dead-time insertion and a break input, '
+      + 'which is what a bridge or a motor drive needs so its two sides are never on at '
+      + 'once.',
+  },
+  TIM8: {
+    title: 'Advanced-control timer',
+    what: 'A timer with complementary outputs, dead-time insertion and a break input, '
+      + 'which is what a bridge or a motor drive needs so its two sides are never on at '
+      + 'once.',
+  },
+  LPTIM: {
+    title: 'Low-power timer',
+    what: 'A timer that keeps counting in Stop mode from a low-power clock, which is how '
+      + 'the part can wake itself after a delay without running the main clock.',
+  },
+
+  // ---- analog
+  ADC: {
+    title: 'Analog-to-digital converter',
+    what: 'Samples an analog voltage into a number. A channel is a pin, and on most of '
+      + 'these parts a scan converts a set of them in sequence.',
+  },
+  HSADC: {
+    title: 'High-speed analog-to-digital converter',
+    what: 'A second converter, faster than the main ADC and on its own supply and '
+      + 'reference pins, so its accuracy does not depend on the digital rail.',
+  },
+  DAC: {
+    title: 'Digital-to-analog converter',
+    what: 'Drives an analog voltage from a number — a setpoint, a waveform, or a bias.',
+  },
+  OPA: {
+    title: 'Operational amplifier',
+    what: 'An on-chip op-amp. Its inputs and output come out on pins and the gain '
+      + 'network is external, so it is wired as an amplifier, a follower or a filter '
+      + 'rather than configured by a register.',
+  },
+  CMP: {
+    title: 'Analog comparator',
+    what: 'Compares two analog voltages and gives a digital result, optionally straight '
+      + 'out on a pin or into a timer, without converting either of them.',
+  },
+  TKEY: {
+    title: 'Touch-key controller',
+    what: 'Measures the capacitance change of an electrode to detect a finger, so a '
+      + 'panel can have keys with no moving parts.',
+  },
+  DFSDM: {
+    title: 'Digital filter for sigma-delta modulators',
+    what: 'Turns the 1-bit bitstream from an external sigma-delta modulator into a '
+      + 'filtered digital value — a cheap way to get a high-resolution measurement.',
+  },
+  PIOC: {
+    title: 'Programmable protocol I/O controller',
+    what: 'A small logic block that drives or samples pins without the CPU, supporting '
+      + 'several 1-wire and 2-wire protocols. (CH32H417DS0.md:94)',
+  },
+
+  // ---- connectivity
+  USART: {
+    title: 'Universal synchronous/asynchronous receiver/transmitter',
+    what: 'A serial port: the asynchronous framing of a UART, plus a clock line when it '
+      + 'runs synchronously. It also carries LIN, SmartCard and IrDA framing.',
+  },
+  SPI: {
+    title: 'Serial peripheral interface',
+    what: 'A synchronous four-wire bus — clock, two data lines and a select — for '
+      + 'flash, displays and sensors. The master drives the clock.',
+  },
+  QSPI: {
+    title: 'Quad serial peripheral interface',
+    what: 'SPI with four data lines instead of one, which is the interface most serial '
+      + 'flash and PSRAM parts use to reach their rated speed.',
+  },
+  I2C: {
+    title: 'Inter-integrated circuit',
+    what: 'A two-wire bus (clock and data) with addressing on the bus itself, for '
+      + 'sensors, memory and port expanders.',
+  },
+  I3C: {
+    title: 'Improved inter-integrated circuit',
+    what: 'The successor to I2C: faster, with in-band interrupts and dynamic addressing.',
+  },
+  I2S: {
+    title: 'Inter-IC sound',
+    what: 'A serial bus for digital audio: a bit clock, a word-select line and one or '
+      + 'two data lines.',
+  },
+  SAI: {
+    title: 'Serial audio interface',
+    what: 'A flexible audio serial port that can be I2S-compatible or a different '
+      + 'framing, as master or slave, with several data lines.',
+  },
+  CAN: {
+    title: 'Controller area network',
+    what: 'A differential two-wire bus where every node hears every frame and '
+      + 'arbitration decides who transmits — the bus vehicles and machines use.',
+  },
+  USBFS: {
+    title: 'USB 2.0 full-speed controller',
+    what: 'A USB 2.0 controller at up to 12 Mbit/s, with a full-speed PHY.',
+  },
+  USBHS: {
+    title: 'USB 2.0 high-speed controller',
+    what: 'A USB 2.0 controller at up to 480 Mbit/s, with the high-speed PHY on chip.',
+  },
+  USBSS: {
+    title: 'USB 3.x SuperSpeed controller',
+    what: 'A USB 3.x controller with its own high-speed serial lanes rather than the '
+      + 'USB 2.0 pair.',
+  },
+  USBPD: {
+    title: 'USB Power Delivery',
+    what: 'The Type-C negotiation block. It talks over the CC lines to agree a voltage '
+      + 'and a current with the other end, and can be the source, the sink, or either.',
+  },
+  ETH: {
+    title: 'Ethernet media access controller',
+    what: 'The MAC — framing, addressing and checksums — with the PHY interface on '
+      + 'dedicated pins rather than a GPIO bus.',
+  },
+  SDIO: {
+    title: 'SD input/output interface',
+    what: 'An SD bus host: command and data lines to an SD card, an SDIO peripheral or '
+      + 'an MMC device. (CH32H417DS0.md:91)',
+  },
+  SDMMC: {
+    title: 'Secure digital / multimedia card controller',
+    what: 'The SD and eMMC host controller — the same bus SDIO speaks, at the clock '
+      + 'rates eMMC parts need. (CH32H417DS0.md:84)',
+  },
+  SWPMI: {
+    title: 'Single-wire protocol master interface',
+    what: 'A single-wire bus with the electrical characteristics of a SIM contact, used '
+      + 'to talk to a contactless front-end. (CH32H417DS0.md:93)',
+  },
+  UHSIF: {
+    title: 'Universal high-speed interface',
+    what: 'A general-purpose high-speed parallel interface, 500 MBytes/s class, for '
+      + 'moving bulk data in and out of the part without loading the core. '
+      + '(CH32H417DS0.md:12)',
+  },
+  SERDES: {
+    title: 'Serialiser/deserialiser transceiver',
+    what: 'A high-speed serialiser and deserialiser: it turns a parallel word into a '
+      + 'differential serial lane, and back, for long or isolated links. '
+      + '(CH32H417DS0.md:11)',
+  },
+
+  // ---- graphics, memory, security, audio
+  DVP: {
+    title: 'Digital video port',
+    what: 'A parallel camera interface: a pixel clock, horizontal and vertical sync, '
+      + 'and a data bus. (CH32H417DS0.md:158)',
+  },
+  LTDC: {
+    title: 'LCD-TFT display controller',
+    what: 'Drives a parallel RGB panel, fetching the framebuffer itself and blending '
+      + 'layers over each other, so the CPU is not drawing pixels. (CH32H417DS0.md:160)',
+  },
+  GPHA: {
+    title: 'Graphics processing hardware accelerator',
+    what: 'A hardware block that draws and blends for the display, so the core is not '
+      + 'filling the framebuffer pixel by pixel. (CH32H417DS0.md:161)',
+  },
+  FMC: {
+    title: 'Flexible memory controller',
+    what: 'The external memory bus: SRAM, NOR and NAND flash, and SDRAM, which is a '
+      + 'different protocol on the same pins. (CH32H417DS0.md:162)',
+  },
+  ECDC: {
+    title: 'ECDC encryption module',
+    what: 'A hardware encryption block supporting the AES128/192/256 and SM4 algorithms. '
+      + '(CH32H417DS0.md:171)',
+  },
+  BKP: {
+    title: 'Backup registers and tamper',
+    what: 'A few bytes of RAM in the backup domain that survive Standby and power-off, '
+      + 'plus the tamper input that can clear them.',
+  },
+  AWU: {
+    title: 'Auto wake-up',
+    what: 'A counter that wakes the part from Standby after a programmable interval, '
+      + 'with no CPU clock running in the meantime.',
+  },
+};
+
+// Which peripheral an id belongs to, for a lookup that has to survive an instance
+// number. `USART3` -> `USART`, `I2C1` -> `I2C`, `LPTIM2` -> `LPTIM`. A trailing run of
+// digits is the INSTANCE: `USBFS` has none and is looked up as itself, and `TIM10` is
+// still a `TIM`. The regex is anchored and the prefix must be non-empty, so an id that
+// is nothing but digits cannot produce an empty base.
+const instanceOf = id => {
+  const m = /^([A-Za-z][A-Za-z0-9_]*?)(\d+)$/.exec(String(id));
+  return m ? { base: m[1], instance: m[2] } : { base: String(id), instance: '' };
+};
+
+/**
+ * What a peripheral's name means: `{ title, what, base, instance, source }`.
+ *
+ * `title` is the expansion of the name, `what` is what that kind of block does, and
+ * `source` says WHERE the answer came from — `'mcu'` when the MCU file overrode it,
+ * `'glossary'` when it is vocabulary, `''` when nothing knows. An id nobody knows gets
+ * empty strings rather than a guess, and the UI then shows the bare name, which is
+ * what it showed before this module existed.
+ */
+function peripheralName(M, pid) {
+  const P = (M && M.peripherals && M.peripherals[pid]) || null;
+  const { base, instance } = instanceOf(pid);
+  // The data wins, and each half is checked separately: a part may have its own name for
+  // a block and nothing to add to the description, or the reverse.
+  const dataTitle = P && typeof P.title === 'string' ? P.title.trim() : '';
+  const dataWhat = P && typeof P.desc === 'string' ? P.desc.trim() : '';
+  const hit = PERIPHERAL_VOCAB[pid] || PERIPHERAL_VOCAB[base] || null;
+  const title = dataTitle || (hit ? hit.title : '');
+  const what = dataWhat || (hit ? hit.what : '');
+  if (!title && !what) return { title: '', what: '', base, instance, source: '' };
+  return {
+    title, what, base, instance,
+    source: dataTitle || dataWhat ? (hit ? 'mcu+glossary' : 'mcu') : 'glossary',
+  };
+}
+
+/**
+ * The one line a hover tooltip shows: `USART3 — universal synchronous/asynchronous
+ * receiver/transmitter`. Falls back to the bare id when nothing knows it, so a caller
+ * can put this in a `title=` attribute unconditionally.
+ */
+function peripheralLabel(M, pid) {
+  const n = peripheralName(M, pid);
+  return n.title ? `${pid} — ${n.title}` : String(pid);
+}
+
+/**
+ * Every peripheral id the glossary cannot name, for the Tools tab's gap list. This is
+ * the honest half of the boundary: an unknown block is not described rather than
+ * described wrongly, and this is how it becomes visible instead of silently blank.
+ */
+function unnamedPeripherals(M) {
+  return Object.keys((M && M.peripherals) || {})
+    .filter(pid => !peripheralName(M, pid).title)
+    .sort();
+}
+
 // ===== app/engine/engine.js ===================================================
 // =============================================================================
 //  engine.js — the conflict engine. Everything the UI colours orange comes from
@@ -20161,7 +20598,7 @@ function renderSystem() {
         : conf ? `${conf} conflict${conf > 1 ? 's' : ''}`
         : iss ? `${iss} issue${iss > 1 ? 's' : ''}`
         : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
-      const blkTip = `${p}${known ? ` \u2014 ${note}` : ' \u2014 not a configurable peripheral'}`;
+      const blkTip = `${peripheralLabel(M, p)}${known ? ` \u00b7 ${note}` : ' \u2014 not a configurable peripheral'}`;
       g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}" role="button" tabindex="0"` : ' role="img"'} aria-label="${attr(blkTip)}"><title>${esc(blkTip)}</title>`);
       g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
       g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
@@ -20419,12 +20856,18 @@ function renderTree() {
     const cn = conf[pid] || 0, rn = res[pid] || 0;
     const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
     const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
-    const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
+    // `SDIO` alone is three letters of abbreviation. The full name comes from the
+    // glossary, or from the MCU file when it overrides it, and goes in the tooltip AND
+    // the accessible name - a screen reader reading "S D I O" has the same problem a
+    // hovering user does. The badges stay on the end, after the name.
+    const label = peripheralLabel(M, pid);
+    const aria = `${label}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
     const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
       + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
-    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([cnTxt, rnTxt].filter(Boolean).join('; ') || pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
+    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([label, cnTxt, rnTxt].filter(Boolean).join(' \u00b7 '))}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
   };
-  const shown = pid => (!q || pid.toLowerCase().includes(q) || periphHasSignal(pid, q))
+  const shown = pid => (!q || pid.toLowerCase().includes(q) || peripheralLabel(M, pid).toLowerCase().includes(q)
+      || peripheralName(M, pid).what.toLowerCase().includes(q) || periphHasSignal(pid, q))
     && (!TREE.enabledOnly || isEnabledPeriph(pid));
 
   // A→Z: one flat list, no headings. Same items, same badges, different order.
@@ -20669,6 +21112,32 @@ function dmaRequestNamesOf(pid) {
   return out;
 }
 
+/**
+ * "What is this thing" — the block at the top of the panel when a peripheral is selected.
+ *
+ * Three sentences from three places, in this order, and the order is the point: what the
+ * NAME stands for, what this KIND of block does (both vocabulary — see
+ * app/engine/glossary.js), then what THIS part's file says about it, which is the part
+ * that can differ between parts and is therefore data. An MCU file that overrides
+ * `title:` or `desc:` replaces the vocabulary sentence and keeps its own `notes:`.
+ *
+ * Returns '' when nothing knows the peripheral, so the panel is exactly what it was
+ * before this existed rather than showing an empty card.
+ */
+function periphIntro(pid) {
+  const n = peripheralName(M, pid);
+  const P = (M.peripherals || {})[pid] || null;
+  const notes = P && P.notes ? String(P.notes).trim().replace(/\s+/g, ' ') : '';
+  if (!n.title && !n.what && !notes) return '';
+  const bits = [P && P.category, n.instance ? `unit ${n.instance}` : ''].filter(Boolean);
+  return `<div class="periphintro">`
+    + (n.title ? `<div class="pi-name">${esc(n.title)}</div>` : '')
+    + (bits.length ? `<div class="pi-cat">${esc(bits.join(' \u00b7 '))}</div>` : '')
+    + (n.what ? `<div class="pi-what">${esc(n.what)}</div>` : '')
+    + (notes ? `<div class="pi-notes">${esc(notes)}</div>` : '')
+    + `</div>`;
+}
+
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
   document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral')
@@ -20679,16 +21148,20 @@ function renderCentre() {
     body.innerHTML = gpioTable([...new Set([...Object.keys(E.pins), ...Object.keys(S.gpio).filter(p => userLabel(p) && pinExists(p))])]);
     return;
   }
-  if (pid === 'NVIC') { renderNvicOverview(mode, body); return; }
+  if (pid === 'NVIC') { mode.innerHTML = periphIntro('NVIC'); renderNvicOverview(mode, body); return; }
   if (pid === 'GPIO') {
     const gres = (E.resourceIssues || []).filter(r => (r.owners || []).includes('GPIO'));
-    mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`
+    mode.innerHTML = periphIntro('GPIO')
+      + `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`
       + gres.map(r => `<div class="issue res"><b>EXTI line conflict:</b> ${esc(r.text)}</div>`).join('');
     body.innerHTML = gpioTable(Object.keys(S.manual));
     return;
   }
   const P = M.peripherals[pid], st = S.periph[pid];
-  let h = '';
+  // What the name means and what the block does, before the controls. `P.notes` used to
+  // be printed at the BOTTOM of this panel as a `.hint`; it is folded into the intro now
+  // so the description reads as one thing rather than two halves a screen apart.
+  let h = periphIntro(pid);
   if (E.status[pid] === 'na') h += `<div class="issue">${pid} is not available on ${S.pkg}: none of its pin mappings are bonded out on this package.</div>`;
   for (const s of P.settings || []) {
     h += `<label>${esc(s.name)}</label>`;
@@ -20698,7 +21171,9 @@ function renderCentre() {
       h += `<select data-s="${attr(s.name)}">` + s.choices.map(c => `<option${st.settings[s.name] === c.name ? ' selected' : ''}>${esc(c.name)}</option>`).join('') + '</select>';
     }
   }
-  if (P.notes) h += `<div class="hint">${P.notes}</div>`;
+  // `P.notes` is printed by periphIntro() at the top of the panel now, so it is not
+  // repeated here. Two copies of the same paragraph, one at each end, was the shape
+  // before this change.
   // The supply domains this peripheral governs, from its `pins.supplies:` block. A rail
   // is a hardware fact - which pads carry it, over what voltage, and which OTHER rail it
   // may not exceed - so it comes from the MCU file with a citation per rail rather than
@@ -21698,6 +22173,10 @@ function renderTools() {
   const openPads = openPadPeripherals();
   const openOwners = [...new Set(openPads.map(o => o.owner).filter(Boolean))];
   const unreachable = unclaimableSignals();
+  // And the third: peripherals the app has no name for. `unnamedPeripherals()` is empty
+  // on every part that ships, and this row is how it stays that way - a block nobody has
+  // described shows its abbreviation and nothing else, which is easy not to notice.
+  const unnamed = unnamedPeripherals(M);
 
   // --- interrupts
   const vectors = (M.nvic || {}).vectors || [];
@@ -21749,6 +22228,12 @@ function renderTools() {
       : '<span class="ro">none</span>')
     + row('Routed, no setting claims it', unreachable.length
       ? `${unreachable.length} — ${list(unreachable.map(u => `${u.pid} ${u.signal}`))}`
+      : '<span class="ro">none</span>')
+    // The third state-of-the-file row. A peripheral the app cannot name is shown by its
+    // abbreviation alone with no description - honest, but it should be visible rather
+    // than just quiet, and this is where it shows up. Empty on every part that ships.
+    + row('Peripheral with no description', unnamed.length
+      ? `${unnamed.length} — ${list(unnamed)}`
       : '<span class="ro">none</span>')
     + `</table></section>`
     + `<section><h4>Interrupts and DMA</h4><table class="toolstab">`

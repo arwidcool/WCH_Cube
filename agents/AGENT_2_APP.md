@@ -17,6 +17,33 @@ page must not contain engine logic.** The two remaining invariants are `tests/no
 
 ## Current — round 6 (brief: `PROMPT_AGENT_2_COVERAGE.txt`)
 
+**Peripheral names and descriptions (HUMAN request).** Hovering a tree item showed `SDIO` and
+nothing else; selecting it showed controls and no explanation. Now:
+
+- **`app/engine/glossary.js`** — what each peripheral's name stands for and what that kind of
+  block does. An acronym's expansion is *vocabulary* (one sentence on every part, so six files
+  would be six copies of it — the same argument `PIN_KIND` and the GPIO mode lists follow).
+  Keyed by name with the instance number stripped, so `USART7` → `USART`; an exact key wins, so
+  `TIM1` is the advanced-control timer while `TIM` stays the general sentence.
+- **`title:` / `desc:` on a peripheral** — the data override, each half independent, with
+  `notes:` unchanged and still the part-specific paragraph below both. Documented in
+  `data/FORMAT.md` (AGENT-1's file, recorded as a DECISION).
+- **An unknown block is not guessed at**: no entry and no `title:` means the bare id and no
+  description. `unnamedPeripherals()` lists them and the Tools tab prints the count.
+  **Measured: 0 unnamed across all six parts**, and the 8 WCH-specific blocks
+  (`PIOC`, `GPHA`, `ECDC`, `UHSIF`, `SDIO`, `SDMMC`, `SWPMI`, `SERDES`) carry the datasheet's
+  own words with the line number.
+- **The tooltip** is the tree item's `title=`, and the expansion went into the accessible name
+  too. **The focus panel** gets a card: name, category and unit, one sentence on what the block
+  does, then the part's own notes. `P.notes` used to print at the *bottom* of that panel; it is
+  folded into the card now rather than printed twice.
+- **Search by meaning** fell out of it: `secure digital` finds SDMMC and `input/output` finds SDIO.
+
+Tests: 8 in `app/tests/glossary.test.js`. Two plants run and confirmed — deleting SDIO's entry
+reddens 5, and making the instance regex greedy (`I2C1` → base `I`) reddens 5. **verified in
+browser:** real Chrome at 1280/1920 × light/dark × 100 %/125 %, tooltips correct on
+SDIO/USART1/GPHA/TIM2, the card renders with no overflow, console silent.
+
 **Power setup + pin descriptions (HUMAN request).** Two things a user asked for and the format
 could not say: what the supply and fixed-function pins ARE, and a Power setup under System Core.
 

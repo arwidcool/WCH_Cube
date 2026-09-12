@@ -446,6 +446,17 @@
   table.rail th:nth-child(2),table.rail td:nth-child(2){width:17%}
   table.rail th:nth-child(3),table.rail td:nth-child(3){width:19%}
   table.rail .src{margin-top:3px;font-size:10.5px}
+  /* The "what is this thing" card at the top of a peripheral's panel. Deliberately quiet:
+     it is reference text, not a control, so it must not look like one of the labels below
+     it. `overflow-wrap` because the descriptions are sentences and the panel is narrow at
+     125 % zoom. */
+  .periphintro{margin:0 0 10px;padding:8px 10px;border-left:3px solid var(--line);
+    background:var(--blue-pale);border-radius:0 4px 4px 0}
+  .periphintro .pi-name{font-weight:600;font-size:12.5px}
+  .periphintro .pi-cat{color:var(--muted);font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.04em;margin-top:1px}
+  .periphintro .pi-what{margin-top:4px;font-size:11.5px;line-height:1.45;overflow-wrap:anywhere}
+  .periphintro .pi-notes{margin-top:4px;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
   .siglabel .userlabel,.siglabel.userlabel{fill:var(--link);font-style:italic}
   .siglabel .lsep{fill:var(--muted)}
   .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
@@ -1652,7 +1663,7 @@ function renderSystem() {
         : conf ? `${conf} conflict${conf > 1 ? 's' : ''}`
         : iss ? `${iss} issue${iss > 1 ? 's' : ''}`
         : pins ? `${pins} pin${pins > 1 ? 's' : ''}` : 'off';
-      const blkTip = `${p}${known ? ` \u2014 ${note}` : ' \u2014 not a configurable peripheral'}`;
+      const blkTip = `${peripheralLabel(M, p)}${known ? ` \u00b7 ${note}` : ' \u2014 not a configurable peripheral'}`;
       g.push(`<g class="sysblk${known ? ' clickable' : ''}${S.sel === p ? ' sel' : ''}"${known ? ` data-p="${attr(p)}" role="button" tabindex="0"` : ' role="img"'} aria-label="${attr(blkTip)}"><title>${esc(blkTip)}</title>`);
       g.push(`<rect x="${x}" y="${by}" width="${BW}" height="${BH}" rx="3" fill="${COLOR[st]}"/>`);
       g.push(`<text x="${x + 8}" y="${by + 14}" fill="${FG[st]}" font-weight="600">${esc(p)}</text>`);
@@ -1910,12 +1921,18 @@ function renderTree() {
     const cn = conf[pid] || 0, rn = res[pid] || 0;
     const cnTxt = cn ? `${cn} pin conflict${cn > 1 ? 's' : ''}` : '';
     const rnTxt = rn ? `${rn} shared-resource issue${rn > 1 ? 's' : ''}` : '';
-    const aria = `${pid}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
+    // `SDIO` alone is three letters of abbreviation. The full name comes from the
+    // glossary, or from the MCU file when it overrides it, and goes in the tooltip AND
+    // the accessible name - a screen reader reading "S D I O" has the same problem a
+    // hovering user does. The badges stay on the end, after the name.
+    const label = peripheralLabel(M, pid);
+    const aria = `${label}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
     const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
       + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
-    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([cnTxt, rnTxt].filter(Boolean).join('; ') || pid)}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
+    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([label, cnTxt, rnTxt].filter(Boolean).join(' \u00b7 '))}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
   };
-  const shown = pid => (!q || pid.toLowerCase().includes(q) || periphHasSignal(pid, q))
+  const shown = pid => (!q || pid.toLowerCase().includes(q) || peripheralLabel(M, pid).toLowerCase().includes(q)
+      || peripheralName(M, pid).what.toLowerCase().includes(q) || periphHasSignal(pid, q))
     && (!TREE.enabledOnly || isEnabledPeriph(pid));
 
   // A→Z: one flat list, no headings. Same items, same badges, different order.
@@ -2160,6 +2177,32 @@ function dmaRequestNamesOf(pid) {
   return out;
 }
 
+/**
+ * "What is this thing" — the block at the top of the panel when a peripheral is selected.
+ *
+ * Three sentences from three places, in this order, and the order is the point: what the
+ * NAME stands for, what this KIND of block does (both vocabulary — see
+ * app/engine/glossary.js), then what THIS part's file says about it, which is the part
+ * that can differ between parts and is therefore data. An MCU file that overrides
+ * `title:` or `desc:` replaces the vocabulary sentence and keeps its own `notes:`.
+ *
+ * Returns '' when nothing knows the peripheral, so the panel is exactly what it was
+ * before this existed rather than showing an empty card.
+ */
+function periphIntro(pid) {
+  const n = peripheralName(M, pid);
+  const P = (M.peripherals || {})[pid] || null;
+  const notes = P && P.notes ? String(P.notes).trim().replace(/\s+/g, ' ') : '';
+  if (!n.title && !n.what && !notes) return '';
+  const bits = [P && P.category, n.instance ? `unit ${n.instance}` : ''].filter(Boolean);
+  return `<div class="periphintro">`
+    + (n.title ? `<div class="pi-name">${esc(n.title)}</div>` : '')
+    + (bits.length ? `<div class="pi-cat">${esc(bits.join(' \u00b7 '))}</div>` : '')
+    + (n.what ? `<div class="pi-what">${esc(n.what)}</div>` : '')
+    + (notes ? `<div class="pi-notes">${esc(notes)}</div>` : '')
+    + `</div>`;
+}
+
 function renderCentre() {
   const pid = S.sel, mode = document.getElementById('mode'), body = document.getElementById('cbody');
   document.getElementById('ptitle').innerHTML = (pid ? `${pid} Mode and Configuration` : 'Select a peripheral')
@@ -2170,16 +2213,20 @@ function renderCentre() {
     body.innerHTML = gpioTable([...new Set([...Object.keys(E.pins), ...Object.keys(S.gpio).filter(p => userLabel(p) && pinExists(p))])]);
     return;
   }
-  if (pid === 'NVIC') { renderNvicOverview(mode, body); return; }
+  if (pid === 'NVIC') { mode.innerHTML = periphIntro('NVIC'); renderNvicOverview(mode, body); return; }
   if (pid === 'GPIO') {
     const gres = (E.resourceIssues || []).filter(r => (r.owners || []).includes('GPIO'));
-    mode.innerHTML = `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`
+    mode.innerHTML = periphIntro('GPIO')
+      + `<div class="hint">GPIO pins set directly on the chip. ${Object.keys(S.manual).length} configured.</div>`
       + gres.map(r => `<div class="issue res"><b>EXTI line conflict:</b> ${esc(r.text)}</div>`).join('');
     body.innerHTML = gpioTable(Object.keys(S.manual));
     return;
   }
   const P = M.peripherals[pid], st = S.periph[pid];
-  let h = '';
+  // What the name means and what the block does, before the controls. `P.notes` used to
+  // be printed at the BOTTOM of this panel as a `.hint`; it is folded into the intro now
+  // so the description reads as one thing rather than two halves a screen apart.
+  let h = periphIntro(pid);
   if (E.status[pid] === 'na') h += `<div class="issue">${pid} is not available on ${S.pkg}: none of its pin mappings are bonded out on this package.</div>`;
   for (const s of P.settings || []) {
     h += `<label>${esc(s.name)}</label>`;
@@ -2189,7 +2236,9 @@ function renderCentre() {
       h += `<select data-s="${attr(s.name)}">` + s.choices.map(c => `<option${st.settings[s.name] === c.name ? ' selected' : ''}>${esc(c.name)}</option>`).join('') + '</select>';
     }
   }
-  if (P.notes) h += `<div class="hint">${P.notes}</div>`;
+  // `P.notes` is printed by periphIntro() at the top of the panel now, so it is not
+  // repeated here. Two copies of the same paragraph, one at each end, was the shape
+  // before this change.
   // The supply domains this peripheral governs, from its `pins.supplies:` block. A rail
   // is a hardware fact - which pads carry it, over what voltage, and which OTHER rail it
   // may not exceed - so it comes from the MCU file with a citation per rail rather than
@@ -3189,6 +3238,10 @@ function renderTools() {
   const openPads = openPadPeripherals();
   const openOwners = [...new Set(openPads.map(o => o.owner).filter(Boolean))];
   const unreachable = unclaimableSignals();
+  // And the third: peripherals the app has no name for. `unnamedPeripherals()` is empty
+  // on every part that ships, and this row is how it stays that way - a block nobody has
+  // described shows its abbreviation and nothing else, which is easy not to notice.
+  const unnamed = unnamedPeripherals(M);
 
   // --- interrupts
   const vectors = (M.nvic || {}).vectors || [];
@@ -3240,6 +3293,12 @@ function renderTools() {
       : '<span class="ro">none</span>')
     + row('Routed, no setting claims it', unreachable.length
       ? `${unreachable.length} — ${list(unreachable.map(u => `${u.pid} ${u.signal}`))}`
+      : '<span class="ro">none</span>')
+    // The third state-of-the-file row. A peripheral the app cannot name is shown by its
+    // abbreviation alone with no description - honest, but it should be visible rather
+    // than just quiet, and this is where it shows up. Empty on every part that ships.
+    + row('Peripheral with no description', unnamed.length
+      ? `${unnamed.length} — ${list(unnamed)}`
       : '<span class="ro">none</span>')
     + `</table></section>`
     + `<section><h4>Interrupts and DMA</h4><table class="toolstab">`

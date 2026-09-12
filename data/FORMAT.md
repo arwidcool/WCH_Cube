@@ -246,6 +246,39 @@ the user can never assign — it renders on the chip as a function and the picke
 nothing. Ten ADC channels on CH32L103 and 207 signals on CH32H417 shipped that way
 before this check existed (2026-09-12); it is an ERROR, not a warning.
 
+### `title:` and `desc:` — the peripheral's name and what it does
+
+The tree shows `SDIO`, `GPHA`, `UHSIF`, and three to five letters of abbreviation are not
+a description. The app names every peripheral from a **glossary of vocabulary** in
+`app/engine/glossary.js` (an acronym's expansion is the same sentence on every part, so
+writing it into six files is six places for a typo — the same argument the `type:`
+vocabulary and the GPIO mode lists follow). Two optional keys let a part say its own:
+
+```yaml
+  SDIO:
+    category: Connectivity
+    title: SD card and SDIO host          # overrides the glossary's name
+    desc: >                               # overrides the glossary's description
+      Two cards share the bus on this part (CH32H417DS0.md 1.2).
+    notes: >                              # unchanged: shown under both
+      ...what this part's file has to say about it...
+```
+
+| Key | Overrides | Shown |
+|---|---|---|
+| `title` | the glossary's name | the tree tooltip, the accessible name, and the heading of the panel |
+| `desc` | the glossary's one-sentence description | under that heading |
+| `notes` | nothing — it is additive | below the description; this is the part-specific half |
+
+**A peripheral the glossary does not know is not guessed at.** With no `title:`/`desc:` it
+shows its bare id and no description — the same refusal as a missing `gpio.modes` entry or
+a struct with no `init_structs` entry. `unnamedPeripherals()` lists them and the Tools tab
+reports the count, so a blank becomes visible instead of silent. Every peripheral of every
+part that ships is named, and a new block is named either by adding a glossary entry (the
+engine's vocabulary) or by giving it a `title:` in its own file (the data's), which is the
+boundary this table exists to keep at one line: **if it is the same on every part it is
+vocabulary; if a part could say it differently it is data.**
+
 ### `pins:` — a peripheral that routes nothing must say so
 
 ```yaml
