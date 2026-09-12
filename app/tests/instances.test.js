@@ -354,3 +354,79 @@ test('driving a per-instance editor changes that instance and only that instance
     assert.deepEqual(a.problems(), []);
   } finally { a.close(); }
 });
+
+// ---------------------------------------------------------------------------
+//  The shipped timers: what is actually missing, measured, and the map that fixes it
+//
+//  Every test above proves the mechanism on a part written for the test. This one is
+//  about the EIGHT blocks that ship: TIM1 and TIM2 on CH32V003, V005, V006 and X035 all
+//  carry `channel_params` with a full `sdk_calls:` table and NO `channels:` map, so
+//  `activeInstances()` has nothing to decide a live channel from and the generator
+//  emits no `TIM_OCxInit` at all. A user who picks "PWM Generation CH1" and types a
+//  pulse gets a time base, a note, and no PWM - configuration that does not reach the C,
+//  which is the defect class this round exists to remove.
+//
+//  The first test is the measurement (it passes today and must go red the day a
+//  `channels:` map lands, which is how it stops being an excuse). The second applies
+//  the exact map proposed to AGENT-1 on the board to a derived part and shows the C it
+//  produces, so the data change is proved before it is asked for rather than after.
+const TIMS = [['CH32V003', 'TIM1'], ['CH32V003', 'TIM2'], ['CH32V005', 'TIM1'], ['CH32V005', 'TIM2'],
+              ['CH32V006', 'TIM1'], ['CH32V006', 'TIM2'], ['CH32X035', 'TIM1'], ['CH32X035', 'TIM2']];
+
+test('the eight shipped timer blocks still emit no TIM_OCxInit, and say so out loud', () => {
+  const silent = [];
+  for (const [part, pid] of TIMS) {
+    const e = fresh(part);
+    const cp = eng.channelParamBlock(pid);
+    assert.ok(cp && cp.struct === 'TIM_OCInitTypeDef', `${part}.${pid}: setup`);
+    assert.ok(cp.sdk_calls && Object.keys(cp.sdk_calls).length === 4,
+      `${part}.${pid}: the call table is complete - it is the SETTING map that is missing`);
+    const plan = eng.activeInstances(pid);
+    if (!plan.instances.length && plan.note) silent.push(`${part}.${pid}`);
+  }
+  assert.deepEqual(silent, TIMS.map(([a, b]) => `${a}.${b}`),
+    'all eight are still waiting on a channels: map — when one lands, update this list, '
+    + 'and when the last one does, delete this test');
+});
+
+test('a configured PWM channel reaches the C the moment the channels: map exists', () => {
+  // What the user did: switched Channel1 to PWM, gave it a pulse, left the rest alone.
+  const configure = e => {
+    e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+    e.setSetting('TIM1', 'Channel2', 'Input Capture');
+    e.setChannelParam('TIM1', 1, 'pulse', 500);
+    e.compute();
+    return e.cSource();
+  };
+
+  // Today, on the shipped part.
+  const before = configure(fresh('CH32V006', 'TSSOP20'));
+  assert.match(before, /TIM_TimeBaseInit\(TIM1, /, 'the time base is emitted');
+  assert.doesNotMatch(before, /TIM_OC1Init/, 'and the PWM the user asked for is not');
+  assert.match(before, /names no setting for any channel/, 'the C says why, which is the only reason this is not a silent defect');
+
+  // With the map proposed on the board, and nothing else changed.
+  const e = fresh('CH32V006');
+  eng.registerMcuFile(`
+mcu:
+  name: CH32V006-TIMCHANNELS
+  inherits: CH32V006
+peripherals:
+  TIM1:
+    channel_params:
+      channels:
+        1: { setting: Channel1, output_choices: ["PWM Generation CH1", "PWM Generation CH1 CH1N", "PWM Generation CH1N only"] }
+        2: { setting: Channel2, output_choices: ["PWM Generation CH2", "PWM Generation CH2 CH2N", "PWM Generation CH2N only"] }
+        3: { setting: Channel3, output_choices: ["PWM Generation CH3", "PWM Generation CH3 CH3N", "PWM Generation CH3N only"] }
+        4: { setting: Channel4, output_choices: ["PWM Generation CH4"] }
+`);
+  eng.loadMcu('CH32V006-TIMCHANNELS');
+  eng.setPackage('TSSOP20');
+  const after = configure(eng);
+  assert.match(after, /TIM_OC1Init\(TIM1, &TIM_OCInitStructure\);/, 'the channel the user turned on is initialised');
+  assert.match(after, /TIM_OCInitStructure\.TIM_Pulse = 500;/, 'with the pulse they typed');
+  assert.doesNotMatch(after, /TIM_OC2Init/, 'an input-capture channel is not an output compare');
+  assert.doesNotMatch(after, /TIM_OC3Init|TIM_OC4Init/, 'and a channel left at Disable is not initialised');
+  assert.doesNotMatch(after, /names no setting for any channel/, 'the note is gone because the gap is');
+  assert.equal((after.match(/TODO/g) || []).length, 0, 'and nothing became a TODO on the way');
+});
