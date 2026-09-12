@@ -1020,11 +1020,34 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       `pins: { open, owner, task }` - silence is an ERROR.
 - [x] CH32V006, CH32V005, CH32X035: coverage 0 open. CH32L103 ADC1's ten unselectable channels
       given a Channels setting (DS Table 2-1-1).
-- [ ] (AGENT-1) **CH32V003: model USART1_CK once codegen emits USART_ClockInit** - three open
-      rows (UCK on PD4 / PD7 / PC5, DS Table 2-1, RM Table 7-10). Needs APP: the generator
-      cannot gate a second init struct off yet.
-- [ ] (AGENT-1) **CH32L103: close the coverage ledger** - `python tools/coverage.py CH32L103`
-      lists every row. **33 -> 12 open this cycle** (BOARD 2026-09-12T12:01Z): BKP TAMPER on
+- [x] (AGENT-1) **CH32V003: model USART1_CK once codegen emits USART_ClockInit** - `python
+      tools/coverage.py CH32V003` prints **0 open** and `data/coverage/CH32V003.yaml` says
+      `status: complete`. 3 -> 0 on 2026-09-12. **The "needs APP" was wrong, and finding that
+      out was the work.** The generator did not need a new feature: `initPlan()` already groups
+      `params:` by `struct:` and gives each block its own `codegen.init_structs` function, and
+      `depends_on: { setting: Mode, equals: Synchronous }` on every row of the second struct is
+      the gate - so an asynchronous project emits no `USART_ClockInit()` call at all. Both
+      halves of the fact landed together so neither can appear alone: a `Synchronous` Mode
+      choice claiming CK, and four `USART_ClockInitTypeDef` rows that depend on it. ONE
+      synchronous choice, not Master/Slave - RM 12.4 (`CH32V003RM.md:9878`): "works only in the
+      main mode, i.e. the CK pin outputs only the clock and does not receive inputs". CK's pad
+      per mapping is RM Table 7-10's own row (`:3756`) - PD4 / PD7 / PD7 / PC5, and 01 and 10
+      ARE the same pad, which is why the DS writes `UCK_1/UCK_2` on PD7 (`CH32V003.md:1114`).
+      Compiled: CH32V003F4P6, USART1 Synchronous, CPOL High, CPHA 2 Edge, last-bit pulse on,
+      `--strict` 0, `pio run` SUCCESS.
+- [x] (AGENT-1) **CH32L103: close the coverage ledger** - `python tools/coverage.py CH32L103`
+      prints **0 open** and `data/coverage/CH32L103.yaml` says `status: complete`. 33 -> 12 -> 0,
+      closed 2026-09-12 by modelling CMP2 and CMP3. The four `ABSENT` entries AGENT-3 staged in
+      `tests/completeness.test.js:159-166` took effect the moment the two peripherals existed,
+      exactly as that comment predicted, so nothing had to be added there. **Two defects fell
+      out of it, both shipping since the part landed and both invisible because no fixture ever
+      switched a comparator on:** `codegen.init_structs` had no `CMP_InitTypeDef`, so CMP1's
+      `params:` were filled in and followed by `/* TODO: nothing applies this struct */`; and no
+      comparator carried a `CMP_NUM` row, which was right for CMP1 by accident (`CMP1 = 0` and
+      the struct is zero-initialised) and would have made CMP2's and CMP3's blocks configure
+      CMP1. Both fixed - `CMP_InitTypeDef: { fn: OPA_CMP_Init, no_handle: true }` and a
+      `const: CMP_NUM` row heading all three. Compiled: CH32L103K8U6 with CMP2 and CMP3 on,
+      `--strict` 0, `pio run` SUCCESS. The historical record of the 33 -> 12 cycle: **33 -> 12 open this cycle** (BOARD 2026-09-12T12:01Z): BKP TAMPER on
       PC13, PWR WKUP on PA0, RTC output on PC13, RCC LSE on PC14/PC15, RCC MCO on PA8, USBPD
       CC1/CC2 on PB6/PB7, I2C1/I2C2 SMBA on PB5/PB12, EXTEN modelled as a peripheral, chapters
       13 (TKEY -> ADC1) and 25 (EXTEN) mapped, the PD1 OSC_OUT disagreement recorded, and BOOT1

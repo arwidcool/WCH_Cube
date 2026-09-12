@@ -180,6 +180,43 @@ IPC; DVP 12-bit with a crop window; SWPMI single-wire with multi/single bufferin
 Numbers: ledger H417 **0** / L103 **12** / V003 **3** / V005 0 / V006 0 / X035 0.
 H417 `params:` **43 of 78 remain**. Collisions QFN68 **4** / QFN88 0 / QFN128 0.
 
-Next: P1 - CH32L103's CMP2/CMP3 and CH32V003's USART1_CK, which have both waited a round
-and are the whole of deliverable F. Then LPTIM1/2, QSPI1/2, I2S2/3, SDIO, SDMMC, GPHA,
-HSADC - all single-struct. FMC/ETH/ECDC the cycle AGENT-2 lands the nested-struct shape.
+**Cycle 3 - 2026-09-12T21:05Z. DELIVERABLE F IS DONE: the ledger reads ZERO on all six
+parts.** `coverage --gate` 6 of 6 `complete`; no part is `in_extraction`, nothing is owned,
+and both TASKS.md lines are ticked.
+
+- **CH32L103 12 -> 0.** CMP2 and CMP3 modelled. One `OPA_CTLR2` holds all three comparators
+  at shifts 1, 9 and 17 and `OPA_CMP_Init()` branches on `CMP_NUM` (`ch32l103_opa.c`), so
+  the two new ones are the same four parameters aimed at different bits; only the pads and
+  the `const: CMP_NUM` differ. **It surfaced two defects that had been shipping since the
+  part landed, both invisible because no fixture ever switched a comparator on**: there was
+  no `CMP_InitTypeDef` in `codegen.init_structs`, so CMP1's `params:` were filled in and
+  then followed by `/* TODO: nothing applies this struct */`; and no comparator had a
+  `CMP_NUM` row, which was right for CMP1 BY ACCIDENT (`CMP1 = 0`, struct zero-initialised)
+  and would have made CMP2's and CMP3's blocks configure CMP1.
+- **CH32V003 3 -> 0, and the blocker was not real.** The row said "needs APP: the generator
+  cannot gate a second init struct off yet". It can: `initPlan()` already groups by
+  `struct:` and looks each up in `init_structs`, and `depends_on: { setting: Mode, equals:
+  Synchronous }` on every row of `USART_ClockInitTypeDef` is the gate. Checking that cost
+  less than the round the row spent waiting. **A blocker nobody has re-read is a guess too.**
+- Both parts compiled rather than asserted: `pio run` SUCCESS on CH32L103K8U6 with CMP2 and
+  CMP3 enabled and on CH32V003F4P6 with USART1 synchronous on PD4, `--strict` 0 both.
+
+Red, and who owns it: **three tests, all AGENT-2's, none mine** - `app/tests/export.test.js`
+x2 and the new `app/tests/pinmap.test.js`, on their uncommitted `pin_map` / `BoardPins.h`
+work (`app/engine/export.js` modified, `pinmap.test.js` untracked). FINDING posted with the
+reproduction. Everything that reads `data/` is green: `coverage` 15, `completeness` 15,
+`strict` 25, `data` 56, `codegen_compile` 18, plus `validate_mcu`, `verify_sdk_names` and
+`coverage --gate` at 0.
+
+AGENT-2 landed the `paramReachWarnings()` fix I filed mid-cycle. My `const:` params still
+mirror their constant into `default:` because that fix is UNCOMMITTED, and a commit of mine
+that depends on an uncommitted change of theirs puts main red in the gap; the mirrors go the
+cycle it is committed, and the board says so.
+
+Numbers: ledger **0 / 0 / 0 / 0 / 0 / 0 - all six complete**.
+H417 `params:` **43 of 78 remain**. Collisions QFN68 **4** / QFN88 0 / QFN128 0.
+
+Next: back to P0. LPTIM1/2 (one struct, but an anonymous union - `LPTIM_ClockPolarity` and
+`LPTIM_EncoderMode` share storage, so at most one may be written), QSPI1/2, I2S2/3, SDIO,
+SDMMC, GPHA, HSADC. Then strip the `default:` mirrors. FMC/ETH/ECDC/FMC_NAND/FMC_SDRAM stay
+blocked on the nested-struct shape (REQUEST 19:33Z) - five peripherals behind one change.

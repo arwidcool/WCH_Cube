@@ -3,16 +3,16 @@
 # most of this file is the vocabulary: each alias says what the DS's spelling means in the
 # file's PERIPHERAL_SIGNAL terms. Patterns are tried in file order; exact keys win first.
 part: CH32V003
-# IN EXTRACTION for one declared gap: DS Table 2-1 puts the USART1 synchronous clock UCK on
-# PD4 (default), PD7 (remaps 1 and 2) and PC5 (remap 3), RM Table 7-10 agrees, and the SPL
-# can drive it (USART_ClockInitTypeDef, ch32v00x_usart.h:51-66) - but the generator cannot
-# yet emit the second init struct, so offering the pin would claim a pad the generated C
-# never configures. CH32V003.notes.md and the USART1 block record the same. Three open rows
-# (the three UCK pads) until codegen can emit USART_ClockInit; then model it and set 0.
-status: in_extraction
-owner: AGENT-1
-task: "CH32V003: model USART1_CK once codegen emits USART_ClockInit"
-open_rows: 3
+# COMPLETE as of 2026-09-12. The last three rows were the USART1 synchronous clock UCK -
+# PD4 (mapping 00), PD7 (01 and 10) and PC5 (11), RM Table 7-10 at CH32V003RM.md:3756 - and
+# they were open because the pad and its register are one fact of which only half could be
+# written: routing CK without `USART_ClockInitTypeDef` would have offered a pad the
+# generated C never configures, and emitting that struct unconditionally would have put a
+# second init call into every asynchronous project. Both halves landed together: a
+# `Synchronous` mode choice that claims the pad (RM 12.4, :9878 - master-only, so there is
+# one such choice and not two) and four `USART_ClockInitTypeDef` rows that every one of
+# them depends on it, so neither can appear without the other.
+status: complete
 
 sources:
   ds: data/sources/V003/Datasheets/CH32V003.md

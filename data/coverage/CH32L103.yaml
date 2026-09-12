@@ -1,13 +1,16 @@
 # Coverage ledger declarations for CH32L103 - docs/COVERAGE.md is the rule, the schema and
-# the loop. This part is IN EXTRACTION: its open rows are counted in `open_rows:` below,
-# the count may only go down, and the part is not done while it is above zero.
+# the loop. This part is COMPLETE: every function the datasheet puts on a pin, every RM
+# chapter and every SPL instance is either modelled by a named signal or declared below
+# with a file:line, and `python tools/coverage.py CH32L103` prints 0 open.
 #
-#   python tools/coverage.py CH32L103        # the open rows, with the datasheet line to read
+# It reached zero on 2026-09-12 when CMP2 and CMP3 were modelled (AGENT-1). The last twelve
+# rows were their pads - CMP2 P0/P1/N0/N1/OUT0/OUT1 and CMP3's six - functions the datasheet
+# names on PB3..PB12 that no peripheral in the file answered to, because the file had one
+# comparator and the silicon has three (`CMP_Num_TypeDef`, ch32l103_opa.h:154-159).
+#
+#   python tools/coverage.py CH32L103        # 0 open, and exits 0
 part: CH32L103
-status: in_extraction
-owner: AGENT-1
-task: "CH32L103: close the coverage ledger"
-open_rows: 12
+status: complete
 
 sources:
   ds: data/sources/l103/Datasheets/CH32L103DS0.md

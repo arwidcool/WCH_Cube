@@ -1123,19 +1123,26 @@ peripherals:
   # ---------------- Connectivity ----------------
   USART1:
     category: Connectivity
-    # USART1_CK is NOT modelled, and that is a declared gap rather than an oversight.
-    # RM Table 7-10 routes a CK pin in every mapping and DS Table 2-2 marks it UCK, and
-    # the SPL can drive it (USART_ClockInitTypeDef + USART_ClockInit,
-    # ch32v00x_usart.h:51-66,156). Modelling the pin without the struct would let the
-    # app claim a pad that generated code never configures; modelling the struct means
-    # a second init call that the generator has no way to gate off today. It is
-    # recorded in CH32V003.notes.md as an open item, which is the same treatment
-    # CH32V006 gives it.
+    # USART1_CK IS MODELLED NOW, and the three coverage rows it left open are closed.
+    # It was declared a gap because the pad and the register are one fact and only half
+    # of it could be written: routing CK without the struct would offer a pad the
+    # generated code never configures, and writing the struct without a way to gate it
+    # off would emit a second init call on every asynchronous project. Both halves are
+    # here - a `Synchronous` mode that claims the pad, and a `USART_ClockInitTypeDef`
+    # block whose every row depends on that mode - so neither can appear without the
+    # other. RM 12.4 (CH32V003RM.md:9878) is the mode; RM Table 7-10 (:3756) is the pad
+    # in each of the four mappings; USART_ClockInit is ch32v00x_usart.h:156.
+    #
+    # THE SILICON IS MASTER-ONLY, which is why there is one Synchronous choice and not
+    # two: RM 12.4 - "The USART module synchronization mode works only in the main mode,
+    # i.e. the CK pin outputs only the clock and does not receive inputs." A Slave entry
+    # would be a choice the part has not got.
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
           - { name: Single Wire (Half-Duplex), signals: [TX] }
           - { name: Transmit only, signals: [TX] }
           - { name: Receive only, signals: [RX] }
@@ -1150,11 +1157,16 @@ peripherals:
     # AFIO_PCFR1 bit 2 (USART1_RM) and the high bit is bit 21 (USART1_RM1), and the
     # manual writes the pair as "[21,2]". The index below is the two-bit value, high
     # bit first, and `codegen.remap.fields.USART1` reassembles it.
+    #
+    # CK's pad per mapping is RM Table 7-10's own CK row (CH32V003RM.md:3756):
+    # PD4 / PD7 / PD7 / PC5. NOTE THAT 01 AND 10 ARE THE SAME PAD - the datasheet's pin
+    # row for PD7 writes both suffixes on one pin, `UCK_1/UCK_2` (CH32V003.md:1114), and
+    # the two mappings differ in TX and RX rather than in the clock.
     remaps:
-      - { name: "00 Default", pins: { TX: PD5, RX: PD6, CTS: PD3, RTS: PC2 } }
-      - { name: "01",         pins: { TX: PD0, RX: PD1, CTS: PC3, RTS: PC2 } }
-      - { name: "10",         pins: { TX: PD6, RX: PD5, CTS: PC6, RTS: PC7 } }
-      - { name: "11",         pins: { TX: PC0, RX: PC1, CTS: PC6, RTS: PC7 } }
+      - { name: "00 Default", pins: { TX: PD5, RX: PD6, CTS: PD3, RTS: PC2, CK: PD4 } }
+      - { name: "01",         pins: { TX: PD0, RX: PD1, CTS: PC3, RTS: PC2, CK: PD7 } }
+      - { name: "10",         pins: { TX: PD6, RX: PD5, CTS: PC6, RTS: PC7, CK: PD7 } }
+      - { name: "11",         pins: { TX: PC0, RX: PC1, CTS: PC6, RTS: PC7, CK: PC5 } }
     params:
       - key: baud
         name: Baud rate
@@ -1199,6 +1211,60 @@ peripherals:
           - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
           - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+      # ---- the CK pin's own register, and the four rows below exist ONLY in Synchronous
+      # mode. `USART_ClockInitTypeDef` is a SECOND struct with a SECOND init call -
+      # USART_ClockInit(USARTx, &s), ch32v00x_usart.h:156 - which writes the four clock
+      # bits of CTLR2 and nothing else (ch32v00x_usart.c:189-198). Every row carries
+      # `depends_on: { setting: Mode, equals: Synchronous }`, so an asynchronous project
+      # emits no second call at all: that gating is what the old "declared gap" comment
+      # above said did not exist, and it is an ordinary `depends_on:`.
+      #
+      # ORDER MATTERS AND IS CORRECT AS WRITTEN. These come after the USART_InitTypeDef
+      # rows, so the generated C calls USART_Init() and then USART_ClockInit(). RM 12.4
+      # requires CPOL, CPHA and LBCL to be written "when TE and RE are not enabled", and
+      # they are: nothing here sets USART_Mode, so USART_Init() leaves TE and RE clear
+      # and the user's own USART_Cmd(ENABLE) is what starts the peripheral.
+      - key: ck_enable
+        name: Clock output
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_Clock
+        const: USART_Clock_Enable
+        default: USART_Clock_Enable
+        depends_on: { setting: Mode, equals: Synchronous }
+        help: "USART_CTLR2 CLKEN, bit 11 (ch32v00x_usart.h:95). Not a choice: the Mode row is what turns synchronous mode on and claims the CK pad, so this follows it."
+      - key: ck_cpol
+        name: Clock polarity (CPOL)
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_CPOL
+        type: enum
+        default: Low
+        depends_on: { setting: Mode, equals: Synchronous }
+        options:
+          - { name: Low , value: 0, sdk: USART_CPOL_Low }
+          - { name: High, value: 1, sdk: USART_CPOL_High }
+        help: "USART_CTLR2 CPOL, bit 10 (ch32v00x_usart.h:98-99). The steady state of CK between frames. RM 12.4, Figure 12-2."
+      - key: ck_cpha
+        name: Clock phase (CPHA)
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_CPHA
+        type: enum
+        default: 1 Edge
+        depends_on: { setting: Mode, equals: Synchronous }
+        options:
+          - { name: 1 Edge, value: 0, sdk: USART_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: USART_CPHA_2Edge }
+        help: "USART_CTLR2 CPHA, bit 9 (ch32v00x_usart.h:102-103). Which clock edge the bit is captured on."
+      - key: ck_lastbit
+        name: Last-bit clock pulse
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_LastBit
+        type: enum
+        default: Disabled
+        depends_on: { setting: Mode, equals: Synchronous }
+        options:
+          - { name: Disabled, value: 0, sdk: USART_LastBit_Disable }
+          - { name: Enabled , value: 1, sdk: USART_LastBit_Enable }
+        help: "USART_CTLR2 LBCL, bit 8 (ch32v00x_usart.h:106-107). Whether CK pulses for the last data bit as well. RM 12.4 names LBCL, CPOL and CPHA together as the three bits to set before TE and RE are enabled."
 
   SPI1:
     category: Connectivity
@@ -1786,6 +1852,11 @@ codegen:
   init_structs:
     GPIO_InitTypeDef:        { fn: GPIO_Init }
     USART_InitTypeDef:       { fn: USART_Init }
+    # The SECOND USART struct, and it is a second CALL rather than more members of the
+    # first: USART_ClockInit(USARTx, &s) writes CTLR2's CLKEN/CPOL/CPHA/LBCL and nothing
+    # else (ch32v00x_usart.h:156, ch32v00x_usart.c:189-198). Its rows all depend on
+    # `Mode = Synchronous`, so on an asynchronous project the block is not emitted at all.
+    USART_ClockInitTypeDef:  { fn: USART_ClockInit }
     SPI_InitTypeDef:         { fn: SPI_Init }
     I2C_InitTypeDef:         { fn: I2C_Init }
     ADC_InitTypeDef:         { fn: ADC_Init }

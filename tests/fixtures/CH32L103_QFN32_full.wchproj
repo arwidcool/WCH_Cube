@@ -288,6 +288,26 @@ peripherals:
       psel: CHP0 (PA2)
       nsel: CHN0 (PB1)
       hyen: Disabled
+  CMP2:
+    settings:
+      Mode: Disable
+      Inputs: []
+    remap: 0
+    params:
+      mode: Comparator output only (OUT_IO0)
+      psel: CHP0 (PB8)
+      nsel: CHN0 (PB3)
+      hyen: Disabled
+  CMP3:
+    settings:
+      Mode: Disable
+      Inputs: []
+    remap: 0
+    params:
+      mode: Comparator output only (OUT_IO0)
+      psel: CHP0 (PB5)
+      nsel: CHN0 (PB3)
+      hyen: Disabled
 gpio_manual:
   PA5: GPIO_Output
   PB7: GPIO_Input

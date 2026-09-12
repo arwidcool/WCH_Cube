@@ -134,6 +134,9 @@ peripherals:
       word: 8 bits
       parity: None
       stop: '1'
+      ck_cpol: Low
+      ck_cpha: 1 Edge
+      ck_lastbit: Disabled
   SPI1:
     settings:
       Mode: Disable
