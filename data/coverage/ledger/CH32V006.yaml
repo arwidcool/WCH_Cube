@@ -4,6 +4,7 @@
 
 part: CH32V006
 pin_functions:
+  - { pin: VSS, token: VSS, line: 2075 }
   - { pin: PB3, token: USART2_RX, line: 2081 }
   - { pin: PB3, token: SWCLK, line: 2081 }
   - { pin: PB3, token: TIM1_BKIN, index: 4, line: 2082 }
@@ -136,6 +137,7 @@ pin_functions:
   - { pin: PC3, token: TIM1_CH1N, index: 3, line: 2233 }
   - { pin: PC3, token: TIM2_CH3, index: 4, line: 2235 }
   - { pin: PC3, token: USART1_CTS, index: 2, line: 2235 }
+  - { pin: VDD, token: VDD, line: 2265 }
   - { pin: PC4, token: ADC_IN2, line: 2271 }
   - { pin: PC4, token: TIM1_CH4, line: 2271 }
   - { pin: PC4, token: MCO, line: 2271 }
@@ -262,6 +264,7 @@ pin_functions:
   - { pin: PA4, token: OPA_N2, line: 2417 }
   - { pin: PA4, token: USART2_TX, index: 1, line: 2417 }
   - { pin: PA4, token: USART2_CTS, index: 5, line: 2417 }
+  - { pin: VSS, token: VSS, line: 2439 }
   - { pin: PD4, token: ADC_IN7, line: 2445 }
   - { pin: PD4, token: TIM2_CH1_ETR, line: 2445 }
   - { pin: PD4, token: TIM1_CH4, index: 3, line: 2446 }
@@ -317,6 +320,7 @@ pin_functions:
   - { pin: PD0, token: TIM1_CH3N, index: 6, line: 2492 }
   - { pin: PD0, token: USART1_TX, index: 2, line: 2493 }
   - { pin: PD0, token: I2C_SDA, index: 1, line: 2493 }
+  - { pin: VDD, token: VDD, line: 2494 }
   - { pin: PC0, token: TIM2_CH3, line: 2499 }
   - { pin: PC0, token: TIM1_CH3, index: 2, line: 2500 }
   - { pin: PC0, token: TIM1_CH1N, index: 7, line: 2500 }

@@ -211,8 +211,11 @@ packages:
 
 # Every pin that exists on the die, not only the ones a package bonds.
 pins:
-  BOOT0: { type: boot }
-  NRST: { type: reset }
+  # BOOT0 is a strap, not a function: it is sampled at reset to pick the boot source and
+  # has no register behind it, which is why the coverage ledger records it as absent
+  # rather than modelled. The note says so on the pin, so nobody looks for a setting.
+  BOOT0: { type: boot, notes: "Boot-mode strap, sampled at reset: low boots from flash, high from the bootloader. It is not a GPIO function and no register controls it. On TSSOP20 and QFN20 it shares a pad with PB8 - see the package's pin table. (CH32L103DS0.md Table 2-1-1; data/coverage/CH32L103.yaml)" }
+  NRST: { type: reset, notes: "External reset, active low, with the internal pull-up. Bonded on TSSOP20 and LQFP48 only - on QFN32, QSOP28 and QFN20 a reset can only come from POR/PDR, the watchdog or software. The SYS setting decides whether the pin is used. (CH32L103DS0.md Table 2-1-1)" }
   PA0: { type: io }
   PA1: { type: io }
   PA10: { type: io }
@@ -250,11 +253,15 @@ pins:
   PC15: { type: io }
   PD0: { type: io }
   PD1: { type: io }
-  VBAT: { type: power }
-  VDD: { type: power }
-  VDDA: { type: power }
-  VSS: { type: ground }
-  VSSA: { type: ground }
+  # --- supplies and straps. Each note is the DS's own 1.4.3 sentence for that rail.
+  # The low-voltage part of this family is why the numbers are here rather than assumed:
+  # VDD is 1.7 V, not the 2.0 V the CH32V00x parts take, and VDDA has an upper bound
+  # RELATIVE to VDD rather than an absolute one alone.
+  VBAT: { type: power, notes: "Optional backup supply 1.8-3.6 V. When VDD is off, an internal power switch runs the RTC, the LSE oscillator and the backup registers from here. Leave unconnected if unused. (CH32L103DS0.md 1.4.3)" }
+  VDD: { type: power, notes: "Supply 1.7-3.6 V - the I/O pins and the internal regulator. Also the ADC reference: there is no VREF+ pad, so noise on VDD appears in the result. (CH32L103DS0.md 1.4.3)" }
+  VDDA: { type: power, notes: "Analog supply 1.8-3.6 V for the high-speed RC oscillator's analog part, the ADC, the temperature sensor and the PLL. Must NOT be higher than VDD; at least 2.0 V when the temperature sensor is used. (CH32L103DS0.md 1.4.3)" }
+  VSS: { type: ground, notes: "Ground. One decoupling capacitor per VDD pin, placed at the pin." }
+  VSSA: { type: ground, notes: "Analog ground, the return for VDDA. Star it to VSS at the pin, not along the digital ground path." }
 
 peripherals:
   SYS:

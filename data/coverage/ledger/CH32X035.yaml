@@ -4,6 +4,8 @@
 
 part: CH32X035
 pin_functions:
+  - { pin: GND, token: GND, line: 1681 }
+  - { pin: GND, token: GND, line: 1682 }
   - { pin: PA15, token: TX2, index: 2, line: 1683 }
   - { pin: PA15, token: TX2, index: 4, line: 1683 }
   - { pin: PA16, token: RX2, index: 2, line: 1685 }
@@ -81,6 +83,8 @@ pin_functions:
   - { pin: PA2, token: T2ET, index: 5, line: 1718 }
   - { pin: PA2, token: T2C3, index: 1, line: 1718 }
   - { pin: PA2, token: T2ET, index: 6, line: 1718 }
+  - { pin: GND, token: GND, line: 1720 }
+  - { pin: VDD, token: VDD, line: 1721 }
   - { pin: PA3, token: RX2, line: 1725 }
   - { pin: PA3, token: T2C4, line: 1725 }
   - { pin: PA3, token: O1O0, line: 1725 }
@@ -149,6 +153,7 @@ pin_functions:
   - { pin: PB4, token: T2BK, index: 5, line: 1793 }
   - { pin: PB4, token: T2C4, index: 3, line: 1794 }
   - { pin: PB4, token: T2BK, index: 6, line: 1794 }
+  - { pin: VDD, token: VDD, line: 1795 }
   - { pin: PB5, token: CK3, line: 1802 }
   - { pin: PB5, token: O1O1, line: 1802 }
   - { pin: PB5, token: T1BK, line: 1802 }

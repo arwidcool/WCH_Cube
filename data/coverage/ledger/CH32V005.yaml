@@ -4,6 +4,7 @@
 
 part: CH32V005
 pin_functions:
+  - { pin: VSS, token: VSS, line: 2628 }
   - { pin: PB3, token: USART2_RX, line: 2634 }
   - { pin: PB3, token: SWCLK, line: 2634 }
   - { pin: PB3, token: TIM1_BKIN, index: 4, line: 2635 }
@@ -126,6 +127,7 @@ pin_functions:
   - { pin: PC3, token: TIM1_CH1N, index: 3, line: 2764 }
   - { pin: PC3, token: TIM2_CH3, index: 4, line: 2765 }
   - { pin: PC3, token: USART1_CTS, index: 2, line: 2765 }
+  - { pin: VDD, token: VDD, line: 2766 }
   - { pin: PC4, token: ADC_IN2, line: 2771 }
   - { pin: PC4, token: TIM1_CH4, line: 2771 }
   - { pin: PC4, token: MCO, line: 2771 }

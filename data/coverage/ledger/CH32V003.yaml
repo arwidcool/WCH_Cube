@@ -4,6 +4,7 @@
 
 part: CH32V003
 pin_functions:
+  - { pin: VSS, token: VSS, line: 1104 }
   - { pin: PD4, token: UCK, line: 1106 }
   - { pin: PD4, token: T2CH1ETR, line: 1106 }
   - { pin: PD4, token: A7, line: 1108 }
@@ -35,11 +36,13 @@ pin_functions:
   - { pin: PA2, token: OSCO, line: 1116 }
   - { pin: PA2, token: AETR2, index: 1, line: 1116 }
   - { pin: PA2, token: TICH2N, index: 2, line: 1116 }
+  - { pin: VSS, token: VSS, line: 1117 }
   - { pin: PD0, token: TICH1N, line: 1118 }
   - { pin: PD0, token: OPN1, line: 1118 }
   - { pin: PD0, token: SDA, index: 1, line: 1118 }
   - { pin: PD0, token: UTX, index: 1, line: 1118 }
   - { pin: PD0, token: TICH1N, index: 2, line: 1118 }
+  - { pin: VDD, token: VDD, line: 1119 }
   - { pin: PC0, token: T2CH3, line: 1120 }
   - { pin: PC0, token: NSS, index: 1, line: 1120 }
   - { pin: PC0, token: UTX, index: 3, line: 1120 }

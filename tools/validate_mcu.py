@@ -317,6 +317,17 @@ def check_peripherals(doc: dict, r: Report) -> None:
         return
     pins_map = doc.get("pins") or {}
     packages = doc.get("packages") or {}
+    # `codegen.skip_signals` names the pads GPIO_Init and GPIO_PinAFConfig must not touch -
+    # the debug pair, the crystal, a hard-wired USB transceiver. They legitimately have no
+    # `af:`, and warning that codegen "emits a TODO instead" for them says something that
+    # is not true: the emitter skips them, which is the whole point of the key. Mirrors
+    # skippedClaim() in app/engine/constraints.js - `true` for a whole peripheral, or a
+    # list of its bare signal names.
+    skip = ((doc.get("codegen") or {}).get("skip_signals") or {})
+
+    def skipped(pid, sig):
+        rule = skip.get(pid)
+        return rule is True or (isinstance(rule, list) and str(sig) in rule)
 
     for pid, P in periphs.items():
         where = f"peripherals.{pid}"
@@ -376,8 +387,11 @@ def check_peripherals(doc: dict, r: Report) -> None:
                         seen_pins.add(str(pin))
                     af = o.get("af")
                     if af is None:
-                        r.warn(ow, f"`{pin}` has no `af:`; codegen will not guess an AF code "
-                                   f"and emits a TODO instead")
+                        # No AF code is CORRECT for a pad the generator must not touch;
+                        # it is a gap only for a pin codegen will try to mux.
+                        if not skipped(pid, signal):
+                            r.warn(ow, f"`{pin}` has no `af:`; codegen will not guess an AF code "
+                                       f"and emits a TODO instead")
                     elif not isinstance(af, int) or not (0 <= af <= 15):
                         r.error(ow, f"`af: {af}` must be an integer 0..15 (GPIOx_AFRy is four bits)")
 

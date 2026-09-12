@@ -305,8 +305,10 @@ packages:
 # PC14-PC19, with holes at PC8-PC9 and PC12-PC13. Those four names appear in no row of
 # DS Table 2-1 and nowhere in the RM. Anything iterating 0..max over a port invents them.
 pins:
-  VDD:   { type: power }
-  GND:   { type: ground }
+  # One rail, and the USB PD block is what raises the floor: the transmitter has to
+  # drive a compliant CC level, so PD (like the ADC) is only specified from 2.5 V.
+  VDD:   { type: power, notes: "Supply 2-5.5 V - I/O pins and the internal regulator; at least 2.5 V when the ADC or the USB PD block is used. Also the ADC reference. (CH32X035DS0.md 1.4.4)" }
+  GND:   { type: ground, notes: "Ground. One decoupling capacitor per VDD pin, placed at the pin." }
   # Port A: 24 pins, PA0-PA23, contiguous
   PA0:   { type: io, analog: true }
   PA1:   { type: io, analog: true }
@@ -1826,7 +1828,18 @@ peripherals:
 
   PWR:
     category: System Core
-    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
+    pins:
+      none: true
+      source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)"
+      supplies:
+        - name: VDD
+          pins: [VDD]
+          range: "2-5.5 V (2.5 V minimum for the ADC or USB PD)"
+          note: >
+            The only rail. Powers the I/O pins and the internal regulator, and is the ADC's
+            reference. The floor is set by two different blocks: a conversion needs 2.5 V,
+            and so does the USB PD transmitter, which has to drive a compliant CC level.
+          source: "CH32X035DS0.md 1.4.4"
     notes: >
       Power control. The PVD thresholds are named twice in the header - PWR_PVDLevel_0..3
       and the aliases PWR_PVDLevel_2V1/2V3/3V0/4V0 pointing at the same four values

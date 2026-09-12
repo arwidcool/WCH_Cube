@@ -258,6 +258,33 @@ export const FIXTURES = [
 
       eng.setSetting('TIM1', 'Channel1', 'PWM Generation CH1 CH1N');
 
+      // THE THREE USB CONTROLLERS, because until 2026-09-12 every one of them said "holds
+      // no pin on any package" while the datasheet gave it pads — so picking any USB mode
+      // claimed nothing. Two of the three are here:
+      //
+      //   USBFS  dual-role plus BOTH OTG pads, so all four of DS Table 2-2-18's pins are
+      //          claimed at once (PA12 DP, PA11 DM, PA9 VBUS, PA10 ID).
+      //   USBSS  the four USB 3.0 SuperSpeed pads (SSTXA/SSTXB/SSRXA/SSRXB). They are
+      //          DEDICATED pads, not GPIO, so this is also the first fixture to claim a
+      //          pin that is not spelled `Pxx` — the AF emitter has to skip it structurally
+      //          rather than emit a port and a bit for it.
+      //
+      // Both are in `codegen.skip_signals`, so the generated C claims the pads, names them
+      // in its "not configured here, by design" line, emits the clock enable
+      // (`RCC_HBPeriph_OTG_FS`, `RCC_HBPeriph_USBSS`) and writes no GPIO_Init and no TODO —
+      // which is what the vendor's own driver does (ch32h417_usbfs_device.c:54-70 enables
+      // the clock and configures no pin; ch32h417_usbhs_device.c touches no GPIO at all).
+      //
+      // USBHS is deliberately ABSENT and that is a hardware fact, not an omission: DS
+      // Table 2-2-19 puts its DP/DM on PB8/PB9, which are the SWCLK and SWIO/SWDIO pads and
+      // which this fixture already uses for I2C1_SCL. Enabling it here would be a genuine
+      // three-way conflict, and the conflict engine correctly refuses it. It is proven
+      // separately in tests/h417_usb.test.js instead.
+      eng.setSetting('USBFS', 'Mode', 'Dual-role (OTG FS)');
+      eng.toggleSetting('USBFS', 'OTG pins', 'VBUS (bus voltage sense)', true);
+      eng.toggleSetting('USBFS', 'OTG pins', 'ID (role detect)', true);
+      eng.setSetting('USBSS', 'Mode', 'Device (SS)');
+
       // NOTE — what is deliberately NOT claimed here, and why.
       //
       // The OPA inputs/outputs and the DAC output are pads the coverage ledger made reachable

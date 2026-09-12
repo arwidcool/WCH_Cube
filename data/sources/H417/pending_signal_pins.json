@@ -1,0 +1,1126 @@
+{
+ "DAC": {
+  "OUT1": [
+   [
+    "PA4",
+    null
+   ]
+  ],
+  "OUT2": [
+   [
+    "PA5",
+    null
+   ]
+  ]
+ },
+ "ADC1": {
+  "IN10": [
+   [
+    "PC0",
+    null
+   ]
+  ],
+  "IN11": [
+   [
+    "PC1",
+    null
+   ]
+  ],
+  "IN12": [
+   [
+    "PC2",
+    null
+   ]
+  ],
+  "IN13": [
+   [
+    "PC3",
+    null
+   ]
+  ],
+  "IN0": [
+   [
+    "PA0",
+    null
+   ]
+  ],
+  "IN1": [
+   [
+    "PA1",
+    null
+   ]
+  ],
+  "IN2": [
+   [
+    "PA2",
+    null
+   ]
+  ],
+  "IN3": [
+   [
+    "PA3",
+    null
+   ]
+  ],
+  "IN4": [
+   [
+    "PA4",
+    null
+   ]
+  ],
+  "IN5": [
+   [
+    "PA5",
+    null
+   ]
+  ],
+  "IN6": [
+   [
+    "PA6",
+    null
+   ]
+  ],
+  "IN7": [
+   [
+    "PA7",
+    null
+   ]
+  ],
+  "IN14": [
+   [
+    "PC4",
+    null
+   ]
+  ],
+  "IN15": [
+   [
+    "PC5",
+    null
+   ]
+  ],
+  "IN8": [
+   [
+    "PB0",
+    null
+   ]
+  ],
+  "IN9": [
+   [
+    "PB1",
+    null
+   ]
+  ]
+ },
+ "HSADC": {
+  "IN4": [
+   [
+    "PF8",
+    null
+   ]
+  ],
+  "IN5": [
+   [
+    "PF9",
+    null
+   ]
+  ],
+  "IN6": [
+   [
+    "PF10",
+    null
+   ]
+  ],
+  "IN0": [
+   [
+    "PC0",
+    null
+   ]
+  ],
+  "IN1": [
+   [
+    "PC1",
+    null
+   ]
+  ],
+  "IN2": [
+   [
+    "PC2",
+    null
+   ]
+  ],
+  "IN3": [
+   [
+    "PC3",
+    null
+   ]
+  ]
+ },
+ "OPA": {
+  "P03": [
+   [
+    "PC2",
+    null
+   ]
+  ],
+  "N03": [
+   [
+    "PC3",
+    null
+   ]
+  ],
+  "OUT03": [
+   [
+    "PA0",
+    null
+   ]
+  ],
+  "P13": [
+   [
+    "PA2",
+    null
+   ]
+  ],
+  "N13": [
+   [
+    "PA3",
+    null
+   ]
+  ],
+  "OUT13": [
+   [
+    "PA4",
+    null
+   ]
+  ],
+  "OUT11": [
+   [
+    "PA5",
+    null
+   ]
+  ],
+  "P11": [
+   [
+    "PA6",
+    null
+   ]
+  ],
+  "N11": [
+   [
+    "PA7",
+    null
+   ]
+  ],
+  "OUT01": [
+   [
+    "PC4",
+    null
+   ]
+  ],
+  "P01": [
+   [
+    "PB0",
+    null
+   ]
+  ],
+  "N01": [
+   [
+    "PB1",
+    null
+   ]
+  ],
+  "OUT12": [
+   [
+    "PB1",
+    null
+   ]
+  ],
+  "P12": [
+   [
+    "PF11",
+    null
+   ]
+  ],
+  "N12": [
+   [
+    "PF12",
+    null
+   ]
+  ],
+  "OUT02": [
+   [
+    "PE7",
+    null
+   ]
+  ],
+  "N02": [
+   [
+    "PE8",
+    null
+   ]
+  ],
+  "P02": [
+   [
+    "PE9",
+    null
+   ]
+  ]
+ },
+ "SDMMC": {
+  "D2_1": [
+   [
+    "PB10",
+    null
+   ]
+  ],
+  "D3_1": [
+   [
+    "PB11",
+    null
+   ]
+  ],
+  "D0_1": [
+   [
+    "PB13",
+    null
+   ]
+  ],
+  "STR_1": [
+   [
+    "PD10",
+    null
+   ]
+  ],
+  "SDCK_": [
+   [
+    "PD11",
+    null
+   ],
+   [
+    "PC12",
+    null
+   ]
+  ],
+  "SLVCK": [
+   [
+    "PD11",
+    null
+   ],
+   [
+    "PC12",
+    null
+   ]
+  ],
+  "STS_1": [
+   [
+    "PD12",
+    null
+   ]
+  ],
+  "CMD_1": [
+   [
+    "PD12",
+    null
+   ]
+  ],
+  "D6": [
+   [
+    "PC6",
+    null
+   ]
+  ],
+  "D6_1": [
+   [
+    "PC6",
+    null
+   ]
+  ],
+  "D7": [
+   [
+    "PC7",
+    null
+   ]
+  ],
+  "D7_1": [
+   [
+    "PC7",
+    null
+   ]
+  ],
+  "D0": [
+   [
+    "PC8",
+    null
+   ]
+  ],
+  "D1": [
+   [
+    "PC9",
+    null
+   ]
+  ],
+  "D1_1": [
+   [
+    "PC9",
+    null
+   ]
+  ],
+  "D4": [
+   [
+    "PA14",
+    null
+   ]
+  ],
+  "D4_1": [
+   [
+    "PA14",
+    null
+   ]
+  ],
+  "D5": [
+   [
+    "PA15",
+    null
+   ]
+  ],
+  "D5_1": [
+   [
+    "PA15",
+    null
+   ]
+  ],
+  "D2": [
+   [
+    "PC10",
+    null
+   ]
+  ],
+  "STS_2": [
+   [
+    "PC10",
+    null
+   ]
+  ],
+  "STS_3": [
+   [
+    "PC10",
+    null
+   ]
+  ],
+  "CMD_2": [
+   [
+    "PC10",
+    null
+   ]
+  ],
+  "CMD_3": [
+   [
+    "PC10",
+    null
+   ]
+  ],
+  "D3": [
+   [
+    "PC11",
+    null
+   ]
+  ],
+  "STR_2": [
+   [
+    "PC11",
+    null
+   ]
+  ],
+  "STR_3": [
+   [
+    "PC11",
+    null
+   ]
+  ],
+  "SDCK": [
+   [
+    "PC12",
+    null
+   ]
+  ],
+  "D0_2": [
+   [
+    "PD0",
+    null
+   ]
+  ],
+  "D0_3": [
+   [
+    "PD0",
+    null
+   ]
+  ],
+  "D1_2": [
+   [
+    "PD1",
+    null
+   ]
+  ],
+  "D1_3": [
+   [
+    "PD1",
+    null
+   ]
+  ],
+  "STS": [
+   [
+    "PD2",
+    null
+   ]
+  ],
+  "CMD": [
+   [
+    "PD2",
+    null
+   ]
+  ],
+  "D2_2": [
+   [
+    "PD2",
+    null
+   ]
+  ],
+  "D2_3": [
+   [
+    "PD2",
+    null
+   ]
+  ],
+  "STR": [
+   [
+    "PD3",
+    null
+   ]
+  ],
+  "D3_2": [
+   [
+    "PD3",
+    null
+   ]
+  ],
+  "D3_3": [
+   [
+    "PD3",
+    null
+   ]
+  ],
+  "D4_2": [
+   [
+    "PD4",
+    null
+   ]
+  ],
+  "D4_3": [
+   [
+    "PD4",
+    null
+   ]
+  ],
+  "D5_2": [
+   [
+    "PD5",
+    null
+   ]
+  ],
+  "D5_3": [
+   [
+    "PD5",
+    null
+   ]
+  ],
+  "D6_2": [
+   [
+    "PD6",
+    null
+   ]
+  ],
+  "D6_3": [
+   [
+    "PD6",
+    null
+   ]
+  ],
+  "D7_2": [
+   [
+    "PD7",
+    null
+   ]
+  ],
+  "D7_3": [
+   [
+    "PD7",
+    null
+   ]
+  ]
+ },
+ "SERDES": {
+  "TXP": [
+   [
+    "PE3",
+    null
+   ]
+  ],
+  "TXN": [
+   [
+    "PE4",
+    null
+   ]
+  ],
+  "RXP": [
+   [
+    "PE5",
+    null
+   ]
+  ],
+  "RXN": [
+   [
+    "PE6",
+    null
+   ]
+  ]
+ },
+ "UHSIF": {
+  "CLK_1": [
+   [
+    "PC0",
+    null
+   ],
+   [
+    "PB9",
+    null
+   ]
+  ],
+  "PORT0_2": [
+   [
+    "PC1",
+    null
+   ]
+  ],
+  "PORT0_3": [
+   [
+    "PC1",
+    null
+   ]
+  ],
+  "PORT3_1": [
+   [
+    "PC1",
+    null
+   ]
+  ],
+  "PORT1_2": [
+   [
+    "PC2",
+    null
+   ]
+  ],
+  "PORT1_3": [
+   [
+    "PC2",
+    null
+   ]
+  ],
+  "PORT4_1": [
+   [
+    "PC2",
+    null
+   ]
+  ],
+  "PORT2_2": [
+   [
+    "PC3",
+    null
+   ]
+  ],
+  "PORT2_3": [
+   [
+    "PC3",
+    null
+   ]
+  ],
+  "PORT5_1": [
+   [
+    "PC3",
+    null
+   ]
+  ],
+  "PORT3_2": [
+   [
+    "PB0",
+    null
+   ]
+  ],
+  "PORT3_3": [
+   [
+    "PB0",
+    null
+   ]
+  ],
+  "PORT6_1": [
+   [
+    "PB0",
+    null
+   ]
+  ],
+  "PORT4_2": [
+   [
+    "PB1",
+    null
+   ]
+  ],
+  "PORT4_3": [
+   [
+    "PB1",
+    null
+   ]
+  ],
+  "PORT7_1": [
+   [
+    "PB1",
+    null
+   ]
+  ],
+  "CLK": [
+   [
+    "PF11",
+    null
+   ]
+  ],
+  "PORT0": [
+   [
+    "PF12",
+    null
+   ]
+  ],
+  "PORT1": [
+   [
+    "PF13",
+    null
+   ]
+  ],
+  "PORT2": [
+   [
+    "PE7",
+    null
+   ]
+  ],
+  "PORT3": [
+   [
+    "PE8",
+    null
+   ]
+  ],
+  "PORT4": [
+   [
+    "PE9",
+    null
+   ]
+  ],
+  "PORT5": [
+   [
+    "PE10",
+    null
+   ]
+  ],
+  "PORT5_2": [
+   [
+    "PE10",
+    null
+   ]
+  ],
+  "PORT5_3": [
+   [
+    "PE10",
+    null
+   ]
+  ],
+  "PORT6": [
+   [
+    "PE11",
+    null
+   ]
+  ],
+  "PORT6_2": [
+   [
+    "PE11",
+    null
+   ]
+  ],
+  "PORT6_3": [
+   [
+    "PE11",
+    null
+   ]
+  ],
+  "PORT7": [
+   [
+    "PE12",
+    null
+   ]
+  ],
+  "PORT7_2": [
+   [
+    "PE12",
+    null
+   ]
+  ],
+  "PORT7_3": [
+   [
+    "PE12",
+    null
+   ]
+  ],
+  "PORT8": [
+   [
+    "PE13",
+    null
+   ]
+  ],
+  "PORT9": [
+   [
+    "PE14",
+    null
+   ]
+  ],
+  "PORT10": [
+   [
+    "PE15",
+    null
+   ]
+  ],
+  "PORT11": [
+   [
+    "PB10",
+    null
+   ]
+  ],
+  "PORT12": [
+   [
+    "PB11",
+    null
+   ]
+  ],
+  "PORT13": [
+   [
+    "PB12",
+    null
+   ]
+  ],
+  "PORT14": [
+   [
+    "PB13",
+    null
+   ]
+  ],
+  "PORT15": [
+   [
+    "PB14",
+    null
+   ]
+  ],
+  "CLK_3": [
+   [
+    "PD9",
+    null
+   ]
+  ],
+  "PORT16": [
+   [
+    "PD10",
+    null
+   ]
+  ],
+  "PORT17": [
+   [
+    "PD11",
+    null
+   ]
+  ],
+  "PORT18": [
+   [
+    "PD12",
+    null
+   ]
+  ],
+  "PORT19": [
+   [
+    "PD13",
+    null
+   ]
+  ],
+  "PORT20": [
+   [
+    "PD14",
+    null
+   ]
+  ],
+  "PORT21": [
+   [
+    "PD15",
+    null
+   ]
+  ],
+  "PORT22": [
+   [
+    "PF0",
+    null
+   ]
+  ],
+  "PORT23": [
+   [
+    "PF1",
+    null
+   ]
+  ],
+  "PORT24": [
+   [
+    "PF2",
+    null
+   ]
+  ],
+  "PORT25": [
+   [
+    "PC6",
+    null
+   ]
+  ],
+  "PORT26": [
+   [
+    "PC7",
+    null
+   ]
+  ],
+  "PORT27": [
+   [
+    "PC8",
+    null
+   ]
+  ],
+  "PORT28": [
+   [
+    "PC9",
+    null
+   ]
+  ],
+  "PORT29": [
+   [
+    "PA13",
+    null
+   ]
+  ],
+  "PORT30": [
+   [
+    "PA14",
+    null
+   ]
+  ],
+  "PORT31": [
+   [
+    "PA15",
+    null
+   ]
+  ],
+  "PORT32": [
+   [
+    "PC10",
+    null
+   ]
+  ],
+  "PORT32_": [
+   [
+    "PC10",
+    null
+   ]
+  ],
+  "PORT33": [
+   [
+    "PC11",
+    null
+   ]
+  ],
+  "PORT33_": [
+   [
+    "PC11",
+    null
+   ]
+  ],
+  "PORT34": [
+   [
+    "PC12",
+    null
+   ]
+  ],
+  "PORT34_": [
+   [
+    "PC12",
+    null
+   ]
+  ],
+  "PORT35": [
+   [
+    "PD0",
+    null
+   ]
+  ],
+  "PORT35_": [
+   [
+    "PD0",
+    null
+   ]
+  ],
+  "PORT36": [
+   [
+    "PD1",
+    null
+   ]
+  ],
+  "PORT36_": [
+   [
+    "PD1",
+    null
+   ]
+  ],
+  "PORT37": [
+   [
+    "PD2",
+    null
+   ]
+  ],
+  "PORT37_": [
+   [
+    "PD2",
+    null
+   ]
+  ],
+  "PORT38": [
+   [
+    "PD3",
+    null
+   ]
+  ],
+  "PORT38_": [
+   [
+    "PD3",
+    null
+   ]
+  ],
+  "PORT39": [
+   [
+    "PD4",
+    null
+   ]
+  ],
+  "PORT39_": [
+   [
+    "PD4",
+    null
+   ]
+  ],
+  "PORT40": [
+   [
+    "PD5",
+    null
+   ]
+  ],
+  "PORT40_": [
+   [
+    "PD5",
+    null
+   ]
+  ],
+  "PORT41": [
+   [
+    "PD6",
+    null
+   ]
+  ],
+  "PORT41_": [
+   [
+    "PD6",
+    null
+   ]
+  ],
+  "PORT42": [
+   [
+    "PD7",
+    null
+   ]
+  ],
+  "PORT42_": [
+   [
+    "PD7",
+    null
+   ]
+  ],
+  "PORT43": [
+   [
+    "PF3",
+    null
+   ]
+  ],
+  "PORT43_": [
+   [
+    "PF3",
+    null
+   ]
+  ],
+  "PORT44": [
+   [
+    "PF4",
+    null
+   ]
+  ],
+  "PORT44_": [
+   [
+    "PF4",
+    null
+   ]
+  ],
+  "PORT45": [
+   [
+    "PF5",
+    null
+   ]
+  ],
+  "PORT45_": [
+   [
+    "PF5",
+    null
+   ]
+  ],
+  "PORT46": [
+   [
+    "PE0",
+    null
+   ]
+  ],
+  "PORT46_": [
+   [
+    "PE0",
+    null
+   ]
+  ],
+  "PORT47": [
+   [
+    "PE1",
+    null
+   ]
+  ],
+  "PORT47_": [
+   [
+    "PE1",
+    null
+   ]
+  ],
+  "CLK_2": [
+   [
+    "PF14",
+    null
+   ]
+  ]
+ }
+}

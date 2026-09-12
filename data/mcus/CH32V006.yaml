@@ -181,8 +181,11 @@ packages:
 # -----------------------------------------------------------------------------
 # DS Table 2-1-1 — pin type and "main function after reset"
 pins:
-  VDD:  { type: power }
-  VSS:  { type: ground }
+  # One rail, two minimums: the part runs from 2.0 V but the ADC needs 2.4 V, and the
+  # same VDD is the ADC's reference - there is no VREF+ pad on this family, so anything
+  # on VDD appears directly in the conversion result.
+  VDD:  { type: power, notes: "Supply 2.0-5.5 V - I/O pins and the internal regulator; at least 2.4 V when the ADC is used. Also the ADC reference, so VDD noise shows in the result. (CH32V006DS0.md 1.4.3, Table 3-2)" }
+  VSS:  { type: ground, notes: "Ground. One decoupling capacitor per VDD pin, placed at the pin." }
   PA0:  { type: io }
   PA1:  { type: io, analog: true, notes: XI when HSE used (AFIO PA12_RM) }
   PA2:  { type: io, analog: true, notes: XO when HSE used (AFIO PA12_RM) }
@@ -396,7 +399,18 @@ peripherals:
   # regulator mode and the wake-up period are all choices with consequences.
   PWR:
     category: System Core
-    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
+    pins:
+      none: true
+      source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)"
+      supplies:
+        - name: VDD
+          pins: [VDD]
+          range: "2.0-5.5 V (2.4-5.5 V with the ADC)"
+          note: >
+            The only rail. Powers the I/O pins and the internal regulator, and is also the
+            ADC's reference - the family has no VREF+ pad, so supply noise appears directly
+            in a conversion result.
+          source: "CH32V006DS0.md 1.4.3, Table 3-2"
     settings:
       - name: Power voltage detector (PVD)
         choices:

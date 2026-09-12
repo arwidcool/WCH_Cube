@@ -310,9 +310,25 @@ FOOTNOTE_HALF = re.compile(r"^(\(|\d\))$")            # `(3)` split into `(` and
 AF_TOKEN = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)\(AF(\d+)\)$")
 SUFFIX = re.compile(r"^(.*[A-Za-z0-9])_(\d+)$")
 FUNC = re.compile(r"^[A-Z][A-Z0-9_]*$")                # a function token is upper-case
-# The pin-type column, across every WCH datasheet in the repo. `I/O/` is the front half
-# of a split `I/O/A`; H417 adds an I/O-characteristic column with FT / SDP / A.
-TYPE_TOKENS = {"I/O", "I/O/", "I/O/A", "I/O/FT", "I/O/S", "I", "O", "A", "P", "S", "FT", "SDP"}
+# The pin-type column. DS note 1 on every WCH datasheet gives the alphabet - "I = TTL/CMOS
+# level Schmitt input, O = CMOS level tri-state output, P = power supply, FT = 5V tolerant,
+# A = analog signal input or output" - and the cells compose it with `/`: `I/O`, `I/O/A`,
+# `O/A`, `I/A`. The conversion sometimes wraps the last half onto the next line, leaving a
+# trailing slash (`I/O/`), so that is allowed too.
+#
+# A DEDICATED pad may carry a type name of its own instead: CH32H417 spells the four USB
+# 3.0 SuperSpeed pads `USB3.0` and the four Ethernet MDI pads `ETH`. Those are per part and
+# are declared in the coverage file's `pin_types:`, because a pad whose type the parser
+# does not recognise is not seen as a row at all - it is read as a FUNCTION of the pad
+# above it, which is exactly how SSTXA/SSTXB/SSRXA/SSRXB ended up attributed to VSS and
+# VDD12A the first time this part's USB 3.0 controller was modelled.
+TYPE_ALPHABET = ("I", "O", "A", "P", "S", "FT", "SDP")
+_ALT = "|".join(TYPE_ALPHABET)
+TYPE_RE = re.compile(rf"^({_ALT})(/({_ALT}))*/?$")
+
+
+def is_type(tok: str, extra: frozenset = frozenset()) -> bool:
+    return bool(TYPE_RE.match(tok)) or tok in extra
 # Page furniture the conversion repeats on every page of a table.
 # A header word is only noise when the LINE is furniture: `## I/O PA6 USART2_TX_6` is a
 # row whose name wrapped, `## I/O` alone is the column heading, and dropping the first one
@@ -425,7 +441,7 @@ def _glue(tokens: list[tuple[str, int]], dictionary: set[str]) -> list[tuple[str
             # letters is never a complete name even when a signal happens to be spelled
             # that way - `SD` + `RAM_D20` is SDRAM_D20, whatever I2S calls its data line)
             if (FUNC.match(base_prev) and (base_prev not in dictionary or len(base_prev) <= 2)
-                    and not (prev in TYPE_TOKENS and t in TYPE_TOKENS)
+                    and not (is_type(prev) and is_type(t))
                     and (jb in dictionary or SUFFIX.sub(r"\1", jb) in dictionary)
                     and (not CELL.match(t) or jb in dictionary) and not PIN_TOKEN.match(t)):
                 out[-1] = (joined, pn)
@@ -464,7 +480,8 @@ class PinRow:
 
 
 def parse_pin_table(text: str, cfg: dict, pin_aliases: dict, dictionary: set[str],
-                    known_pins: set[str], extra_noise: list[str]) -> list[PinRow]:
+                    known_pins: set[str], extra_noise: list[str],
+                    pin_types: frozenset = frozenset()) -> list[PinRow]:
     """DS Table 2-1-x on the row token stream. A row is anchored by a pin name that follows
     a run of package-cell tokens (numbers / dashes) and is itself followed by a pin-type
     token; everything after the type tokens, up to the next anchor, is a function of that
@@ -488,7 +505,7 @@ def parse_pin_table(text: str, cfg: dict, pin_aliases: dict, dictionary: set[str
             # a type token within the next 4 tokens makes this a row (a footnote, a dash
             # and a torn main-function name can all sit between the name and its type)
             look = [x for x, _ in toks[i + 1:i + 5]]
-            if any(x in TYPE_TOKENS for x in look):
+            if any(is_type(x, pin_types) for x in look):
                 anchor = t
         if anchor is not None:
             name = anchor.split("-")[0]
@@ -524,7 +541,7 @@ def parse_pin_table(text: str, cfg: dict, pin_aliases: dict, dictionary: set[str
         j = i + 1
         while j < n:
             x, xl = toks[j]
-            if x in TYPE_TOKENS or x == "-" or x == base or x == anchor:
+            if is_type(x, pin_types) or x == "-" or x == base or x == anchor:
                 j += 1
                 continue
             break
@@ -693,6 +710,7 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
     ds_rel = pathlib.Path(src["ds"]).name
     pin_aliases = {str(k): str(v) for k, v in (cov.get("pin_aliases") or {}).items()}
     extra_noise = [str(x) for x in (cov.get("noise") or [])]
+    pin_types = frozenset(str(x) for x in (cov.get("pin_types") or []))
     aliaser = Aliaser(model, cov.get("aliases"))
     absent = _decl_list(cov, "absent")
     corrections = _decl_list(cov, "corrections")
@@ -714,7 +732,8 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
     if not tables:
         raise CoverageError("`pin_tables:` must list at least one DS pin table")
     for t in tables:
-        for r in parse_pin_table(ds_text, t, pin_aliases, dictionary, set(model.pins), extra_noise):
+        for r in parse_pin_table(ds_text, t, pin_aliases, dictionary, set(model.pins),
+                                 extra_noise, pin_types):
             for base, _, _, _ in r.funcs:
                 if "_" in base:
                     dictionary.add(base)
@@ -734,7 +753,8 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
     # ---- pin-first reading, over every listed table, with the full dictionary
     rows: list[PinRow] = []
     for t in tables:
-        rows += parse_pin_table(ds_text, t, pin_aliases, dictionary, set(model.pins), extra_noise)
+        rows += parse_pin_table(ds_text, t, pin_aliases, dictionary, set(model.pins),
+                                extra_noise, pin_types)
 
     # ---- the parse must account for every io pin the file BONDS, or it is not believed.
     # (Bonded, not declared: CH32V005 inherits CH32V006's die and keeps five pins no
@@ -1108,9 +1128,12 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
                         f"data/coverage/{part}.yaml")
 
     res.inventory = {
+        # Every row, io or not. The dedicated pads are the ones worth having here: a
+        # reader looking for "what does the datasheet say lives on SSTXA" gets an answer,
+        # and those four pads are precisely the facts that went missing on CH32H417.
         "pin_functions": [
             {"pin": r.pin, "token": base, "index": idx, "af": af, "line": ln}
-            for r in rows if r.io for base, idx, af, ln in r.funcs
+            for r in rows for base, idx, af, ln in r.funcs
         ],
         "signal_first": {pin: sorted(f"{b}" + (f"(AF{af})" if af is not None else "") for b, af in pairs)
                          for pin, pairs in sorted(second.items())},

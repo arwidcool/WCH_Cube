@@ -4,6 +4,7 @@
 
 part: CH32L103
 pin_functions:
+  - { pin: VBAT, token: VBAT, line: 1951 }
   - { pin: PC13, token: TAMPER, line: 1957 }
   - { pin: PC13, token: RTC, line: 1957 }
   - { pin: PC13, token: TAMPER, line: 1964 }
@@ -20,6 +21,9 @@ pin_functions:
   - { pin: PD1, token: USART3_TX, index: 2, line: 1997 }
   - { pin: PD1, token: USART3_RX, index: 3, line: 1998 }
   - { pin: PD1, token: CAN1_TX, index: 3, line: 1999 }
+  - { pin: NRST, token: NRST, line: 2000 }
+  - { pin: VSSA, token: VSSA, line: 2001 }
+  - { pin: VDDA, token: VDDA, line: 2006 }
   - { pin: PA0, token: WKUP, line: 2011 }
   - { pin: PA0, token: WKUP, line: 2012 }
   - { pin: PA0, token: ADC_IN0, line: 2013 }
@@ -140,6 +144,8 @@ pin_functions:
   - { pin: PB11, token: TIM4_CH2, index: 1, line: 2211 }
   - { pin: PB11, token: USART1_TX, index: 4, line: 2212 }
   - { pin: PB11, token: I2C1_SDA, index: 3, line: 2213 }
+  - { pin: VSS, token: VSS, line: 2214 }
+  - { pin: VDD, token: VDD, line: 2219 }
   - { pin: PB12, token: CMP3_OUT1, line: 2225 }
   - { pin: PB12, token: TIM1_BKIN, line: 2226 }
   - { pin: PB12, token: LPTIM_CH1, line: 2227 }
@@ -211,6 +217,8 @@ pin_functions:
   - { pin: PA13, token: USART1_RTS, index: 2, line: 2346 }
   - { pin: PA13, token: USART1_RTS, index: 4, line: 2347 }
   - { pin: PA13, token: I2C1_SCL, index: 2, line: 2348 }
+  - { pin: VSS, token: VSS, line: 2349 }
+  - { pin: VDD, token: VDD, line: 2354 }
   - { pin: PA14, token: SWCLK, line: 2361 }
   - { pin: PA14, token: TIM1_CH3, index: 2, line: 2362 }
   - { pin: PA14, token: TIM1_CH3, index: 3, line: 2363 }
@@ -265,6 +273,7 @@ pin_functions:
   - { pin: PB7, token: SPI1_MOSI, index: 3, line: 2455 }
   - { pin: PB7, token: TIM1_CH1, index: 4, line: 2456 }
   - { pin: PB7, token: TIM1_CH3N, index: 5, line: 2457 }
+  - { pin: BOOT0, token: BOOT0, line: 2459 }
   - { pin: PB8, token: TIM4_CH3, line: 2465 }
   - { pin: PB8, token: CMP2_P0, line: 2466 }
   - { pin: PB8, token: TIM4_CH3, index: 1, line: 2467 }
@@ -284,6 +293,8 @@ pin_functions:
   - { pin: PB9, token: TIM1_CH3N, index: 2, line: 2513 }
   - { pin: PB9, token: TIM1_CH3N, index: 3, line: 2514 }
   - { pin: PB9, token: TIM1_CH3N, index: 4, line: 2515 }
+  - { pin: VSS, token: VSS, line: 2516 }
+  - { pin: VDD, token: VDD, line: 2521 }
 signal_first:
   PA0: [ADC_IN0, OPA_P4, TIM2_CH1_ETR, USART2_CTS, WKUP]
   PA1: [ADC_IN1, OPA_N4, TIM1_CH1, TIM1_CH2N, TIM2_CH2, USART2_RTS]

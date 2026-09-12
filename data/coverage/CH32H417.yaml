@@ -7,7 +7,7 @@ part: CH32H417
 status: in_extraction
 owner: AGENT-1
 task: "CH32H417: close the coverage ledger"
-open_rows: 113
+open_rows: 104
 
 sources:
   ds: data/sources/H417/Datasheets/CH32H417DS0.md
@@ -19,6 +19,12 @@ pin_tables:
   - { start: "Table 2-1-1 CH32H417 Pin definitions", end: "Table 2-1-2" }
 # Tables 2-2-1 .. 2-2-31 are the signal-first reading: one table per peripheral family.
 signal_table: { kind: signal_rows, start: "Table 2-2-1 ADC Pin functions", end: "## Chapter 3" }
+
+# Pad types this datasheet uses that are not the I/O/A/P/FT alphabet. Each names a
+# DEDICATED pad, and the parser needs them to see the row at all: `USB3.0` is the four
+# USB 3.0 SuperSpeed pads (SSTXA/SSTXB/SSRXA/SSRXB, DS Table 2-1-1 pins 1/2/4/5 on QFN68)
+# and `ETH` the four Ethernet MDI pads (MDIRN/MDIRP/MDITN/MDITP, pins 8-11).
+pin_types: [USB3.0, ETH]
 
 aliases:
   # The file models the memory controller as FMC (the SPL header is ch32h417_fmc.h); the
@@ -43,6 +49,18 @@ aliases:
   OPA{1}_P{2}: OPA_P{2}{1}
   OPA{1}_N{2}: OPA_N{2}{1}
   OPA{1}_OUT{2}: OPA_OUT{2}{1}
+  # The USB full-speed controller is OTG_FS in the datasheet and USBFS in the SPL header
+  # and the tree (DS Table 2-2-18; ch32h417.h defines USBFSD/USBFSH at the OTG_FS base).
+  OTG_DP: USBFS_DP
+  OTG_DM: USBFS_DM
+  OTG_VBUS: USBFS_VBUS
+  OTG_ID: USBFS_ID
+  # The USB 3.0 SuperSpeed pads carry their own name as their function (DS Table 2-1-1,
+  # pin type USB3.0); the file names the signals after the pads, minus the SS prefix.
+  SSTXA: USBSS_TXA
+  SSTXB: USBSS_TXB
+  SSRXA: USBSS_RXA
+  SSRXB: USBSS_RXB
 
 corrections:
   - pin: PC2

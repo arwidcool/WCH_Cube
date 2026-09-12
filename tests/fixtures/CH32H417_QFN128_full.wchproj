@@ -464,7 +464,10 @@ peripherals:
     remap: 0
   USBFS:
     settings:
-      Mode: Disable
+      Mode: Dual-role (OTG FS)
+      OTG pins:
+        - VBUS (bus voltage sense)
+        - ID (role detect)
     remap: 0
   USBHS:
     settings:
@@ -476,7 +479,7 @@ peripherals:
     remap: 0
   USBSS:
     settings:
-      Mode: Disable
+      Mode: Device (SS)
     remap: 0
   WWDG:
     settings:

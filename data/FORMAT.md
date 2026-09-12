@@ -6,9 +6,17 @@ enforces it; if the two ever disagree, the tool is right and this file needs upd
 
 ```
 python tools/validate_mcu.py          # 0 = clean, 1 = at least one ERROR
+python tools/coverage.py <PART>       # every datasheet function / RM chapter / SDK instance the
+                                      # file does not account for; 0 open rows is "done" (docs/COVERAGE.md)
 python tools/extract_remaps.py        # re-derives the remap tables from the RM and diffs
 python build.py                       # inlines every data file into dist/index.html
 ```
+
+This document says what a file may contain. **`docs/COVERAGE.md` says when a file is
+complete**, and the two are checked by different tools: `validate_mcu.py` proves the file is
+consistent with itself, `coverage.py` proves it accounts for everything the sources say. A
+file can pass the first and fail the second — that is how 207 dead pads shipped on one part —
+so a part is not done until both exit 0.
 
 ## The one idea that shapes everything else
 
@@ -231,6 +239,36 @@ another silently disappears when the user switches. The validator rejects it.
 
 **Every signal a choice can request must be routed by some remap**, or the choice can
 never be satisfied.
+
+**And every signal a remap routes must be requestable by some choice.** The validator
+checks both directions. A signal that is routed to a pin and named by no choice is a pad
+the user can never assign — it renders on the chip as a function and the picker offers
+nothing. Ten ADC channels on CH32L103 and 207 signals on CH32H417 shipped that way
+before this check existed (2026-09-12); it is an ERROR, not a warning.
+
+### `pins:` — a peripheral that routes nothing must say so
+
+```yaml
+  IWDG:
+    category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of it" }
+  USBFS:
+    category: Connectivity
+    pins: { open: true, owner: AGENT-1, task: "CH32H417: close the coverage ledger" }
+```
+
+A peripheral with neither `remaps:` nor `signal_pins:` must carry exactly one of:
+
+| Form | Meaning | Checked by |
+|---|---|---|
+| `none: true` + `source:` | the silicon gives it no pad. The source is a DS table or note number; a family is not a source | `validate_mcu.py` (the shape); `tools/coverage.py` (the claim — a `none` on a peripheral the datasheet lists a pad for is an open row) |
+| `open: true` + `owner:` + `task:` | its pads are not extracted yet. `task` is a phrase that exists in `TASKS.md` | `validate_mcu.py` (the shape); `tools/coverage.py` (it is an open row until routing replaces it) |
+
+Silence — a routing-less peripheral with no `pins:` — is an ERROR, and a `pins:` on a
+peripheral that does route is one too. This replaced the prose note “This peripheral holds
+no pin on any package”, which USBFS, USBHS, USBSS and TKEY carried on CH32H417 while the
+datasheet gave every one of them pads: a note nothing could check, replaced by a claim
+something does. `docs/COVERAGE.md` has the whole mechanism.
 
 A signal that two features share is modelled once. CH32V006 TIM2 routes `CH1_ETR` as a
 single signal because channel 1 and the external trigger are the same pin, and it exposes

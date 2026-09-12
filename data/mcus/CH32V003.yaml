@@ -145,8 +145,11 @@ packages:
 # `five_volt_tolerant` is recorded ONLY where the table's FT marker appears — four
 # pins, all on port C. It is not a family property and must not be carried across.
 pins:
-  VDD:  { type: power }
-  VSS:  { type: ground }
+  # Supply. One rail for everything - logic, I/O and the ADC reference - so there is no
+  # VDDA/VREF+ pad to bond. POR/PDR holds the chip in reset above 2.7 V, and the ADC is
+  # specified from 2.9 V: between those two the part runs but a conversion is not valid.
+  VDD:  { type: power, notes: "Supply 2.7-5.5 V - I/O pins and the internal regulator. POR/PDR releases at 2.7 V; ADC accuracy degrades below 2.9 V. (CH32V003.md 1.4.3, 1.4.4)" }
+  VSS:  { type: ground, notes: "Ground. One decoupling capacitor per VDD pin, placed at the pin." }
   # Ports on this part are A, C and D — there is no port B (RM Figure 1-1 lists
   # GPIOA PA1~PA2, GPIOC PC0~PC7, GPIOD PD0~PD7), and port A has exactly two pins.
   # Anything that iterates PA0..PA7 invents six pins that do not exist.
@@ -340,7 +343,22 @@ peripherals:
   # either (see `exti.internal`).
   PWR:
     category: System Core
-    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
+    pins:
+      none: true
+      source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)"
+      # The supply DOMAINS, which is a different claim from "PWR has no pad": the DS's pin
+      # table gives VDD/VSS to no peripheral because a supply is not a peripheral function,
+      # yet these are the pads PWR governs. `supplies` is where that belongs, so the power
+      # setup has something to show that is cited rather than inferred from pin `type:`.
+      supplies:
+        - name: VDD
+          pins: [VDD]
+          range: "2.7-5.5 V"
+          note: >
+            The only rail. Powers the I/O pins and the internal regulator, and is also the
+            ADC's reference - there is no separate VREF+ pad. POR/PDR releases at 2.7 V and
+            ADC accuracy is specified from 2.9 V.
+          source: "CH32V003.md 1.4.3, 1.4.4"
     settings:
       - name: Power voltage detector (PVD)
         choices:

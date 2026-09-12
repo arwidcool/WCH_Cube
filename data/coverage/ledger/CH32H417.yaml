@@ -4,6 +4,8 @@
 
 part: CH32H417
 pin_functions:
+  - { pin: VSS, token: VSS, line: 3771 }
+  - { pin: VDD33, token: VDD33, line: 3776 }
   - { pin: PE2, token: USART5_RX, af: 4, line: 3782 }
   - { pin: PE2, token: SPI4_SCK, af: 5, line: 3782 }
   - { pin: PE2, token: SAI_MCLK_A, af: 6, line: 3783 }
@@ -62,6 +64,8 @@ pin_functions:
   - { pin: PE6, token: FSMC_A22, af: 12, line: 3832 }
   - { pin: PE6, token: DVP_D7, af: 13, line: 3832 }
   - { pin: PE6, token: LTDC_G1, af: 14, line: 3867 }
+  - { pin: VDDIO, token: VDDIO, line: 3868 }
+  - { pin: VBAT, token: VBAT, line: 3873 }
   - { pin: PC13, token: C, line: 3882 }
   - { pin: PC13, token: I, line: 3883 }
   - { pin: PC13, token: O, line: 3883 }
@@ -85,6 +89,14 @@ pin_functions:
   - { pin: PC15, token: SDRAM_RAS_N, af: 9, line: 3909 }
   - { pin: PC15, token: FSMC_D17, af: 12, line: 3910 }
   - { pin: PC15, token: SDRAM_D17, af: 12, line: 3910 }
+  - { pin: VDDK, token: VDDK, line: 3912 }
+  - { pin: VDDK, token: DDK, line: 3917 }
+  - { pin: MDIRN, token: MDIRN, line: 3919 }
+  - { pin: MDIRP, token: MDIRP, line: 3922 }
+  - { pin: MDITN, token: MDITN, line: 3925 }
+  - { pin: MDITP, token: MDITP, line: 3928 }
+  - { pin: VDD33, token: VDD33, line: 3931 }
+  - { pin: VDD33, token: DD33, line: 3936 }
   - { pin: PF6, token: CAN3_RX, af: 2, line: 3939 }
   - { pin: PF6, token: SPI1_NSS, af: 3, line: 3939 }
   - { pin: PF6, token: QSPI2_SCK, af: 4, line: 3940 }
@@ -138,6 +150,10 @@ pin_functions:
   - { pin: PF10, token: SDRAM_D22, af: 12, line: 4009 }
   - { pin: PF10, token: DVP_D11, af: 13, line: 4010 }
   - { pin: PF10, token: LTDC_DE, af: 14, line: 4011 }
+  - { pin: VSS, token: VSS, line: 4013 }
+  - { pin: XI, token: XI, line: 4018 }
+  - { pin: XO, token: XO, line: 4019 }
+  - { pin: NRST, token: NRST, line: 4020 }
   - { pin: PC0, token: ADC_IN10, line: 4022 }
   - { pin: PC0, token: HSADC_IN0, line: 4022 }
   - { pin: PC0, token: TIM8_BKIN, af: 0, line: 4023 }
@@ -209,6 +225,10 @@ pin_functions:
   - { pin: PC3, token: SDRAM_CKE0, af: 12, line: 4109 }
   - { pin: PC3, token: SDRAM_DQM1, af: 15, line: 4110 }
   - { pin: PC3, token: UHSIF_PORT5, index: 1, line: 4112 }
+  - { pin: VDDIO, token: VDDIO, line: 4113 }
+  - { pin: VSSA, token: VSSA, line: 4118 }
+  - { pin: VREFP, token: VREFP, line: 4123 }
+  - { pin: VDD33A, token: VDD33A, line: 4128 }
   - { pin: PA0, token: ADC_IN0, line: 4134 }
   - { pin: PA0, token: OPA3_OUT0, line: 4134 }
   - { pin: PA0, token: TIM2_CH1_ETR, af: 1, line: 4135 }
@@ -256,6 +276,7 @@ pin_functions:
   - { pin: PA3, token: FSMC_D26, af: 12, line: 4166 }
   - { pin: PA3, token: SDRAM_D26, af: 12, line: 4167 }
   - { pin: PA3, token: LTDC_B5, af: 14, line: 4167 }
+  - { pin: VDDIO, token: VDDIO, line: 4169 }
   - { pin: PA4, token: ADC_IN4, line: 4175 }
   - { pin: PA4, token: DAC1_OUT, line: 4175 }
   - { pin: PA4, token: OPA3_OUT1, line: 4175 }
@@ -375,6 +396,7 @@ pin_functions:
   - { pin: PF13, token: PIOC_IO1, af: 5, line: 4335 }
   - { pin: PF13, token: DVP_PCLK, af: 11, line: 4335 }
   - { pin: PF13, token: TIM12_CH4, af: 13, line: 4336 }
+  - { pin: VDDIO, token: VDDIO, line: 4338 }
   - { pin: PE7, token: OPA2_OUT0, line: 4344 }
   - { pin: PE7, token: UHSIF_PORT2, line: 4344 }
   - { pin: PE7, token: TIM1_ETR, af: 1, line: 4345 }
@@ -498,6 +520,10 @@ pin_functions:
   - { pin: PB11, token: SDRAM_A11, af: 12, line: 4469 }
   - { pin: PB11, token: LTDC_G5, af: 14, line: 4471 }
   - { pin: PB11, token: SDMMC_D3, index: 1, line: 4472 }
+  - { pin: VIO18, token: VIO18, line: 4508 }
+  - { pin: VIO18, token: IO18, line: 4513 }
+  - { pin: VDDIO, token: VDDIO, line: 4515 }
+  - { pin: VDDIO, token: DDIO, line: 4520 }
   - { pin: PB12, token: UHSIF_PORT13, line: 4523 }
   - { pin: PB12, token: SDRAM_A7, af: 0, line: 4523 }
   - { pin: PB12, token: TIM1_BKIN, af: 1, line: 4524 }
@@ -679,6 +705,9 @@ pin_functions:
   - { pin: PF2, token: ETH_PHY_LED2, af: 10, line: 4725 }
   - { pin: PF2, token: SDRAM_CLK, af: 12, line: 4726 }
   - { pin: PF2, token: LTDC_G7, af: 14, line: 4726 }
+  - { pin: VDDK, token: VDDK, line: 4728 }
+  - { pin: VIO18, token: VIO18, line: 4733 }
+  - { pin: VDDIO, token: VDDIO, line: 4738 }
   - { pin: PC6, token: SDMMC_D6, line: 4744 }
   - { pin: PC6, token: UHSIF_PORT25, line: 4746 }
   - { pin: PC6, token: SDRAM_D6, af: 0, line: 4747 }
@@ -807,6 +836,7 @@ pin_functions:
   - { pin: PA13, token: FSMC_A9, af: 10, line: 4909 }
   - { pin: PA13, token: SDRAM_A9, af: 10, line: 4910 }
   - { pin: PA13, token: SAI_SD_B, af: 13, line: 4910 }
+  - { pin: VDD33, token: VDD33, line: 4912 }
   - { pin: PA14, token: SDMMC_D4, line: 4918 }
   - { pin: PA14, token: UHSIF_PORT30, line: 4920 }
   - { pin: PA14, token: SDRAM_D15, af: 0, line: 4921 }
@@ -984,6 +1014,7 @@ pin_functions:
   - { pin: PD5, token: SDMMC_D5, index: 3, line: 5168 }
   - { pin: PD5, token: UHSIF_PORT40, index: 2, line: 5171 }
   - { pin: PD5, token: UHSIF_PORT40, index: 3, line: 5173 }
+  - { pin: VIO18, token: VIO18, line: 5175 }
   - { pin: PD6, token: UHSIF_PORT41, line: 5181 }
   - { pin: PD6, token: TIM11_CH4, af: 2, line: 5181 }
   - { pin: PD6, token: SDRAM_CS_N0, af: 3, line: 5182 }
@@ -1090,6 +1121,8 @@ pin_functions:
   - { pin: PF14, token: FSMC_NADV, af: 12, line: 5311 }
   - { pin: PF14, token: LTDC_B5, af: 15, line: 5312 }
   - { pin: PF14, token: UHSIF_CLK, index: 2, line: 5313 }
+  - { pin: VIO18, token: VIO18, line: 5314 }
+  - { pin: VDDIO, token: VDDIO, line: 5352 }
   - { pin: PB3, token: TIM2_CH2, af: 1, line: 5358 }
   - { pin: PB3, token: CC1, af: 4, line: 5358 }
   - { pin: PB3, token: SPI1_SCK, af: 5, line: 5359 }
@@ -1184,6 +1217,13 @@ pin_functions:
   - { pin: PB9, token: SDRAM_A4, af: 12, line: 5456 }
   - { pin: PB9, token: DVP_D7, af: 13, line: 5456 }
   - { pin: PB9, token: LTDC_B7, af: 14, line: 5457 }
+  - { pin: VSS, token: VSS, line: 5459 }
+  - { pin: SSTXB, token: SSTXB, line: 5464 }
+  - { pin: SSTXA, token: SSTXA, line: 5467 }
+  - { pin: VDD12A, token: VDD12A, line: 5470 }
+  - { pin: SSRXB, token: SSRXB, line: 5475 }
+  - { pin: SSRXA, token: SSRXA, line: 5478 }
+  - { pin: VDD33, token: VDD33, line: 5481 }
 signal_first:
   PA0: [ADC_IN0, FSMC_D23(AF12), LTDC_R0(AF14), OPA3_OUT, PIOC_IO0(AF5), QSPI2_SIOX2(AF4), SDIO_CMD(AF9), SDRAM_D23(AF12), SDRAM_DQM2(AF15), TIM2_CH1_ETR(AF1), TIM5_CH1(AF2), TIM8_ETR(AF3), TIM9_CH1(AF6), USART2_CTS(AF7), USART6_TX(AF8)]
   PA1: [ADC_IN1, FSMC_D24(AF12), LTDC_R2(AF14), QSPI1_SIO3(AF9), QSPI2_SIOX3(AF4), SDRAM_D24(AF12), TIM2_CH2(AF1), TIM5_CH2(AF2), TIM9_CH2(AF6), USART2_RTS(AF7), USART6_RX(AF8)]
