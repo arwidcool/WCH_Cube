@@ -24,7 +24,8 @@
 //  everything else. The setters below are the only way to change it.
 // =============================================================================
 import { M, S, isEnabled, pinExists } from './model.js';
-import { normaliseParamDefs, validateParam, paramDefs, paramValue } from './params.js';
+import { normaliseParamDefs, validateParam, paramDefs, paramValue, paramApplies } from './params.js';
+import { isConstParam } from './util.js';
 import { record } from './history.js';
 
 // EXTI line a pin can drive, or null. `lines` maps a selector value to a pin.
@@ -476,6 +477,25 @@ export function setNvicGroup(index) {
  * A warning rather than a conflict - nothing is wrong with the silicon, the user just
  * has not finished. It names the peripheral so the UI can link to it, the same way the
  * NVIC warning does.
+ *
+ * "The user changed it" is `paramValue() !== d.default`, and that comparison is only
+ * true of a parameter the user can actually reach. Two kinds cannot be, and both read
+ * as changed until they are skipped here (AGENT-1, BOARD 2026-09-12T20:49Z):
+ *
+ *   - a `const:` member. `paramValue()` returns `d.const` for it on purpose while
+ *     `d.default` is `undefined`, so EVERY const member of a switched-off peripheral
+ *     compared unequal - although it is never drawn and cannot be typed into. On
+ *     CH32H417 that reported `ADC1 has Dual-ADC mode set` on a disabled ADC1, and
+ *     `--strict` exits 2 on a warning, so it failed the gate. The workaround was a
+ *     `default:` mirroring every `const:` in `data/sources/H417/peripheral_extras.yaml`;
+ *     with this clause those mirrors are AGENT-1's to strip.
+ *   - the inapplicable half of a mutually-exclusive pair. `paramApplies()` is what the
+ *     Parameter Settings table asks before it draws a row, and asking it here is what
+ *     stops `SWPMI has 2 settings changed (Loopback, Loopback)` - one field, counted
+ *     once per alternative.
+ *
+ * Both are the same rule: this loop must consider exactly the parameters the table
+ * offers, which is why it now uses the table's own two predicates rather than its own.
  */
 function paramReachWarnings() {
   const out = [];
@@ -483,7 +503,7 @@ function paramReachWarnings() {
     if (isEnabled(pid)) continue;
     const changed = [];
     for (const d of paramDefs(pid)) {
-      if (d.readonly) continue;
+      if (d.readonly || isConstParam(d) || !paramApplies(pid, d)) continue;
       const v = paramValue(pid, d.key);
       if (v === undefined || String(v) === String(d.default)) continue;
       changed.push(d.name);

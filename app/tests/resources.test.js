@@ -786,3 +786,81 @@ nvic:
   assert.deepEqual(e.E.resources.issues.filter(i => i.kind === 'nvic'), [],
     'enabling the group once clears it for every line in it');
 });
+
+// ---------------------------------------------------------------------------
+//  "The user changed it" must mean a parameter the user could reach
+//
+//  `paramReachWarnings()` asks `paramValue() !== d.default`, and that question is only
+//  meaningful for a row Parameter Settings actually draws. Two kinds are never drawn
+//  and both answered "changed" until 2026-09-12 (AGENT-1, BOARD 20:49Z): a `const:`
+//  member, whose `paramValue()` is `d.const` while `d.default` is `undefined`; and the
+//  inapplicable half of a mutually-exclusive pair, counted once per alternative. On
+//  CH32H417 that produced `ADC1 has Dual-ADC mode set` on a DISABLED ADC1 and
+//  `SWPMI has 2 settings changed (Loopback, Loopback)` for one field - and `--strict`
+//  exits 2 on a warning, so it failed the gate rather than merely reading oddly.
+//
+//  Both halves are here: the two kinds say nothing, and a parameter the user really did
+//  change still warns, so the fix cannot be "stop warning".
+const UNREACHABLE = `
+mcu:
+  name: CH32V006-REACH
+  inherits: CH32V006
+peripherals:
+  OPAR:
+    category: Analog
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [PSEL] }
+    remaps:
+      - name: Default
+        pins: { PSEL: PA2 }
+    params:
+      - { key: num, name: Which one, const: OPAR_2, struct: OPA_InitTypeDef, sdk_field: OPA_NUM }
+      - key: gain
+        name: Gain
+        type: enum
+        default: x1
+        options: [{ name: x1 }, { name: x4 }]
+      - key: loop_int
+        name: Loopback
+        type: enum
+        default: "off"
+        when: { Mode: Enabled }
+        options: [{ name: "off" }, { name: "on" }]
+`;
+
+const reach = e => e.E.resources.issues.filter(i => i.kind === 'params');
+
+test('a const: member of a switched-off peripheral is not "changed" - it cannot be', () => {
+  const e = fresh('CH32V006');
+  e.registerMcuFile(UNREACHABLE);
+  e.loadMcu('CH32V006-REACH');
+  e.compute();
+  assert.equal(e.paramValue('OPAR', 'num'), 'OPAR_2', 'setup: paramValue returns the constant');
+  assert.equal(e.paramDefs('OPAR').find(d => d.key === 'num').default, undefined,
+    'setup: and the definition has no default, which is what compared unequal');
+  assert.deepEqual(reach(e), [], 'a peripheral whose only non-default value is a constant says nothing');
+
+  // the half that proves it did not just stop warning
+  e.setParam('OPAR', 'gain', 'x4');
+  e.compute();
+  const w = reach(e);
+  assert.equal(w.length, 1);
+  assert.match(w[0].text, /Gain/);
+  assert.doesNotMatch(w[0].text, /Which one/, 'and the constant is still not in the list');
+});
+
+test('the inapplicable half of a dependent pair is counted once, not once per alternative', () => {
+  const e = fresh('CH32V006');
+  e.registerMcuFile(UNREACHABLE);
+  e.loadMcu('CH32V006-REACH');
+  // `Loopback` only applies at Mode: Enabled, and this peripheral is at Mode: Disable -
+  // so a value sitting in it is not a setting the user can see, let alone one they chose.
+  e.S.periph.OPAR.params.loop_int = 'on';
+  e.compute();
+  assert.deepEqual(reach(e), [], 'a parameter whose dependency is unmet is not offered, so it is not "changed"');
+  assert.equal(e.paramApplies('OPAR', e.paramDefs('OPAR').find(d => d.key === 'loop_int')), false,
+    'setup: and paramApplies agrees it is not offered');
+});
