@@ -36,6 +36,7 @@ import path from 'node:path';
 import { suite, test, assert } from './lib/harness.js';
 import { ROOT } from './lib/app.js';
 import * as eng from '../app/engine/index.js';
+import { withMutantMcu } from './lib/mutant.js';
 
 suite('CH32H417 LTDC');
 
@@ -313,4 +314,38 @@ test('the format is remembered across save and reload', () => {
   eng.projectApply(text);
   eng.compute();
   assert.equal(eng.paramValue('LTDC', 'layer1_format'), 'AL44', 'the pixel format did not survive a reload');
+});
+
+// =============================================================================
+//  THE PLANTED BREAK — round 6, deliverable B. This file was written for one defect: on
+//  2026-09-12 PA8 was the first option for BOTH LTDC_R6 and LTDC_B3, and every gate was
+//  green. The fix that survived the regenerator is B3's — PA8 is now its LAST option — while
+//  R6 still leads with PA8. So the historical defect is one move away: put PA8 back at the
+//  front of B3, and the very first check in this file must go red on QFN128, naming PA8.
+//  It is planted on a re-registered COPY of the part's text (tests/lib/mutant.js); the tree
+//  is untouched and the restore is proved by re-running the check and requiring green.
+// =============================================================================
+test('planted break: putting PA8 back at the front of B3 re-creates the original R6/B3 collision, and it is caught', () => {
+  const B3 = 'B3: [{ pin: PD10, af: 14 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }, { pin: PA8, af: 13 }]';
+  const check = () => {
+    load('QFN128');
+    const bonded = new Set();
+    for (const v of Object.values(eng.M.packages.QFN128)) for (const n of [].concat(v)) bonded.add(String(n));
+    const seen = new Map(), clashes = [];
+    for (const [sig, opts] of Object.entries(eng.M.peripherals.LTDC.signal_pins)) {
+      const pin = (opts.find(o => bonded.has(String(o.pin))) || opts[0]).pin;
+      if (seen.has(pin)) clashes.push(`${pin} is the default for both LTDC_${seen.get(pin)} and LTDC_${sig}`);
+      seen.set(pin, sig);
+    }
+    return clashes;
+  };
+  assert.empty(check(), 'the baseline already has a shared LTDC default, so the plant could not be attributed');
+  const clashes = withMutantMcu(eng, PART,
+    src => src.replace(B3, 'B3: [{ pin: PA8, af: 13 }, { pin: PD10, af: 14 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }]'),
+    check);
+  assert.ok(clashes.length >= 1, 'PA8 shared by R6 and B3 was not reported — the 2026-09-12 defect would ship again');
+  assert.ok(clashes.some(c => /^PA8 /.test(c) && /R6/.test(c) && /B3/.test(c)),
+    `the report does not name PA8 with both R6 and B3:\n${clashes.join('\n')}`);
+  console.log(`      planted refusal (LTDC default): ${clashes[0]}`);
+  assert.empty(check(), 'the original part was not restored after the plant');
 });

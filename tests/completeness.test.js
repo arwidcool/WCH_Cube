@@ -28,6 +28,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { suite, test, assert, skip } from './lib/harness.js';
 import * as eng from '../app/engine/index.js';
+import { withMutantFile } from './lib/mutant.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -260,6 +261,40 @@ const lookup = (table, part, pid, cell) =>
   table[`${part}.${pid}.${cell}`] || table[`${part}.${pid}.*`]
   || table[`${pid}.${cell}`] || table[`${pid}.*`];
 
+/**
+ * Where TASKS.md is read from. An env override exists for ONE reason: the planted break at
+ * the end of this file has to hand the checks a copy of TASKS.md with a line ticked, and it
+ * must never tick the real one on a tree three agents write at once.
+ */
+const TASKS_PATH = process.env.WCHCUBE_TASKS_MD || path.join(ROOT, 'TASKS.md');
+
+/**
+ * The state of the TASKS.md line an exemption cites: 'open', 'ticked' or 'missing'.
+ *
+ * THIS IS THE EXPIRY, and until 2026-09-12 it did not exist. The pack had said since round 5
+ * that "the day the TASKS.md line is ticked, every cell becomes a hard failure with no edit
+ * here" — and the guard checked only `tasks.includes(task)`. A ticked `- [x]` line still
+ * CONTAINS the phrase, so ticking it changed nothing; the exemption could only expire by the
+ * line being DELETED, which the working agreement forbids. An exemption with no working
+ * retirement condition is a gate that cannot go red. Round 6, deliverable B, found by the
+ * sweep for exactly that class.
+ *
+ * Matching: the line (or wrapped run of lines) that carries the phrase's distinctive words,
+ * the same tolerance the OPEN guard uses, because TASKS.md wraps at 100 columns and a wrapped
+ * line must not read as a deleted one.
+ */
+function taskState(tasksText, phrase) {
+  const words = phrase.replace(/[`:*]/g, '').split(/[\s,]+/).filter(w => w.length > 3);
+  if (!words.every(w => tasksText.includes(w))) return 'missing';
+  // Find the list item that holds the phrase: walk items (`- [ ]` / `- [x]` / `- [~]` /
+  // `- [-]` at line start, with their wrapped continuation lines) and pick the first whose
+  // text carries every distinctive word.
+  const items = tasksText.split(/\n(?=- \[[ x~\-]\])/);
+  const item = items.find(it => words.every(w => it.replace(/[`:*]/g, '').includes(w)));
+  if (!item) return 'missing';
+  return /^- \[x\]/i.test(item) ? 'ticked' : 'open';
+}
+
 const excused = (part, pid, cell) =>
   process.env.WCHCUBE_NO_EXEMPTIONS ? false : lookup(ABSENT, part, pid, cell);
 
@@ -306,6 +341,9 @@ const SOFT_CELLS = new Set(['params', 'clock']);
 test('every peripheral of every real part has settings, params, a clock bit, and vectors', () => {
   const missing = [];
   const stillOpen = new Set();
+  // Read once: whether each IN_EXTRACTION line is still open decides whether its cells are
+  // softened or fail. See taskState() — a ticked line is an EXPIRED exemption.
+  const tasksText = fs.readFileSync(TASKS_PATH, 'utf8');
   for (const part of REAL_PARTS) {
     eng.loadMcu(eng.MCU_FILES[part]);
     const M = eng.M;
@@ -326,7 +364,16 @@ test('every peripheral of every real part has settings, params, a clock bit, and
       if (excused(part, pid, cell)) return;
       const extracting = IN_EXTRACTION[part];
       if (extracting && SOFT_CELLS.has(cell)) {
-        stillOpen.add(`${part}  ${pid}: ${cell} — ${extracting[0]} owns it, extraction in progress`);
+        const state = taskState(tasksText, extracting[1]);
+        if (state === 'open') {
+          stillOpen.add(`${part}  ${pid}: ${cell} — ${extracting[0]} owns it, extraction in progress`);
+          return;
+        }
+        // The exemption has EXPIRED: its TASKS.md line is ticked (or gone). From this commit
+        // on every cell it excused is a hard failure, with no edit to this file - which is
+        // what the exemption promised on the day it was written.
+        missing.push(`${part}  ${pid}: ${cell} — ${why}  [IN_EXTRACTION for ${part} has expired: its TASKS.md line `
+          + `"${extracting[1]}" is ${state}; delete the entry and fill or declare the cell]`);
         return;
       }
       const open = lookup(OPEN, part, pid, cell);
@@ -481,19 +528,68 @@ test('the reachability check can fail: a signal no setting names is caught', () 
     'the check reports a gap when every signal is named');
 });
 
-test('every part declared in-extraction still has a live TASKS.md line', () => {
-  // The guard that makes IN_EXTRACTION self-closing. Without it, a part could sit
-  // "in extraction" forever and quietly stop being checked.
-  const tasks = fs.readFileSync(path.join(ROOT, 'TASKS.md'), 'utf8');
-  const orphans = [];
+/** The IN_EXTRACTION entries whose TASKS.md line is no longer OPEN, with the reason. */
+function expiredExemptions(tasksText) {
+  const out = [];
   for (const [part, [owner, task]] of Object.entries(IN_EXTRACTION)) {
-    if (!eng.MCU_FILES[part]) { orphans.push(`${part} is declared in-extraction but is not a registered part`); continue; }
-    if (!tasks.includes(task)) {
-      orphans.push(`${part} is declared in-extraction citing ${owner}'s task "${task}", which is no longer in TASKS.md `
+    if (!eng.MCU_FILES[part]) { out.push(`${part} is declared in-extraction but is not a registered part`); continue; }
+    const state = taskState(tasksText, task);
+    if (state === 'missing') {
+      out.push(`${part} is declared in-extraction citing ${owner}'s task "${task}", which is no longer in TASKS.md `
         + '— if the extraction is finished, delete the IN_EXTRACTION entry and let the cells fail');
+    } else if (state === 'ticked') {
+      out.push(`${part}'s IN_EXTRACTION line "${task}" is TICKED in TASKS.md — the exemption has expired. `
+        + 'Delete the entry; every cell it excused now fails until it is filled or declared ABSENT');
     }
   }
-  assert.empty(orphans, 'parts held in-extraction with no backlog line');
+  return out;
+}
+
+test('every part declared in-extraction still has a live, UNTICKED TASKS.md line', () => {
+  // The guard that makes IN_EXTRACTION self-closing. Without it, a part could sit "in
+  // extraction" forever and quietly stop being checked — and until 2026-09-12 that is what
+  // it did: only a DELETED line closed it, and lines are ticked, never deleted.
+  assert.empty(expiredExemptions(fs.readFileSync(TASKS_PATH, 'utf8')),
+    'parts held in-extraction whose backlog line is gone or ticked');
+});
+
+test('planted break: ticking an IN_EXTRACTION line in TASKS.md expires the exemption and the cells fail', async () => {
+  // Round 6, deliverable B. A COPY of TASKS.md with CH32H417's line ticked - the real file is
+  // never touched - then three things must be true: taskState() reads it as ticked, the guard
+  // above names the expiry, and the matrix, run in a child process against that copy, goes RED
+  // on the cells the exemption used to excuse. The third is the one that matters: it is the
+  // promise the exemption made on the day it was written, seen kept.
+  const part = 'CH32H417';
+  const [, phrase] = IN_EXTRACTION[part];
+  const real = fs.readFileSync(TASKS_PATH, 'utf8');
+  assert.equal(taskState(real, phrase), 'open', `the baseline TASKS.md line for ${part} is not open, so ticking it proves nothing`);
+
+  const ticked = withMutantFile(TASKS_PATH, text => {
+    const items = text.split(/\n(?=- \[[ x~\-]\])/);
+    const words = phrase.replace(/[`:*]/g, '').split(/[\s,]+/).filter(w => w.length > 3);
+    const i = items.findIndex(it => words.every(w => it.replace(/[`:*]/g, '').includes(w)));
+    if (i < 0) return text;
+    items[i] = items[i].replace(/^- \[[ ~]\]/, '- [x]');
+    return items.join('\n');
+  });
+  const tickedText = fs.readFileSync(ticked, 'utf8');
+  assert.equal(taskState(tickedText, phrase), 'ticked', 'taskState() did not read the ticked copy as ticked');
+  const expired = expiredExemptions(tickedText);
+  assert.ok(expired.some(e => e.startsWith(`${part}'s IN_EXTRACTION line`) && /expired/.test(e)),
+    `the guard did not report the expiry:\n${expired.join('\n') || '(nothing)'}`);
+  console.log(`      planted refusal (IN_EXTRACTION expiry): ${expired.find(e => /expired/.test(e)).split('. ')[0]}`);
+
+  // The matrix, for real, against the ticked copy. Only the matrix test is run, in a child
+  // so this process's own TASKS_PATH stays what it was.
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync(process.execPath, [path.join(ROOT, 'tests', 'run.js'), 'has settings, params, a clock bit, and vectors'],
+    { cwd: ROOT, encoding: 'utf8', env: { ...process.env, WCHCUBE_TASKS_MD: ticked }, maxBuffer: 32 * 1024 * 1024 });
+  const out = (r.stdout || '') + (r.stderr || '');
+  assert.notEqual(r.status, 0, 'the matrix passed with the exemption expired — the cells it excused did not fail');
+  assert.match(out, /IN_EXTRACTION for CH32H417 has expired/, `the matrix's failure does not say the exemption expired:\n${out.slice(-1500)}`);
+  const cells = (out.match(/CH32H417 {2}\w+: (params|clock) —/g) || []).length;
+  assert.ok(cells >= 1, `expected the excused cells to be listed as failures, found ${cells}:\n${out.slice(-1500)}`);
+  console.log(`      planted refusal (matrix): ${cells} CH32H417 cell(s) failed once the line was ticked`);
 });
 
 test('every cell parked in OPEN still has a live TASKS.md line', () => {

@@ -41,6 +41,7 @@ import path from 'node:path';
 import { suite, test, assert } from './lib/harness.js';
 import { ROOT } from './lib/app.js';
 import * as eng from '../app/engine/index.js';
+import { withMutantMcu as withMutantMcuLib } from './lib/mutant.js';
 
 suite('CH32H417 packages');
 
@@ -414,15 +415,7 @@ test('QFN68 can only have I2C1 at the price of the debug port, and that is the s
 // =============================================================================
 
 /** Run `fn` with the part's text mutated by `mutate`, then put the original back. */
-function withMutantMcu(mutate, fn) {
-  const file = path.join(ROOT, 'data', 'mcus', `${PART}.yaml`);
-  const src = fs.readFileSync(file, 'utf8');
-  const mut = mutate(src);
-  assert.notEqual(mut, src,
-    'the planted mutation left the text unchanged — its anchor has moved in the YAML, so this break now plants nothing');
-  eng.registerMcuFile(mut);
-  try { return fn(); } finally { eng.registerMcuFile(src); }
-}
+const withMutantMcu = (mutate, fn) => withMutantMcuLib(eng, PART, mutate, fn);
 
 test('planted break: a forced shared default pad is caught by the collision sweep as a regression', () => {
   // The LTDC defect, re-created on USART1: make TX's default pad (PB14 on QFN128, the first
