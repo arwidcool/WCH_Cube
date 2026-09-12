@@ -1,8 +1,12 @@
 # HUMAN_TODO — things only the human can do. Agents list them here once and never re-request them on the board.
 
-1. **Add a git remote and push**: `git remote add origin <url> && git push -u origin main`.
-   Unblocks: CI has never run, the worktree model, and a second machine. AGENT-3 takes over the
-   moment it exists. The repo has been local-only for five rounds.
+1. ~~**Add a git remote and push**~~ — **done 2026-09-12**: `origin` is
+   `https://github.com/arwidcool/WCH_Cube.git` and every commit since is pushed. **What is
+   still yours: nothing, unless the first CI run needs a repository setting** (Actions enabled,
+   a runner minute budget). AGENT-3 pushes, reads the first run, and posts what the runner image
+   shakes out; if a job fails for a reason only the repository owner can change, it lands here
+   as a new numbered item with the exact setting named. The repo was local-only for five
+   rounds; the workflows have still never executed, and round 6's deliverable A is that they do.
    **The workflow side is now ready for it** (2026-09-12, AGENT-3): `.github/workflows/ci.yml` has
    three jobs — `test` (data gates, build, the whole suite, no PlatformIO), `firmware` (installs
    PlatformIO, builds all five environments, then generates every fixture's project and builds it,

@@ -39,6 +39,7 @@ board.
 | `HUMAN_TODO.md` | things only the human can do, listed once, never re-requested | AGENT-3 |
 | `BACKLOG.md` | feature-parity items for an agent whose brief is complete | everyone |
 | `WALKTHROUGH.md` | the acceptance script for the round's exit criterion | AGENT-3 |
+| `history/round<N>/` | a closed round's brief, board, walkthrough and agent files, plus its paste-in prompts. Written once when the round closes; never read in a cycle; `history/INDEX.md` says what each produced | AGENT-3 |
 | `../PROGRESS.md` | where the project actually stands, checked against the tree | AGENT-3 |
 | `../TASKS.md` | the backlog. Claim `[~] (AGENT-n)`, finish `[x]` | everyone |
 

@@ -4,7 +4,9 @@ N is 1, 2 or 3, and it is the ONLY thing in this prompt that changes between the
 agents. Your full instructions are in agents/AGENT_N_*.md, named in step 3 below.
 
 All three agents share this ONE working tree and commit straight to main — git worktrees
-stay suspended until a remote exists, so never create one.
+stay suspended, so never create one. A remote exists (origin, since 2026-09-12); the
+condition for switching to worktrees is NOT that — it is CI read green on a runner, which
+AGENT-3 posts as `DECISION | worktrees ON` when it happens, and has not yet.
 
 Read these in order before you touch anything:
   0. CLAUDE.md, then docs/COVERAGE.md  THE COVERAGE LEDGER. A part is not done while
@@ -15,7 +17,9 @@ Read these in order before you touch anything:
                                        OPEN. Read this before any hardware fact.
   1. agents/README.md                  the working agreement: ownership, work cycle,
                                        gates, environment facts, rules
-  2. agents/PROJECT.md                 the round-5 brief — read it every cycle
+  2. agents/PROJECT.md                 the CURRENT round's brief — read it every cycle.
+                                       It is always this file; closed rounds live in
+                                       agents/history/round<N>/ and are never read in a cycle.
   3. agents/AGENT_N_*.md               your standing instructions; it names your role,
                                        the files you own, and what is next for you.
                                        Never edit outside the files it gives you.
@@ -29,10 +33,23 @@ decision is genuinely in question. Do not go looking for a per-round pack — th
 not one any more.
 
 Then run the work cycle from agents/README.md and keep looping. Answer any board request
-addressed to you FIRST. Round 4's open lines carry over as E1-E9 in agents/PROJECT.md and
-come first. Bug before feature: a human P0 or a QA-FAIL beats any priority list.
+addressed to you FIRST. The round's deliverables and their owners are in agents/PROJECT.md;
+your own P0/P1/P2 in agents/AGENT_N_*.md are the same list, in your order. Bug before
+feature: a human P0 or a QA-FAIL beats any priority list.
 
-This round's rule is:
+This round's rule is (round 6):
+
+    A gate nobody has watched run is a guess.
+
+A check that passes can be standing in front of nothing. Round 5 closed with four green
+gates over things nobody had looked at: the ledger at zero on CH32H417 the same day 63
+default-pin collisions were found; three Python data gates at 0 errors over a file js-yaml
+refused to open; the compile gate's header checks silently skipping three of six parts; and
+CI never having executed once. The discipline that fixes it - plant a break, watch it go
+red, restore - is the rule this round, not the exception. A check you have not seen fail on
+the thing it is for is not yet a check.
+
+Round 5's rule still binds and is not relaxed:
 
     Every choice the app offers must be one the silicon can honour.
 

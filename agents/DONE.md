@@ -3,12 +3,14 @@
 Every `[x]` names the evidence, so anyone can re-check it. `python build.py && node tests/run.js`
 runs all of it. **QA does not tick a line on a claim — only on something that runs.**
 
-**The authoritative open list is the Round 5 section at the end of this file.** The round-1
-section below still carries its `[ ]`/`[x]` marks and its "15 of 24" count, last audited in
-round 3; most of what it calls open has since closed, and re-auditing it is a round-5 task
-rather than something to trust. Read it for a line's evidence, not for the project's status —
-`PROGRESS.md` §4 is where the remaining work is listed, and the round-5 section is what gates
-the round.
+**The authoritative open list is the Round 6 section at the end of this file.** Everything
+above it — rounds 1 through 5 — is the evidence record: read a line there for *how* it was
+closed, never for the project's status. The round-1 section still carries its `[ ]`/`[x]` marks
+and its "15 of 24" count from round 3; most of what it calls open has since closed under a later
+round's line, and it has not been re-audited. `PROGRESS.md` §4 is where the remaining work is
+listed, and the round-6 section is what gates the round. Round 5's section is complete as a
+record of what closed and what carried; its open lines are restated as round 6's, below, and
+are not double-counted.
 
 Round 4's rule still binds and is not repeated below: **every green result in this repository is
 a compile.** Nothing has been flashed. The hardware line reads "builds, not flashed", in exactly
@@ -592,6 +594,83 @@ runs.** A line whose evidence is a sentence in a board entry is not ticked.
         does not establish.
 - [ ] The round-1 section at the top of this file is re-audited against the tree, or explicitly
       superseded — it must not keep claiming a status nobody has checked  (AGENT-3)
+
+# Round 6 — "a gate nobody has watched run is a guess"
+
+Opened 2026-09-12 by closing round 5. Every line below is ticked by AGENT-3 only on something
+that runs, with the evidence named on the line. The baseline at the open, measured:
+CH32H417 0 open / 66 of 78 peripherals without `params:` / collisions 4-0-0; CH32L103 12 open;
+CH32V003 3 open; suite 721 green; CI never executed.
+
+## Deliverable A — CI executes and is read green  (AGENT-3)
+
+- [ ] `ci.yml` has completed at least one run on `main`, and the run URL is in `PROGRESS.md`
+- [ ] The `firmware` job's log shows the compile-gate suite reporting **ok**, not a skip, for
+      every fixture — PlatformIO installed on the runner and used
+- [ ] The `Coverage ledger` step prints `6 of 6` **on the runner**
+- [ ] `desktop` (Tauri, Linux) green
+- [ ] `DECISION | worktrees ON` posted **after** the above, not before
+
+## Deliverable B — every gate is proven able to fail  (AGENT-3; owners fix what goes red)
+
+- [ ] `tests/evidence/round6/` holds one file per planted break, red output verbatim
+- [ ] The collision ratchet: a planted collision → REGRESSION, seen red
+- [ ] The reachability check: a planted undeclared bonded pin → named, seen red
+- [ ] The SPL-header guard: a part removed from the map → **named, not skipped**, seen red
+- [ ] Fixture freshness: a corrupted fixture → STALE, seen red
+- [ ] `--strict` per fixture: a planted TODO → exit 2, seen red
+- [ ] The `IN_EXTRACTION` expiry: the TASKS.md line ticked in a copy → cells fail, seen red
+- [ ] `verify_sdk_names.py`: a planted non-existent macro → named, seen red
+- [ ] The list of checks that **cannot** go red is posted by name with a reason — and is **empty**
+
+## Deliverable C — CH32H417's Parameter Settings are not empty  (AGENT-1)
+
+- [ ] `params:` for every peripheral that routes pins (49 at the open); count posted per cycle
+- [ ] Every parameter traced to `ch32h417_*.h` — `verify_sdk_names.py` 0 errors
+- [ ] `FMC_NORSRAMInitTypeDef` timings, so the 8080 `Bus mode` generates `FMC_NORSRAMInit(...)`
+- [ ] The `IN_EXTRACTION` entry for CH32H417 is **gone** from `tests/completeness.test.js` and
+      the TASKS.md line is ticked — every remaining cell fails hard from that commit on
+- [ ] All of it in `data/sources/H417/peripheral_extras.yaml`, none in the generated block
+
+## Deliverable D — the clock schema holds a second PLL and a per-peripheral mux  (AGENT-2 schema, AGENT-1 data)
+
+- [ ] `clock.plls:` in `data/FORMAT.md`, checked by `validate_mcu.py`; `clock.pll` still works
+      unchanged on the five parts that have one PLL
+- [ ] A tap whose `source:` is a list draws a mux, computes from the choice, round-trips, undoes
+- [ ] CH32H417's four secondary PLLs and eight muxes are **modelled**, cited by RM line, and no
+      longer "declared absent" in `notes:`
+- [ ] **USBFS 48 MHz computed from USBHS_PLL / 10** on the clock tab, in a real browser
+- [ ] Every new number checked against the RM's worked example — a wrong number is worse than
+      a missing one, and this line is not ticked on "it computes something"
+- [ ] `tests/clock_ui.test.js`'s sweep and planted breaks cover the new controls on all five parts
+
+## Deliverable E — the per-instance init struct  (AGENT-2)
+
+- [ ] N struct blocks + `sdk_calls[n]`, gated on the instance being enabled, in `codegen.js`
+- [ ] `LTDC_Layer_InitTypeDef` emitted per layer on CH32H417 — the round-5 "your layer init
+      applies it" comment is gone and `LTDC_LayerInit(LTDC_Layerx, ...)` is in the C
+- [ ] CH32L103 CMP1–3 through `OPA_CMP_Init` with `CMP_NUM` fixed by `const:`
+- [ ] TIM PWM channels (`TIM_OCxInit`) on every part that has them
+- [ ] `--strict` exit 0 on every fixture throughout
+
+## Deliverable F — CH32L103 and CH32V003 at 0 open  (AGENT-1)
+
+- [ ] `python tools/coverage.py CH32L103` → 0 open, `status: complete`
+- [ ] `python tools/coverage.py CH32V003` → 0 open, `status: complete` (needs `USART_ClockInit`
+      in codegen — AGENT-2)
+- [ ] `python tools/coverage.py --quiet` prints **six zeros**
+
+## Round-6 housekeeping
+
+- [ ] `gen_h417_peripherals.py:1415` writes LF (`newline="\n"`); a regeneration diff is its
+      content, not 3677 lines  (AGENT-1)
+- [ ] `validate_mcu.py` refuses a duplicate YAML key, so the failure lands three steps earlier
+      than `tests/data.test.js`  (AGENT-1)
+- [ ] The 4 default collisions left on QFN68 closed and `COLLISION_CEILING` at 0-0-0  (AGENT-1)
+- [ ] `app/tests/engine.test.js:253` and `app/template.html:2092` no longer cite things that
+      are not true  (AGENT-2)
+- [ ] `WALKTHROUGH.md` run end to end, QA-PASS posted with what failed  (AGENT-3)
+- [ ] `PROGRESS.md` re-measured each cycle; every number in it is the tool's, dated  (AGENT-3)
 
 ## Not in this round, and the line that must not be rounded up
 

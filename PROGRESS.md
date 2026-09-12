@@ -213,6 +213,12 @@ flashed.
 
 ---
 
+
+**CI, in the exact words the round-6 brief requires: never run in CI.** `origin` exists and
+every commit is pushed; `.github/workflows/ci.yml` has three jobs checked by
+`tests/release.test.js`; **not one has ever executed**. Every green result in this file is a
+result on one Windows box. Round 6 deliverable A is that this sentence is replaced by a run URL.
+
 ## 2. Completed work
 
 ### Configurator — engine and data

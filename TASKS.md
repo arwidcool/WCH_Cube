@@ -188,7 +188,7 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       IRQn_Type enum nor the startup table. Vectors now carry `irqn` AND `handler`; all 29 pairs
       extracted mechanically from EVT. The TIM3-vector contradiction is settled — EVT confirms
       there is no TIM3 vector, so the round-2 decision not to invent one was right.
-- [ ] (AGENT-4) Wire `verify_sdk_names.py` into `node tests/run.js`
+- [-]  Wire `verify_sdk_names.py` into `node tests/run.js`
 - [x] (AGENT-4) **The compile gate**: `tests/codegen_compile.test.js` — generates from fixtures
       that assign pins and params, then `pio run` for CH32V006 TSSOP20 + QFN32 and CH32V005
       TSSOP20; all three compile and link. Skips loudly with a printed reason and a count in the
@@ -222,7 +222,7 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       **not offered** rather than offered and broken (BOARD 16:22Z)
 - [x] (AGENT-2) User code sections preserved across regeneration — or the option is **not offered**
       — `mergeUserCode()`, a configuration-independent tag set, and orphaned blocks kept under `#if 0`
-- [ ] (AGENT-4) Tauri command to write generated files to a chosen folder, next to `save_project`
+- [-]  Tauri command to write generated files to a chosen folder, next to `save_project`
 
 ### P2 — configuration must reach the C
 
@@ -243,7 +243,7 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
       to `src/`; `--strict` fails on an emitted TODO or `#error`
 - [x] (AGENT-1) `params:` for TIM3, IWDG, WWDG, TKEY, OPA1 — all done; TKEY needs none,
       being an ADC mode rather than a peripheral
-- [ ] (AGENT-4) Host-side unit tests for `lib/util` under a `[env:native]`
+- [-]  Host-side unit tests for `lib/util` under a `[env:native]`
 
 ### P3 — more parts, now that there is a compiler
 
@@ -276,18 +276,18 @@ for real silicon, so "generated C compiles" is a gate now, not an aspiration. Cl
 
 ### Housekeeping
 
-- [ ] (AGENT-4) Correct `agents/README.md` "Environment facts" — `cargo` 1.98.1 and a C compiler
+- [-]  Correct `agents/README.md` "Environment facts" — `cargo` 1.98.1 and a C compiler
       both exist now; four agents read that file as ground truth
 - [x] (AGENT-4) Compile `src-tauri/` locally — `cargo build` clean. The `open_project` fix was
       REQUIRED (`Result<Option<String>>` vs `Result<String>`, proved with `cargo check`), so the
       shell had never compiled; fix and `Cargo.lock` committed.
-- [ ] (AGENT-4) Finish the dead-control sweep; `#m-open` / `#m-openproj` need a human or a stub
-- [ ] (AGENT-4) Round-3 section in `agents/DONE.md`; re-audit the round-1 and round-2 lines
+- [-]  Finish the dead-control sweep; `#m-open` / `#m-openproj` need a human or a stub
+- [-]  Round-3 section in `agents/DONE.md`; re-audit the round-1 and round-2 lines
 - [x] (AGENT-1) Stale source paths in `data/FORMAT.md`, `CH32V006.notes.md` and
       `tools/extract_remaps.py` — they still name the pre-reorganisation `data/sources/*.md`
       — `extract_pins.py` and `extract_remaps.py` fixed and both re-run; the two docs were
       already clean
-- [ ] (AGENT-4) The human's `Taskfile.yml` is a stub. Make it the real task runner (build, test,
+- [-]  The human's `Taskfile.yml` is a stub. Make it the real task runner (build, test,
       firmware, validate) or leave it alone and say so — do not half-adopt it.
 
 ## Round 4 — a second family, and a project you can flash  (closed; archived as round 5's E1–E9)
@@ -349,7 +349,7 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [ ] (AGENT-1) **CH32X035 extraction: `params:` for the peripherals that have none** — USBFS
       and USBPD carry settings but no parameters yet; `tests/completeness.test.js` prints them
       every run as tracked-open rather than failing.
-- [~] (AGENT-4) D9 `#m-open` / `#m-openproj` sweep — still open. `Taskfile.yml` **ADOPTED**:
+- [-]~ D9 `#m-open` / `#m-openproj` sweep — still open. `Taskfile.yml` **ADOPTED**:
       `task` 3.53.1 is installed, so the human'''s stub became the real runner — build, test,
       gate, validate, firmware, firmware:native, firmware:check, tauri, tauri:test, fixtures,
       generate, all. It records the environment gotchas that were otherwise only in prose
@@ -460,7 +460,7 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
       `r.pin`/`o.pin` reads of a row that carries `name` (AGENT-2's 18:05Z finding), now fixed
 - [x] (AGENT-4) A specific one-paragraph request in `HUMAN_TODO.md` for someone with a board and a
       WCH-Link to flash one, with the exact commands — item 6
-- [ ] (AGENT-4) The flash result in `tests/evidence/round4/` — **or the DONE line says "builds, not
+- [-]  The flash result in `tests/evidence/round4/` — **or the DONE line says "builds, not
       flashed", in those words**
 
 ### Housekeeping
@@ -1091,3 +1091,9 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       firmware's geometry, not a planning choice. Needs the same per-instance shape as
       `channel_params`. Until then the `USER CODE BEGIN Periph_LTDC` block is where a layer
       init goes, and `data/mcus/CH32H417.notes.md` says so.
+
+> **2026-09-12 — every `(AGENT-4)` line above is `[-]`, superseded.** AGENT-4 does not exist in
+> round 5 or 6 (three agents; the launcher starts 1-3). Each of its open lines either closed under a
+> later owner's line (verify_sdk_names in run.js, Taskfile, `lib/util` native tests, the README
+> environment facts, the round-3 DONE section) or is restated in round 6 under AGENT-3 (the flash
+> evidence line, the dead-control sweep). Nothing was deleted; `[-]` is the record.
