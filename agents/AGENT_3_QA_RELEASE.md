@@ -106,85 +106,107 @@ and `clock` only. When you write the DONE line for a part, quote the ledger's co
 
 ## Current
 
-**Round 5, the coverage-ledger cycle — the ledger was not in git, and now it is.**
+**The CH32H417 push, cycle 1 — the net had five holes and the net now catches the thing it was
+written for.** One sentence decides this push: *every pin the datasheet gives this part is
+claimable in the app, every peripheral it names is configurable, and the C that comes out is
+right for the pad it configures.* Nothing below reports it as true; the numbers say where it is.
 
-1. **P0.1 found the ratchet had no history, because it was never committed.** The first
-   instruction of this cycle is to read `git log -p -- data/coverage/` and flag any diff that
-   raises `open_rows:`. That command returns nothing, and not because nothing changed: all six
-   coverage files and all six generated ledgers existed **only on disk** — untracked, not
-   `gitignore`d, invisible to every diff. The consequences were not subtle. A count could be
-   raised by anyone with no diff to review, which is the one thing P0 exists to prevent; the
-   review instruction was unrunnable; and a fresh `git clone` had no `data/coverage/` at all, so
-   the CI step "Coverage ledger - every part meets its declared status" ran against nothing and
-   **exited 2**. The same was true of the whole coverage system: `tools/coverage.py`,
-   `tools/coverage_lib.py`, `tools/coverage_selftest.py`, `tools/ledger.py`, `docs/COVERAGE.md`,
-   `CLAUDE.md` — the file every session is told to read first — and `tests/coverage.test.js` were
-   all untracked. Landed. Evidence: `tests/evidence/round5/2026-09-12-ledger-untracked.md`.
-   **The guard:** `tests/coverage.test.js` now asserts every coverage file and ledger is tracked
-   by git, in both directions, with a planted break — it was **seen red naming all 13 files**
-   before the fix and green after. An untracked ratchet is not a weaker ratchet, it is no
-   ratchet, wearing a `status: complete` badge.
-2. **P0.2 — `SOFT_CELLS` is pinned to `{params, clock}`.** Two tests: one asserting the set is
-   exactly that (naming `settings`, `nvic`, `pins`, `chapter` and `routed` individually as cells
-   that must never be excused), and a planted break proving four widenings are each caught.
-   Widening it is invisible by construction — a softened cell *prints* instead of failing, so the
-   run gets quieter and stays green.
-3. **P0.3 — the ratchet was seen red four ways**, captured verbatim in
-   `tests/evidence/round5/2026-09-12-ratchet-red.md`, each restored from a byte copy in a
-   `finally`: `open_rows:` raised → *"lower it to N (the count may only go down, and it must be
-   current)"*; `open_rows:` lowered → *"REGRESSION: 3 open rows, 1 recorded - 2 new gap(s) were
-   introduced"*; `status: complete` with rows open → *"declared complete but 3 row(s) are OPEN"*.
-   All three name the part in the summary line, which is P0.4's requirement holding.
-4. **P0.4 — the per-part shape is kept**, and it survived a failure the tool was not designed
-   around: with a coverage file missing, the gate prints one `CANNOT READ` line per part rather
-   than collapsing into a single message.
-5. **P1 — `docs/HOW-IT-WORKS.md`.** The ledger is now a row in the verification flowchart, between
-   `validate_mcu.py` and `verify_sdk_names.py`, a new **rule 7** ("consistent is not the same as
-   complete"), and two entries in the repository map. `PROGRESS.md` quotes
-   `python tools/coverage.py --quiet` verbatim as a dated snapshot, and its stale
-   "(no remote)" line is gone.
-6. **P2 — the compile gate follows the data.** The CH32L103 fixture now claims `ADC1` channel
-   `IN4`, and **`IN0` was tried first and correctly refused** (`PA0: TIM2_CH1_ETR / ADC1_IN0`) —
-   the builder printing the pair is what made "pick another pin" a decision rather than a guess.
-   On CH32H417 the analog claims were **tried, found a real defect, and reverted**: see below.
-7. **Found by that extension — CH32H417 configures an analog pad `GPIO_Mode_AF_PP`.** `OPA`
-   inputs/outputs and the `DAC` output are pads with no `(AFn)` code, because their function *is*
-   analog and is selected by `GPIO_Mode_AIN`. `analogClaim()` (`app/engine/constraints.js:255`)
-   decides "is this analog?" from `codegen.analog_signals`, falling back to "Analog-category
-   peripheral on an analog-capable pin" — and **CH32H417 is the only shipped part that declares
-   neither**, because its `pins:` block carries no `analog:` flag either (a declared gap in the
-   file header). So the fallback returns false, `gpioEffectiveMode()` takes the alternate-function
-   branch, and the generated C drives analog pads as AF push-pull. The TODO beside it then asks
-   the reader to add an `af:` to a pad that has none. Wrong-but-compiling, which is the defect
-   class this round exists to remove. Recorded with the generated C in
-   `tests/evidence/round5/2026-09-12-analog-pads.md`; requested from AGENT-1 (the data half) and
-   AGENT-2 (the message half). **The fixture claims those four pads in the commit that lands the
-   fix, not before** — while they are claimed this fixture cannot be `--strict` clean, and
-   `--strict` exit 0 for every fixture is deliverable B's acceptance test. Premature, not wrong,
-   and the four lines are written out in `make_fixtures.js` so they come back with it.
-8. **P3 — CI and the Taskfile are checked, not assumed.** `tests/release.test.js` gained three
-   tests: the coverage ledger step exists in CI **and runs after** `verify_sdk_names.py` (a row
-   closed by naming a signal whose macro does not exist must be reported by the name check first),
-   a planted break proving a missing *and* a reordered step are caught, and a check that
-   `task coverage` / `task coverage:gate` / `task ledger` exist and run the commands they claim.
-9. **P4 — the pack.** `agents/README.md` said "no remote" in three places while `origin` points at
-   `https://github.com/arwidcool/WCH_Cube.git`; corrected, together with the worktree condition —
-   which is **not** "a remote exists" but item 12's list, and CI has still not been read green, so
-   worktrees stay off and the state is posted instead of flipped. The three
-   `PROMPT_AGENT_n_COVERAGE.txt` files and `PROMPT.txt` were checked for drift and agree on the
-   gates; no contradiction found.
-10. **Answered AGENT-1's `REQUEST(→AGENT-3)` first, as the work cycle requires.** Four `ABSENT`
-    entries for CH32L103's CMP2/CMP3 (`nvic` and `clock`) are in `tests/completeness.test.js`,
-    **re-verified here rather than pasted**: `ch32l103.h:100` is `CMPWakeUp_IRQn = 68` and the
-    only comparator vector in the enum, and `ch32l103_rcc.h` defines no `RCC_*Periph_CMP` for any
-    of the three. They take effect the moment AGENT-1 models the two peripherals; if CMP2/CMP3
-    are ever abandoned they become dead declarations, which is noted in the entry itself.
+1. **P0.1 — `tests/h417_ltdc.test.js` was UNTRACKED.** Written, green, and running for nobody
+   who cloned this repository. Landed with the three `agents/PROMPT_AGENT_n_H417.txt` briefs,
+   which were untracked for the same reason. Same defect class as 2026-09-12T12:19Z, when the
+   whole coverage ledger turned out to exist only on disk — the third time this has been the
+   answer, so it is now the first thing I check in a cycle, not the last.
 
-State: **`python build.py && node tests/run.js` → ALL GREEN, 603 tests, 0 failed.**
-`python tools/coverage.py --quiet` at 2026-09-12T12:19Z —
+2. **P0.2 — the clock tab is swept on this part, and the sweep is proven.** `clock_ui.test.js`
+   hardcoded three small parts; it now runs five, over four clock SHAPES — CH32H417's is the
+   richest in the repo (four oscillators, a PLL whose `inputs:` spell out 32 (source, divider)
+   pairs, 32 multipliers with half steps). It went **green**, which is a claim worth exactly the
+   proof that it could have gone red, so two **planted breaks** truncate `#ck-pllin` to 8 of 32
+   and `#ck-sys` to 1 of 3 in a COPY of `dist/index.html` and require the comparison to bite on
+   CH32H417 specifically. Both mutations took. Each also asserts the OTHER mux is untouched, so
+   a break that blanks the tab cannot read as a pass.
+
+3. **P0.3 — one fixture no longer stands for three packages.** This is the first part whose
+   PACKAGE decides which pins a peripheral can reach: **301** signals have a different bonded
+   option list on QFN68 than on QFN128. `CH32H417_QFN68_pkg.wchproj` + `[env:CH32H417WEU6]`
+   claims seven signals whose pad differs, and the generated C proves the package reaches it —
+   `USART1_RX` emits `GPIOD/PinSource12/AF14` on QFN68 and `GPIOB/PinSource15/AF4` on QFN128: a
+   different port, pin AND AF code, all three wrong together if the generator ignored the
+   package, all three compiling either way. Compile gate and generated-project gate both build
+   it. Both listings: `tests/evidence/round5/2026-09-12-h417-package-pads.md`.
+
+4. **P0.4 — the skip count for CH32H417, read from the RUN OUTPUT rather than from the code:
+   0.** The full suite prints no skip section at all and 130 of its lines name this part. But
+   the question found something the count could not: `splHeaders()` mapped only three parts and
+   both checks using it are written `if (!spl) continue;`, so **CH32H417 and CH32L103 fell out
+   of the header-case and GPIO-enum checks with no failure, no skip and no summary line**, while
+   `checked` stayed non-zero because the other parts carried it. Both EVT drops were on disk the
+   whole time. Mapped them, and added a guard that turns a future omission into a failure —
+   which **immediately found a third part in the same hole, CH32V003**. A silent `continue` is
+   worse than a skip: a skip is counted.
+
+5. **P0.5 — the exemption named an owner who could never retire it.** `IN_EXTRACTION` booked
+   this part's ~66 missing `params:` cells to AGENT-3, and `params:` lives in
+   `data/mcus/CH32H417.yaml`, which is AGENT-1's. Moved to AGENT-1 in the table and the TASKS.md
+   line together. The automatic expiry is untouched: tick the line and every cell becomes a hard
+   failure with no edit here.
+
+6. **P1 — `tests/h417_packages.test.js`, and it found the big one.** Every pin reachable, every
+   peripheral configurable, no default pin colliding — all three on all three packages.
+   - *Reachable*: green. Every bonded pin is claimable or is a declared `power`/`ground`/`sys`/
+     `reset` pad, on all three packages.
+   - *Configurable*: green. 78 peripherals, 17 declaring `pins.none`, 0 still `pins.open`.
+   - *Collisions*: **red, and correctly so.** Sweeping all **419** mode choices per package and
+     asking what happens when a user does nothing but switch a peripheral ON: **QFN68 26,
+     QFN88 20, QFN128 17** choices put two signals on one pad although the signal had another
+     bonded pad free. `conflictList` reports none of them — it only fires on claims with
+     DIFFERENT owners, which is exactly how four LTDC pads survived a green suite. DVP, FMC,
+     I2C4, PIOC, SDIO, UHSIF and USART6 had never been looked at. A further 11/6/3 collisions
+     per package are forced by the silicon and are PRINTED, not asserted away; the difference is
+     computed from whether either claim had another bonded pad, never assumed.
+
+7. **The root cause, and why it is not a YAML fix.** The default IS the first bonded option in
+   `signal_pins:`, and `tools/gen_h417_peripherals.py:1086` emits that list in DATASHEET order
+   with no notion of which pad becomes the default. So the 2026-09-12 hand-reordering of LTDC's
+   lists lives in the generator's OUTPUT, and the very next regeneration discards it. **That
+   already happened, inside this cycle**: at HEAD the counts are 26/20/17 and LTDC is clean at 28
+   pads / 0 doubles; with AGENT-1's in-flight regeneration in the working tree they are
+   **38/25/24** and LTDC is back to 24 pads / 5 doubles, with 8 of 9 `h417_ltdc` tests red. The
+   order belongs in the generator. Reported to AGENT-1; not fixed by me — `data/mcus/**` and
+   `tools/gen_*` are theirs.
+
+8. **The ratchet, and why the check is a count rather than a zero.** The defect was ALREADY
+   COMMITTED, so asserting zero would leave main red on somebody else's area and softening the
+   check would make it worthless. `COLLISION_CEILING` is the shape this repo already uses for
+   exactly this — `open_rows:` and `IN_EXTRACTION`: an owner, a TASKS.md line
+   ("CH32H417: default pins collide"), and a number that MAY ONLY GO DOWN. A rise fails as a
+   regression naming what came back; a fall fails until the number is lowered, so the ceiling
+   can never quietly stop meaning anything; at zero the entry goes and the check becomes the
+   plain assertion it wants to be. A guard test fails if the TASKS.md line ever vanishes. It did
+   not need a planted break: it caught a real regression within the hour.
+
+9. **P2 — the record, re-measured rather than asserted.** `PROGRESS.md` said `CH32H417 OPEN
+   113`; the tool said 104 at the start of this cycle, **58** an hour later and **50** by the
+   time the line was written — rewritten as a dated snapshot, because on this part the number
+   moves faster than the document. Its compile-gate table listed **4** fixtures when the tree has
+   **8**. `WALKTHROUGH.md` gained §4b, ten CH32H417 steps a human can follow, ending in the one
+   that matters: generate on QFN128 and on QFN68 and DIFF the two `GPIO_PinAFConfig` blocks — if
+   they are identical the generator is ignoring the package and everything above it is
+   decoration. §4 step 16 still said "four real parts"; there are six.
+
+**State.** `python build.py && node tests/run.js` → **13 FAILED, 657 passed, 0 skipped.** All 13
+are CH32H417 data and none is mine: 8 × `h417_ltdc` + 3 × `h417_packages` are the collision
+defect above, 1 × `codegen_compile` is the fixtures going stale under AGENT-1's edits DURING the
+run, and 1 × `h417_af` was a GOOD failure reporting a gap being CLOSED (`I2S2_MCK PC6 AF5` is
+now routed) — fixed by verifying the routing and removing the line, not by trusting the list.
+The runner also warned `dist/index.html` was rebuilt mid-run; the tree is shared and we are
+stepping on each other. Data gates green: `validate_mcu.py` 0 errors / 166 warnings,
+`verify_sdk_names.py` 0 errors, `coverage gate: 6 of 6 part(s) meet their declared status`.
+
+`python tools/coverage.py --quiet` at 2026-09-12T16:36Z —
 
 ```
-  CH32H417   OPEN 113  (modelled 1234, absent 20, disagreements 0)
+  CH32H417   OPEN 50   (modelled 1254, absent 23, disagreements 0)
   CH32L103   OPEN 12   (modelled 260, absent 11, disagreements 1)
   CH32V003   OPEN 3    (modelled 113, absent 10, disagreements 0)
   CH32V005   OPEN 0    (modelled 214, absent 14, disagreements 0)
@@ -192,15 +214,17 @@ State: **`python build.py && node tests/run.js` → ALL GREEN, 603 tests, 0 fail
   CH32X035   OPEN 0    (modelled 278, absent 11, disagreements 0)
 ```
 
-`coverage gate: 6 of 6 part(s) meet their declared status`. `validate_mcu.py` 0 errors /
-170 warnings, `verify_sdk_names.py` 0 errors, `--strict` exit 0 on all six fixtures in both
-formats. **Three parts are still `in_extraction` and their counts may only go down**; no part is
-reported done while the tool prints an open row, and the DONE line still reads **"builds, not
-flashed"**.
+**CH32H417 is NOT done and is not reported as done: 50 open rows, and 26/20/17 default
+collisions.** The DONE line still reads **"builds, not flashed"**, and nothing this cycle came
+near changing that — every green result here is a compile.
 
-**Next, in order:** (a) the day CI is readable, read the `Coverage ledger` step's result and post
-it — it is now the third data gate and nothing has seen it run; (b) land the CH32H417 analog
-fixture claims with `codegen.analog_signals` and delete the note in `make_fixtures.js`; (c) re-run
-the CH32L103 CMP2/CMP3 `ABSENT` entries once the peripherals exist, and remove them if they are
-abandoned; (d) `WALKTHROUGH.md` gets its "open `data/coverage/`, run the tool, expect six zeros"
-section the day every part reads `complete` — not before, because six zeros is the claim it makes.
+**Next, in order.** (a) Re-run the suite when the tree is quiet and regenerate the two CH32H417
+fixtures once AGENT-1's data settles — they went stale twice in one cycle. (b) The moment the
+collision counts move, lower `COLLISION_CEILING`; if AGENT-1 fixes it in the generator the three
+numbers should fall together, and a fall in only one is worth reading. (c) `src-tauri` still has
+not been relinked since round 4 — `cargo build` green is not a window opening, and PROGRESS.md
+must keep saying so. (d) The CH32H417 analog fixture claims (OPA/DAC) are still commented out in
+`make_fixtures.js` waiting on `codegen.analog_signals`; uncomment them the cycle AGENT-1 lands it
+and confirm from the GENERATED C that those four pads read `GPIO_Mode_AIN` with no AFR write and
+no TODO. (e) The day CI is readable, read the `Coverage ledger` step's result and post it — it
+is the third data gate and nothing has ever seen it run.
