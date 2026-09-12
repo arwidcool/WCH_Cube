@@ -411,6 +411,13 @@ peripherals:
             ADC's reference - the family has no VREF+ pad, so supply noise appears directly
             in a conversion result.
           source: "CH32V006DS0.md 1.4.3, Table 3-2"
+        - name: VSS
+          pins: [VSS]
+          range: "0 V"
+          note: >
+            Ground, and the return for VDD. One decoupling capacitor per supply pin,
+            placed at the pin.
+          source: "CH32V006DS0.md Table 2-1-1"
     settings:
       - name: Power voltage detector (PVD)
         choices:

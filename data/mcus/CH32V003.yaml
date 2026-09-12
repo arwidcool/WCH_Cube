@@ -359,6 +359,13 @@ peripherals:
             ADC's reference - there is no separate VREF+ pad. POR/PDR releases at 2.7 V and
             ADC accuracy is specified from 2.9 V.
           source: "CH32V003.md 1.4.3, 1.4.4"
+        - name: VSS
+          pins: [VSS]
+          range: "0 V"
+          note: >
+            Ground, and the return for VDD. One decoupling capacitor per supply pin,
+            placed at the pin.
+          source: "CH32V003.md Table 2-1"
     settings:
       - name: Power voltage detector (PVD)
         choices:

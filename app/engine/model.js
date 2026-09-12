@@ -381,7 +381,35 @@ export function unclaimableSignals() {
   }
   return out;
 }
+/**
+ * The supply domains a peripheral governs, from its `pins.supplies:` block, normalised
+ * to `{ name, pins, range, note, source }`.
+ *
+ * A supply rail is a hardware fact - which pads carry it, over what voltage, constrained
+ * against which other rail - and so it lives in the MCU file, cited, rather than being
+ * derived here from a pin's `type:`. That distinction is why this is a query over the
+ * data and not a filter over `M.pins`: the file can say something the pin table cannot,
+ * such as VDDA never exceeding VDD, and a set of rails that only exists as "every pin
+ * typed power" would be a guess about which rail each pad belongs to.
+ *
+ * Empty for a peripheral that declares none - which is every peripheral except the one
+ * that owns the power interface.
+ */
+export function suppliesOf(pid) {
+  const raw = (((M.peripherals || {})[pid] || {}).pins || {}).supplies;
+  if (!Array.isArray(raw)) return [];
+  const one = v => String(v).trim().replace(/\s+/g, ' ');
+  return raw.filter(s => s && s.name !== undefined).map(s => ({
+    name: one(s.name),
+    pins: (Array.isArray(s.pins) ? s.pins : s.pins === undefined ? [] : [s.pins]).map(one),
+    range: s.range === undefined ? '' : one(s.range),
+    note: s.note === undefined ? '' : one(s.note),
+    source: s.source === undefined ? '' : one(s.source),
+  }));
+}
+
 // The choice that means "off": the first one that needs no pins. Usually
+
 // choices[0] ("Disable"), but not always — CH32V006's external reset pin is
 // ENABLED at the factory, so its off switch is the RST_MODE=11 choice at the end.
 // Anything keyed off choices[0] would be unable to release that pin.

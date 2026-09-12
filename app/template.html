@@ -421,6 +421,31 @@
      pin numbers took the pin-box ink instead of the muted grey they are meant to have.
      They are drawn just OUTSIDE the box, on the canvas, so they need the canvas colour. */
   .pin text.pinnum{font-family:var(--font);font-size:7.5px;fill:var(--muted)}
+  /* The pin hover card. Fixed, so it is positioned against the viewport and cannot be
+     clipped by the chip's overflow; `pointer-events:none` so it never steals the hover
+     that is showing it. Width is capped because the notes are sentences, and it wraps
+     rather than growing a scrollbar - a tooltip you have to scroll is not a tooltip. */
+  .pinhover{position:fixed;z-index:60;max-width:340px;padding:8px 10px;background:var(--panel);
+    color:var(--text);border:1px solid var(--line);border-radius:6px;pointer-events:none;
+    box-shadow:0 4px 14px rgba(0,0,0,.22);font-size:11.5px;line-height:1.45}
+  .pinhover h5{margin:0 0 2px;font-size:12px}
+  .pinhover .num{color:var(--muted);font-size:10.5px}
+  .pinhover .kind{color:var(--muted);margin:1px 0 4px}
+  .pinhover .n{margin:3px 0 0}
+  .pinhover .n b{color:var(--muted);font-weight:600}
+  .pinhover .as{color:var(--ok);margin-top:4px}
+  .pinhover .bad{color:var(--bad)}
+  /* The supply-domain table in the Power setup. Same look as the Tools tab's tables, and
+     the same reason for `table-layout:fixed`: the Notes column is a paragraph, so without
+     it one long rail would push the other three columns off the panel. */
+  table.rail{width:100%;border-collapse:collapse;margin:4px 0 8px;table-layout:fixed;font-size:11.5px}
+  table.rail th{text-align:left;color:var(--muted);font-weight:600;font-size:10.5px;
+    text-transform:uppercase;letter-spacing:.04em;padding:3px 6px;border-bottom:1px solid var(--line)}
+  table.rail td{padding:4px 6px;vertical-align:top;border-bottom:1px solid var(--line-soft);word-break:break-word}
+  table.rail th:nth-child(1),table.rail td:nth-child(1){width:20%}
+  table.rail th:nth-child(2),table.rail td:nth-child(2){width:17%}
+  table.rail th:nth-child(3),table.rail td:nth-child(3){width:19%}
+  table.rail .src{margin-top:3px;font-size:10.5px}
   .siglabel .userlabel,.siglabel.userlabel{fill:var(--link);font-style:italic}
   .siglabel .lsep{fill:var(--muted)}
   .pin.focused rect{stroke:#0033cc;stroke-width:2;stroke-dasharray:3.5 2.5}
@@ -872,6 +897,11 @@
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<!-- What a pin is, on hover. The SVG `<title>` above still carries the same words for
+     the keyboard and for a screen reader; this is the readable version of it, because a
+     native tooltip is one line, styled by the OS, and appears a second late. It is
+     `hidden` until a pin is hovered, so nothing measures or paints it on load. -->
+<div class="pinhover" id="pinhover" role="tooltip" hidden></div>
 <input type="file" id="fileinput" accept=".yaml,.yml">
 <input type="file" id="projinput" accept=".wchproj,.yaml,.yml" style="display:none">
 
@@ -1045,8 +1075,38 @@ function layout() {
   }
 }
 
+// ---------- pin types ---------------------------------------------------------
+/**
+ * What each `pins.<NAME>.type` MEANS, in one sentence, for the hover card and the SVG's
+ * own `<title>`.
+ *
+ * This is the one thing about a pin spelled in code rather than read from the MCU file,
+ * and it is deliberate: these are the FORMAT.md definitions of the type vocabulary, not a
+ * hardware fact about any part. A per-part table of what "ground" means would be six
+ * copies of the same sentence, and the part-specific half of the answer - the voltage, the
+ * domain, what to connect - is already in `pins.<NAME>.notes`, which IS data.
+ *
+ * Defined above `renderChip()` because `const` is not hoisted: the first version of this
+ * sat beside the hover card, 200 lines below its only caller, and every pin label in the
+ * app read "undefined".
+ */
+const PIN_KIND = {
+  io: 'GPIO — assignable to a peripheral signal or driven directly',
+  power: 'Supply pin — not a GPIO. See the Power setup',
+  ground: 'Ground pin — not a GPIO',
+  reset: 'Reset pin — held by the option bytes, not by GPIO_Init',
+  boot: 'Boot strap — sampled at reset, not a GPIO',
+  sys: 'Fixed-function system pin — not a GPIO',
+  analog: 'Analog-only pin — not a GPIO',
+  nc: 'Not connected',
+};
+
 function renderChip() {
   geom = layout();
+  // The hover card is positioned against the page, so a repaint under the cursor would
+  // leave it pointing at a pin that has moved or gone. Cheaper and more honest to drop
+  // it; the very next mouseover brings it back with the new geometry.
+  hidePinHover();
   const names = pkgPins();
   const g = [];
   const epad = names[0];
@@ -1109,10 +1169,16 @@ function renderChip() {
     if (U.focus === name) cls += ' focused';
     if (hidden) cls += ' dim';
     const w = p.w, h = p.h;                      // set in layout(), so rotation carries it
-    const notes = grp.map(n => (M.pins[n] || {}).notes).filter(Boolean).join('; ');
-    const tip = `${grp.join('/')} \u2014 pin ${p.num}`
-      + (info ? ` \u2014 ${info.label}${info.state === 'conflict' ? ' (CONFLICT)' : ''}` : t === 'io' ? ' \u2014 unassigned' : ` \u2014 ${t}`)
-      + (ul ? ` \u2014 "${ul}"` : '') + (notes ? ` \u2014 ${notes}` : '');
+    // The same words the hover card shows, on separate lines. A `<title>` is the only
+    // description a screen reader or a keyboard user gets for SVG, and a supply pin's
+    // note is a sentence per pin - run together on one line it is unreadable. The card
+    // is decoration on top of this, not a replacement for it.
+    const tip = [`${grp.join('/')} — pin ${p.num}`,
+      PIN_KIND[t] || t,
+      ...grp.map(n => (M.pins[n] || {}).notes).filter(Boolean),
+      info ? `Currently: ${info.label}${info.state === 'conflict' ? ' (CONFLICT)' : ''}` : (t === 'io' ? 'Unassigned' : ''),
+      ul ? `Label: "${ul}"` : '',
+    ].filter(Boolean).join('\n');
     g.push(`<g class="${cls}" data-pin="${esc(name)}" data-num="${p.num}" role="${t === 'io' ? 'button' : 'img'}" aria-label="${attr(tip)}"><title>${esc(tip)}</title>`);
     g.push(`<rect x="${p.x}" y="${p.y}" width="${w}" height="${h}" rx="2"/>`);
     const cx = p.x + w / 2, cy = p.y + h / 2;
@@ -1272,13 +1338,80 @@ function zoomAt(f, cx, cy) {
   });
   c.addEventListener('contextmenu', e => { const pinEl = e.target.closest('.pin'); if (!pinEl) return; e.preventDefault(); U.focus = pinEl.dataset.pin; openPinMenu(pinEl.dataset.pin, e.clientX, e.clientY); });
   c.addEventListener('wheel', e => { e.preventDefault(); const r = c.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
-  c.addEventListener('mouseover', e => { const p = e.target.closest('.pin'); if (p) p.classList.add('hover'); });
-  c.addEventListener('mouseout', e => { const p = e.target.closest('.pin'); if (p) p.classList.remove('hover'); });
+  c.addEventListener('mouseover', e => { const p = e.target.closest('.pin'); if (p) { p.classList.add('hover'); showPinHover(p.dataset.pin, e); } });
+  c.addEventListener('mouseout', e => { const p = e.target.closest('.pin'); if (p) { p.classList.remove('hover'); hidePinHover(); } });
   document.getElementById('z-in').onclick = () => zoomAt(1.25, c.clientWidth / 2, c.clientHeight / 2);
   document.getElementById('z-out').onclick = () => zoomAt(1 / 1.25, c.clientWidth / 2, c.clientHeight / 2);
   document.getElementById('z-fit').onclick = fitChip;
   new ResizeObserver(() => { if (M) fitChip(); }).observe(c);
 })();
+
+// ---------- pin hover card ----------------------------------------------------
+/**
+ * What a pin IS, on hover - the readable form of the `<title>` the SVG already carries.
+ *
+ * The words come from three places and none of them is invented here:
+ *   * `pins.<NAME>.notes` in the MCU file, which is where a supply pin says its voltage,
+ *     what it feeds, and what to connect to it;
+ *   * the part's own power declaration (`suppliesOf`), so hovering VDDIO can say which
+ *     rail it is and which other rail it may not exceed;
+ *   * the current configuration, for a pin that carries a signal.
+ *
+ * The `type:` meanings are the one thing spelled in code — see PIN_KIND above.
+ */
+function pinHoverHTML(pin) {
+  // `groupOf` returns the pads shorted to this one, which can be EMPTY for a pin that is
+  // not bonded on the current package - so an empty answer falls back to the pin itself
+  // rather than rendering "pin N of nothing".
+  const g = groupOf(pin);
+  const grp = Array.isArray(g) && g.length ? g : [pin];
+  const t = pinType(pin), info = E.pins[canon(pin)], ul = userLabel(pin);
+  let h = `<h5>${esc(grp.join(' / '))} <span class="num">pin ${pinNum(pin)}</span></h5>`
+    + `<div class="kind">${esc(PIN_KIND[t] || t)}</div>`;
+  if (grp.length > 1) {
+    h += `<div class="n bad">${esc(grp.join(' and '))} are shorted inside this package — one physical pad.</div>`;
+  }
+  for (const n of grp) if (M.pins[n] && M.pins[n].notes) h += `<div class="n">${esc(M.pins[n].notes)}</div>`;
+
+  // Which supply rail this pad carries, if the part declares one. A packge can bond one
+  // rail to several pads, so the lookup is by pad and the answer may name others too.
+  const rail = supplyOfPin(pin);
+  if (rail) {
+    h += `<div class="n"><b>${esc(rail.name)}</b>${rail.range ? ` · ${esc(rail.range)}` : ''}</div>`;
+  }
+  if (t === 'io') {
+    h += info
+      ? `<div class="as${info.state === 'conflict' ? ' bad' : ''}">Currently: ${esc(info.label)}${info.state === 'conflict' ? ' — CONFLICT' : ''}</div>`
+      : `<div class="as">Unassigned</div>`;
+    if (ul) h += `<div class="n">Label: ${esc(ul)}</div>`;
+  }
+  return h;
+}
+
+/** The declared supply rail a pad carries, or null. */
+function supplyOfPin(pin) {
+  if (!M || !E) return null;
+  for (const pid of Object.keys(M.peripherals)) {
+    for (const s of suppliesOf(pid)) if (s.pins.includes(pin)) return s;
+  }
+  return null;
+}
+
+function showPinHover(pin, ev) {
+  const el = document.getElementById('pinhover');
+  if (!el || !M || !E || !pin) return;
+  el.innerHTML = pinHoverHTML(pin);
+  el.hidden = false;
+  // Clamp into the viewport: a card that runs off the right edge is unreadable, and the
+  // notes are long enough that this happens at 1280 px with the panel open.
+  const r = el.getBoundingClientRect();
+  const pad = 12;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width + pad > window.innerWidth) x = Math.max(pad, ev.clientX - r.width - 14);
+  if (y + r.height + pad > window.innerHeight) y = Math.max(pad, ev.clientY - r.height - 14);
+  el.style.left = `${x}px`; el.style.top = `${y}px`;
+}
+function hidePinHover() { const el = document.getElementById('pinhover'); if (el) { el.hidden = true; el.innerHTML = ''; } }
 
 // pin picker
 function openPicker(pin, cx, cy) {
@@ -2057,6 +2190,22 @@ function renderCentre() {
     }
   }
   if (P.notes) h += `<div class="hint">${P.notes}</div>`;
+  // The supply domains this peripheral governs, from its `pins.supplies:` block. A rail
+  // is a hardware fact - which pads carry it, over what voltage, and which OTHER rail it
+  // may not exceed - so it comes from the MCU file with a citation per rail rather than
+  // being inferred here from the pins' `type:`. Rendered for whichever peripheral
+  // declares one, so the app names no part and no peripheral.
+  const rails = suppliesOf(pid);
+  if (rails.length) {
+    h += `<div class="paramhead">Supplies<span class="ro"> ${rails.length}</span></div>`
+      + `<table class="rail"><thead><tr><th>Rail</th><th>Pins</th><th>Range</th><th>Notes</th></tr></thead><tbody>`
+      + rails.map(s => `<tr><td><b>${esc(s.name)}</b></td>`
+        + `<td>${s.pins.length ? esc(s.pins.join(', ')) : '<span class="ro">—</span>'}</td>`
+        + `<td>${s.range ? esc(s.range) : '<span class="ro">not stated</span>'}</td>`
+        + `<td>${s.note ? esc(s.note) : '<span class="ro">not stated</span>'}`
+        + `${s.source ? `<div class="ro src">${esc(s.source)}</div>` : ''}</td></tr>`).join('')
+      + `</tbody></table>`;
+  }
   if (P.remaps && P.remaps.length > 1) {
     h += `<label>${P.remap_by_package ? 'Pin location (by package)' : 'Pin remap (AFIO)'}</label><select data-remap="1">` + P.remaps.map((r, i) => {
       const missing = Object.values(r.pins).filter(p => !pinExists(p));

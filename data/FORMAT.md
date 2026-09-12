@@ -270,6 +270,56 @@ no pin on any package”, which USBFS, USBHS, USBSS and TKEY carried on CH32H417
 datasheet gave every one of them pads: a note nothing could check, replaced by a claim
 something does. `docs/COVERAGE.md` has the whole mechanism.
 
+### `pins.supplies:` — the supply domains the Power setup governs
+
+A supply rail is not a peripheral function, so no pin-table row carries it and `none: true`
+stays correct for the power interface — yet which pads carry a rail, over what voltage, and
+**constrained against which other rail** is a hardware fact, and hardware facts live in the
+data with a citation. The Power setup reads this block; the app derives nothing about a
+supply from a pin's `type:`.
+
+```yaml
+  PWR:
+    category: System Core
+    pins:
+      none: true
+      source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral"
+      supplies:
+        - name: VDDIO
+          pins: [VDDIO]
+          range: "1.65-3.6 V"
+          note: >
+            I/O supply: sets the output high level of the regular I/O pins and feeds the I/O
+            LDO that produces VIO18. Must not exceed VDD33 or VDD33A.
+          source: "CH32H417DS0.md 1.4.3"
+```
+
+| Key | Required | What it is |
+|---|---|---|
+| `name` | yes | the rail as the datasheet writes it (`VDDIO`, `VDD33A`, `VREF+`). A row may cover several pads that are the same domain (`VSS / VSSA`) — the name is then the label, and `pins` carries both |
+| `pins` | yes | the pads this rail is bonded to, as declared in the part's own `pins:` table. A name that is not a pin there is an ERROR |
+| `range` | no | the operating range, verbatim from the DS. Omitted = "not stated" on screen, which is honest; a made-up number is not |
+| `note` | no | what the rail powers and what to connect to it. This is what a designer reads |
+| `source` | yes | `file:line` or a DS section/table number. **A family is not a source**, and a rail with no citation is an ERROR — the same rule every other fact in this file follows |
+
+Two shapes are legal, and which one depends on whether the peripheral routes anything:
+
+| Peripheral | Declaration |
+|---|---|
+| routes nothing (the usual case) | `none: true` + `source:` + `supplies:` |
+| **does** route (CH32L103's PWR holds the WKUP pad) | `supplies:` alone — `none`/`open` claim "I have no pad", so they would be false, but `supplies` says nothing about pads |
+
+`tools/validate_mcu.py` checks both shapes, the key set, the required fields, and that every
+named pad exists on the part. `tools/coverage.py` treats a supplies-only declaration on a
+routing peripheral as **not** a contradicting `pins:` claim, for the same reason. The order
+of the list is the order the rails are written, which is the order the DS presents them —
+CH32H417's section states `VDD33 >= VDD33A >= VDDIO >= VIO18` at the end, and the file
+keeps that order so the constraint reads top-down.
+
+`pins.<NAME>.notes:` on the power, ground, reset, boot and system pins is the other half of
+the same job: the hover card shows it, so a bare pad says what it is, what voltage it takes
+and what to connect. Every non-io pin of every part carries one (`app/tests/power.test.js`).
+
 A signal that two features share is modelled once. CH32V006 TIM2 routes `CH1_ETR` as a
 single signal because channel 1 and the external trigger are the same pin, and it exposes
 complementary outputs as a setting that claims the existing `CH3`/`CH4` signals, because

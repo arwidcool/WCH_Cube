@@ -936,7 +936,14 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
     for pid in model.pids:
         d = model.decl.get(pid)
         if model.has_routing(pid):
-            if d:
+            # `supplies:` is the one key a ROUTING peripheral may carry in its `pins:`
+            # block, and only on its own. It is not a claim about pads - it names the
+            # supply domains the peripheral governs - so it cannot contradict a routing,
+            # which is what this row reports. The claim that does contradict one is
+            # `none`/`open`, and that is still an open row here. Same carve-out as
+            # tools/validate_mcu.py, which rejects the routing + `none` combination
+            # outright; this tool reports it instead, because its job is the ledger.
+            if d and set(d) - {"supplies"}:
                 res.add("periph", pid, "open", "has routing AND a `pins:` declaration; one of "
                         "them is wrong", f"data/mcus/{part}.yaml")
             continue

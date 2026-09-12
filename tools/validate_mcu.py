@@ -102,7 +102,16 @@ SIGNAL_PIN_KEYS = {"pin", "af", "notes"}
 # A peripheral's `pins:` declaration - the statement a routing-less peripheral must make
 # (docs/COVERAGE.md): `none` + `source` when the silicon gives it no pad, `open` +
 # `owner` + `task` while its pads are unextracted.
-PERIPH_PINS_KEYS = {"none", "open", "source", "owner", "task", "notes"}
+#
+# `supplies:` is the third thing that belongs on this declaration: the supply DOMAINS the
+# peripheral governs. A rail is not a peripheral function, so no pin table row carries it
+# and `none` stays true - yet `supplies:` is a hardware fact (which pads carry a rail, at
+# what voltage, constrained against which other rail) and hardware facts live in the data,
+# cited, rather than being inferred by the app from a pin's `type:`. Only the peripheral
+# that owns the power interface may carry it, and AGENT-2's `suppliesProblems()` shape
+# check is the app side of the same rule.
+PERIPH_PINS_KEYS = {"none", "open", "source", "owner", "task", "notes", "supplies"}
+SUPPLY_KEYS = {"name", "pins", "range", "note", "source"}
 # How a remap reaches the silicon. `register` and `macro` move a whole peripheral at
 # once; `af` moves one pin at a time and is the only one that pairs with `signal_pins:`.
 REMAP_STYLES = {"register", "macro", "af"}
@@ -122,6 +131,42 @@ CONSTRAINT_KEYS = {"id", "option", "choices", "classes", "only_on", "not_on",
 
 def unknown_keys(mapping, allowed):
     return sorted(k for k in mapping if k not in allowed)
+
+
+def check_supplies(decl: dict, where: str, doc: dict, r: Report) -> None:
+    """The `pins.supplies:` block - the supply domains a peripheral governs.
+
+    Each rail is a hardware fact, so each needs its own citation: a rail with no `source`
+    is an uncited claim, which is the defect the whole file format exists to make
+    impossible. The pads are checked against the part's own `pins:` table, because a rail
+    naming a pad the file does not define is the same class of error as a routing to one.
+    """
+    sup = decl.get("supplies")
+    if sup is None:
+        return
+    if not isinstance(sup, list) or not sup:
+        r.error(f"{where}.pins.supplies", "must be a non-empty list of "
+                                          "{ name, pins, range, note, source }")
+        return
+    for i, s in enumerate(sup):
+        sw = f"{where}.pins.supplies[{i}]"
+        if not isinstance(s, dict):
+            r.error(sw, "must be a mapping")
+            continue
+        stray = unknown_keys(s, SUPPLY_KEYS)
+        if stray:
+            r.error(sw, f"unknown key(s) {stray}")
+        for k in ("name", "pins", "source"):
+            if not s.get(k):
+                r.error(sw, f"needs `{k}:`")
+        pads = s.get("pins")
+        if pads is not None and (not isinstance(pads, list) or not pads):
+            r.error(sw, "`pins:` must be a non-empty list of pin names")
+        else:
+            for p in pads or []:
+                if p not in (doc.get("pins") or {}):
+                    r.error(sw, f"`{p}` is not a pin this part defines; a supply rail "
+                                f"names a pad that exists")
 
 
 class Report:
@@ -505,6 +550,22 @@ def check_peripherals(doc: dict, r: Report) -> None:
                 elif decl.get("open") and not (decl.get("owner") and decl.get("task")):
                     r.error(f"{where}.pins", "`open: true` needs `owner:` and `task:` (a phrase "
                                              "that exists in TASKS.md) so the gap has a name")
+                # `supplies:` - the supply domains this peripheral governs. Each rail is a
+                # hardware fact, so each needs its own citation.
+                check_supplies(decl, where, doc, r)
+        elif isinstance(decl, dict) and "supplies" in decl and not (
+                decl.get("none") or decl.get("open")):
+            # A ROUTING peripheral may declare `supplies:` and nothing else, and that is
+            # the normal case rather than the exception: PWR on CH32L103 routes the WKUP
+            # pad, so it is not a peripheral that "routes nothing" and needs no `none`/
+            # `open` claim - but the supply domains are still its business. The claim that
+            # conflicts with a routing is `none`/`open` ("I have no pad"), and that is what
+            # this branch keeps rejecting; `supplies` says nothing about pads at all.
+            stray = unknown_keys(decl, PERIPH_PINS_KEYS)
+            if stray:
+                r.error(f"{where}.pins", f"unknown key(s) {stray}")
+            else:
+                check_supplies(decl, where, doc, r)
         elif isinstance(decl, dict):
             r.error(f"{where}.pins", "declared, but this peripheral routes signals to pins; one "
                                      "of the two is wrong")

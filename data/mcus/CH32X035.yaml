@@ -1840,6 +1840,13 @@ peripherals:
             reference. The floor is set by two different blocks: a conversion needs 2.5 V,
             and so does the USB PD transmitter, which has to drive a compliant CC level.
           source: "CH32X035DS0.md 1.4.4"
+        - name: GND
+          pins: [GND]
+          range: "0 V"
+          note: >
+            Ground, and the return for VDD. One decoupling capacitor per supply pin,
+            placed at the pin.
+          source: "CH32X035DS0.md Table 2-1"
     notes: >
       Power control. The PVD thresholds are named twice in the header - PWR_PVDLevel_0..3
       and the aliases PWR_PVDLevel_2V1/2V3/3V0/4V0 pointing at the same four values

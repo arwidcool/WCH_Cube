@@ -17,6 +17,29 @@ page must not contain engine logic.** The two remaining invariants are `tests/no
 
 ## Current — round 6 (brief: `PROMPT_AGENT_2_COVERAGE.txt`)
 
+**Power setup + pin descriptions (HUMAN request).** Two things a user asked for and the format
+could not say: what the supply and fixed-function pins ARE, and a Power setup under System Core.
+
+- **36 pin descriptions**, every non-io pin of all six parts, each from that part's own datasheet
+  section — voltage range, what it feeds, what to connect, and the caveats (VDDA must not exceed
+  VDD; VIO18 is normally an LDO output; BOOT0 is a strap with no register).
+- **`peripherals.<PID>.pins.supplies:`** — a NEW key, added to `data/FORMAT.md`,
+  `tools/validate_mcu.py` and `tools/coverage_lib.py` (AGENT-1's files; recorded as a DECISION on
+  the board, because the human asked for the feature directly). Each rail carries `name`, `pins`,
+  `range`, `note` and a **required** `source`. A routing peripheral may carry `supplies:` alone —
+  CH32L103's PWR holds the WKUP pad, so `none:` there would be a false claim.
+- **A real hover card** on the chip: pin(s), number, what the type means, the notes, the supply
+  rail the pad carries, and the current assignment. The SVG `<title>` carries the same words
+  multi-line, because that is all a screen reader or keyboard user gets — the card is decoration
+  on top of it, not a replacement.
+- **The Power setup** is a Supplies table in the peripheral panel, rendered for whichever
+  peripheral declares rails, so `app/` names no part and no peripheral.
+
+Tests: 8 in `app/tests/power.test.js`, all over every shipped part. Two plants run and confirmed.
+**verified in browser:** real Chrome, 1280/1920 × light/dark × 100 %/125 % — 9 rail rows on
+CH32H417, the hover card shows VDDIO's range and the rail it must not exceed, no viewport edge
+crossed, console silent.
+
 **P0a: DONE and committed.** The conditional second init struct needed no new engine feature — it
 works today through param-level `when:` — so the deliverable became the thing that was actually
 missing: making a MIS-WRITTEN gate loud. `depProblems(pid, def)` in `app/engine/params.js` reports

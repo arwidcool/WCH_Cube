@@ -1526,7 +1526,54 @@ peripherals:
         min: 0
         max: 127
   PWR:
-    category: System
+    # `System Core`, the same category the other five parts put it in. The file had it
+    # under plain `System`, which put the power setup in a category of its own here and
+    # nowhere else - the tree is drawn from these strings, so the inconsistency was
+    # visible as a Power entry that moved when the part changed.
+    category: System Core
+    pins:
+      # No `none:` here, on purpose: this PWR DOES route the WKUP pad below, so `none:
+      # true` would be a false claim - the declaration exists for peripherals that route
+      # nothing. `supplies:` is orthogonal to that claim, which is why a routing
+      # peripheral may carry it and nothing else (tools/validate_mcu.py allows exactly
+      # this shape, and the other five parts - where PWR routes nothing - carry `none:`
+      # plus the same block).
+      #
+      # The supply domains. Four rails on this part, and the DS constrains them against
+      # each other rather than each against an absolute limit alone - VDDA must not exceed
+      # VDD - which is exactly the kind of fact a pin table does not carry.
+      supplies:
+        - name: VDD
+          pins: [VDD]
+          range: "1.7-3.6 V"
+          note: >
+            Main supply. Powers the I/O pins and the internal regulator, and is the ADC's
+            reference - this part has no VREF+ pad, so supply noise appears directly in a
+            conversion result.
+          source: "CH32L103DS0.md 1.4.3"
+        - name: VDDA
+          pins: [VDDA]
+          range: "1.8-3.6 V"
+          note: >
+            Analog supply: the high-speed RC oscillator's analog part, the ADC, the
+            temperature sensor and the PLL. Must NOT be higher than VDD, and must be at
+            least 2.0 V when the temperature sensor is used.
+          source: "CH32L103DS0.md 1.4.3"
+        - name: VBAT
+          pins: [VBAT]
+          range: "1.8-3.6 V"
+          note: >
+            Optional backup supply. When VDD is off, an internal power switch runs the RTC,
+            the external low-frequency oscillator and the backup registers from here. Leave
+            unconnected when unused.
+          source: "CH32L103DS0.md 1.4.3"
+        - name: VSS / VSSA
+          pins: [VSS, VSSA]
+          range: "0 V"
+          note: >
+            Ground, and the analog return for VDDA. Star VSSA to VSS at the pin rather than
+            along the digital ground path.
+          source: "CH32L103DS0.md Table 2-1-1"
     settings:
       - name: Mode
         choices:
