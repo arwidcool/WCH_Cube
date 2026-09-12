@@ -2406,6 +2406,167 @@ peripherals:
       IN7: [{ pin: PA7 }]
       IN8: [{ pin: PB0 }]
       IN9: [{ pin: PB1 }]
+    params:
+      # PER CHANNEL, not per peripheral: ADC_InitTypeDef has no sample-time member at all.
+      # Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank,
+      # ADC_SampleTime) (ch32h417_adc.h:187), so one call is emitted per ticked channel, in
+      # the order they are ticked - which is also the regular sequence rank.
+      - key: sample
+        name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
+        sdk_note: >-
+          ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of
+          ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per
+          CHANNEL, not per peripheral. ch32h417_adc.h:187.
+        type: enum
+        default: 13.5 cycles
+        options:
+          - { name: 1.5 cycles  , value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles  , value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 13.5 cycles , value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 28.5 cycles , value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 41.5 cycles , value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles , value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles , value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
+        help: >
+          ADCx_SAMPTR1/2 SMPx[2:0], codes 000..111 in this order (RM 11.3.5,
+          CH32H417RM.md:14974). These are CH32H417's own figures and they are NOT the
+          CH32V00x ones - five of the eight differ. The same bits mean 2.5 / 3.5 / 4.5 /
+          5.5 cycles for codes 100..111 when ADC_SMP_SELx is set, which this configurator
+          does not set. Total conversion = sampling + 12.5 ADC clocks (RM:13534). Above a
+          1 MHz sampling rate the RM advises not going below 3.5 cycles.
+      # ADC_Mode, written TWICE and applied ONCE - which reading applies is decided by the
+      # `Mode` row above, and both are written out rather than one of them being left to
+      # the struct's zero-initialiser. ADC_Mode_Independent happens to be 0x00000000, so
+      # omitting the member in independent mode would produce correct code by accident;
+      # code that is right by accident is the thing this file exists to stop.
+      - key: mode_independent
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        const: ADC_Mode_Independent
+        default: ADC_Mode_Independent
+        depends_on: { setting: Mode, equals: Independent }
+        help: "ADCx_CTLR1 DUALMOD[19:16] = 0000 (RM 11.3.2). Fixed by the Mode row: an independent ADC has no dual mode to choose."
+      - key: mode_dual
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        type: enum
+        default: Regular simultaneous
+        depends_on: { setting: Mode, equals: "Dual (with the other ADC)" }
+        options:
+          - { name: Regular + injected simultaneous     , value: 1, sdk: ADC_Mode_RegInjecSimult }
+          - { name: Regular simultaneous + alternate trigger, value: 2, sdk: ADC_Mode_RegSimult_AlterTrig }
+          - { name: Injected simultaneous + fast interleaved, value: 3, sdk: ADC_Mode_InjecSimult_FastInterl }
+          - { name: Injected simultaneous + slow interleaved, value: 4, sdk: ADC_Mode_InjecSimult_SlowInterl }
+          - { name: Injected simultaneous               , value: 5, sdk: ADC_Mode_InjecSimult }
+          - { name: Regular simultaneous                , value: 6, sdk: ADC_Mode_RegSimult }
+          - { name: Fast interleaved                    , value: 7, sdk: ADC_Mode_FastInterl }
+          - { name: Slow interleaved                    , value: 8, sdk: ADC_Mode_SlowInterl }
+          - { name: Alternate trigger                   , value: 9, sdk: ADC_Mode_AlterTrig }
+        help: >
+          ADCx_CTLR1 DUALMOD[19:16], codes 0001..1001 (RM 11.3.2, CH32H417RM.md:14423).
+          Only shown when the Mode row says Dual; the two ADCs are one pair, so setting this
+          on ADC1 describes what ADC1 and ADC2 do together.
+      - key: scan
+        name: Scan conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ScanConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR1 SCAN, bit 8. Converts the whole regular sequence rather than only its first channel - turn it on whenever more than one channel is ticked."
+      - key: cont
+        name: Continuous conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ContinuousConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR2 CONT, bit 1. The sequence restarts as soon as it ends instead of waiting for the next trigger."
+      - key: nbr
+        name: Number of regular channels
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_NbrOfChannel
+        type: int
+        default: 1
+        min: 1
+        max: 16
+        help: >
+          ADCx_RSQR1 L[23:20], the LENGTH of the regular sequence. Set it to the number of
+          channels you ticked on the Channels row: ADC_Init() writes
+          (ADC_NbrOfChannel - 1) into the field (ch32h417_adc.c), so this is a count and not
+          an index, and leaving it at 0 would write 0xFF - 1 rather than "no channels".
+      - key: trig
+        name: External trigger
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ExternalTrigConv
+        type: enum
+        default: Software trigger (SWSTART)
+        options:
+          - { name: TIM1 CC1              , value: 0, sdk: ADC_ExternalTrigConv_T1_CC1 }
+          - { name: TIM1 CC2              , value: 1, sdk: ADC_ExternalTrigConv_T1_CC2 }
+          - { name: TIM1 CC3              , value: 2, sdk: ADC_ExternalTrigConv_T1_CC3 }
+          - { name: TIM2 CC2              , value: 3, sdk: ADC_ExternalTrigConv_T2_CC2 }
+          - { name: TIM3 TRGO             , value: 4, sdk: ADC_ExternalTrigConv_T3_TRGO }
+          - { name: TIM4 CC4              , value: 5, sdk: ADC_ExternalTrigConv_T4_CC4 }
+          - { name: EXTI line 11 / TIM8 TRGO, value: 6, sdk: ADC_ExternalTrigConv_Ext_IT11_TIM8_TRGO }
+          - { name: Software trigger (SWSTART), value: 7, sdk: ADC_ExternalTrigConv_None }
+        help: >
+          ADCx_CTLR2 EXTSEL[19:17], codes 000..111 (RM 11.3.3, CH32H417RM.md:14768).
+          NOTE THE LAST ONE'S TWO NAMES, recorded rather than reconciled: the SPL macro is
+          spelled ADC_ExternalTrigConv_None (ch32h417_adc.h:78) and the reference manual
+          calls code 111 "SWSTART software trigger". They are the same encoding; the label
+          here follows the RM because it says what the silicon does, and the macro is the
+          SPL's own.
+      - key: align
+        name: Data alignment
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_DataAlign
+        type: enum
+        default: Right
+        options:
+          - { name: Right, value: 0, sdk: ADC_DataAlign_Right }
+          - { name: Left , value: 1, sdk: ADC_DataAlign_Left }
+        help: "ADCx_CTLR2 ALIGN, bit 11. 12-bit results in a 16-bit register."
+      - key: buffer
+        name: Input buffer
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_OutputBuffer
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: ADC_OutputBuffer_Disable }
+          - { name: Enabled , value: 1, sdk: ADC_OutputBuffer_Enable }
+        help: >
+          ADCx_CTLR1 BUFEN, bit 26 (RM 11.3.2). Turn it on when the source impedance is
+          above the datasheet's maximum, and then keep the sampling time at 7.5 cycles or
+          more. The gain row below NEEDS it on. It is also forced on by the silicon whenever
+          TKENABLE or TSVREFE is set, and calibration must happen before that - the SDK
+          member is spelled ADC_OutputBuffer even though the bit is an INPUT buffer.
+      - key: pga
+        name: Input gain (PGA)
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Pga
+        type: enum
+        default: x1
+        depends_on: { param: buffer, equals: Enabled }
+        options:
+          - { name: x1 , value: 0, sdk: ADC_Pga_1 }
+          - { name: x4 , value: 1, sdk: ADC_Pga_4 }
+          - { name: x16, value: 2, sdk: ADC_Pga_16 }
+          - { name: x64, value: 3, sdk: ADC_Pga_64 }
+        help: >
+          ADCx_CTLR1 PGA[28:27], codes 00..11 (RM 11.3.2, CH32H417RM.md:14423). Amplifies a
+          small input before conversion. The RM's own note 2 on that bit field is why this
+          row is greyed until the input buffer is on: "ADC_Buffer needs to be enabled to use
+          this function."
   ADC2:
     category: Analog
     settings:
@@ -2452,6 +2613,167 @@ peripherals:
       IN7: [{ pin: PA7 }]
       IN8: [{ pin: PB0 }]
       IN9: [{ pin: PB1 }]
+    params:
+      # PER CHANNEL, not per peripheral: ADC_InitTypeDef has no sample-time member at all.
+      # Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank,
+      # ADC_SampleTime) (ch32h417_adc.h:187), so one call is emitted per ticked channel, in
+      # the order they are ticked - which is also the regular sequence rank.
+      - key: sample
+        name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
+        sdk_note: >-
+          ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of
+          ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per
+          CHANNEL, not per peripheral. ch32h417_adc.h:187.
+        type: enum
+        default: 13.5 cycles
+        options:
+          - { name: 1.5 cycles  , value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles  , value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 13.5 cycles , value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 28.5 cycles , value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 41.5 cycles , value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles , value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles , value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
+        help: >
+          ADCx_SAMPTR1/2 SMPx[2:0], codes 000..111 in this order (RM 11.3.5,
+          CH32H417RM.md:14974). These are CH32H417's own figures and they are NOT the
+          CH32V00x ones - five of the eight differ. The same bits mean 2.5 / 3.5 / 4.5 /
+          5.5 cycles for codes 100..111 when ADC_SMP_SELx is set, which this configurator
+          does not set. Total conversion = sampling + 12.5 ADC clocks (RM:13534). Above a
+          1 MHz sampling rate the RM advises not going below 3.5 cycles.
+      # ADC_Mode, written TWICE and applied ONCE - which reading applies is decided by the
+      # `Mode` row above, and both are written out rather than one of them being left to
+      # the struct's zero-initialiser. ADC_Mode_Independent happens to be 0x00000000, so
+      # omitting the member in independent mode would produce correct code by accident;
+      # code that is right by accident is the thing this file exists to stop.
+      - key: mode_independent
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        const: ADC_Mode_Independent
+        default: ADC_Mode_Independent
+        depends_on: { setting: Mode, equals: Independent }
+        help: "ADCx_CTLR1 DUALMOD[19:16] = 0000 (RM 11.3.2). Fixed by the Mode row: an independent ADC has no dual mode to choose."
+      - key: mode_dual
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        type: enum
+        default: Regular simultaneous
+        depends_on: { setting: Mode, equals: "Dual (with the other ADC)" }
+        options:
+          - { name: Regular + injected simultaneous     , value: 1, sdk: ADC_Mode_RegInjecSimult }
+          - { name: Regular simultaneous + alternate trigger, value: 2, sdk: ADC_Mode_RegSimult_AlterTrig }
+          - { name: Injected simultaneous + fast interleaved, value: 3, sdk: ADC_Mode_InjecSimult_FastInterl }
+          - { name: Injected simultaneous + slow interleaved, value: 4, sdk: ADC_Mode_InjecSimult_SlowInterl }
+          - { name: Injected simultaneous               , value: 5, sdk: ADC_Mode_InjecSimult }
+          - { name: Regular simultaneous                , value: 6, sdk: ADC_Mode_RegSimult }
+          - { name: Fast interleaved                    , value: 7, sdk: ADC_Mode_FastInterl }
+          - { name: Slow interleaved                    , value: 8, sdk: ADC_Mode_SlowInterl }
+          - { name: Alternate trigger                   , value: 9, sdk: ADC_Mode_AlterTrig }
+        help: >
+          ADCx_CTLR1 DUALMOD[19:16], codes 0001..1001 (RM 11.3.2, CH32H417RM.md:14423).
+          Only shown when the Mode row says Dual; the two ADCs are one pair, so setting this
+          on ADC1 describes what ADC1 and ADC2 do together.
+      - key: scan
+        name: Scan conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ScanConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR1 SCAN, bit 8. Converts the whole regular sequence rather than only its first channel - turn it on whenever more than one channel is ticked."
+      - key: cont
+        name: Continuous conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ContinuousConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR2 CONT, bit 1. The sequence restarts as soon as it ends instead of waiting for the next trigger."
+      - key: nbr
+        name: Number of regular channels
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_NbrOfChannel
+        type: int
+        default: 1
+        min: 1
+        max: 16
+        help: >
+          ADCx_RSQR1 L[23:20], the LENGTH of the regular sequence. Set it to the number of
+          channels you ticked on the Channels row: ADC_Init() writes
+          (ADC_NbrOfChannel - 1) into the field (ch32h417_adc.c), so this is a count and not
+          an index, and leaving it at 0 would write 0xFF - 1 rather than "no channels".
+      - key: trig
+        name: External trigger
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ExternalTrigConv
+        type: enum
+        default: Software trigger (SWSTART)
+        options:
+          - { name: TIM1 CC1              , value: 0, sdk: ADC_ExternalTrigConv_T1_CC1 }
+          - { name: TIM1 CC2              , value: 1, sdk: ADC_ExternalTrigConv_T1_CC2 }
+          - { name: TIM1 CC3              , value: 2, sdk: ADC_ExternalTrigConv_T1_CC3 }
+          - { name: TIM2 CC2              , value: 3, sdk: ADC_ExternalTrigConv_T2_CC2 }
+          - { name: TIM3 TRGO             , value: 4, sdk: ADC_ExternalTrigConv_T3_TRGO }
+          - { name: TIM4 CC4              , value: 5, sdk: ADC_ExternalTrigConv_T4_CC4 }
+          - { name: EXTI line 11 / TIM8 TRGO, value: 6, sdk: ADC_ExternalTrigConv_Ext_IT11_TIM8_TRGO }
+          - { name: Software trigger (SWSTART), value: 7, sdk: ADC_ExternalTrigConv_None }
+        help: >
+          ADCx_CTLR2 EXTSEL[19:17], codes 000..111 (RM 11.3.3, CH32H417RM.md:14768).
+          NOTE THE LAST ONE'S TWO NAMES, recorded rather than reconciled: the SPL macro is
+          spelled ADC_ExternalTrigConv_None (ch32h417_adc.h:78) and the reference manual
+          calls code 111 "SWSTART software trigger". They are the same encoding; the label
+          here follows the RM because it says what the silicon does, and the macro is the
+          SPL's own.
+      - key: align
+        name: Data alignment
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_DataAlign
+        type: enum
+        default: Right
+        options:
+          - { name: Right, value: 0, sdk: ADC_DataAlign_Right }
+          - { name: Left , value: 1, sdk: ADC_DataAlign_Left }
+        help: "ADCx_CTLR2 ALIGN, bit 11. 12-bit results in a 16-bit register."
+      - key: buffer
+        name: Input buffer
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_OutputBuffer
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: ADC_OutputBuffer_Disable }
+          - { name: Enabled , value: 1, sdk: ADC_OutputBuffer_Enable }
+        help: >
+          ADCx_CTLR1 BUFEN, bit 26 (RM 11.3.2). Turn it on when the source impedance is
+          above the datasheet's maximum, and then keep the sampling time at 7.5 cycles or
+          more. The gain row below NEEDS it on. It is also forced on by the silicon whenever
+          TKENABLE or TSVREFE is set, and calibration must happen before that - the SDK
+          member is spelled ADC_OutputBuffer even though the bit is an INPUT buffer.
+      - key: pga
+        name: Input gain (PGA)
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Pga
+        type: enum
+        default: x1
+        depends_on: { param: buffer, equals: Enabled }
+        options:
+          - { name: x1 , value: 0, sdk: ADC_Pga_1 }
+          - { name: x4 , value: 1, sdk: ADC_Pga_4 }
+          - { name: x16, value: 2, sdk: ADC_Pga_16 }
+          - { name: x64, value: 3, sdk: ADC_Pga_64 }
+        help: >
+          ADCx_CTLR1 PGA[28:27], codes 00..11 (RM 11.3.2, CH32H417RM.md:14423). Amplifies a
+          small input before conversion. The RM's own note 2 on that bit field is why this
+          row is greyed until the input buffer is on: "ADC_Buffer needs to be enabled to use
+          this function."
   CAN1:
     category: Connectivity
     settings:
@@ -2618,6 +2940,171 @@ peripherals:
       HSYNC: [{ pin: PB13, af: 8 }, { pin: PA4, af: 13 }]
       PCLK: [{ pin: PB12, af: 15 }, { pin: PA6, af: 13 }, { pin: PF13, af: 11 }]
       VSYNC: [{ pin: PA5, af: 11 }, { pin: PB14, af: 15 }, { pin: PF3, af: 13 }, { pin: PB7, af: 13 }]
+    params:
+      - key: datasize_8
+        name: Data width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_DataSize
+        const: DVP_DataSize_8b
+        default: DVP_DataSize_8b
+        depends_on: { setting: Mode, equals: 8-bit }
+        help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:72). Fixed by the Mode row, which is what claims D8-D11."
+      - key: datasize_10
+        name: Data width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_DataSize
+        const: DVP_DataSize_10b
+        default: DVP_DataSize_10b
+        depends_on: { setting: Mode, equals: 10-bit }
+        help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:73). Fixed by the Mode row."
+      - key: datasize_12
+        name: Data width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_DataSize
+        const: DVP_DataSize_12b
+        default: DVP_DataSize_12b
+        depends_on: { setting: Mode, equals: 12-bit }
+        help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:74). Fixed by the Mode row."
+      - key: hclk_pol
+        name: PCLK edge
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_HCLK_P
+        type: enum
+        default: Rising
+        options:
+          - { name: Rising , value: 0, sdk: DVP_Hclk_P_Rising }
+          - { name: Falling, value: 1, sdk: DVP_Hclk_P_Falling }
+        help: "DVP_CR0, the pixel-clock edge data is sampled on (ch32h417_dvp.h:77-78). DVP_StructInit() starts at Rising."
+      - key: hsync_pol
+        name: HSYNC polarity
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_HSYNC_P
+        type: enum
+        default: Active low
+        options:
+          - { name: Active high, value: 0, sdk: DVP_Hsync_P_High }
+          - { name: Active low , value: 1, sdk: DVP_Hsync_P_Low }
+        help: >
+          DVP_CR0 (ch32h417_dvp.h:81-82). The default follows the EVT drop rather than the
+          macro that encodes 0: DVP_StructInit() sets DVP_Hsync_P_Low, whose value is 0x04.
+      - key: vsync_pol
+        name: VSYNC polarity
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_VSYNC_P
+        type: enum
+        default: Active low
+        options:
+          - { name: Active low , value: 0, sdk: DVP_Vsync_P_Low }
+          - { name: Active high, value: 1, sdk: DVP_Vsync_P_High }
+        help: "DVP_CR0 (ch32h417_dvp.h:85-86). DVP_StructInit() starts at Low."
+      - key: caprate
+        name: Frame capture rate
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_FrameCapRate
+        type: enum
+        default: Every frame
+        options:
+          - { name: Every frame   , value: 0, sdk: DVP_FrameCapRate_100P }
+          - { name: Every 2nd frame, value: 1, sdk: DVP_FrameCapRate_50P }
+          - { name: Every 4th frame, value: 2, sdk: DVP_FrameCapRate_25P }
+        help: "DVP_CR1 (ch32h417_dvp.h:89-91). The SDK spells these 100P / 50P / 25P - the proportion of frames kept."
+      - key: capmode
+        name: Capture mode
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_CaptureMode
+        type: enum
+        default: Snapshot
+        options:
+          - { name: Continuous, value: 0, sdk: DVP_CaptureMode_Continuous }
+          - { name: Snapshot  , value: 1, sdk: DVP_CaptureMode_Snapshot }
+        help: "DVP_CR1 (ch32h417_dvp.h:94-95). Snapshot is the EVT drop's own default (DVP_StructInit)."
+      - key: jpeg
+        name: JPEG mode
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_JPEGMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "DVP_CR0 bit 6. The sensor sends a JPEG byte stream rather than raw pixels, so the row/column counts below stop describing the transfer."
+      - key: rows
+        name: Rows per frame
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_ROW_NUM
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "DVP_ROW_NUM. The sensor's frame height in lines. 0 is the EVT drop's own starting value (DVP_StructInit) and means the field is left for your own code."
+      - key: cols
+        name: Bytes per row
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_COL_NUM
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "DVP_COL_NUM. Counted in BYTES, not pixels, so an RGB565 line of 320 pixels is 640. 0 is DVP_StructInit()'s value."
+      - key: crop
+        name: Crop window
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Crop
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "DVP_CR1 bit 5. Captures a rectangle of the sensor's frame instead of all of it; the four window rows below apply only while it is on."
+      - key: win_hoff
+        name: Window horizontal offset
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_HOFFCNT
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_HOFFCNT, in BYTES from the start of the line - the same unit as Bytes per row."
+      - key: win_vst
+        name: Window first line
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_VST
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_VST, the first line of the frame that is kept."
+      - key: win_capcnt
+        name: Window width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_CAPCNT
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_CAPCNT, bytes captured per line."
+      - key: win_vline
+        name: Window height
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_VLine
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_VLINE, lines captured per frame."
+    notes: >
+      Digital video port: a parallel camera interface. The Mode row picks the data width
+      AND the pads it claims - 8-bit takes D0-D7, 10-bit adds D8-D9, 12-bit adds D10-D11 -
+      and Parameter Settings writes the matching DVP_CR0.DATA_SIZE rather than offering the
+      width a second time, so the pin plan and the register cannot disagree.
+      THE TWO DMA BUFFER ADDRESSES ARE DELIBERATELY NOT ROWS. `DVP_DMA_BUF0_Addr` and
+      `DVP_DMA_BUF1_Addr` (ch32h417_dvp.h:31-35) are pointers into your own program's
+      memory - a symbol this tool has no way to know - so they are left at the struct's
+      zero-initialiser, which is exactly what the vendor's own `DVP_StructInit()` sets them
+      to (ch32h417_dvp.c). Assign `DVP->DMA_BUF0` / `DMA_BUF1` in the USER CODE block before
+      `DVP_Cmd(ENABLE)`. Every other member of the struct is a row above.
   ECDC:
     category: System Core
     settings:
@@ -2630,13 +3117,33 @@ peripherals:
       through its own registers and the clock tree only.
   ETH:
     category: Connectivity
+    notes: >
+      MAC plus a BUILT-IN 10/100M PHY: "Single chip can realize Ethernet communication",
+      and "MAC and 100M PHY are fully integrated, and the periphery only needs capacitance"
+      (CH32H417DS0.md 1.4.31, 1.2). So the ordinary configuration is the internal PHY -
+      four media-dependent pads straight to the magnetics, with no MAC-to-PHY interface on
+      pins at all, and nothing to select.
+      RGMII is the OTHER supported configuration and the only interface the DS names: it is
+      how an external 1Gbps PHY is attached, which the DS calls "Optional Ethernet
+      controller MAC + external 1Gbps PHY".
+      MII and RMII are deliberately NOT offered. Neither word appears anywhere in this
+      part's datasheet - its Ethernet section lists only RGMII - and a choice the silicon
+      does not have is the defect class this project exists to remove. (Before this change
+      the file offered MII and RMII, both invented.)
     settings:
       - name: Interface
         choices:
           - { name: Disable }
-          - { name: MII, signals: [MDC, MDIO] }
-          - { name: RMII, signals: [MDC, MDIO] }
-          - { name: RGMII, signals: [MDC, MDIO, GTXC, RXC, RXD0, RXD1, RXD2, RXD3, RXDV, TXD0, TXD1, TXD2, TXD3, TXEN] }
+          - { name: "Internal PHY (built-in 10/100M)", signals: [MDIRN, MDIRP, MDITN, MDITP] }
+          - { name: "RGMII (external 1Gbps PHY)", signals: [GTXC, RXC, RXD0, RXD1, RXD2, RXD3, RXDV, TXD0, TXD1, TXD2, TXD3, TXEN] }
+      # SMI - MDC and MDIO - is how the controller reaches a PHY's registers, and the DS
+      # describes it as the interface used "to configure and manage the external PHYs". So
+      # it is a choice of its own rather than bundled into Interface: the internal PHY runs
+      # without it, and an external one generally needs it.
+      - name: "SMI (serial management interface)"
+        choices:
+          - { name: Disable }
+          - { name: "MDC + MDIO", signals: [MDC, MDIO] }
       - name: "Status outputs"
         type: checkboxes
         choices:
@@ -2647,6 +3154,14 @@ peripherals:
           - { name: PHY_LED4, signals: [PHY_LED4] }
           - { name: "PPS (pulse per second)", signals: [PPS] }
     signal_pins:
+      # The internal PHY's differential pairs. No `af:` and none is possible: these pads are
+      # driven by the PHY block rather than by the GPIO cell, and DS Table 2-1-1 gives them
+      # no (AFn) code. That is why ETH appears in `codegen.skip_signals` below. They are
+      # routed here so the pin grid claims them and the conflict engine sees them.
+      MDIRN: [{ pin: MDIRN }]
+      MDIRP: [{ pin: MDIRP }]
+      MDITN: [{ pin: MDITN }]
+      MDITP: [{ pin: MDITP }]
       GTXC: [{ pin: PD15, af: 10 }]
       MDC: [{ pin: PC0, af: 1 }]
       MDIO: [{ pin: PC1, af: 1 }]
@@ -2958,6 +3473,51 @@ peripherals:
       SCL: [{ pin: PA14, af: 7 }, { pin: PA8, af: 4 }]
       SDA: [{ pin: PA13, af: 7 }, { pin: PC9, af: 4 }]
       SMBA: [{ pin: PA15, af: 7 }, { pin: PA9, af: 4 }]
+    # Same block as I2C1/I2C2: ch32h417.h:1742 and :1767 cast I2C3 and I2C4 to
+    # `I2C_TypeDef *`, and I2C_Init() (ch32h417_i2c.h:302) takes either. The SPL's own
+    # Init reads only the standard/fast split at 100 kHz (ch32h417_i2c.c:160) - there is no
+    # register field above that - so the ceiling below is the documented peripheral maximum
+    # and not a computed one, the same bound I2C1 and I2C2 carry.
+    params:
+      - key: speed
+        name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
+        type: int
+        default: 100000
+        min: 1000
+        max: 1000000
+        unit: Hz
+        help: "I2C_CKCFGR CCR together with F/S. Above 100 kHz the peripheral must be in fast mode (ch32h417_i2c.c:160)."
+      - key: duty
+        name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
+        type: enum
+        default: "2:1"
+        options:
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
+        help: "I2C_CKCFGR DUTY, bit 14 (ch32h417_i2c.h:51-52). Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
+        type: enum
+        default: 7-bit
+        options:
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
+        help: "I2C_OAR1 ADDMODE, bit 15 (ch32h417_i2c.h:62-63)."
+      - key: addr
+        name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0] (ch32h417_i2c.h:34). Only the low 7 bits are used in 7-bit addressing mode."
   I2C4:
     category: Connectivity
     settings:
@@ -2970,6 +3530,51 @@ peripherals:
       SCL: [{ pin: PD12, af: 4 }, { pin: PB6, af: 6 }, { pin: PF12, af: 2 }, { pin: PB8, af: 6 }]
       SDA: [{ pin: PD13, af: 4 }, { pin: PB7, af: 6 }, { pin: PF13, af: 2 }, { pin: PB9, af: 6 }]
       SMBA: [{ pin: PD11, af: 4 }, { pin: PB5, af: 6 }, { pin: PF11, af: 2 }, { pin: PB9, af: 11 }]
+    # Same block as I2C1/I2C2: ch32h417.h:1742 and :1767 cast I2C3 and I2C4 to
+    # `I2C_TypeDef *`, and I2C_Init() (ch32h417_i2c.h:302) takes either. The SPL's own
+    # Init reads only the standard/fast split at 100 kHz (ch32h417_i2c.c:160) - there is no
+    # register field above that - so the ceiling below is the documented peripheral maximum
+    # and not a computed one, the same bound I2C1 and I2C2 carry.
+    params:
+      - key: speed
+        name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
+        type: int
+        default: 100000
+        min: 1000
+        max: 1000000
+        unit: Hz
+        help: "I2C_CKCFGR CCR together with F/S. Above 100 kHz the peripheral must be in fast mode (ch32h417_i2c.c:160)."
+      - key: duty
+        name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
+        type: enum
+        default: "2:1"
+        options:
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
+        help: "I2C_CKCFGR DUTY, bit 14 (ch32h417_i2c.h:51-52). Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
+        type: enum
+        default: 7-bit
+        options:
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
+        help: "I2C_OAR1 ADDMODE, bit 15 (ch32h417_i2c.h:62-63)."
+      - key: addr
+        name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0] (ch32h417_i2c.h:34). Only the low 7 bits are used in 7-bit addressing mode."
   I2S2:
     category: Connectivity
     settings:
@@ -3010,6 +3615,66 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    params:
+      - key: channel
+        name: Channel
+        struct: IPC_InitTypeDef
+        sdk_field: IPC_CH
+        type: enum
+        default: Channel 0
+        options:
+          - { name: Channel 0, value: 0, sdk: IPC_CH0 }
+          - { name: Channel 1, value: 1, sdk: IPC_CH1 }
+          - { name: Channel 2, value: 2, sdk: IPC_CH2 }
+          - { name: Channel 3, value: 3, sdk: IPC_CH3 }
+        help: "IPC_Channel_TypeDef, ch32h417_ipc.h:23-29. Four independent channels; this block configures one of them."
+      - key: txcid
+        name: Transmit core ID
+        struct: IPC_InitTypeDef
+        sdk_field: TxCID
+        type: enum
+        default: CID0
+        options:
+          - { name: CID0, value: 0, sdk: IPC_TxCID0 }
+          - { name: CID1, value: 1, sdk: IPC_TxCID1 }
+        help: "IPC_TxCID_TypeDef, ch32h417_ipc.h:32-36. Which core this channel's messages are addressed to."
+      - key: rxcid
+        name: Receive core ID
+        struct: IPC_InitTypeDef
+        sdk_field: RxCID
+        type: enum
+        default: CID0
+        options:
+          - { name: CID0, value: 0, sdk: IPC_RxCID0 }
+          - { name: CID1, value: 1, sdk: IPC_RxCID1 }
+        help: "IPC_RxCID_TypeDef, ch32h417_ipc.h:39-43. Which core's messages this channel listens for."
+      - key: txie
+        name: Transmit interrupt
+        struct: IPC_InitTypeDef
+        sdk_field: TxIER
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "IPC_InitTypeDef.TxIER (ch32h417_ipc.h:51). Raises the channel's interrupt when the message has been taken."
+      - key: rxie
+        name: Receive interrupt
+        struct: IPC_InitTypeDef
+        sdk_field: RxIER
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "IPC_InitTypeDef.RxIER (ch32h417_ipc.h:52). Raises the channel's interrupt when a message arrives."
+      - key: auto
+        name: Auto acknowledge
+        struct: IPC_InitTypeDef
+        sdk_field: AutoEN
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "IPC_InitTypeDef.AutoEN (ch32h417_ipc.h:53)."
   IWDG:
     category: System Core
     settings:
@@ -3620,6 +4285,70 @@ peripherals:
       MOSI: [{ pin: PA13, af: 1 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }]
       NSS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
       SCK: [{ pin: PA14, af: 1 }, { pin: PC10, af: 6 }, { pin: PB3, af: 6 }]
+    # THE PRESCALER MACROS ARE NOT THE CH32V00x SET EITHER. ch32h417_spi.h:106-113 names
+    # them SPI_BaudRatePrescaler_Mode0..Mode7, not _2 / _4 / ... / _256. Which divider each
+    # Mode selects depends on the SPI clock tree, which is not modelled here, so the options
+    # carry the header's own names rather than a division this file cannot yet prove.
+    # Copying CH32V006's list would fail verify_sdk_names.py. Same block as SPI1/SPI2:
+    # ch32h417.h:1734-1735 casts SPI3 and SPI4 to `SPI_TypeDef *`, and SPI_Init()
+    # (ch32h417_spi.h:198) takes either.
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
+        type: enum
+        default: Mode 3
+        options:
+          - { name: Mode 0, value: 0, sdk: SPI_BaudRatePrescaler_Mode0 }
+          - { name: Mode 1, value: 1, sdk: SPI_BaudRatePrescaler_Mode1 }
+          - { name: Mode 2, value: 2, sdk: SPI_BaudRatePrescaler_Mode2 }
+          - { name: Mode 3, value: 3, sdk: SPI_BaudRatePrescaler_Mode3 }
+          - { name: Mode 4, value: 4, sdk: SPI_BaudRatePrescaler_Mode4 }
+          - { name: Mode 5, value: 5, sdk: SPI_BaudRatePrescaler_Mode5 }
+          - { name: Mode 6, value: 6, sdk: SPI_BaudRatePrescaler_Mode6 }
+          - { name: Mode 7, value: 7, sdk: SPI_BaudRatePrescaler_Mode7 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111. The header names these Mode0..Mode7 rather than by divider (ch32h417_spi.h:106-113)."
+      - key: cpol
+        name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
+        help: "SPI_CTLR1 CPOL, bit 1 (ch32h417_spi.h:94-95)."
+      - key: cpha
+        name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
+        type: enum
+        default: 1 Edge
+        options:
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
+        help: "SPI_CTLR1 CPHA, bit 0 (ch32h417_spi.h:98-99)."
+      - key: datasize
+        name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
+        help: "SPI_CTLR1 DFF, bit 11 (ch32h417_spi.h:91-92)."
+      - key: firstbit
+        name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
+        type: enum
+        default: MSB First
+        options:
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
+        help: "SPI_CTLR1 LSBFIRST, bit 7 (ch32h417_spi.h:116-117)."
   SPI4:
     category: Connectivity
     settings:
@@ -3642,6 +4371,70 @@ peripherals:
       MOSI: [{ pin: PE14, af: 5 }, { pin: PE6, af: 5 }]
       NSS: [{ pin: PE11, af: 5 }, { pin: PE4, af: 5 }]
       SCK: [{ pin: PE12, af: 5 }, { pin: PE2, af: 5 }]
+    # THE PRESCALER MACROS ARE NOT THE CH32V00x SET EITHER. ch32h417_spi.h:106-113 names
+    # them SPI_BaudRatePrescaler_Mode0..Mode7, not _2 / _4 / ... / _256. Which divider each
+    # Mode selects depends on the SPI clock tree, which is not modelled here, so the options
+    # carry the header's own names rather than a division this file cannot yet prove.
+    # Copying CH32V006's list would fail verify_sdk_names.py. Same block as SPI1/SPI2:
+    # ch32h417.h:1734-1735 casts SPI3 and SPI4 to `SPI_TypeDef *`, and SPI_Init()
+    # (ch32h417_spi.h:198) takes either.
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
+        type: enum
+        default: Mode 3
+        options:
+          - { name: Mode 0, value: 0, sdk: SPI_BaudRatePrescaler_Mode0 }
+          - { name: Mode 1, value: 1, sdk: SPI_BaudRatePrescaler_Mode1 }
+          - { name: Mode 2, value: 2, sdk: SPI_BaudRatePrescaler_Mode2 }
+          - { name: Mode 3, value: 3, sdk: SPI_BaudRatePrescaler_Mode3 }
+          - { name: Mode 4, value: 4, sdk: SPI_BaudRatePrescaler_Mode4 }
+          - { name: Mode 5, value: 5, sdk: SPI_BaudRatePrescaler_Mode5 }
+          - { name: Mode 6, value: 6, sdk: SPI_BaudRatePrescaler_Mode6 }
+          - { name: Mode 7, value: 7, sdk: SPI_BaudRatePrescaler_Mode7 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111. The header names these Mode0..Mode7 rather than by divider (ch32h417_spi.h:106-113)."
+      - key: cpol
+        name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
+        help: "SPI_CTLR1 CPOL, bit 1 (ch32h417_spi.h:94-95)."
+      - key: cpha
+        name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
+        type: enum
+        default: 1 Edge
+        options:
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
+        help: "SPI_CTLR1 CPHA, bit 0 (ch32h417_spi.h:98-99)."
+      - key: datasize
+        name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
+        help: "SPI_CTLR1 DFF, bit 11 (ch32h417_spi.h:91-92)."
+      - key: firstbit
+        name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
+        type: enum
+        default: MSB First
+        options:
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
+        help: "SPI_CTLR1 LSBFIRST, bit 7 (ch32h417_spi.h:116-117)."
   SWPMI:
     category: Connectivity
     settings:
@@ -3656,6 +4449,59 @@ peripherals:
       RX: [{ pin: PC10, af: 11 }, { pin: PC8, af: 11 }]
       SUP: [{ pin: PC9, af: 11 }]
       TX: [{ pin: PC7, af: 11 }]
+    params:
+      - key: bitrate
+        name: Bit rate divider
+        struct: SWPMI_InitTypeDef
+        sdk_field: BitRate
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: >
+          SWPMI_BRR. The header states the relation rather than the frequency:
+          SWPMI_freq = SWPMI_clk / ((BitRate + 1) * 4), with the resulting rate required to
+          land between 100 kbit/s and 2 Mbit/s (ch32h417_swpmi.h:24-27). It is a DIVIDER
+          and not a bit rate, which is why this row is a small integer; the clock tree that
+          would let the tool compute the rate for you is not modelled on this part yet.
+      - key: txbuf
+        name: Transmit buffering
+        struct: SWPMI_InitTypeDef
+        sdk_field: TxBufferingMode
+        type: enum
+        default: None
+        options:
+          - { name: "None"  , value: 0, sdk: SWPMI_TxMode_Buffering_None }
+          - { name: Single  , value: 2, sdk: SWPMI_TxMode_Buffering_Single }
+          - { name: Multiple, value: 10, sdk: SWPMI_TxMode_Buffering_Multi }
+        help: "ch32h417_swpmi.h:41-43. The `value:` figures are the macros' own encodings (0x0 / 0x2 / 0xA), which are NOT a dense 0/1/2 enum."
+      - key: rxbuf
+        name: Receive buffering
+        struct: SWPMI_InitTypeDef
+        sdk_field: RxBufferingMode
+        type: enum
+        default: None
+        options:
+          - { name: "None"  , value: 0, sdk: SWPMI_RxMode_Buffering_None }
+          - { name: Single  , value: 1, sdk: SWPMI_RxMode_Buffering_Single }
+          - { name: Multiple, value: 5, sdk: SWPMI_RxMode_Buffering_Multi }
+        help: "ch32h417_swpmi.h:46-48. Encodings 0x0 / 0x1 / 0x5, again not dense."
+      - key: loopback_off
+        name: Loopback
+        struct: SWPMI_InitTypeDef
+        sdk_field: LoopBackMode
+        const: DISABLE
+        default: DISABLE
+        depends_on: { setting: Mode, ne: Loopback }
+        help: "ch32h417_swpmi.h:34. Fixed by the Mode row: a live single-wire link is not in loopback."
+      - key: loopback_on
+        name: Loopback
+        struct: SWPMI_InitTypeDef
+        sdk_field: LoopBackMode
+        const: ENABLE
+        default: ENABLE
+        depends_on: { setting: Mode, equals: Loopback }
+        help: "ch32h417_swpmi.h:34. Fixed by the Mode row: the transceiver is looped back for self-test and the pad carries nothing."
   TIM10:
     category: Timers
     settings:
@@ -3693,6 +4539,71 @@ peripherals:
       CH3: [{ pin: PA3, af: 8 }, { pin: PF6, af: 9 }, { pin: PB8, af: 1 }]
       CH4: [{ pin: PA4, af: 9 }, { pin: PF7, af: 9 }, { pin: PB9, af: 1 }]
       ETR: [{ pin: PA5, af: 9 }, { pin: PB5, af: 0 }, { pin: PF10, af: 8 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM11:
     category: Timers
     settings:
@@ -3730,6 +4641,71 @@ peripherals:
       CH3: [{ pin: PD7, af: 13 }, { pin: PF8, af: 13 }, { pin: PD5, af: 2 }]
       CH4: [{ pin: PD6, af: 2 }, { pin: PF9, af: 13 }]
       ETR: [{ pin: PD5, af: 13 }, { pin: PB2, af: 13 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM12:
     category: Timers
     settings:
@@ -3767,6 +4743,71 @@ peripherals:
       CH3: [{ pin: PE14, af: 2 }, { pin: PE5, af: 3 }, { pin: PF12, af: 13 }]
       CH4: [{ pin: PE15, af: 2 }, { pin: PE6, af: 3 }, { pin: PF13, af: 13 }]
       ETR: [{ pin: PB0, af: 13 }, { pin: PB3, af: 14 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM5:
     category: Timers
     settings:
@@ -3804,6 +4845,63 @@ peripherals:
       CH3: [{ pin: PC3, af: 2 }, { pin: PD14, af: 6 }, { pin: PA2, af: 2 }]
       CH4: [{ pin: PB0, af: 4 }, { pin: PD15, af: 6 }, { pin: PA3, af: 2 }]
       ETR: [{ pin: PD11, af: 6 }, { pin: PA4, af: 2 }]
+    # 16-bit general-purpose time base, the same one TIM2/TIM3/TIM4 carry. Counter mode and
+    # clock division ARE applied for this instance: TIM_TimeBaseInit()'s CTLR1 guard names
+    # TIM5 (ch32h417_tim.c). No repetition counter - RPTCR is written for TIM1 and TIM8
+    # only - so that row is ABSENT here rather than offered and ignored.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks. 16 bits on this instance (RM 15.4.13)."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM6:
     category: Timers
     settings:
@@ -3814,6 +4912,44 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    # BASIC TIMER - A PRESCALER, AN AUTO-RELOAD AND NOTHING ELSE, and the three rows the
+    # general-purpose timers have are ABSENT by citation rather than by omission:
+    #   counter mode / clock division - RM 16.4.1 (CH32H417RM.md:20474) makes CTLR1 bits
+    #     [6:4] and [15:8] Reserved on TIMx (x=6/7): there is no DIR, no CMS, no CKD field.
+    #     TIM_TimeBaseInit() agrees by not naming TIM6 or TIM7 in its CTLR1 guard, so a
+    #     dropdown here would write to nothing.
+    #   repetition counter - RPTCR is written for TIM1 and TIM8 only (same function).
+    # ARPE (bit 7) IS present in that same bit table, so the preload row stays and is
+    # applied by TIM_ARRPreloadConfig(), which writes CTLR1 unconditionally.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's HB bus clock / (Prescaler + 1). RM 16.2.1."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value 0xFFFF (RM 16.4, register map). Up-counting only on a basic timer, so one period is (Counter period + 1) ticks."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7 (RM 16.4.1, CH32H417RM.md:20474)."
   TIM7:
     category: Timers
     settings:
@@ -3824,6 +4960,44 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    # BASIC TIMER - A PRESCALER, AN AUTO-RELOAD AND NOTHING ELSE, and the three rows the
+    # general-purpose timers have are ABSENT by citation rather than by omission:
+    #   counter mode / clock division - RM 16.4.1 (CH32H417RM.md:20474) makes CTLR1 bits
+    #     [6:4] and [15:8] Reserved on TIMx (x=6/7): there is no DIR, no CMS, no CKD field.
+    #     TIM_TimeBaseInit() agrees by not naming TIM6 or TIM7 in its CTLR1 guard, so a
+    #     dropdown here would write to nothing.
+    #   repetition counter - RPTCR is written for TIM1 and TIM8 only (same function).
+    # ARPE (bit 7) IS present in that same bit table, so the preload row stays and is
+    # applied by TIM_ARRPreloadConfig(), which writes CTLR1 unconditionally.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's HB bus clock / (Prescaler + 1). RM 16.2.1."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value 0xFFFF (RM 16.4, register map). Up-counting only on a basic timer, so one period is (Counter period + 1) ticks."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7 (RM 16.4.1, CH32H417RM.md:20474)."
   TIM8:
     category: Timers
     settings:
@@ -3875,6 +5049,72 @@ peripherals:
       CH3N: [{ pin: PB1, af: 3 }, { pin: PC3, af: 0 }, { pin: PB15, af: 3 }]
       CH4: [{ pin: PC9, af: 3 }, { pin: PE6, af: 0 }]
       ETR: [{ pin: PF2, af: 3 }, { pin: PA0, af: 3 }]
+    # Advanced-control time base, identical to TIM1's. TIM8 is the other instance
+    # TIM_TimeBaseInit() writes RPTCR for (`if((TIMx == TIM1) || (TIMx == TIM8))`,
+    # ch32h417_tim.c), so the repetition counter is a real row here and nowhere else
+    # on this part except TIM1.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
+      - key: rcr
+        name: Repetition counter (RPTCR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_RepetitionCounter
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: "TIM8_RPTCR. An update event happens every (value + 1) counter cycles. Advanced timer only: TIM_TimeBaseInit() writes RPTCR for TIM1 and TIM8 and no other instance, so it is ABSENT from TIM2-TIM12 rather than offered and ignored."
   TIM9:
     category: Timers
     settings:
@@ -3912,6 +5152,71 @@ peripherals:
       CH3: [{ pin: PB12, af: 8 }, { pin: PC12, af: 2 }, { pin: PE5, af: 4 }, { pin: PA2, af: 4 }]
       CH4: [{ pin: PB11, af: 9 }, { pin: PC11, af: 2 }, { pin: PE6, af: 4 }, { pin: PA3, af: 4 }]
       ETR: [{ pin: PB13, af: 4 }, { pin: PC8, af: 6 }, { pin: PA4, af: 4 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TKEY:
     category: Analog
     # TKEY HAS NO PAD OF ITS OWN, and this is the citation rather than an assumption from
@@ -4021,6 +5326,57 @@ peripherals:
       RTS: [{ pin: PE0, af: 7 }, { pin: PF2, af: 7 }]
       RX: [{ pin: PC7, af: 7 }, { pin: PF3, af: 7 }]
       TX: [{ pin: PC6, af: 7 }, { pin: PF4, af: 7 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART5:
     category: Connectivity
     settings:
@@ -4045,6 +5401,57 @@ peripherals:
       RTS: [{ pin: PD7, af: 4 }]
       RX: [{ pin: PF5, af: 4 }, { pin: PE2, af: 4 }]
       TX: [{ pin: PE0, af: 4 }, { pin: PE3, af: 11 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART6:
     category: Connectivity
     settings:
@@ -4069,6 +5476,57 @@ peripherals:
       RTS: [{ pin: PA15, af: 8 }, { pin: PB14, af: 8 }]
       RX: [{ pin: PC11, af: 8 }, { pin: PD0, af: 8 }, { pin: PA11, af: 6 }, { pin: PA1, af: 8 }, { pin: PB8, af: 8 }]
       TX: [{ pin: PC10, af: 8 }, { pin: PD1, af: 8 }, { pin: PA0, af: 8 }, { pin: PA12, af: 6 }, { pin: PB9, af: 8 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART7:
     category: Connectivity
     settings:
@@ -4093,6 +5551,57 @@ peripherals:
       RTS: [{ pin: PC8, af: 8 }]
       RX: [{ pin: PB12, af: 14 }, { pin: PD2, af: 8 }, { pin: PB5, af: 14 }]
       TX: [{ pin: PB13, af: 14 }, { pin: PC12, af: 8 }, { pin: PB6, af: 14 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART8:
     category: Connectivity
     settings:
@@ -4117,6 +5626,57 @@ peripherals:
       RTS: [{ pin: PF8, af: 7 }, { pin: PF9, af: 11 }]
       RX: [{ pin: PB3, af: 11 }, { pin: PA8, af: 11 }, { pin: PE7, af: 7 }, { pin: PF6, af: 7 }]
       TX: [{ pin: PA15, af: 11 }, { pin: PB4, af: 11 }, { pin: PE8, af: 7 }, { pin: PF7, af: 7 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USBFS:
     category: Connectivity
     settings:
@@ -4392,6 +5952,12 @@ codegen:
     # GPIO cell. EXAM/SerDes/AcquireConfig does the same. The pins stay CLAIMED, so the
     # conflict engine still sees SerDes taking PE3-PE6; only the GPIO setup is skipped.
     SERDES: [TXP, TXN, RXP, RXN]
+    # ETH's media-dependent pairs, on the same evidence and for the same reason: the pads
+    # are driven by the built-in 10/100M PHY, not by the GPIO cell, and DS Table 2-1-1 gives
+    # them no (AFn) code. Without this the generator would emit an `af:` TODO for a pad that
+    # can never have one. The RGMII signals are NOT here - those are genuine alternate
+    # functions with real AF codes and must be configured normally.
+    ETH: [MDIRN, MDIRP, MDITN, MDITP]
 
   # AN ANALOG PAD IS `GPIO_Mode_AIN`, NOT AN ALTERNATE FUNCTION, and without this list the
   # generator could not tell the difference. `analogClaim()` (app/engine/constraints.js:255)
@@ -4418,6 +5984,28 @@ codegen:
   #
   # SERDES is not here either - see `skip_signals:` above: those pads take no GPIO
   # configuration of any kind, analog or otherwise.
+  # The SPL macro for each channel a `checkboxes` row can tick, for `sdk_repeat: channels`.
+  # KEYED BY THE CHOICE NAME, not by the signal: `selectedChannels()` in
+  # app/engine/codegen.js reads the ticked CHOICE names out of the settings, which is why
+  # the two internal channels appear here under their full labels - they have no pad and
+  # therefore no signal, and a ticked box with no macro is a TODO in the generated C.
+  # ch32h417_adc.h:83-100 defines ADC_Channel_0..17, with ADC_Channel_16 aliased
+  # ADC_Channel_TempSensor and ADC_Channel_17 aliased ADC_Channel_Vrefint (:102-103); the
+  # numeric spelling is used so the list reads as the sequence the datasheet numbers.
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            IN8: ADC_Channel_8, IN9: ADC_Channel_9, IN10: ADC_Channel_10, IN11: ADC_Channel_11,
+            IN12: ADC_Channel_12, IN13: ADC_Channel_13, IN14: ADC_Channel_14, IN15: ADC_Channel_15,
+            "IN16 (temperature sensor, internal)": ADC_Channel_16,
+            "IN17 (internal reference voltage, internal)": ADC_Channel_17 }
+    ADC2: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            IN8: ADC_Channel_8, IN9: ADC_Channel_9, IN10: ADC_Channel_10, IN11: ADC_Channel_11,
+            IN12: ADC_Channel_12, IN13: ADC_Channel_13, IN14: ADC_Channel_14, IN15: ADC_Channel_15,
+            "IN16 (temperature sensor, internal)": ADC_Channel_16,
+            "IN17 (internal reference voltage, internal)": ADC_Channel_17 }
+
   analog_signals:
     ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13, IN14, IN15]
     ADC2: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13, IN14, IN15]
@@ -4494,22 +6082,75 @@ codegen:
     USART_InitTypeDef:       { fn: USART_Init }         # ch32h417_usart.h:184
     SPI_InitTypeDef:         { fn: SPI_Init }           # ch32h417_spi.h:198
     I2C_InitTypeDef:         { fn: I2C_Init }           # ch32h417_i2c.h:302
+    ADC_InitTypeDef:         { fn: ADC_Init }          # ch32h417_adc.h:174
+    # `no_handle: true` is the data saying the Init takes the struct ALONE - these three
+    # peripherals are singletons on this part, so their base address is compiled into the
+    # SDK function rather than passed to it. Getting this wrong is not a compile error on
+    # one side: `DVP_Init(DVP, &s)` would fail to build, but omitting the flag makes the
+    # generator emit `DVP_Init(<nothing>, &s)` as a TODO instead of the call.
+    DVP_InitTypeDef:         { fn: DVP_Init,   no_handle: true }   # ch32h417_dvp.h:115
+    IPC_InitTypeDef:         { fn: IPC_Init,   no_handle: true }   # ch32h417_ipc.h:80
+    SWPMI_InitTypeDef:       { fn: SWPMI_Init, no_handle: true }   # ch32h417_swpmi.h:78
     TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }   # ch32h417_tim.h:465
+    # TIM9-TIM12 have their OWN time-base struct and their own init function, and this is
+    # the line that keeps the two apart. ch32h417_tim.h:125-141 defines
+    # TIM9_12_TimeBaseInitTypeDef with a 32-bit TIM_Period and no TIM_RepetitionCounter;
+    # :556 declares TIM9_12_TimeBaseInit(), which writes ATRLR_32 where TIM_TimeBaseInit()
+    # writes the 16-bit ATRLR - and whose CTLR1 guard names TIM1/2/3/4/5/8 only, so
+    # passing a TIM9 through it would set no counter mode at all.
+    TIM9_12_TimeBaseInitTypeDef: { fn: TIM9_12_TimeBaseInit }   # ch32h417_tim.h:556
     I3C_Ctrl_BusTypeDef:     { fn: I3C_Ctrl_Init, no_handle: true }   # ch32h417_i3c.h:400
 
   periph_handle:
     USART1: USART1
     USART2: USART2
     USART3: USART3
+    # USART4-8, SPI3-4 and I2C3-4 got their `params:` this cycle, and a `params:` block
+    # without a handle here is not half a feature - the generator emits
+    # `/* TODO: nothing applies this struct */` beside a filled-in struct, which is
+    # worse than no rows at all. Every name below is a define in ch32h417.h:
+    # USART4/5 at :1738-1739, USART6/7/8 at :1724-1726, SPI3/4 at :1734-1735,
+    # I2C3 at :1742 and I2C4 at :1767 - all `(USART_TypeDef *)` / `(SPI_TypeDef *)` /
+    # `(I2C_TypeDef *)`, so USART_Init / SPI_Init / I2C_Init take them unchanged.
+    USART4: USART4
+    USART5: USART5
+    USART6: USART6
+    USART7: USART7
+    USART8: USART8
     SPI1:   SPI1
     SPI2:   SPI2
+    SPI3:   SPI3
+    SPI4:   SPI4
     I2C1:   I2C1
     I2C2:   I2C2
+    I2C3:   I2C3
+    I2C4:   I2C4
     I3C:    I3C
     TIM1:   TIM1
     TIM2:   TIM2
     TIM3:   TIM3
     TIM4:   TIM4
+    # ch32h417.h:1718-1723 (TIM2-TIM7), :1762/:1764/:1766 (TIM1, TIM8, TIM12) and
+    # :1772-1774 (TIM9-TIM11): every one is a `(TIM_TypeDef *)`, including TIM9-TIM12,
+    # whose SEPARATE init function TIM9_12_TimeBaseInit() also takes a TIM_TypeDef*. One
+    # handle name per instance; which struct goes with it is init_structs' business.
+    TIM5:   TIM5
+    TIM6:   TIM6
+    TIM7:   TIM7
+    TIM8:   TIM8
+    TIM9:   TIM9
+    TIM10:  TIM10
+    TIM11:  TIM11
+    TIM12:  TIM12
+    # ADC1/ADC2 are `(ADC_TypeDef *)` at ch32h417.h:1758-1759. The handle is needed twice
+    # over here, and the second use is the one that is easy to forget: ADC's sampling time
+    # is not a struct member but the first argument of ADC_RegularChannelConfig(ADCx, ...),
+    # so without this key the per-channel calls are TODOs as well as the init struct.
+    ADC1:   ADC1
+    ADC2:   ADC2
+    # LPTIM_TimeBaseInit(LPTIMx, &s) - ch32h417.h:1727 and :1732, both `(LPTIM_TypeDef *)`.
+    LPTIM1: LPTIM1
+    LPTIM2: LPTIM2
 
   # Which enable register each peripheral's clock bit lives in. Generated from
   # ch32h417_rcc.h: every RCC_HB*Periph_* macro, with the bit taken as log2 of its
@@ -15931,22 +17572,126 @@ function applyChannelParams(pid, obj) {
 // =============================================================================
 //  clock.js — clock tree maths. No DOM, no rendering: renderClock() (UI) draws
 //  whatever clockCalc() returns, so a new MCU's tree needs no UI change.
+//
+//  Two things a part may have more than one of, and both are data:
+//    * PLLs.  `clock.pll` is the SYS PLL and keeps that spelling; `clock.plls`
+//      is a map of the others, each with an `output:` name that a tap, another
+//      PLL or `sysclk.sources` can cite.
+//    * a tap's source.  `source:` is one name, or a LIST — and a list is a mux
+//      the user picks from, held in `S.clock.preSrc[<tap>]`.
+//  Neither names a part. `data/FORMAT.md` has the block; the rule that governs
+//  both is that a computed number which is WRONG is worse than a missing one,
+//  so every frequency here comes from the file or is not printed at all.
 // =============================================================================
 
 
 
+// ---------------------------------------------------------------------------
+//  PLLs
+// ---------------------------------------------------------------------------
+
+/**
+ * Every PLL the file declares, the SYS PLL first.
+ *
+ * `clock.pll` stays the SYS PLL's spelling because five parts have exactly one
+ * PLL and a `plls:` map would have rewritten all five for nothing. A file that
+ * writes the SYS PLL as `plls.PLL` instead is read identically, so neither
+ * spelling is the special case and nothing downstream has to ask which was used.
+ *
+ * Each entry: `{ id, def, sys, label, output }`. `output` is the name other taps
+ * cite — `PLLCLK` for the SYS PLL, `<id>_CLK` for a named one that does not say.
+ */
+function pllList(c) {
+  if (!c) return [];
+  const named = c.plls || {};
+  const sysDef = c.pll || named.PLL || null;
+  const entry = (id, def, sys) => ({
+    id, def, sys,
+    label: def.label || (sys ? 'PLL' : id),
+    output: def.output || (sys ? 'PLLCLK' : id + '_CLK'),
+  });
+  const out = [];
+  if (sysDef) out.push(entry('PLL', sysDef, true));
+  for (const [id, def] of Object.entries(named)) {
+    if (id === 'PLL' || !def) continue;
+    out.push(entry(id, def, false));
+  }
+  return out;
+}
+
+// The node id the UI and `feeding` use for a PLL. The SYS PLL is `PLL` — it was
+// that before `plls:` existed and an older bundle's key must keep meaning the
+// same thing — and every other one is `pll:<id>`, which cannot collide with an
+// oscillator, a prescaler (`pre:`) or a derived tap (`drv:`).
+const pllNode = p => (p.sys ? 'PLL' : 'pll:' + p.id);
+
+/**
+ * One PLL's live state. The SYS PLL keeps the flat `pllIn` / `pllMul` keys every
+ * project file and the RCC codegen already write; a named PLL lives in
+ * `S.clock.plls[<id>]` as `{ in, mul, div }`.
+ */
+function pllState(p, k) {
+  if (!k) return { in: 0 };
+  const held = (k.plls || {})[p.id] || {};
+  if (!p.sys) return held;
+  return { in: k.pllIn || 0, mul: k.pllMul, div: held.div };
+}
+
+function pllDefaultState(p) {
+  const st = { in: 0 };
+  const muls = p.def.multipliers || [], divs = p.def.dividers || [];
+  if (muls.length) st.mul = muls[0];
+  if (divs.length) st.div = divs[0];
+  return st;
+}
+
+// ---------------------------------------------------------------------------
+//  Taps (prescalers)
+// ---------------------------------------------------------------------------
+
+/** The sources a tap offers when its `source:` is a LIST, else null. */
+const tapSources = v => (v && Array.isArray(v.source) ? v.source.filter(Boolean) : null);
+
+/**
+ * The source a tap is taking RIGHT NOW: its single `source:`, or the chosen entry
+ * of its list. A chosen value the file no longer offers falls back to the first —
+ * the same rule the GPIO speed follows, and for the same reason: state that names
+ * something the part does not have must never reach a frequency or the generated C.
+ */
+function tapSource(v, name, k) {
+  const list = tapSources(v);
+  if (!list) return v.source || null;
+  const chosen = ((k || {}).preSrc || {})[name];
+  return list.includes(chosen) ? chosen : list[0];
+}
+
 // Initial clock state for an MCU's `clock:` block (null when the file has none).
+//
+// `preSrc` and `plls` are written only when the part HAS a mux or a second PLL,
+// so a project saved for one of the five single-PLL parts round-trips byte for
+// byte against a build that predates this schema.
 function defaultClock(c) {
   if (!c) return null;
-  const pre = {};
-  for (const [k, v] of Object.entries(c.prescalers || {})) pre[k] = v.options[0];
-  return {
+  const pre = {}, preSrc = {};
+  for (const [name, v] of Object.entries(c.prescalers || {})) {
+    const opts = v.options || [];
+    pre[name] = opts.some(o => String(o) === String(v.default)) ? v.default : opts[0];
+    const list = tapSources(v);
+    if (list) preSrc[name] = list.includes(v.default_source) ? v.default_source : list[0];
+  }
+  const plls = {};
+  for (const p of pllList(c)) if (!p.sys) plls[p.id] = pllDefaultState(p);
+  const sysPll = pllList(c).find(p => p.sys);
+  const k = {
     hse: c.sources.HSE ? c.sources.HSE.mhz : 8,
     pllIn: 0,
-    pllMul: c.pll ? c.pll.multipliers[0] : 1,
+    pllMul: sysPll && (sysPll.def.multipliers || []).length ? sysPll.def.multipliers[0] : 1,
     sys: c.sysclk.sources[0],
     pre,
   };
+  if (Object.keys(preSrc).length) k.preSrc = preSrc;
+  if (Object.keys(plls).length) k.plls = plls;
+  return k;
 }
 
 // The root prescaler (the one with no `source:`) — AHB on F1-style parts, HB on V00x.
@@ -15954,25 +17699,53 @@ const firstPre = c => Object.keys(c.prescalers || {}).find(n => !(c.prescalers[n
 
 /**
  * Which node ids carry a clock right now. Ids match what the UI draws:
- * HSI/HSE/LSI/LSE, PLL, SYSCLK, `pre:<name>`, `drv:<name>`. "Not feeding" is a
- * DISPLAY fact (dashed and dimmed) — it never means the user may not pick it.
+ * HSI/HSE/LSI/LSE, PLL, `pll:<name>`, SYSCLK, `pre:<name>`, `drv:<name>`. "Not
+ * feeding" is a DISPLAY fact (dashed and dimmed) — it never means the user may
+ * not pick it.
  */
 function feedingSet(c, k) {
   const on = new Set(['SYSCLK']);
-  const pllSrc = c.pll ? (c.pll.inputs[k.pllIn] || {}).source : null;
-  // a prescaler tapped straight off the PLL (USB on the dummy part) keeps the
-  // PLL running even when SYSCLK comes from somewhere else
-  if (Object.values(c.prescalers || {}).some(v => v.source === 'PLLCLK')) on.add('PLL');
-  if (k.sys === 'PLLCLK') on.add('PLL'); else on.add(k.sys);
-  if (on.has('PLL') && pllSrc) on.add(pllSrc);
   const fp = firstPre(c);
-  if (fp) on.add('pre:' + fp);
+  const plls = pllList(c);
+  const byOutput = {};
+  for (const p of plls) byOutput[p.output] = p;
+
+  // 1. the PLLs something asks for. A PLL a tap hangs off keeps running even when
+  //    SYSCLK comes from somewhere else (USB on the dummy part, USBFS on H417).
+  const want = new Set();
+  if (byOutput[k.sys]) want.add(byOutput[k.sys].id); else on.add(k.sys);
   for (const [name, v] of Object.entries(c.prescalers || {})) {
-    if (name === fp) continue;
-    const base = v.source === 'PLLCLK' ? 'PLL'
-      : (v.source && v.source !== fp && c.prescalers[v.source]) ? 'pre:' + v.source
-      : (fp ? 'pre:' + fp : 'SYSCLK');
-    if (on.has(base)) on.add('pre:' + name);
+    const s = tapSource(v, name, k);
+    if (s && byOutput[s]) want.add(byOutput[s].id);
+  }
+  // …and whatever feeds THEM, which may be another PLL (H417's USBHS_PLL can take
+  // the SYS PLL's output divided down). Bounded by the number of PLLs, so a file
+  // that wires two of them in a circle stops instead of spinning.
+  for (let pass = 0; pass <= plls.length; pass++) {
+    for (const p of plls) {
+      if (!want.has(p.id)) continue;
+      const inp = (p.def.inputs || [])[pllState(p, k).in || 0];
+      if (!inp) continue;
+      if (byOutput[inp.source]) want.add(byOutput[inp.source].id); else on.add(inp.source);
+    }
+  }
+  for (const p of plls) if (want.has(p.id)) on.add(pllNode(p));
+
+  // 2. the taps, in dependency order rather than file order: a mux may point at a
+  //    prescaler declared later in the file, and "unresolved" must not read as "off".
+  if (fp) on.add('pre:' + fp);
+  const baseNode = (name, v) => {
+    const s = tapSource(v, name, k);
+    if (!s || s === fp) return fp ? 'pre:' + fp : 'SYSCLK';
+    if (byOutput[s]) return pllNode(byOutput[s]);
+    if (s === 'SYSCLK') return 'SYSCLK';
+    if (s !== name && (c.prescalers || {})[s]) return 'pre:' + s;
+    if ((c.sources || {})[s]) return s;
+    return fp ? 'pre:' + fp : 'SYSCLK';
+  };
+  const left = Object.entries(c.prescalers || {}).filter(([n]) => n !== fp);
+  for (let pass = 0; pass <= left.length; pass++) {
+    for (const [name, v] of left) if (on.has(baseNode(name, v))) on.add('pre:' + name);
   }
   for (const d of c.derived || []) if (!fp || on.has('pre:' + fp)) on.add('drv:' + d.name);
   return on;
@@ -15985,25 +17758,47 @@ function feedingSet(c, k) {
  */
 function clockSelectable(m = M) {
   const c = m.clock;
-  if (!c) return { sys: [], pllIn: [], pllMul: [], pre: {} };
+  if (!c) return { sys: [], pllIn: [], pllMul: [], pre: {}, preSrc: {}, plls: {} };
+  const inputsOf = def => (def.inputs || []).map((i, index) =>
+    ({ index, name: i.name, source: i.source, div: i.div || 1 }));
+  const list = pllList(c), sysPll = list.find(p => p.sys);
+  const plls = {};
+  for (const p of list) {
+    plls[p.id] = {
+      id: p.id, label: p.label, output: p.output, sys: p.sys,
+      inputs: inputsOf(p.def),
+      multipliers: [...(p.def.multipliers || [])],
+      dividers: [...(p.def.dividers || [])],
+      fixed: p.def.output_mhz !== undefined,
+    };
+  }
+  const pre = Object.entries(c.prescalers || {});
   return {
     sys: [...c.sysclk.sources],
-    pllIn: (c.pll ? c.pll.inputs : []).map((i, index) =>
-      ({ index, name: i.name, source: i.source, div: i.div || 1 })),
-    pllMul: c.pll ? [...c.pll.multipliers] : [],
-    pre: Object.fromEntries(Object.entries(c.prescalers || {}).map(([n, v]) => [n, [...v.options]])),
+    pllIn: sysPll ? inputsOf(sysPll.def) : [],
+    pllMul: sysPll ? [...(sysPll.def.multipliers || [])] : [],
+    pre: Object.fromEntries(pre.map(([n, v]) => [n, [...v.options]])),
+    preSrc: Object.fromEntries(pre.filter(([, v]) => tapSources(v)).map(([n, v]) => [n, tapSources(v)])),
+    plls,
   };
 }
 
-// Does HSE reach SYSCLK, directly or through the PLL? The RCC coupling hangs off
-// this: CubeMX switches the crystal on the moment the mux points at it.
+// Does HSE reach SYSCLK, directly or through the PLL chain? The RCC coupling
+// hangs off this: CubeMX switches the crystal on the moment the mux points at it.
+// The chain is WALKED rather than the one `clock.pll` hop it used to be, because a
+// part may put a second PLL between the crystal and SYSCLK.
 function hseFeedsSysclk(m = M, s = S) {
   const c = m.clock, k = s.clock;
   if (!c || !k) return false;
   if (k.sys === 'HSE') return true;
-  if (k.sys === 'PLLCLK' && c.pll) {
-    const inp = c.pll.inputs[k.pllIn];
-    return !!inp && inp.source === 'HSE';
+  const list = pllList(c), byOutput = {};
+  for (const p of list) byOutput[p.output] = p;
+  let p = byOutput[k.sys];
+  for (let guard = 0; p && guard <= list.length; guard++) {
+    const inp = (p.def.inputs || [])[pllState(p, k).in || 0];
+    if (!inp) return false;
+    if (inp.source === 'HSE') return true;
+    p = byOutput[inp.source];
   }
   return false;
 }
@@ -16011,37 +17806,106 @@ function hseFeedsSysclk(m = M, s = S) {
 /**
  * Every frequency in MHz. Back-compatible keys (SYSCLK, HCLK, PLLCLK, pllIn,
  * every prescaler output, every derived tap, `over`) plus the round-2 shape the
- * clock UI binds to: `sources`, `pll`, `sysclk`, `hclk`, `feeding`, `under`,
- * `selectable`.
+ * clock UI binds to: `sources`, `pll`, `plls`, `sysclk`, `hclk`, `feeding`,
+ * `under`, `selectable`.
  *
- * NOTE for MCU files: prescaler and derived-tap names share this object with the
- * keys above, so a prescaler may not be called `sources`, `pll`, `feeding`,
- * `over`, `under`, `selectable`, `sysclk` or `hclk`.
+ * NOTE for MCU files: prescaler names, derived-tap names and PLL OUTPUT names all
+ * share this object with the keys above, so none of them may be called `sources`,
+ * `pll`, `plls`, `feeding`, `over`, `under`, `selectable`, `sysclk` or `hclk`.
  */
 function clockCalc(m = M, s = S) {
   const c = m.clock, k = s.clock, out = { over: [], under: [] };
-  const src = {
-    HSI: c.sources.HSI ? c.sources.HSI.mhz : 0,
-    HSE: k.hse,
-    LSI: c.sources.LSI ? c.sources.LSI.khz / 1000 : 0,
-    LSE: c.sources.LSE ? c.sources.LSE.khz / 1000 : 0,
+  // Every oscillator the file declares, not the four CH32V006 happens to have: a
+  // part may name its input clock anything (H417 feeds USBHS_PLL from ETHCLK_20M),
+  // and a source with no entry here is a source no tap could ever resolve.
+  const src = {};
+  for (const [name, d] of Object.entries(c.sources || {})) {
+    src[name] = d.khz !== undefined ? d.khz / 1000 : (name === 'HSE' ? k.hse : d.mhz);
+  }
+
+  // ---- the PLLs, resolved in dependency order --------------------------------
+  // A PLL may take another PLL's output, so file order is not evaluation order.
+  const plls = pllList(c);
+  out.plls = {};
+  const record = (p, inMhz, mhz, st, inp) => {
+    out[p.output] = mhz;
+    out.plls[p.id] = {
+      id: p.id, label: p.label, output: p.output, sys: p.sys,
+      in: inMhz, out: mhz,
+      mul: p.def.output_mhz !== undefined ? null : (st.mul !== undefined ? Number(st.mul) : 1),
+      div: st.div !== undefined ? Number(st.div) : 1,
+      index: st.in || 0, source: inp ? inp.source : null, name: inp ? inp.name : null,
+      fixed: p.def.output_mhz !== undefined,
+    };
   };
-  const pin = c.pll ? c.pll.inputs[k.pllIn] : null;
-  out.pllIn = pin ? src[pin.source] / pin.div : 0;
-  out.PLLCLK = out.pllIn * (k.pllMul || 1);
-  out.SYSCLK = k.sys === 'PLLCLK' ? out.PLLCLK : src[k.sys];
+  const pendingPll = [...plls];
+  for (let pass = 0; pass <= plls.length && pendingPll.length; pass++) {
+    for (let i = pendingPll.length - 1; i >= 0; i--) {
+      const q = pendingPll[i], st = pllState(q, k);
+      const inp = (q.def.inputs || [])[st.in || 0] || null;
+      const from = inp ? (src[inp.source] !== undefined ? src[inp.source] : out[inp.source]) : 0;
+      if (from === undefined) continue;            // its input is a PLL not resolved yet
+      const inMhz = inp ? from / (inp.div || 1) : 0;
+      const mhz = q.def.output_mhz !== undefined ? Number(q.def.output_mhz)
+        : inMhz * (st.mul !== undefined ? Number(st.mul) : 1) / (st.div !== undefined ? Number(st.div) : 1);
+      record(q, inMhz, mhz, st, inp);
+      pendingPll.splice(i, 1);
+    }
+  }
+  // A PLL whose input never resolves (a file that wires two of them in a circle)
+  // prints nothing rather than a number nobody can trace.
+  for (const q of pendingPll) record(q, 0, 0, pllState(q, k), null);
+
+  const sysPll = out.plls.PLL;
+  out.pllIn = sysPll ? sysPll.in : 0;
+  out.PLLCLK = sysPll ? sysPll.out : 0;
+  for (const q of plls) {
+    const rp = out.plls[q.id], d = q.def;
+    if (d.max_mhz && rp.out > d.max_mhz) out.over.push(q.id);
+    if (d.min_mhz && rp.out < d.min_mhz) { out.over.push(q.id); out.under.push(q.id); }
+    if (d.target_mhz && Math.abs(rp.out - d.target_mhz) > 0.01) {
+      out.over.push(q.id);
+      if (rp.out < d.target_mhz) out.under.push(q.id);
+    }
+  }
+
+  out.SYSCLK = src[k.sys] !== undefined ? src[k.sys] : (out[k.sys] !== undefined ? out[k.sys] : 0);
   if (out.SYSCLK > c.sysclk.max_mhz) out.over.push('SYSCLK');
 
+  // ---- the taps, also in dependency order ------------------------------------
   const p = c.prescalers || {}, fp = firstPre(c);
-  out.HCLK = out.SYSCLK / (fp ? k.pre[fp] : 1);
+  const divOf = name => {
+    const held = k.pre ? k.pre[name] : undefined;
+    return held !== undefined ? held : ((p[name].options || [1])[0]);
+  };
+  out.HCLK = out.SYSCLK / (fp ? divOf(fp) : 1);
   if (fp && p[fp].max_mhz && out.HCLK > p[fp].max_mhz) out.over.push(fp);
 
-  for (const [name, v] of Object.entries(p)) {
-    if (name === fp) continue;
-    const base = v.source === 'PLLCLK' ? out.PLLCLK
-      : (v.source && v.source !== fp && out[v.source] !== undefined) ? out[v.source]
-      : out.HCLK;
-    out[name] = base / k.pre[name];
+  const baseOf = (name, v) => {
+    const s = tapSource(v, name, k);
+    if (!s || s === fp) return out.HCLK;
+    if (s === 'SYSCLK') return out.SYSCLK;
+    if (src[s] !== undefined) return src[s];
+    return out[s];                                 // PLLCLK, a named PLL output, another tap
+  };
+  const taps = Object.entries(p).filter(([n]) => n !== fp);
+  const unresolved = [...taps];
+  for (let pass = 0; pass <= taps.length && unresolved.length; pass++) {
+    for (let i = unresolved.length - 1; i >= 0; i--) {
+      const [name, v] = unresolved[i];
+      const base = baseOf(name, v);
+      if (base === undefined) continue;
+      out[name] = base / divOf(name);
+      unresolved.splice(i, 1);
+    }
+  }
+  // A tap whose source names nothing this file declares hangs off HCLK, which is
+  // what it did before muxes existed; the validator is where that becomes an error.
+  for (const [name] of unresolved) out[name] = out.HCLK / divOf(name);
+
+  // The limit checks stay in FILE order so the `over` list reads the way the tree
+  // is drawn, whatever order the frequencies had to be computed in.
+  for (const [name, v] of taps) {
     if (v.max_mhz && out[name] > v.max_mhz) out.over.push(name);
     if (v.min_mhz && out[name] < v.min_mhz) { out.over.push(name); out.under.push(name); }
     if (v.target_mhz && Math.abs(out[name] - v.target_mhz) > 0.01) {
@@ -16049,7 +17913,12 @@ function clockCalc(m = M, s = S) {
       if (out[name] < v.target_mhz) out.under.push(name);
     }
   }
-  for (const d of c.derived || []) out[d.name] = out.HCLK / d.div;
+  for (const d of c.derived || []) {
+    const base = d.source && d.source !== fp
+      ? (src[d.source] !== undefined ? src[d.source] : out[d.source])
+      : out.HCLK;
+    out[d.name] = (base === undefined ? out.HCLK : base) / d.div;
+  }
   if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) {
     out.over.push('HSE');
     if (k.hse < c.sources.HSE.min_mhz) out.under.push('HSE');
@@ -16062,7 +17931,7 @@ function clockCalc(m = M, s = S) {
   const on = feedingSet(c, k);
   out.feeding = { SYSCLK: true };
   for (const id of Object.keys(c.sources)) out.feeding[id] = on.has(id);
-  if (c.pll) out.feeding.PLL = on.has('PLL');
+  for (const q of plls) out.feeding[pllNode(q)] = on.has(pllNode(q));
   for (const name of Object.keys(p)) out.feeding['pre:' + name] = on.has('pre:' + name);
   for (const d of c.derived || []) out.feeding['drv:' + d.name] = on.has('drv:' + d.name);
 
@@ -16077,12 +17946,13 @@ function clockCalc(m = M, s = S) {
       over: out.over.includes(name),
     };
   }
-  const inp = c.pll ? c.pll.inputs[k.pllIn] : null;
-  out.pll = c.pll ? {
-    in: out.pllIn, out: out.PLLCLK, mul: k.pllMul || 1,
-    index: k.pllIn, source: inp ? inp.source : null, name: inp ? inp.name : null,
+  // `pll` is the SYS PLL alone and keeps every key it had; `plls` is the map.
+  out.pll = sysPll ? {
+    in: sysPll.in, out: sysPll.out, mul: sysPll.mul === null ? 1 : sysPll.mul,
+    index: sysPll.index, source: sysPll.source, name: sysPll.name,
     feeding: on.has('PLL'),
   } : null;
+  for (const q of plls) out.plls[q.id].feeding = on.has(pllNode(q));
   out.sysclk = out.SYSCLK;
   out.hclk = out.HCLK;
   out.selectable = clockSelectable(m);
@@ -17964,6 +19834,29 @@ function setClock(patch) {
         if (!pre) throw bad('prescaler', name, Object.keys(c.prescalers || {}));
         if (!pre.options.some(o => String(o) === String(val))) throw bad(`pre.${name}`, val, pre.options.map(String));
       }
+    } else if (k === 'preSrc') {
+      // A tap whose `source:` is a LIST is a mux, and the list is the whole set of
+      // choices: refusing anything outside it is the same rule the prescaler options
+      // follow. A tap with a single source has no mux to set at all.
+      const muxes = Object.keys(c.prescalers || {}).filter(n => tapSources(c.prescalers[n]));
+      for (const [name, val] of Object.entries(v)) {
+        const list = tapSources((c.prescalers || {})[name]);
+        if (!list) throw bad('clock mux', name, muxes);
+        if (!list.includes(val)) throw bad(`preSrc.${name}`, val, list);
+      }
+    } else if (k === 'plls') {
+      // The SYS PLL is set through `pllIn` / `pllMul`; `plls` is for the others, so a
+      // patch naming PLL here is refused rather than quietly writing a second copy of
+      // state the rest of the engine reads from the flat keys.
+      const named = pllList(c).filter(q => !q.sys);
+      for (const [id, st] of Object.entries(v)) {
+        const q = named.find(n => n.id === id);
+        if (!q) throw bad('PLL', id, named.map(n => n.id));
+        const inputs = q.def.inputs || [], muls = q.def.multipliers || [], divs = q.def.dividers || [];
+        if (st.in !== undefined && !inputs[st.in]) throw bad(`plls.${id}.in`, st.in, inputs.map((i, n) => `${n}=${i.name}`));
+        if (st.mul !== undefined && !muls.some(mu => String(mu) === String(st.mul))) throw bad(`plls.${id}.mul`, st.mul, muls.map(String));
+        if (st.div !== undefined && !divs.some(d => String(d) === String(st.div))) throw bad(`plls.${id}.div`, st.div, divs.map(String));
+      }
     } else {
       throw new Error(`setClock: unknown field "${k}"`);
     }
@@ -17972,7 +19865,11 @@ function setClock(patch) {
   const changed = {};
   batch('Clock', () => {
     for (const [k, v] of Object.entries(patch)) {
-      if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+      if (k === 'pre' || k === 'preSrc') S.clock[k] = Object.assign(S.clock[k] || {}, v);
+      else if (k === 'plls') {
+        S.clock.plls = S.clock.plls || {};
+        for (const [id, st] of Object.entries(v)) S.clock.plls[id] = Object.assign(S.clock.plls[id] || {}, st);
+      } else S.clock[k] = v;
     }
     if (!hseFeedsSysclk()) return;
     const h = hseSetting();
@@ -17997,6 +19894,7 @@ function setClock(patch) {
 //  readable YAML (`.wchproj`). Pure: serialise/apply touch only M, S and PROJECT.
 //  The browser download and the file dialogs live in the app shell.
 // =============================================================================
+
 
 
 
@@ -18133,6 +20031,62 @@ function normaliseGpioSpeeds() {
 }
 
 /**
+ * The clock state from a .wchproj.
+ *
+ * This was `Object.assign(S.clock, obj.clock)` while the state was flat, and a flat
+ * assign is exactly wrong now that `pre`, `preSrc` and `plls` are maps: assigning the
+ * whole map REPLACES it, so a file saved before a tap existed would drop that tap's
+ * divider from the state entirely and every frequency below it would read NaN. Each
+ * map is merged key by key, and a value the part does not offer is dropped and named
+ * rather than applied - the same contract as the GPIO speed and the DMA channel.
+ */
+function applyClock(saved) {
+  const out = [];
+  if (!saved || typeof saved !== 'object' || !M.clock || !S.clock) return out;
+  const c = M.clock, k = S.clock;
+  const drop = (what, val, why) => out.push(`Clock ${what}: "${val}" ${why}; using this part's default.`);
+  for (const [key, val] of Object.entries(saved)) {
+    if (key === 'pre') {
+      for (const [name, v] of Object.entries(val || {})) {
+        const pre = (c.prescalers || {})[name];
+        if (!pre) { drop(`prescaler "${name}"`, v, 'is not a prescaler this part has'); continue; }
+        if (!(pre.options || []).some(o => String(o) === String(v))) { drop(`prescaler ${name}`, v, 'is not one of its options'); continue; }
+        k.pre[name] = v;
+      }
+    } else if (key === 'preSrc') {
+      for (const [name, v] of Object.entries(val || {})) {
+        const list = tapSources((c.prescalers || {})[name]);
+        if (!list) { drop(`source mux "${name}"`, v, 'is not a mux this part has'); continue; }
+        if (!list.includes(v)) { drop(`${name} source`, v, 'is not one of its sources'); continue; }
+        (k.preSrc = k.preSrc || {})[name] = v;
+      }
+    } else if (key === 'plls') {
+      const named = pllList(c).filter(p => !p.sys);
+      for (const [id, st] of Object.entries(val || {})) {
+        const p = named.find(n => n.id === id);
+        if (!p || !st || typeof st !== 'object') { drop('PLL', id, 'is not a PLL this part has'); continue; }
+        const held = ((k.plls = k.plls || {})[id] = k.plls[id] || {});
+        if (st.in !== undefined) {
+          if ((p.def.inputs || [])[st.in]) held.in = st.in;
+          else drop(`${id} input`, st.in, 'is not one of its inputs');
+        }
+        if (st.mul !== undefined) {
+          if ((p.def.multipliers || []).some(m => String(m) === String(st.mul))) held.mul = st.mul;
+          else drop(`${id} multiplier`, st.mul, 'is not one of its multipliers');
+        }
+        if (st.div !== undefined) {
+          if ((p.def.dividers || []).some(d => String(d) === String(st.div))) held.div = st.div;
+          else drop(`${id} divider`, st.div, 'is not one of its dividers');
+        }
+      }
+    } else {
+      k[key] = val;
+    }
+  }
+  return out;
+}
+
+/**
  * DMA requests from a .wchproj. Everything goes through the same setters the UI uses,
  * so a saved file can never put state into S that the engine would reject live: a
  * request the part no longer has, a channel it is not wired to, a parameter value out
@@ -18247,7 +20201,7 @@ function projectApply(src) {
   dropped.push(...applyDma(obj.dma));
   dropped.push(...applyNvic(obj.nvic));
   dropped.push(...applyGenerator(obj.generator));
-  if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
+  dropped.push(...applyClock(obj.clock));
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
   // A project saved against an older MCU file may name parameters that no longer
@@ -18567,47 +20521,130 @@ function remapWord() {
 }
 
 // ---- RCC ---------------------------------------------------------------------
-function rccWord() {
-  const c = cfg().rcc;
-  if (!c || !M.clock) return null;
-  const k = S.clock;
-  let value = 0, mask = 0;
-  const parts = [];
+/**
+ * One register word under construction: the value, the mask, and the running list of
+ * what went into it. Pulled out of `rccWord()` because a part whose clock block has a
+ * second PLL or a peripheral source mux needs MORE THAN ONE register - CH32H417 puts
+ * the SYSCLK mux and the bus prescalers in CFGR0, the eight peripheral muxes in CFGR2
+ * and the PLL reference selects in PLLCFGR2 - and three copies of this arithmetic is
+ * three places for a mask to go wrong.
+ */
+function rccWordBuilder(register) {
+  const w = { register, value: 0, mask: 0, parts: [] };
   // One setting may need bits in more than one place: the V00x ADC divider is
   // ADCPRE[4:0] at bit 11 PLUS ADC_CLK_MODE at bit 31, and the gap between them holds
   // PLLSRC and MCO, so one wide field would swallow them. A spec may therefore be a
   // single { lsb, bits, values } or a LIST of them - the shape remap.fields already
   // uses. `default:` covers a slice that has no entry for the current value.
-  const put = (spec, raw, what) => {
+  w.put = (spec, raw, what) => {
     if (!spec) return;
     const slices = Array.isArray(spec) ? spec : [spec];
     const encoded = [];
     let anyExplicit = false;
-    for (const s of slices) {
-      let field = s.values ? s.values[raw] : raw;
+    for (const sl of slices) {
+      let field = sl.values ? sl.values[raw] : raw;
       if (field !== undefined) anyExplicit = true;
-      else if (s.default !== undefined) field = s.default;
+      else if (sl.default !== undefined) field = sl.default;
       else if (slices.length > 1) field = 0;   // a split field: the slice that does not
-      encoded.push({ s, field });              // name this value contributes zero
+      encoded.push({ s: sl, field });          // name this value contributes zero
     }
     if (!anyExplicit || encoded.some(e => e.field === undefined)) {
-      parts.push({ what, note: `no encoding for ${raw}` });
+      w.parts.push({ what, note: `no encoding for ${raw}` });
       return;                                  // a half-written divider is worse than a gap
     }
-    for (const { s, field } of encoded) {
-      const width = (1 << s.bits) - 1;
-      value |= (field & width) << s.lsb;
-      mask |= width << s.lsb;
+    for (const { s: sl, field } of encoded) {
+      const width = (1 << sl.bits) - 1;
+      w.value |= (field & width) << sl.lsb;
+      w.mask |= width << sl.lsb;
     }
     const one = encoded.length === 1;
-    parts.push({
+    w.parts.push({
       what, raw,
       field: one ? encoded[0].field : encoded.map(e => e.field),
       bits: one ? encoded[0].s.bits : encoded.map(e => e.s.bits),
       lsb: one ? encoded[0].s.lsb : encoded.map(e => e.s.lsb),
       slices: encoded.length,
     });
+    w.wrote = true;
   };
+  return w;
+}
+
+// The fields any one register spec can carry. `sources:` and `plls:` are what the
+// second-PLL / source-mux schema added; a register that names none of them writes
+// nothing, which is what every part but CH32H417 does today.
+function rccFill(w, spec, k) {
+  const named = pllList(M.clock).filter(p => !p.sys);
+  const byId = Object.fromEntries(named.map(p => [p.id, p]));
+  for (const [name, sp] of Object.entries(spec.sources || {})) {
+    const v = (M.clock.prescalers || {})[name];
+    if (!v) continue;
+    w.put(sp, tapSource(v, name, k), `${name} clock source`);
+  }
+  for (const [name, sp] of Object.entries(spec.prescalers || {})) w.put(sp, (k.pre || {})[name], `${name} prescaler`);
+  for (const [id, sp] of Object.entries(spec.plls || {})) {
+    const p = byId[id];
+    if (!p || !sp) continue;
+    const st = pllState(p, k);
+    // `src:` is keyed on the input's SOURCE, not on its index: an index is a position in
+    // a list the data may reorder, and the register field names a clock.
+    const inp = (p.def.inputs || [])[st.in || 0] || {};
+    if (sp.src) w.put(sp.src, inp.source, `${id} source`);
+    if (sp.div_in) w.put(sp.div_in, inp.div || 1, `${id} input divider`);
+    if (sp.mul) w.put(sp.mul, st.mul, `${id} multiplier`);
+    if (sp.div) w.put(sp.div, st.div, `${id} divider`);
+  }
+}
+
+/**
+ * Every RCC register this configuration writes: the primary one, then each entry of
+ * `codegen.rcc.extra:`. A part with one register gets a one-element list, which is
+ * what `rccWord()` returns the head of.
+ */
+function rccWords() {
+  const head = rccWord();
+  if (!head) return [];
+  const c = cfg().rcc, k = S.clock;
+  const out = [head];
+  for (const spec of c.extra || []) {
+    if (!spec || !spec.register) continue;
+    const w = rccWordBuilder(spec.register);
+    rccFill(w, spec, k);
+    if (w.parts.length) out.push(w);
+  }
+  // Anything the clock tab lets the user choose and NO register spec encodes. Without
+  // this the generated C prints "USBFS from USBHS_PLL_CLK /10 -> 48 MHz" in a comment
+  // and writes not one bit of CFGR2 for it: a file that reads as configured and boots
+  // at the reset value. Reported as a note beside the others, which is what `put()`
+  // already does for a divider it cannot encode.
+  const wrote = new Set();
+  for (const w of out) for (const p of w.parts) if (p.what) wrote.add(p.what);
+  const missing = [];
+  for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
+    if (tapSources(v) && !wrote.has(`${name} clock source`)) missing.push(`${name}'s source mux`);
+  }
+  for (const p of pllList(M.clock)) {
+    if (p.sys) continue;
+    if (![`${p.id} source`, `${p.id} multiplier`, `${p.id} divider`].some(x => wrote.has(x))) missing.push(p.id);
+  }
+  if (missing.length) {
+    head.parts.push({
+      what: 'not written',
+      note: `${missing.join(', ')} - the clock tab configures ${missing.length > 1 ? 'these' : 'this'} and the `
+        + `MCU file has no codegen.rcc encoding for ${missing.length > 1 ? 'them' : 'it'}, so the register `
+        + `${missing.length > 1 ? 'fields keep' : 'field keeps'} the reset value. Add a codegen.rcc.extra `
+        + `entry naming the register and the field`,
+    });
+  }
+  return out;
+}
+
+function rccWord() {
+  const c = cfg().rcc;
+  if (!c || !M.clock) return null;
+  const k = S.clock;
+  const w = rccWordBuilder(c.register || 'RCC->CFGR0');
+  const put = w.put, parts = w.parts;
   put(c.sw, k.sys, 'SYSCLK source');
   if (c.pllsrc && M.clock.pll) put(c.pllsrc, M.clock.pll.inputs[k.pllIn].source, 'PLL input');
   else if (!c.pllsrc && M.clock.pll && k.sys === 'PLLCLK') {
@@ -18633,8 +20670,8 @@ function rccWord() {
         + `part whose input carries a divider it is more than a source`,
     });
   }
-  for (const [name, spec] of Object.entries(c.prescalers || {})) put(spec, k.pre[name], `${name} prescaler`);
-  return { register: c.register || 'RCC->CFGR0', value: value >>> 0, mask: mask >>> 0, parts };
+  rccFill(w, c, k);
+  return { register: w.register, value: w.value >>> 0, mask: w.mask >>> 0, parts: w.parts };
 }
 
 // ---- the files ---------------------------------------------------------------
@@ -18954,19 +20991,36 @@ function rccSection() {
   const r = clockCalc(), k = S.clock, fp = firstPre(M.clock);
   L.push(`    /* SYSCLK ${r.SYSCLK} MHz from ${k.sys}${k.sys === 'PLLCLK' ? ` (${M.clock.pll.inputs[k.pllIn].name} x ${k.pllMul})` : ''} */`);
   L.push(`    /* ${fp} /${k.pre[fp]} -> HCLK ${r.HCLK} MHz */`);
+  // A second PLL gets its own line: its output is what the taps below are divided from,
+  // so a reader who cannot see it cannot check their arithmetic.
+  for (const p of pllList(M.clock)) {
+    if (p.sys) continue;
+    const rp = r.plls[p.id];
+    L.push(`    /* ${p.id}: ${rp.name || rp.source || '?'}${rp.fixed ? '' : ` x ${rp.mul}${rp.div !== 1 ? ` / ${rp.div}` : ''}`}`
+      + ` -> ${p.output} ${rp.out} MHz${rp.fixed ? ' (fixed)' : ''} */`);
+  }
   for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
     if (name === fp) continue;
-    L.push(`    /* ${name} /${k.pre[name]} -> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)` : ''} */`);
+    // A tap whose source is a mux says which side of it this configuration picked.
+    const from = tapSources(v) ? `${tapSource(v, name, k)} ` : '';
+    L.push(`    /* ${name} ${from}/${k.pre[name]} -> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
+      : v.target_mhz ? ` (must be ${v.target_mhz} MHz)` : ''} */`);
   }
   if (r.over.length) L.push(`    /* WARNING: out of specification: ${r.over.join(', ')} */`);
   L.push('');
-  const rcc = rccWord();
+  const words = rccWords();
+  const rcc = words[0] || null;
   if (rcc) {
-    for (const p of rcc.parts) {
-      L.push(p.note ? `    /* ${p.what}: ${p.note} */`
-        : `    /* ${p.what} = ${bin(p.field, p.bits)} (bit${p.bits > 1 ? `s ${p.lsb + p.bits - 1}:${p.lsb}` : ` ${p.lsb}`}) */`);
+    // One block per register: the fields that went into it, then the write. A part with
+    // one register gets exactly what it got before; CH32H417 gets CFGR0, then CFGR2,
+    // then PLLCFGR2, each under its own fields.
+    for (const w of words) {
+      for (const p of w.parts) {
+        L.push(p.note ? `    /* ${p.what}: ${p.note} */`
+          : `    /* ${p.what} = ${bin(p.field, p.bits)} (bit${p.bits > 1 ? `s ${p.lsb + p.bits - 1}:${p.lsb}` : ` ${p.lsb}`}) */`);
+      }
+      L.push(`    ${w.register} = (${w.register} & ~${hex(w.mask >>> 0)}) | ${hex(w.value >>> 0)};`);
     }
-    L.push(`    ${rcc.register} = (${rcc.register} & ~${hex(rcc.mask)}) | ${hex(rcc.value)};`);
     L.push('');
     // Name what THIS part has to start, not what CH32V006 has. A source the data marks
     // `fixed: true` runs from reset and needs no start-up; the rest do. A part with none
@@ -21660,8 +23714,11 @@ const hasDmaConflicts = () => typeof dmaConflicts === 'function';
 const hasDmaState = () => typeof dmaState === 'function';
 const CTABS = [
   // `instanceGroups` is in this test because a peripheral's parameters can live ENTIRELY
-  // in its per-instance block - an LTDC layer's settable members are all in
-  // LTDC_Layer_InitTypeDef - so `paramRows()` is empty for it and the tab would not appear.
+  // in its per-instance block: the settable members of an LTDC LAYER are all in
+  // LTDC_Layer_InitTypeDef, so a peripheral whose only configuration is per-instance has
+  // an empty `paramRows()` and its tab would not appear. (LTDC itself has two plain rows
+  // since the pixel format landed in round 5, so it is no longer the example - the
+  // reasoning is what this comment is for, and it is unchanged.)
   { id: 'param', name: 'Parameter Settings',
     has: pid => pid !== 'GPIO' && (paramRows(pid).length > 0 || instanceGroups(pid).length > 0) },
   { id: 'nvic', name: 'NVIC Settings', has: pid => hasNvic() && nvicVectorsOf(pid).length > 0 },
@@ -22558,7 +24615,15 @@ function renderClock() {
   // painted past the viewport edge with the ADC prescaler's <select> sliced through
   // (round-2 finding L2). The layout pass at the bottom of this function shrinks the gap
   // and then the columns to the room the panel actually has.
-  const COLW = [188, 208, 198, 216, 240];
+  // Six columns: oscillators, the SYS PLL, the OTHER PLLs, the SYSCLK mux, the root
+  // prescaler, everything hanging off it. Column 2 is new and is EMPTY on the five
+  // parts with one PLL - `cols` is built from the columns nodes actually landed in, so
+  // an empty one takes no width and those trees are laid out exactly as before.
+  // A second PLL has to sit between the sources and SYSCLK rather than beside the SYS
+  // PLL: it may take the SYS PLL's own output as its input (H417's USBHS_PLL does),
+  // and an edge inside one column has nowhere to go.
+  const COLW = [188, 208, 208, 198, 216, 240];
+  const COL = { src: 0, pll: 1, pll2: 2, sys: 3, root: 4, tap: 5 };
   // Every option list is clockCalc().selectable \u2014 the MCU file's FULL list, never
   // filtered by the current state. An option is missing from a mux only when the data
   // says this part cannot do it; nothing here may add a second reason.
@@ -22575,6 +24640,36 @@ function renderClock() {
   const preSel = n => `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
     + (sel.pre[n] || c.prescalers[n].options)
       .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  // A tap whose `source:` is a LIST is a mux. The <select> is drawn from
+  // clockCalc().selectable.preSrc - the file's whole list - and a tap with one source
+  // draws nothing at all, so a part without muxes gains no control it cannot use.
+  const srcSel = n => {
+    const list = (sel.preSrc || {})[n];
+    if (!list || list.length < 2) return '';
+    const cur = ((k.preSrc || {})[n] !== undefined && list.includes(k.preSrc[n])) ? k.preSrc[n] : list[0];
+    return `<select data-presrc="${attr(n)}" aria-label="${attr(n + ' clock source')}">`
+      + list.map(s => `<option value="${attr(s)}"${s === cur ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>';
+  };
+  // One PLL's controls: its input mux, then its multiplier and post-divider when the
+  // file gives it any. A fixed-output PLL (H417's USBHS_PLL is always 480 MHz) has
+  // neither, and shows the input it is locked to instead of a multiplier it has not got.
+  const pllSt = id => ((k.plls || {})[id] || {});
+  const pllSel = (id, p) => {
+    const bits = [`<select data-pllin="${attr(id)}" aria-label="${attr(p.label + ' source')}">`
+      + p.inputs.map(i2 => `<option value="${i2.index}"${(pllSt(id).in || 0) === i2.index ? ' selected' : ''}>${esc(i2.name)}`
+        + `${i2.div > 1 && !new RegExp('/\\s*' + i2.div + '$').test(i2.name) ? ' / ' + i2.div : ''}</option>`).join('') + '</select>'];
+    if (p.multipliers.length) {
+      bits.push(`<div class="mul"><span>×</span><select data-pllmul="${attr(id)}" aria-label="${attr(p.label + ' multiplier')}">`
+        + p.multipliers.map(m => `<option value="${m}"${String(m) === String(pllSt(id).mul) ? ' selected' : ''}>${m}</option>`).join('')
+        + '</select></div>');
+    }
+    if (p.dividers.length) {
+      bits.push(`<div class="mul"><span>÷</span><select data-plldiv="${attr(id)}" aria-label="${attr(p.label + ' divider')}">`
+        + p.dividers.map(d => `<option value="${d}"${String(d) === String(pllSt(id).div) ? ' selected' : ''}>${d}</option>`).join('')
+        + '</select></div>');
+    }
+    return bits.join('');
+  };
   const TITLE = { HSI: 'HSI RC oscillator', HSE: 'HSE crystal / clock in', LSI: 'LSI RC oscillator', LSE: 'LSE crystal' };
 
   /**
@@ -22603,7 +24698,7 @@ function renderClock() {
     // The crystal frequency carries no `max` attribute on purpose: the datasheet range is
     // shown underneath and an out-of-range value has to be TYPEABLE so it can go red.
     // A spinner that refuses 30 MHz would hide the very limit it is meant to teach.
-    node(s, 0, {
+    node(s, COL.src, {
       title: TITLE[s] || s,
       body: s === 'HSE'
         ? `<input type="number" step="0.001" min="0" id="ck-hse" value="${k.hse}"`
@@ -22616,7 +24711,7 @@ function renderClock() {
       over: rs.over !== undefined ? rs.over : r.over.includes(s),
     });
   }
-  if (c.pll) node('PLL', 1, {
+  if (c.pll) node('PLL', COL.pll, {
     title: 'PLL',
     // The divider is appended only when the input's own name does not already carry it.
     // The dummy part calls its inputs "HSI/2" and "HSE/2", which read as "HSI/2 / 2".
@@ -22627,30 +24722,57 @@ function renderClock() {
         `<option value="${m}"${String(m) === String(k.pllMul) ? ' selected' : ''}>${m}</option>`).join('') + '</select></div>',
     val: r.PLLCLK, unit: 'MHz PLLCLK', lim: `input ${f(r.pllIn)} MHz`,
   });
-  node('SYSCLK', 2, {
+  // Every PLL that is not the SYS one. `outNode` maps an OUTPUT name (PLLCLK,
+  // USBHS_PLL_CLK) to the node that produces it, which is what a tap's mux, another
+  // PLL's input and sysclk.sources all cite - so all three resolve through one table
+  // instead of three places that could disagree about what "USBHS_PLL_CLK" means.
+  const outNode = { PLLCLK: 'PLL' };
+  const pllRows = Object.values(sel.plls || {});
+  for (const p of pllRows) outNode[p.output] = p.sys ? 'PLL' : 'pll:' + p.id;
+  for (const p of pllRows) {
+    if (p.sys) continue;
+    const rp = (r.plls || {})[p.id] || {};
+    node('pll:' + p.id, COL.pll2, {
+      title: p.label,
+      body: pllSel(p.id, p),
+      val: rp.out, unit: 'MHz ' + p.output,
+      lim: p.fixed ? `fixed ${f(rp.out)} MHz output` : `input ${f(rp.in)} MHz`,
+      over: r.over.includes(p.id),
+    });
+  }
+  node('SYSCLK', COL.sys, {
     title: 'System clock mux',
     body: `<select id="ck-sys" aria-label="System clock source">`
       + sel.sys.map(s => `<option${s === k.sys ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>',
     val: r.SYSCLK, unit: 'MHz SYSCLK', lim: `max ${c.sysclk.max_mhz} MHz`, over: r.over.includes('SYSCLK'),
   });
-  if (fp) node('pre:' + fp, 3, {
+  if (fp) node('pre:' + fp, COL.root, {
     title: c.prescalers[fp].label || `${fp} prescaler`,
     body: preSel(fp), val: r.HCLK, unit: 'MHz HCLK',
     lim: c.prescalers[fp].max_mhz ? `max ${c.prescalers[fp].max_mhz} MHz` : '', over: r.over.includes(fp),
   });
+  // The node a tap hangs off, for ONE source name. A mux draws one edge per entry in
+  // its list and lights the chosen one, so the tree shows what the part could do as
+  // well as what it is doing - the same reason the SYSCLK mux draws all of its inputs.
+  const baseNodeOf = s => (!s || s === fp ? (fp ? 'pre:' + fp : 'SYSCLK')
+    : outNode[s] ? outNode[s]
+    : s === 'SYSCLK' ? 'SYSCLK'
+    : c.prescalers[s] ? 'pre:' + s
+    : c.sources[s] ? s
+    : (fp ? 'pre:' + fp : 'SYSCLK'));
   const prebase = {};
   for (const [name, v] of Object.entries(c.prescalers || {})) {
     if (name === fp) continue;
-    prebase[name] = v.source === 'PLLCLK' ? 'PLL'
-      : (v.source && v.source !== fp && c.prescalers[v.source]) ? 'pre:' + v.source
-      : (fp ? 'pre:' + fp : 'SYSCLK');
+    const list = (sel.preSrc || {})[name];
+    const chosen = list ? (((k.preSrc || {})[name] !== undefined && list.includes(k.preSrc[name])) ? k.preSrc[name] : list[0]) : v.source;
+    prebase[name] = { base: baseNodeOf(chosen), all: (list || [chosen]).map(s => ({ s, node: baseNodeOf(s) })) };
     const lim = [v.min_mhz ? `min ${v.min_mhz}` : '', v.max_mhz ? `max ${v.max_mhz}` : '', v.target_mhz ? `must be ${v.target_mhz}` : ''].filter(Boolean).join(', ');
-    node('pre:' + name, 4, {
-      title: v.label || `${name} prescaler`, body: preSel(name),
+    node('pre:' + name, COL.tap, {
+      title: v.label || `${name} prescaler`, body: srcSel(name) + preSel(name),
       val: r[name], unit: 'MHz ' + name, lim: lim ? lim + ' MHz' : '', over: r.over.includes(name),
     });
   }
-  for (const d of c.derived || []) node('drv:' + d.name, 4, {
+  for (const d of c.derived || []) node('drv:' + d.name, COL.tap, {
     title: d.name, val: r[d.name], unit: 'MHz', lim: `${d.source || fp || 'SYSCLK'} / ${d.div}`,
   });
 
@@ -22659,10 +24781,17 @@ function renderClock() {
   // clockCalc().feeding now, and dimming is purely how a non-feeding branch LOOKS.
   for (const n of nodes) n.off = !lit(n.id);
 
-  if (c.pll) sel.pllIn.forEach(i2 => edge(i2.source, 'PLL', lit('PLL') && k.pllIn === i2.index));
-  for (const s of sel.sys) edge(s === 'PLLCLK' ? 'PLL' : s, 'SYSCLK', k.sys === s);
+  if (c.pll) sel.pllIn.forEach(i2 => edge(baseNodeOf(i2.source), 'PLL', lit('PLL') && k.pllIn === i2.index));
+  for (const p of pllRows) {
+    if (p.sys) continue;
+    const id = 'pll:' + p.id;
+    p.inputs.forEach(i2 => edge(baseNodeOf(i2.source), id, lit(id) && (pllSt(p.id).in || 0) === i2.index));
+  }
+  for (const s of sel.sys) edge(outNode[s] || s, 'SYSCLK', k.sys === s);
   if (fp) edge('SYSCLK', 'pre:' + fp, true);
-  for (const [name, base] of Object.entries(prebase)) edge(base, 'pre:' + name, lit('pre:' + name));
+  for (const [name, b] of Object.entries(prebase)) {
+    for (const o of b.all) edge(o.node, 'pre:' + name, o.node === b.base && lit('pre:' + name));
+  }
   for (const d of c.derived || []) edge(fp ? 'pre:' + fp : 'SYSCLK', 'drv:' + d.name, lit('drv:' + d.name));
 
   // ---- 2. paint the boxes ----------------------------------------------------
@@ -22682,7 +24811,7 @@ function renderClock() {
     // on and one they have to go and re-derive from the limit line.
     const under = new Set(r.under || []);
     const why = n => under.has(n) ? 'below minimum'
-      : ((c.prescalers || {})[n] || {}).target_mhz ? 'off target' : 'above maximum';
+      : (((c.prescalers || {})[n] || (c.plls || {})[n] || {}).target_mhz ? 'off target' : 'above maximum');
     h += `<div class="issues">\u26a0 Out of specification: ${esc(r.over.map(n => `${n} (${why(n)})`).join(', '))}</div>`;
   }
   if (c.notes) h += `<div class="cnote">${esc(c.notes)}</div>`;
@@ -22698,6 +24827,15 @@ function renderClock() {
   el.querySelectorAll('select[data-pre]').forEach(s => {
     if (String(s.value) !== String(k.pre[s.dataset.pre])) s.value = String(k.pre[s.dataset.pre]);
   });
+  // The same guarantee for the controls a second PLL and a source mux add: a <select>
+  // may never sit showing a configuration the engine does not hold.
+  el.querySelectorAll('select[data-presrc]').forEach(s => {
+    const want = (k.preSrc || {})[s.dataset.presrc];
+    if (want !== undefined && s.value !== String(want)) s.value = String(want);
+  });
+  el.querySelectorAll('select[data-pllin]').forEach(s => setVal(`select[data-pllin="${s.dataset.pllin}"]`, pllSt(s.dataset.pllin).in || 0));
+  el.querySelectorAll('select[data-pllmul]').forEach(s => setVal(`select[data-pllmul="${s.dataset.pllmul}"]`, pllSt(s.dataset.pllmul).mul));
+  el.querySelectorAll('select[data-plldiv]').forEach(s => setVal(`select[data-plldiv="${s.dataset.plldiv}"]`, pllSt(s.dataset.plldiv).div));
 
   // ---- 3. measure, place, connect --------------------------------------------
   // Only the GEOMETRY can be deferred. Interaction is bound once, by delegation, below
@@ -22816,6 +24954,13 @@ document.getElementById('clock').addEventListener('change', e => {
   else if (t.id === 'ck-pllmul') clockApply({ pllMul: +t.value });
   else if (t.id === 'ck-hse') clockApply({ hse: +t.value });
   else if (t.dataset.pre) clockApply({ pre: { [t.dataset.pre]: +t.value } });
+  // A tap's source mux and a second PLL's three controls. Each goes through setClock()
+  // like everything else on this tab, so each is one undo step and each is refused if
+  // the value is not one the MCU file offers.
+  else if (t.dataset.presrc) clockApply({ preSrc: { [t.dataset.presrc]: t.value } });
+  else if (t.dataset.pllin) clockApply({ plls: { [t.dataset.pllin]: { in: +t.value } } });
+  else if (t.dataset.pllmul) clockApply({ plls: { [t.dataset.pllmul]: { mul: +t.value } } });
+  else if (t.dataset.plldiv) clockApply({ plls: { [t.dataset.plldiv]: { div: +t.value } } });
 });
 // The clock tab is display:none until selected, and hidden boxes measure 0, so
 // lay the tree out the moment the tab becomes visible.

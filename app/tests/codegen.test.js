@@ -1466,6 +1466,67 @@ test('the PLL input note is absent when the part can write the field, and appear
   assert.equal(e.cSource().includes('PLL input'), false, 'no PLL, no note');
   e.M.codegen.rcc.pllsrc = saved;
 });
+
+// =============================================================================
+//  A skipped signal is claimed but never configured - the two-sided property
+// =============================================================================
+//  `codegen.skip_signals` names the pads codegen must not touch because the block drives
+//  them itself: the SWD pair, the HSE crystal, USB's hard-wired transceivers, SerDes, and
+//  the internal Ethernet PHY's media-dependent pairs. Both halves have consequences, and
+//  both have been wrong in this repo at different times:
+//    * the signal must still be CLAIMED, or the conflict engine cannot see the peripheral
+//      sitting on those pads and two blocks can be enabled onto one pin silently;
+//    * it must never be configured by GPIO_Init, and must never produce an `af:` TODO -
+//      the pad has no AF code and never will, so advice to add one is unfollowable.
+//
+//  Written generically because the ETH case below is not special: any part that adds a
+//  `skip_signals` entry for a signal it also routes gets these two assertions for free.
+test('a skipped signal is claimed on its pad, and GPIO_Init never touches it', () => {
+  let exercised = 0;
+  const bad = [];
+  for (const name of mcuNames()) {
+    const e = fresh(name);
+    for (const [pid, sigs] of Object.entries((e.M.codegen || {}).skip_signals || {})) {
+      if (!Array.isArray(sigs)) continue;                  // `PID: true` skips the whole peripheral
+      for (const sig of sigs) {
+        // Find the setting choice that offers this signal, and select it, so the
+        // peripheral really claims the pad rather than the test asking about nothing.
+        let found = false;
+        for (const s of ((e.M.peripherals[pid] || {}).settings || [])) {
+          const c = s.choices.find(x => (x.signals || []).includes(sig));
+          if (!c) continue;
+          if (s.type === 'checkboxes') continue;            // nothing ticked by default; skip
+          e.setSetting(pid, s.name, c.name);
+          found = true;
+        }
+        if (!found) continue;
+        const routed = e.signalPins(pid).pins || {};
+        if (!routed[sig]) continue;                        // no pin on this package
+        exercised++;
+        e.compute();
+        const c = e.cSource();
+        // (1) claimed
+        const owner = Object.entries(e.E.pins).find(([, v]) =>
+          (v.claims || []).some(x => x.who === pid));
+        if (!owner) bad.push(`${name} ${pid}_${sig}: not claimed on any pad`);
+        // (2) never named by a GPIO configuration call
+        const gpio = c.split('void WCHCube_GPIO_Init(void)')[1]?.split('\nvoid ')[0] || '';
+        const cfg = gpio.split('\n').filter(l => /GPIO_Pin =|GPIO_Init\(|GPIO_PinAFConfig/.test(l));
+        const pin = routed[sig];
+        if (cfg.some(l => l.includes(pin))) {
+          bad.push(`${name} ${pid}_${sig}: GPIO_Init configures ${pin}, which it must not`);
+        }
+        // (3) no unfollowable `af:` TODO
+        if (c.split('\n').some(l => /TODO/.test(l) && l.includes(eng.sigName(pid, sig)))) {
+          bad.push(`${name} ${pid}_${sig}: asked for an "af:" the pad cannot have`);
+        }
+      }
+    }
+  }
+  assert.ok(exercised > 0, 'setup: at least one skipped signal must be exercised');
+  assert.deepEqual(bad, []);
+});
+
 test('CH32H417 ETH offers the built-in PHY, and NOT the MII/RMII it does not have', () => {
   // The part's Ethernet is "MAC and 100M PHY fully integrated, and the periphery only
   // needs capacitance", with RGMII as the other supported configuration for an external

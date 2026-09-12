@@ -24,7 +24,7 @@ import {
 } from './model.js';
 import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
-import { hseFeedsSysclk } from './clock.js';
+import { hseFeedsSysclk, pllList, tapSources } from './clock.js';
 import { constraintFor, constraintSentence, gpioEffectiveMode, gpioModeForSignal, gpioFieldOptionNames, analogClaim, skippedClaim } from './constraints.js';
 
 export let E = null;
@@ -427,6 +427,29 @@ export function setClock(patch) {
         if (!pre) throw bad('prescaler', name, Object.keys(c.prescalers || {}));
         if (!pre.options.some(o => String(o) === String(val))) throw bad(`pre.${name}`, val, pre.options.map(String));
       }
+    } else if (k === 'preSrc') {
+      // A tap whose `source:` is a LIST is a mux, and the list is the whole set of
+      // choices: refusing anything outside it is the same rule the prescaler options
+      // follow. A tap with a single source has no mux to set at all.
+      const muxes = Object.keys(c.prescalers || {}).filter(n => tapSources(c.prescalers[n]));
+      for (const [name, val] of Object.entries(v)) {
+        const list = tapSources((c.prescalers || {})[name]);
+        if (!list) throw bad('clock mux', name, muxes);
+        if (!list.includes(val)) throw bad(`preSrc.${name}`, val, list);
+      }
+    } else if (k === 'plls') {
+      // The SYS PLL is set through `pllIn` / `pllMul`; `plls` is for the others, so a
+      // patch naming PLL here is refused rather than quietly writing a second copy of
+      // state the rest of the engine reads from the flat keys.
+      const named = pllList(c).filter(q => !q.sys);
+      for (const [id, st] of Object.entries(v)) {
+        const q = named.find(n => n.id === id);
+        if (!q) throw bad('PLL', id, named.map(n => n.id));
+        const inputs = q.def.inputs || [], muls = q.def.multipliers || [], divs = q.def.dividers || [];
+        if (st.in !== undefined && !inputs[st.in]) throw bad(`plls.${id}.in`, st.in, inputs.map((i, n) => `${n}=${i.name}`));
+        if (st.mul !== undefined && !muls.some(mu => String(mu) === String(st.mul))) throw bad(`plls.${id}.mul`, st.mul, muls.map(String));
+        if (st.div !== undefined && !divs.some(d => String(d) === String(st.div))) throw bad(`plls.${id}.div`, st.div, divs.map(String));
+      }
     } else {
       throw new Error(`setClock: unknown field "${k}"`);
     }
@@ -435,7 +458,11 @@ export function setClock(patch) {
   const changed = {};
   batch('Clock', () => {
     for (const [k, v] of Object.entries(patch)) {
-      if (k === 'pre') Object.assign(S.clock.pre, v); else S.clock[k] = v;
+      if (k === 'pre' || k === 'preSrc') S.clock[k] = Object.assign(S.clock[k] || {}, v);
+      else if (k === 'plls') {
+        S.clock.plls = S.clock.plls || {};
+        for (const [id, st] of Object.entries(v)) S.clock.plls[id] = Object.assign(S.clock.plls[id] || {}, st);
+      } else S.clock[k] = v;
     }
     if (!hseFeedsSysclk()) return;
     const h = hseSetting();

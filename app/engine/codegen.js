@@ -41,7 +41,7 @@ import {
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
 import { E, compute } from './engine.js';
 import { generatorOption, userSection } from './export.js';
-import { clockCalc, firstPre } from './clock.js';
+import { clockCalc, firstPre, pllList, pllState, tapSource, tapSources } from './clock.js';
 import { PROJECT } from './project.js';
 import {
   constraintFor, constraintSentence, skippedClaim, gpioEffectiveMode,
@@ -316,47 +316,130 @@ export function remapWord() {
 }
 
 // ---- RCC ---------------------------------------------------------------------
-export function rccWord() {
-  const c = cfg().rcc;
-  if (!c || !M.clock) return null;
-  const k = S.clock;
-  let value = 0, mask = 0;
-  const parts = [];
+/**
+ * One register word under construction: the value, the mask, and the running list of
+ * what went into it. Pulled out of `rccWord()` because a part whose clock block has a
+ * second PLL or a peripheral source mux needs MORE THAN ONE register - CH32H417 puts
+ * the SYSCLK mux and the bus prescalers in CFGR0, the eight peripheral muxes in CFGR2
+ * and the PLL reference selects in PLLCFGR2 - and three copies of this arithmetic is
+ * three places for a mask to go wrong.
+ */
+function rccWordBuilder(register) {
+  const w = { register, value: 0, mask: 0, parts: [] };
   // One setting may need bits in more than one place: the V00x ADC divider is
   // ADCPRE[4:0] at bit 11 PLUS ADC_CLK_MODE at bit 31, and the gap between them holds
   // PLLSRC and MCO, so one wide field would swallow them. A spec may therefore be a
   // single { lsb, bits, values } or a LIST of them - the shape remap.fields already
   // uses. `default:` covers a slice that has no entry for the current value.
-  const put = (spec, raw, what) => {
+  w.put = (spec, raw, what) => {
     if (!spec) return;
     const slices = Array.isArray(spec) ? spec : [spec];
     const encoded = [];
     let anyExplicit = false;
-    for (const s of slices) {
-      let field = s.values ? s.values[raw] : raw;
+    for (const sl of slices) {
+      let field = sl.values ? sl.values[raw] : raw;
       if (field !== undefined) anyExplicit = true;
-      else if (s.default !== undefined) field = s.default;
+      else if (sl.default !== undefined) field = sl.default;
       else if (slices.length > 1) field = 0;   // a split field: the slice that does not
-      encoded.push({ s, field });              // name this value contributes zero
+      encoded.push({ s: sl, field });          // name this value contributes zero
     }
     if (!anyExplicit || encoded.some(e => e.field === undefined)) {
-      parts.push({ what, note: `no encoding for ${raw}` });
+      w.parts.push({ what, note: `no encoding for ${raw}` });
       return;                                  // a half-written divider is worse than a gap
     }
-    for (const { s, field } of encoded) {
-      const width = (1 << s.bits) - 1;
-      value |= (field & width) << s.lsb;
-      mask |= width << s.lsb;
+    for (const { s: sl, field } of encoded) {
+      const width = (1 << sl.bits) - 1;
+      w.value |= (field & width) << sl.lsb;
+      w.mask |= width << sl.lsb;
     }
     const one = encoded.length === 1;
-    parts.push({
+    w.parts.push({
       what, raw,
       field: one ? encoded[0].field : encoded.map(e => e.field),
       bits: one ? encoded[0].s.bits : encoded.map(e => e.s.bits),
       lsb: one ? encoded[0].s.lsb : encoded.map(e => e.s.lsb),
       slices: encoded.length,
     });
+    w.wrote = true;
   };
+  return w;
+}
+
+// The fields any one register spec can carry. `sources:` and `plls:` are what the
+// second-PLL / source-mux schema added; a register that names none of them writes
+// nothing, which is what every part but CH32H417 does today.
+function rccFill(w, spec, k) {
+  const named = pllList(M.clock).filter(p => !p.sys);
+  const byId = Object.fromEntries(named.map(p => [p.id, p]));
+  for (const [name, sp] of Object.entries(spec.sources || {})) {
+    const v = (M.clock.prescalers || {})[name];
+    if (!v) continue;
+    w.put(sp, tapSource(v, name, k), `${name} clock source`);
+  }
+  for (const [name, sp] of Object.entries(spec.prescalers || {})) w.put(sp, (k.pre || {})[name], `${name} prescaler`);
+  for (const [id, sp] of Object.entries(spec.plls || {})) {
+    const p = byId[id];
+    if (!p || !sp) continue;
+    const st = pllState(p, k);
+    // `src:` is keyed on the input's SOURCE, not on its index: an index is a position in
+    // a list the data may reorder, and the register field names a clock.
+    const inp = (p.def.inputs || [])[st.in || 0] || {};
+    if (sp.src) w.put(sp.src, inp.source, `${id} source`);
+    if (sp.div_in) w.put(sp.div_in, inp.div || 1, `${id} input divider`);
+    if (sp.mul) w.put(sp.mul, st.mul, `${id} multiplier`);
+    if (sp.div) w.put(sp.div, st.div, `${id} divider`);
+  }
+}
+
+/**
+ * Every RCC register this configuration writes: the primary one, then each entry of
+ * `codegen.rcc.extra:`. A part with one register gets a one-element list, which is
+ * what `rccWord()` returns the head of.
+ */
+export function rccWords() {
+  const head = rccWord();
+  if (!head) return [];
+  const c = cfg().rcc, k = S.clock;
+  const out = [head];
+  for (const spec of c.extra || []) {
+    if (!spec || !spec.register) continue;
+    const w = rccWordBuilder(spec.register);
+    rccFill(w, spec, k);
+    if (w.parts.length) out.push(w);
+  }
+  // Anything the clock tab lets the user choose and NO register spec encodes. Without
+  // this the generated C prints "USBFS from USBHS_PLL_CLK /10 -> 48 MHz" in a comment
+  // and writes not one bit of CFGR2 for it: a file that reads as configured and boots
+  // at the reset value. Reported as a note beside the others, which is what `put()`
+  // already does for a divider it cannot encode.
+  const wrote = new Set();
+  for (const w of out) for (const p of w.parts) if (p.what) wrote.add(p.what);
+  const missing = [];
+  for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
+    if (tapSources(v) && !wrote.has(`${name} clock source`)) missing.push(`${name}'s source mux`);
+  }
+  for (const p of pllList(M.clock)) {
+    if (p.sys) continue;
+    if (![`${p.id} source`, `${p.id} multiplier`, `${p.id} divider`].some(x => wrote.has(x))) missing.push(p.id);
+  }
+  if (missing.length) {
+    head.parts.push({
+      what: 'not written',
+      note: `${missing.join(', ')} - the clock tab configures ${missing.length > 1 ? 'these' : 'this'} and the `
+        + `MCU file has no codegen.rcc encoding for ${missing.length > 1 ? 'them' : 'it'}, so the register `
+        + `${missing.length > 1 ? 'fields keep' : 'field keeps'} the reset value. Add a codegen.rcc.extra `
+        + `entry naming the register and the field`,
+    });
+  }
+  return out;
+}
+
+export function rccWord() {
+  const c = cfg().rcc;
+  if (!c || !M.clock) return null;
+  const k = S.clock;
+  const w = rccWordBuilder(c.register || 'RCC->CFGR0');
+  const put = w.put, parts = w.parts;
   put(c.sw, k.sys, 'SYSCLK source');
   if (c.pllsrc && M.clock.pll) put(c.pllsrc, M.clock.pll.inputs[k.pllIn].source, 'PLL input');
   else if (!c.pllsrc && M.clock.pll && k.sys === 'PLLCLK') {
@@ -382,8 +465,8 @@ export function rccWord() {
         + `part whose input carries a divider it is more than a source`,
     });
   }
-  for (const [name, spec] of Object.entries(c.prescalers || {})) put(spec, k.pre[name], `${name} prescaler`);
-  return { register: c.register || 'RCC->CFGR0', value: value >>> 0, mask: mask >>> 0, parts };
+  rccFill(w, c, k);
+  return { register: w.register, value: w.value >>> 0, mask: w.mask >>> 0, parts: w.parts };
 }
 
 // ---- the files ---------------------------------------------------------------
@@ -703,19 +786,36 @@ function rccSection() {
   const r = clockCalc(), k = S.clock, fp = firstPre(M.clock);
   L.push(`    /* SYSCLK ${r.SYSCLK} MHz from ${k.sys}${k.sys === 'PLLCLK' ? ` (${M.clock.pll.inputs[k.pllIn].name} x ${k.pllMul})` : ''} */`);
   L.push(`    /* ${fp} /${k.pre[fp]} -> HCLK ${r.HCLK} MHz */`);
+  // A second PLL gets its own line: its output is what the taps below are divided from,
+  // so a reader who cannot see it cannot check their arithmetic.
+  for (const p of pllList(M.clock)) {
+    if (p.sys) continue;
+    const rp = r.plls[p.id];
+    L.push(`    /* ${p.id}: ${rp.name || rp.source || '?'}${rp.fixed ? '' : ` x ${rp.mul}${rp.div !== 1 ? ` / ${rp.div}` : ''}`}`
+      + ` -> ${p.output} ${rp.out} MHz${rp.fixed ? ' (fixed)' : ''} */`);
+  }
   for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
     if (name === fp) continue;
-    L.push(`    /* ${name} /${k.pre[name]} -> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)` : ''} */`);
+    // A tap whose source is a mux says which side of it this configuration picked.
+    const from = tapSources(v) ? `${tapSource(v, name, k)} ` : '';
+    L.push(`    /* ${name} ${from}/${k.pre[name]} -> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
+      : v.target_mhz ? ` (must be ${v.target_mhz} MHz)` : ''} */`);
   }
   if (r.over.length) L.push(`    /* WARNING: out of specification: ${r.over.join(', ')} */`);
   L.push('');
-  const rcc = rccWord();
+  const words = rccWords();
+  const rcc = words[0] || null;
   if (rcc) {
-    for (const p of rcc.parts) {
-      L.push(p.note ? `    /* ${p.what}: ${p.note} */`
-        : `    /* ${p.what} = ${bin(p.field, p.bits)} (bit${p.bits > 1 ? `s ${p.lsb + p.bits - 1}:${p.lsb}` : ` ${p.lsb}`}) */`);
+    // One block per register: the fields that went into it, then the write. A part with
+    // one register gets exactly what it got before; CH32H417 gets CFGR0, then CFGR2,
+    // then PLLCFGR2, each under its own fields.
+    for (const w of words) {
+      for (const p of w.parts) {
+        L.push(p.note ? `    /* ${p.what}: ${p.note} */`
+          : `    /* ${p.what} = ${bin(p.field, p.bits)} (bit${p.bits > 1 ? `s ${p.lsb + p.bits - 1}:${p.lsb}` : ` ${p.lsb}`}) */`);
+      }
+      L.push(`    ${w.register} = (${w.register} & ~${hex(w.mask >>> 0)}) | ${hex(w.value >>> 0)};`);
     }
-    L.push(`    ${rcc.register} = (${rcc.register} & ~${hex(rcc.mask)}) | ${hex(rcc.value)};`);
     L.push('');
     // Name what THIS part has to start, not what CH32V006 has. A source the data marks
     // `fixed: true` runs from reset and needs no start-up; the rest do. A part with none

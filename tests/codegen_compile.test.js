@@ -326,9 +326,9 @@ function splHeaders(part) {
  * part nobody looked at. That is the exact shape of the defect this repository keeps
  * re-finding — a green tick standing in front of nothing.
  */
-function partsWithoutSpl() {
+function partsWithoutSpl(fixtures = FIXTURES) {
   const out = [];
-  for (const part of [...new Set(FIXTURES.map(f => f.mcu))].sort()) {
+  for (const part of [...new Set(fixtures.map(f => f.mcu))].sort()) {
     if (splHeaders(part)) continue;
     out.push(`${part}: neither data/sources/<dir>/Evt/EXAM/SRC/Peripheral/inc nor ${SDK}/Peripheral/<series>/inc `
       + 'resolved — add this part to BOTH maps in splHeaders(), or say here why it has no SPL');
@@ -344,6 +344,22 @@ test('every fixture part resolves to an SPL header set, so no part drops silentl
   const missing = partsWithoutSpl();
   const parts = [...new Set(FIXTURES.map(f => f.mcu))];
   assert.empty(missing, `fixture parts that would drop out of the SPL checks (of ${parts.length}: ${parts.join(', ')})`);
+});
+
+test('planted break: a fixture part missing from the SPL map is NAMED, not silently skipped', () => {
+  // The guard above exists because `if (!spl) continue;` dropped three of six parts from two
+  // checks with no failure and no skip. So the guard itself has to be seen refusing: hand it
+  // a fixture list with a part no map knows, and it must come back naming that part - and
+  // ONLY that part, because a guard that names everything is as useless as one that names
+  // nothing. Round 6, deliverable B.
+  const planted = [...FIXTURES, { mcu: 'CH32ZZ999', file: 'planted.wchproj', pkg: 'NONE', env: 'none' }];
+  const missing = partsWithoutSpl(planted);
+  assert.equal(missing.length, 1, `expected exactly the planted part to be reported, got ${missing.length}:\n${missing.join('\n')}`);
+  assert.match(missing[0], /^CH32ZZ999:/, 'the unmapped part is not named first, where a reader looks');
+  assert.match(missing[0], /add this part to BOTH maps/, 'the report does not say what to do about it');
+  console.log(`      planted refusal (SPL map): ${missing[0].split(' resolved')[0]}`);
+  // ...and the real list is still clean, so the plant did not leak into the guard's state.
+  assert.empty(partsWithoutSpl(), 'the guard reports a real part missing after the plant - state leaked');
 });
 
 test('the header the generated C includes is a file that exists in the SPL for that part', () => {

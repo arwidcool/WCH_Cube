@@ -483,10 +483,15 @@ export function render(f) {
 function main() {
   boot();
   const check = process.argv.includes('--check');
+  // `--dir <path>`: read/write the fixtures somewhere other than beside this script. Exists
+  // so a test can copy the fixtures to a temp folder, corrupt one, and prove `--check`
+  // reports it STALE - the freshness gate seen red on purpose, not just seen green.
+  const di = process.argv.indexOf('--dir');
+  const dir = di >= 0 && process.argv[di + 1] ? path.resolve(process.argv[di + 1]) : HERE;
   let stale = 0;
   for (const f of FIXTURES) {
     const text = render(f);
-    const dest = path.join(HERE, f.file);
+    const dest = path.join(dir, f.file);
     const old = fs.existsSync(dest) ? fs.readFileSync(dest, 'utf8') : null;
     if (old === text) { process.stdout.write(`ok    ${f.file}\n`); continue; }
     if (check) { process.stdout.write(`STALE ${f.file}\n`); stale++; continue; }

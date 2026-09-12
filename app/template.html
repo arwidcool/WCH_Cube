@@ -2090,8 +2090,11 @@ const hasDmaConflicts = () => typeof dmaConflicts === 'function';
 const hasDmaState = () => typeof dmaState === 'function';
 const CTABS = [
   // `instanceGroups` is in this test because a peripheral's parameters can live ENTIRELY
-  // in its per-instance block - an LTDC layer's settable members are all in
-  // LTDC_Layer_InitTypeDef - so `paramRows()` is empty for it and the tab would not appear.
+  // in its per-instance block: the settable members of an LTDC LAYER are all in
+  // LTDC_Layer_InitTypeDef, so a peripheral whose only configuration is per-instance has
+  // an empty `paramRows()` and its tab would not appear. (LTDC itself has two plain rows
+  // since the pixel format landed in round 5, so it is no longer the example - the
+  // reasoning is what this comment is for, and it is unchanged.)
   { id: 'param', name: 'Parameter Settings',
     has: pid => pid !== 'GPIO' && (paramRows(pid).length > 0 || instanceGroups(pid).length > 0) },
   { id: 'nvic', name: 'NVIC Settings', has: pid => hasNvic() && nvicVectorsOf(pid).length > 0 },
@@ -2988,7 +2991,15 @@ function renderClock() {
   // painted past the viewport edge with the ADC prescaler's <select> sliced through
   // (round-2 finding L2). The layout pass at the bottom of this function shrinks the gap
   // and then the columns to the room the panel actually has.
-  const COLW = [188, 208, 198, 216, 240];
+  // Six columns: oscillators, the SYS PLL, the OTHER PLLs, the SYSCLK mux, the root
+  // prescaler, everything hanging off it. Column 2 is new and is EMPTY on the five
+  // parts with one PLL - `cols` is built from the columns nodes actually landed in, so
+  // an empty one takes no width and those trees are laid out exactly as before.
+  // A second PLL has to sit between the sources and SYSCLK rather than beside the SYS
+  // PLL: it may take the SYS PLL's own output as its input (H417's USBHS_PLL does),
+  // and an edge inside one column has nowhere to go.
+  const COLW = [188, 208, 208, 198, 216, 240];
+  const COL = { src: 0, pll: 1, pll2: 2, sys: 3, root: 4, tap: 5 };
   // Every option list is clockCalc().selectable \u2014 the MCU file's FULL list, never
   // filtered by the current state. An option is missing from a mux only when the data
   // says this part cannot do it; nothing here may add a second reason.
@@ -3005,6 +3016,36 @@ function renderClock() {
   const preSel = n => `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
     + (sel.pre[n] || c.prescalers[n].options)
       .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  // A tap whose `source:` is a LIST is a mux. The <select> is drawn from
+  // clockCalc().selectable.preSrc - the file's whole list - and a tap with one source
+  // draws nothing at all, so a part without muxes gains no control it cannot use.
+  const srcSel = n => {
+    const list = (sel.preSrc || {})[n];
+    if (!list || list.length < 2) return '';
+    const cur = ((k.preSrc || {})[n] !== undefined && list.includes(k.preSrc[n])) ? k.preSrc[n] : list[0];
+    return `<select data-presrc="${attr(n)}" aria-label="${attr(n + ' clock source')}">`
+      + list.map(s => `<option value="${attr(s)}"${s === cur ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>';
+  };
+  // One PLL's controls: its input mux, then its multiplier and post-divider when the
+  // file gives it any. A fixed-output PLL (H417's USBHS_PLL is always 480 MHz) has
+  // neither, and shows the input it is locked to instead of a multiplier it has not got.
+  const pllSt = id => ((k.plls || {})[id] || {});
+  const pllSel = (id, p) => {
+    const bits = [`<select data-pllin="${attr(id)}" aria-label="${attr(p.label + ' source')}">`
+      + p.inputs.map(i2 => `<option value="${i2.index}"${(pllSt(id).in || 0) === i2.index ? ' selected' : ''}>${esc(i2.name)}`
+        + `${i2.div > 1 && !new RegExp('/\\s*' + i2.div + '$').test(i2.name) ? ' / ' + i2.div : ''}</option>`).join('') + '</select>'];
+    if (p.multipliers.length) {
+      bits.push(`<div class="mul"><span>×</span><select data-pllmul="${attr(id)}" aria-label="${attr(p.label + ' multiplier')}">`
+        + p.multipliers.map(m => `<option value="${m}"${String(m) === String(pllSt(id).mul) ? ' selected' : ''}>${m}</option>`).join('')
+        + '</select></div>');
+    }
+    if (p.dividers.length) {
+      bits.push(`<div class="mul"><span>÷</span><select data-plldiv="${attr(id)}" aria-label="${attr(p.label + ' divider')}">`
+        + p.dividers.map(d => `<option value="${d}"${String(d) === String(pllSt(id).div) ? ' selected' : ''}>${d}</option>`).join('')
+        + '</select></div>');
+    }
+    return bits.join('');
+  };
   const TITLE = { HSI: 'HSI RC oscillator', HSE: 'HSE crystal / clock in', LSI: 'LSI RC oscillator', LSE: 'LSE crystal' };
 
   /**
@@ -3033,7 +3074,7 @@ function renderClock() {
     // The crystal frequency carries no `max` attribute on purpose: the datasheet range is
     // shown underneath and an out-of-range value has to be TYPEABLE so it can go red.
     // A spinner that refuses 30 MHz would hide the very limit it is meant to teach.
-    node(s, 0, {
+    node(s, COL.src, {
       title: TITLE[s] || s,
       body: s === 'HSE'
         ? `<input type="number" step="0.001" min="0" id="ck-hse" value="${k.hse}"`
@@ -3046,7 +3087,7 @@ function renderClock() {
       over: rs.over !== undefined ? rs.over : r.over.includes(s),
     });
   }
-  if (c.pll) node('PLL', 1, {
+  if (c.pll) node('PLL', COL.pll, {
     title: 'PLL',
     // The divider is appended only when the input's own name does not already carry it.
     // The dummy part calls its inputs "HSI/2" and "HSE/2", which read as "HSI/2 / 2".
@@ -3057,30 +3098,57 @@ function renderClock() {
         `<option value="${m}"${String(m) === String(k.pllMul) ? ' selected' : ''}>${m}</option>`).join('') + '</select></div>',
     val: r.PLLCLK, unit: 'MHz PLLCLK', lim: `input ${f(r.pllIn)} MHz`,
   });
-  node('SYSCLK', 2, {
+  // Every PLL that is not the SYS one. `outNode` maps an OUTPUT name (PLLCLK,
+  // USBHS_PLL_CLK) to the node that produces it, which is what a tap's mux, another
+  // PLL's input and sysclk.sources all cite - so all three resolve through one table
+  // instead of three places that could disagree about what "USBHS_PLL_CLK" means.
+  const outNode = { PLLCLK: 'PLL' };
+  const pllRows = Object.values(sel.plls || {});
+  for (const p of pllRows) outNode[p.output] = p.sys ? 'PLL' : 'pll:' + p.id;
+  for (const p of pllRows) {
+    if (p.sys) continue;
+    const rp = (r.plls || {})[p.id] || {};
+    node('pll:' + p.id, COL.pll2, {
+      title: p.label,
+      body: pllSel(p.id, p),
+      val: rp.out, unit: 'MHz ' + p.output,
+      lim: p.fixed ? `fixed ${f(rp.out)} MHz output` : `input ${f(rp.in)} MHz`,
+      over: r.over.includes(p.id),
+    });
+  }
+  node('SYSCLK', COL.sys, {
     title: 'System clock mux',
     body: `<select id="ck-sys" aria-label="System clock source">`
       + sel.sys.map(s => `<option${s === k.sys ? ' selected' : ''}>${esc(s)}</option>`).join('') + '</select>',
     val: r.SYSCLK, unit: 'MHz SYSCLK', lim: `max ${c.sysclk.max_mhz} MHz`, over: r.over.includes('SYSCLK'),
   });
-  if (fp) node('pre:' + fp, 3, {
+  if (fp) node('pre:' + fp, COL.root, {
     title: c.prescalers[fp].label || `${fp} prescaler`,
     body: preSel(fp), val: r.HCLK, unit: 'MHz HCLK',
     lim: c.prescalers[fp].max_mhz ? `max ${c.prescalers[fp].max_mhz} MHz` : '', over: r.over.includes(fp),
   });
+  // The node a tap hangs off, for ONE source name. A mux draws one edge per entry in
+  // its list and lights the chosen one, so the tree shows what the part could do as
+  // well as what it is doing - the same reason the SYSCLK mux draws all of its inputs.
+  const baseNodeOf = s => (!s || s === fp ? (fp ? 'pre:' + fp : 'SYSCLK')
+    : outNode[s] ? outNode[s]
+    : s === 'SYSCLK' ? 'SYSCLK'
+    : c.prescalers[s] ? 'pre:' + s
+    : c.sources[s] ? s
+    : (fp ? 'pre:' + fp : 'SYSCLK'));
   const prebase = {};
   for (const [name, v] of Object.entries(c.prescalers || {})) {
     if (name === fp) continue;
-    prebase[name] = v.source === 'PLLCLK' ? 'PLL'
-      : (v.source && v.source !== fp && c.prescalers[v.source]) ? 'pre:' + v.source
-      : (fp ? 'pre:' + fp : 'SYSCLK');
+    const list = (sel.preSrc || {})[name];
+    const chosen = list ? (((k.preSrc || {})[name] !== undefined && list.includes(k.preSrc[name])) ? k.preSrc[name] : list[0]) : v.source;
+    prebase[name] = { base: baseNodeOf(chosen), all: (list || [chosen]).map(s => ({ s, node: baseNodeOf(s) })) };
     const lim = [v.min_mhz ? `min ${v.min_mhz}` : '', v.max_mhz ? `max ${v.max_mhz}` : '', v.target_mhz ? `must be ${v.target_mhz}` : ''].filter(Boolean).join(', ');
-    node('pre:' + name, 4, {
-      title: v.label || `${name} prescaler`, body: preSel(name),
+    node('pre:' + name, COL.tap, {
+      title: v.label || `${name} prescaler`, body: srcSel(name) + preSel(name),
       val: r[name], unit: 'MHz ' + name, lim: lim ? lim + ' MHz' : '', over: r.over.includes(name),
     });
   }
-  for (const d of c.derived || []) node('drv:' + d.name, 4, {
+  for (const d of c.derived || []) node('drv:' + d.name, COL.tap, {
     title: d.name, val: r[d.name], unit: 'MHz', lim: `${d.source || fp || 'SYSCLK'} / ${d.div}`,
   });
 
@@ -3089,10 +3157,17 @@ function renderClock() {
   // clockCalc().feeding now, and dimming is purely how a non-feeding branch LOOKS.
   for (const n of nodes) n.off = !lit(n.id);
 
-  if (c.pll) sel.pllIn.forEach(i2 => edge(i2.source, 'PLL', lit('PLL') && k.pllIn === i2.index));
-  for (const s of sel.sys) edge(s === 'PLLCLK' ? 'PLL' : s, 'SYSCLK', k.sys === s);
+  if (c.pll) sel.pllIn.forEach(i2 => edge(baseNodeOf(i2.source), 'PLL', lit('PLL') && k.pllIn === i2.index));
+  for (const p of pllRows) {
+    if (p.sys) continue;
+    const id = 'pll:' + p.id;
+    p.inputs.forEach(i2 => edge(baseNodeOf(i2.source), id, lit(id) && (pllSt(p.id).in || 0) === i2.index));
+  }
+  for (const s of sel.sys) edge(outNode[s] || s, 'SYSCLK', k.sys === s);
   if (fp) edge('SYSCLK', 'pre:' + fp, true);
-  for (const [name, base] of Object.entries(prebase)) edge(base, 'pre:' + name, lit('pre:' + name));
+  for (const [name, b] of Object.entries(prebase)) {
+    for (const o of b.all) edge(o.node, 'pre:' + name, o.node === b.base && lit('pre:' + name));
+  }
   for (const d of c.derived || []) edge(fp ? 'pre:' + fp : 'SYSCLK', 'drv:' + d.name, lit('drv:' + d.name));
 
   // ---- 2. paint the boxes ----------------------------------------------------
@@ -3112,7 +3187,7 @@ function renderClock() {
     // on and one they have to go and re-derive from the limit line.
     const under = new Set(r.under || []);
     const why = n => under.has(n) ? 'below minimum'
-      : ((c.prescalers || {})[n] || {}).target_mhz ? 'off target' : 'above maximum';
+      : (((c.prescalers || {})[n] || (c.plls || {})[n] || {}).target_mhz ? 'off target' : 'above maximum');
     h += `<div class="issues">\u26a0 Out of specification: ${esc(r.over.map(n => `${n} (${why(n)})`).join(', '))}</div>`;
   }
   if (c.notes) h += `<div class="cnote">${esc(c.notes)}</div>`;
@@ -3128,6 +3203,15 @@ function renderClock() {
   el.querySelectorAll('select[data-pre]').forEach(s => {
     if (String(s.value) !== String(k.pre[s.dataset.pre])) s.value = String(k.pre[s.dataset.pre]);
   });
+  // The same guarantee for the controls a second PLL and a source mux add: a <select>
+  // may never sit showing a configuration the engine does not hold.
+  el.querySelectorAll('select[data-presrc]').forEach(s => {
+    const want = (k.preSrc || {})[s.dataset.presrc];
+    if (want !== undefined && s.value !== String(want)) s.value = String(want);
+  });
+  el.querySelectorAll('select[data-pllin]').forEach(s => setVal(`select[data-pllin="${s.dataset.pllin}"]`, pllSt(s.dataset.pllin).in || 0));
+  el.querySelectorAll('select[data-pllmul]').forEach(s => setVal(`select[data-pllmul="${s.dataset.pllmul}"]`, pllSt(s.dataset.pllmul).mul));
+  el.querySelectorAll('select[data-plldiv]').forEach(s => setVal(`select[data-plldiv="${s.dataset.plldiv}"]`, pllSt(s.dataset.plldiv).div));
 
   // ---- 3. measure, place, connect --------------------------------------------
   // Only the GEOMETRY can be deferred. Interaction is bound once, by delegation, below
@@ -3246,6 +3330,13 @@ document.getElementById('clock').addEventListener('change', e => {
   else if (t.id === 'ck-pllmul') clockApply({ pllMul: +t.value });
   else if (t.id === 'ck-hse') clockApply({ hse: +t.value });
   else if (t.dataset.pre) clockApply({ pre: { [t.dataset.pre]: +t.value } });
+  // A tap's source mux and a second PLL's three controls. Each goes through setClock()
+  // like everything else on this tab, so each is one undo step and each is refused if
+  // the value is not one the MCU file offers.
+  else if (t.dataset.presrc) clockApply({ preSrc: { [t.dataset.presrc]: t.value } });
+  else if (t.dataset.pllin) clockApply({ plls: { [t.dataset.pllin]: { in: +t.value } } });
+  else if (t.dataset.pllmul) clockApply({ plls: { [t.dataset.pllmul]: { mul: +t.value } } });
+  else if (t.dataset.plldiv) clockApply({ plls: { [t.dataset.plldiv]: { div: +t.value } } });
 });
 // The clock tab is display:none until selected, and hidden boxes measure 0, so
 // lay the tree out the moment the tab becomes visible.

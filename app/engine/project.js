@@ -15,6 +15,7 @@ import { generatorOptions, setGeneratorOption } from './export.js';
 import { normaliseGpioConstraints } from './constraints.js';
 import { applyParams, paramsObject, applyChannelParams, channelParamsObject } from './params.js';
 import { clearHistory } from './history.js';
+import { pllList, tapSources } from './clock.js';
 
 export const PROJECT = { name: 'Untitled', variant: null, dirty: false };
 
@@ -145,6 +146,62 @@ function normaliseGpioSpeeds() {
 }
 
 /**
+ * The clock state from a .wchproj.
+ *
+ * This was `Object.assign(S.clock, obj.clock)` while the state was flat, and a flat
+ * assign is exactly wrong now that `pre`, `preSrc` and `plls` are maps: assigning the
+ * whole map REPLACES it, so a file saved before a tap existed would drop that tap's
+ * divider from the state entirely and every frequency below it would read NaN. Each
+ * map is merged key by key, and a value the part does not offer is dropped and named
+ * rather than applied - the same contract as the GPIO speed and the DMA channel.
+ */
+function applyClock(saved) {
+  const out = [];
+  if (!saved || typeof saved !== 'object' || !M.clock || !S.clock) return out;
+  const c = M.clock, k = S.clock;
+  const drop = (what, val, why) => out.push(`Clock ${what}: "${val}" ${why}; using this part's default.`);
+  for (const [key, val] of Object.entries(saved)) {
+    if (key === 'pre') {
+      for (const [name, v] of Object.entries(val || {})) {
+        const pre = (c.prescalers || {})[name];
+        if (!pre) { drop(`prescaler "${name}"`, v, 'is not a prescaler this part has'); continue; }
+        if (!(pre.options || []).some(o => String(o) === String(v))) { drop(`prescaler ${name}`, v, 'is not one of its options'); continue; }
+        k.pre[name] = v;
+      }
+    } else if (key === 'preSrc') {
+      for (const [name, v] of Object.entries(val || {})) {
+        const list = tapSources((c.prescalers || {})[name]);
+        if (!list) { drop(`source mux "${name}"`, v, 'is not a mux this part has'); continue; }
+        if (!list.includes(v)) { drop(`${name} source`, v, 'is not one of its sources'); continue; }
+        (k.preSrc = k.preSrc || {})[name] = v;
+      }
+    } else if (key === 'plls') {
+      const named = pllList(c).filter(p => !p.sys);
+      for (const [id, st] of Object.entries(val || {})) {
+        const p = named.find(n => n.id === id);
+        if (!p || !st || typeof st !== 'object') { drop('PLL', id, 'is not a PLL this part has'); continue; }
+        const held = ((k.plls = k.plls || {})[id] = k.plls[id] || {});
+        if (st.in !== undefined) {
+          if ((p.def.inputs || [])[st.in]) held.in = st.in;
+          else drop(`${id} input`, st.in, 'is not one of its inputs');
+        }
+        if (st.mul !== undefined) {
+          if ((p.def.multipliers || []).some(m => String(m) === String(st.mul))) held.mul = st.mul;
+          else drop(`${id} multiplier`, st.mul, 'is not one of its multipliers');
+        }
+        if (st.div !== undefined) {
+          if ((p.def.dividers || []).some(d => String(d) === String(st.div))) held.div = st.div;
+          else drop(`${id} divider`, st.div, 'is not one of its dividers');
+        }
+      }
+    } else {
+      k[key] = val;
+    }
+  }
+  return out;
+}
+
+/**
  * DMA requests from a .wchproj. Everything goes through the same setters the UI uses,
  * so a saved file can never put state into S that the engine would reject live: a
  * request the part no longer has, a channel it is not wired to, a parameter value out
@@ -259,7 +316,7 @@ export function projectApply(src) {
   dropped.push(...applyDma(obj.dma));
   dropped.push(...applyNvic(obj.nvic));
   dropped.push(...applyGenerator(obj.generator));
-  if (obj.clock) S.clock = Object.assign(S.clock || {}, obj.clock);
+  dropped.push(...applyClock(obj.clock));
   clearHistory();            // loadMcu already cleared it; be explicit
   PROJECT.dirty = false;
   // A project saved against an older MCU file may name parameters that no longer

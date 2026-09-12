@@ -1527,6 +1527,167 @@ peripherals:
       IN7: [{ pin: PA7 }]
       IN8: [{ pin: PB0 }]
       IN9: [{ pin: PB1 }]
+    params:
+      # PER CHANNEL, not per peripheral: ADC_InitTypeDef has no sample-time member at all.
+      # Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank,
+      # ADC_SampleTime) (ch32h417_adc.h:187), so one call is emitted per ticked channel, in
+      # the order they are ticked - which is also the regular sequence rank.
+      - key: sample
+        name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
+        sdk_note: >-
+          ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of
+          ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per
+          CHANNEL, not per peripheral. ch32h417_adc.h:187.
+        type: enum
+        default: 13.5 cycles
+        options:
+          - { name: 1.5 cycles  , value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles  , value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 13.5 cycles , value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 28.5 cycles , value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 41.5 cycles , value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles , value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles , value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
+        help: >
+          ADCx_SAMPTR1/2 SMPx[2:0], codes 000..111 in this order (RM 11.3.5,
+          CH32H417RM.md:14974). These are CH32H417's own figures and they are NOT the
+          CH32V00x ones - five of the eight differ. The same bits mean 2.5 / 3.5 / 4.5 /
+          5.5 cycles for codes 100..111 when ADC_SMP_SELx is set, which this configurator
+          does not set. Total conversion = sampling + 12.5 ADC clocks (RM:13534). Above a
+          1 MHz sampling rate the RM advises not going below 3.5 cycles.
+      # ADC_Mode, written TWICE and applied ONCE - which reading applies is decided by the
+      # `Mode` row above, and both are written out rather than one of them being left to
+      # the struct's zero-initialiser. ADC_Mode_Independent happens to be 0x00000000, so
+      # omitting the member in independent mode would produce correct code by accident;
+      # code that is right by accident is the thing this file exists to stop.
+      - key: mode_independent
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        const: ADC_Mode_Independent
+        default: ADC_Mode_Independent
+        depends_on: { setting: Mode, equals: Independent }
+        help: "ADCx_CTLR1 DUALMOD[19:16] = 0000 (RM 11.3.2). Fixed by the Mode row: an independent ADC has no dual mode to choose."
+      - key: mode_dual
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        type: enum
+        default: Regular simultaneous
+        depends_on: { setting: Mode, equals: "Dual (with the other ADC)" }
+        options:
+          - { name: Regular + injected simultaneous     , value: 1, sdk: ADC_Mode_RegInjecSimult }
+          - { name: Regular simultaneous + alternate trigger, value: 2, sdk: ADC_Mode_RegSimult_AlterTrig }
+          - { name: Injected simultaneous + fast interleaved, value: 3, sdk: ADC_Mode_InjecSimult_FastInterl }
+          - { name: Injected simultaneous + slow interleaved, value: 4, sdk: ADC_Mode_InjecSimult_SlowInterl }
+          - { name: Injected simultaneous               , value: 5, sdk: ADC_Mode_InjecSimult }
+          - { name: Regular simultaneous                , value: 6, sdk: ADC_Mode_RegSimult }
+          - { name: Fast interleaved                    , value: 7, sdk: ADC_Mode_FastInterl }
+          - { name: Slow interleaved                    , value: 8, sdk: ADC_Mode_SlowInterl }
+          - { name: Alternate trigger                   , value: 9, sdk: ADC_Mode_AlterTrig }
+        help: >
+          ADCx_CTLR1 DUALMOD[19:16], codes 0001..1001 (RM 11.3.2, CH32H417RM.md:14423).
+          Only shown when the Mode row says Dual; the two ADCs are one pair, so setting this
+          on ADC1 describes what ADC1 and ADC2 do together.
+      - key: scan
+        name: Scan conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ScanConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR1 SCAN, bit 8. Converts the whole regular sequence rather than only its first channel - turn it on whenever more than one channel is ticked."
+      - key: cont
+        name: Continuous conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ContinuousConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR2 CONT, bit 1. The sequence restarts as soon as it ends instead of waiting for the next trigger."
+      - key: nbr
+        name: Number of regular channels
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_NbrOfChannel
+        type: int
+        default: 1
+        min: 1
+        max: 16
+        help: >
+          ADCx_RSQR1 L[23:20], the LENGTH of the regular sequence. Set it to the number of
+          channels you ticked on the Channels row: ADC_Init() writes
+          (ADC_NbrOfChannel - 1) into the field (ch32h417_adc.c), so this is a count and not
+          an index, and leaving it at 0 would write 0xFF - 1 rather than "no channels".
+      - key: trig
+        name: External trigger
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ExternalTrigConv
+        type: enum
+        default: Software trigger (SWSTART)
+        options:
+          - { name: TIM1 CC1              , value: 0, sdk: ADC_ExternalTrigConv_T1_CC1 }
+          - { name: TIM1 CC2              , value: 1, sdk: ADC_ExternalTrigConv_T1_CC2 }
+          - { name: TIM1 CC3              , value: 2, sdk: ADC_ExternalTrigConv_T1_CC3 }
+          - { name: TIM2 CC2              , value: 3, sdk: ADC_ExternalTrigConv_T2_CC2 }
+          - { name: TIM3 TRGO             , value: 4, sdk: ADC_ExternalTrigConv_T3_TRGO }
+          - { name: TIM4 CC4              , value: 5, sdk: ADC_ExternalTrigConv_T4_CC4 }
+          - { name: EXTI line 11 / TIM8 TRGO, value: 6, sdk: ADC_ExternalTrigConv_Ext_IT11_TIM8_TRGO }
+          - { name: Software trigger (SWSTART), value: 7, sdk: ADC_ExternalTrigConv_None }
+        help: >
+          ADCx_CTLR2 EXTSEL[19:17], codes 000..111 (RM 11.3.3, CH32H417RM.md:14768).
+          NOTE THE LAST ONE'S TWO NAMES, recorded rather than reconciled: the SPL macro is
+          spelled ADC_ExternalTrigConv_None (ch32h417_adc.h:78) and the reference manual
+          calls code 111 "SWSTART software trigger". They are the same encoding; the label
+          here follows the RM because it says what the silicon does, and the macro is the
+          SPL's own.
+      - key: align
+        name: Data alignment
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_DataAlign
+        type: enum
+        default: Right
+        options:
+          - { name: Right, value: 0, sdk: ADC_DataAlign_Right }
+          - { name: Left , value: 1, sdk: ADC_DataAlign_Left }
+        help: "ADCx_CTLR2 ALIGN, bit 11. 12-bit results in a 16-bit register."
+      - key: buffer
+        name: Input buffer
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_OutputBuffer
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: ADC_OutputBuffer_Disable }
+          - { name: Enabled , value: 1, sdk: ADC_OutputBuffer_Enable }
+        help: >
+          ADCx_CTLR1 BUFEN, bit 26 (RM 11.3.2). Turn it on when the source impedance is
+          above the datasheet's maximum, and then keep the sampling time at 7.5 cycles or
+          more. The gain row below NEEDS it on. It is also forced on by the silicon whenever
+          TKENABLE or TSVREFE is set, and calibration must happen before that - the SDK
+          member is spelled ADC_OutputBuffer even though the bit is an INPUT buffer.
+      - key: pga
+        name: Input gain (PGA)
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Pga
+        type: enum
+        default: x1
+        depends_on: { param: buffer, equals: Enabled }
+        options:
+          - { name: x1 , value: 0, sdk: ADC_Pga_1 }
+          - { name: x4 , value: 1, sdk: ADC_Pga_4 }
+          - { name: x16, value: 2, sdk: ADC_Pga_16 }
+          - { name: x64, value: 3, sdk: ADC_Pga_64 }
+        help: >
+          ADCx_CTLR1 PGA[28:27], codes 00..11 (RM 11.3.2, CH32H417RM.md:14423). Amplifies a
+          small input before conversion. The RM's own note 2 on that bit field is why this
+          row is greyed until the input buffer is on: "ADC_Buffer needs to be enabled to use
+          this function."
   ADC2:
     category: Analog
     settings:
@@ -1573,6 +1734,167 @@ peripherals:
       IN7: [{ pin: PA7 }]
       IN8: [{ pin: PB0 }]
       IN9: [{ pin: PB1 }]
+    params:
+      # PER CHANNEL, not per peripheral: ADC_InitTypeDef has no sample-time member at all.
+      # Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank,
+      # ADC_SampleTime) (ch32h417_adc.h:187), so one call is emitted per ticked channel, in
+      # the order they are ticked - which is also the regular sequence rank.
+      - key: sample
+        name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
+        sdk_note: >-
+          ADC_InitTypeDef has NO sample-time member. Sample time is the fourth argument of
+          ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per
+          CHANNEL, not per peripheral. ch32h417_adc.h:187.
+        type: enum
+        default: 13.5 cycles
+        options:
+          - { name: 1.5 cycles  , value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles  , value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 13.5 cycles , value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 28.5 cycles , value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 41.5 cycles , value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles , value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles , value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
+        help: >
+          ADCx_SAMPTR1/2 SMPx[2:0], codes 000..111 in this order (RM 11.3.5,
+          CH32H417RM.md:14974). These are CH32H417's own figures and they are NOT the
+          CH32V00x ones - five of the eight differ. The same bits mean 2.5 / 3.5 / 4.5 /
+          5.5 cycles for codes 100..111 when ADC_SMP_SELx is set, which this configurator
+          does not set. Total conversion = sampling + 12.5 ADC clocks (RM:13534). Above a
+          1 MHz sampling rate the RM advises not going below 3.5 cycles.
+      # ADC_Mode, written TWICE and applied ONCE - which reading applies is decided by the
+      # `Mode` row above, and both are written out rather than one of them being left to
+      # the struct's zero-initialiser. ADC_Mode_Independent happens to be 0x00000000, so
+      # omitting the member in independent mode would produce correct code by accident;
+      # code that is right by accident is the thing this file exists to stop.
+      - key: mode_independent
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        const: ADC_Mode_Independent
+        default: ADC_Mode_Independent
+        depends_on: { setting: Mode, equals: Independent }
+        help: "ADCx_CTLR1 DUALMOD[19:16] = 0000 (RM 11.3.2). Fixed by the Mode row: an independent ADC has no dual mode to choose."
+      - key: mode_dual
+        name: Dual-ADC mode
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Mode
+        type: enum
+        default: Regular simultaneous
+        depends_on: { setting: Mode, equals: "Dual (with the other ADC)" }
+        options:
+          - { name: Regular + injected simultaneous     , value: 1, sdk: ADC_Mode_RegInjecSimult }
+          - { name: Regular simultaneous + alternate trigger, value: 2, sdk: ADC_Mode_RegSimult_AlterTrig }
+          - { name: Injected simultaneous + fast interleaved, value: 3, sdk: ADC_Mode_InjecSimult_FastInterl }
+          - { name: Injected simultaneous + slow interleaved, value: 4, sdk: ADC_Mode_InjecSimult_SlowInterl }
+          - { name: Injected simultaneous               , value: 5, sdk: ADC_Mode_InjecSimult }
+          - { name: Regular simultaneous                , value: 6, sdk: ADC_Mode_RegSimult }
+          - { name: Fast interleaved                    , value: 7, sdk: ADC_Mode_FastInterl }
+          - { name: Slow interleaved                    , value: 8, sdk: ADC_Mode_SlowInterl }
+          - { name: Alternate trigger                   , value: 9, sdk: ADC_Mode_AlterTrig }
+        help: >
+          ADCx_CTLR1 DUALMOD[19:16], codes 0001..1001 (RM 11.3.2, CH32H417RM.md:14423).
+          Only shown when the Mode row says Dual; the two ADCs are one pair, so setting this
+          on ADC1 describes what ADC1 and ADC2 do together.
+      - key: scan
+        name: Scan conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ScanConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR1 SCAN, bit 8. Converts the whole regular sequence rather than only its first channel - turn it on whenever more than one channel is ticked."
+      - key: cont
+        name: Continuous conversion
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ContinuousConvMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ADCx_CTLR2 CONT, bit 1. The sequence restarts as soon as it ends instead of waiting for the next trigger."
+      - key: nbr
+        name: Number of regular channels
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_NbrOfChannel
+        type: int
+        default: 1
+        min: 1
+        max: 16
+        help: >
+          ADCx_RSQR1 L[23:20], the LENGTH of the regular sequence. Set it to the number of
+          channels you ticked on the Channels row: ADC_Init() writes
+          (ADC_NbrOfChannel - 1) into the field (ch32h417_adc.c), so this is a count and not
+          an index, and leaving it at 0 would write 0xFF - 1 rather than "no channels".
+      - key: trig
+        name: External trigger
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_ExternalTrigConv
+        type: enum
+        default: Software trigger (SWSTART)
+        options:
+          - { name: TIM1 CC1              , value: 0, sdk: ADC_ExternalTrigConv_T1_CC1 }
+          - { name: TIM1 CC2              , value: 1, sdk: ADC_ExternalTrigConv_T1_CC2 }
+          - { name: TIM1 CC3              , value: 2, sdk: ADC_ExternalTrigConv_T1_CC3 }
+          - { name: TIM2 CC2              , value: 3, sdk: ADC_ExternalTrigConv_T2_CC2 }
+          - { name: TIM3 TRGO             , value: 4, sdk: ADC_ExternalTrigConv_T3_TRGO }
+          - { name: TIM4 CC4              , value: 5, sdk: ADC_ExternalTrigConv_T4_CC4 }
+          - { name: EXTI line 11 / TIM8 TRGO, value: 6, sdk: ADC_ExternalTrigConv_Ext_IT11_TIM8_TRGO }
+          - { name: Software trigger (SWSTART), value: 7, sdk: ADC_ExternalTrigConv_None }
+        help: >
+          ADCx_CTLR2 EXTSEL[19:17], codes 000..111 (RM 11.3.3, CH32H417RM.md:14768).
+          NOTE THE LAST ONE'S TWO NAMES, recorded rather than reconciled: the SPL macro is
+          spelled ADC_ExternalTrigConv_None (ch32h417_adc.h:78) and the reference manual
+          calls code 111 "SWSTART software trigger". They are the same encoding; the label
+          here follows the RM because it says what the silicon does, and the macro is the
+          SPL's own.
+      - key: align
+        name: Data alignment
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_DataAlign
+        type: enum
+        default: Right
+        options:
+          - { name: Right, value: 0, sdk: ADC_DataAlign_Right }
+          - { name: Left , value: 1, sdk: ADC_DataAlign_Left }
+        help: "ADCx_CTLR2 ALIGN, bit 11. 12-bit results in a 16-bit register."
+      - key: buffer
+        name: Input buffer
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_OutputBuffer
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: ADC_OutputBuffer_Disable }
+          - { name: Enabled , value: 1, sdk: ADC_OutputBuffer_Enable }
+        help: >
+          ADCx_CTLR1 BUFEN, bit 26 (RM 11.3.2). Turn it on when the source impedance is
+          above the datasheet's maximum, and then keep the sampling time at 7.5 cycles or
+          more. The gain row below NEEDS it on. It is also forced on by the silicon whenever
+          TKENABLE or TSVREFE is set, and calibration must happen before that - the SDK
+          member is spelled ADC_OutputBuffer even though the bit is an INPUT buffer.
+      - key: pga
+        name: Input gain (PGA)
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_Pga
+        type: enum
+        default: x1
+        depends_on: { param: buffer, equals: Enabled }
+        options:
+          - { name: x1 , value: 0, sdk: ADC_Pga_1 }
+          - { name: x4 , value: 1, sdk: ADC_Pga_4 }
+          - { name: x16, value: 2, sdk: ADC_Pga_16 }
+          - { name: x64, value: 3, sdk: ADC_Pga_64 }
+        help: >
+          ADCx_CTLR1 PGA[28:27], codes 00..11 (RM 11.3.2, CH32H417RM.md:14423). Amplifies a
+          small input before conversion. The RM's own note 2 on that bit field is why this
+          row is greyed until the input buffer is on: "ADC_Buffer needs to be enabled to use
+          this function."
   CAN1:
     category: Connectivity
     settings:
@@ -1739,6 +2061,171 @@ peripherals:
       HSYNC: [{ pin: PB13, af: 8 }, { pin: PA4, af: 13 }]
       PCLK: [{ pin: PB12, af: 15 }, { pin: PA6, af: 13 }, { pin: PF13, af: 11 }]
       VSYNC: [{ pin: PA5, af: 11 }, { pin: PB14, af: 15 }, { pin: PF3, af: 13 }, { pin: PB7, af: 13 }]
+    params:
+      - key: datasize_8
+        name: Data width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_DataSize
+        const: DVP_DataSize_8b
+        default: DVP_DataSize_8b
+        depends_on: { setting: Mode, equals: 8-bit }
+        help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:72). Fixed by the Mode row, which is what claims D8-D11."
+      - key: datasize_10
+        name: Data width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_DataSize
+        const: DVP_DataSize_10b
+        default: DVP_DataSize_10b
+        depends_on: { setting: Mode, equals: 10-bit }
+        help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:73). Fixed by the Mode row."
+      - key: datasize_12
+        name: Data width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_DataSize
+        const: DVP_DataSize_12b
+        default: DVP_DataSize_12b
+        depends_on: { setting: Mode, equals: 12-bit }
+        help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:74). Fixed by the Mode row."
+      - key: hclk_pol
+        name: PCLK edge
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_HCLK_P
+        type: enum
+        default: Rising
+        options:
+          - { name: Rising , value: 0, sdk: DVP_Hclk_P_Rising }
+          - { name: Falling, value: 1, sdk: DVP_Hclk_P_Falling }
+        help: "DVP_CR0, the pixel-clock edge data is sampled on (ch32h417_dvp.h:77-78). DVP_StructInit() starts at Rising."
+      - key: hsync_pol
+        name: HSYNC polarity
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_HSYNC_P
+        type: enum
+        default: Active low
+        options:
+          - { name: Active high, value: 0, sdk: DVP_Hsync_P_High }
+          - { name: Active low , value: 1, sdk: DVP_Hsync_P_Low }
+        help: >
+          DVP_CR0 (ch32h417_dvp.h:81-82). The default follows the EVT drop rather than the
+          macro that encodes 0: DVP_StructInit() sets DVP_Hsync_P_Low, whose value is 0x04.
+      - key: vsync_pol
+        name: VSYNC polarity
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_VSYNC_P
+        type: enum
+        default: Active low
+        options:
+          - { name: Active low , value: 0, sdk: DVP_Vsync_P_Low }
+          - { name: Active high, value: 1, sdk: DVP_Vsync_P_High }
+        help: "DVP_CR0 (ch32h417_dvp.h:85-86). DVP_StructInit() starts at Low."
+      - key: caprate
+        name: Frame capture rate
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_FrameCapRate
+        type: enum
+        default: Every frame
+        options:
+          - { name: Every frame   , value: 0, sdk: DVP_FrameCapRate_100P }
+          - { name: Every 2nd frame, value: 1, sdk: DVP_FrameCapRate_50P }
+          - { name: Every 4th frame, value: 2, sdk: DVP_FrameCapRate_25P }
+        help: "DVP_CR1 (ch32h417_dvp.h:89-91). The SDK spells these 100P / 50P / 25P - the proportion of frames kept."
+      - key: capmode
+        name: Capture mode
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_CaptureMode
+        type: enum
+        default: Snapshot
+        options:
+          - { name: Continuous, value: 0, sdk: DVP_CaptureMode_Continuous }
+          - { name: Snapshot  , value: 1, sdk: DVP_CaptureMode_Snapshot }
+        help: "DVP_CR1 (ch32h417_dvp.h:94-95). Snapshot is the EVT drop's own default (DVP_StructInit)."
+      - key: jpeg
+        name: JPEG mode
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_JPEGMode
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "DVP_CR0 bit 6. The sensor sends a JPEG byte stream rather than raw pixels, so the row/column counts below stop describing the transfer."
+      - key: rows
+        name: Rows per frame
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_ROW_NUM
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "DVP_ROW_NUM. The sensor's frame height in lines. 0 is the EVT drop's own starting value (DVP_StructInit) and means the field is left for your own code."
+      - key: cols
+        name: Bytes per row
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_COL_NUM
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "DVP_COL_NUM. Counted in BYTES, not pixels, so an RGB565 line of 320 pixels is 640. 0 is DVP_StructInit()'s value."
+      - key: crop
+        name: Crop window
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Crop
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "DVP_CR1 bit 5. Captures a rectangle of the sensor's frame instead of all of it; the four window rows below apply only while it is on."
+      - key: win_hoff
+        name: Window horizontal offset
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_HOFFCNT
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_HOFFCNT, in BYTES from the start of the line - the same unit as Bytes per row."
+      - key: win_vst
+        name: Window first line
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_VST
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_VST, the first line of the frame that is kept."
+      - key: win_capcnt
+        name: Window width
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_CAPCNT
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_CAPCNT, bytes captured per line."
+      - key: win_vline
+        name: Window height
+        struct: DVP_InitTypeDef
+        sdk_field: DVP_Window_VLine
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        depends_on: { param: crop, equals: true }
+        help: "DVP_VLINE, lines captured per frame."
+    notes: >
+      Digital video port: a parallel camera interface. The Mode row picks the data width
+      AND the pads it claims - 8-bit takes D0-D7, 10-bit adds D8-D9, 12-bit adds D10-D11 -
+      and Parameter Settings writes the matching DVP_CR0.DATA_SIZE rather than offering the
+      width a second time, so the pin plan and the register cannot disagree.
+      THE TWO DMA BUFFER ADDRESSES ARE DELIBERATELY NOT ROWS. `DVP_DMA_BUF0_Addr` and
+      `DVP_DMA_BUF1_Addr` (ch32h417_dvp.h:31-35) are pointers into your own program's
+      memory - a symbol this tool has no way to know - so they are left at the struct's
+      zero-initialiser, which is exactly what the vendor's own `DVP_StructInit()` sets them
+      to (ch32h417_dvp.c). Assign `DVP->DMA_BUF0` / `DMA_BUF1` in the USER CODE block before
+      `DVP_Cmd(ENABLE)`. Every other member of the struct is a row above.
   ECDC:
     category: System Core
     settings:
@@ -1788,6 +2275,14 @@ peripherals:
           - { name: PHY_LED4, signals: [PHY_LED4] }
           - { name: "PPS (pulse per second)", signals: [PPS] }
     signal_pins:
+      # The internal PHY's differential pairs. No `af:` and none is possible: these pads are
+      # driven by the PHY block rather than by the GPIO cell, and DS Table 2-1-1 gives them
+      # no (AFn) code. That is why ETH appears in `codegen.skip_signals` below. They are
+      # routed here so the pin grid claims them and the conflict engine sees them.
+      MDIRN: [{ pin: MDIRN }]
+      MDIRP: [{ pin: MDIRP }]
+      MDITN: [{ pin: MDITN }]
+      MDITP: [{ pin: MDITP }]
       GTXC: [{ pin: PD15, af: 10 }]
       MDC: [{ pin: PC0, af: 1 }]
       MDIO: [{ pin: PC1, af: 1 }]
@@ -2241,6 +2736,66 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    params:
+      - key: channel
+        name: Channel
+        struct: IPC_InitTypeDef
+        sdk_field: IPC_CH
+        type: enum
+        default: Channel 0
+        options:
+          - { name: Channel 0, value: 0, sdk: IPC_CH0 }
+          - { name: Channel 1, value: 1, sdk: IPC_CH1 }
+          - { name: Channel 2, value: 2, sdk: IPC_CH2 }
+          - { name: Channel 3, value: 3, sdk: IPC_CH3 }
+        help: "IPC_Channel_TypeDef, ch32h417_ipc.h:23-29. Four independent channels; this block configures one of them."
+      - key: txcid
+        name: Transmit core ID
+        struct: IPC_InitTypeDef
+        sdk_field: TxCID
+        type: enum
+        default: CID0
+        options:
+          - { name: CID0, value: 0, sdk: IPC_TxCID0 }
+          - { name: CID1, value: 1, sdk: IPC_TxCID1 }
+        help: "IPC_TxCID_TypeDef, ch32h417_ipc.h:32-36. Which core this channel's messages are addressed to."
+      - key: rxcid
+        name: Receive core ID
+        struct: IPC_InitTypeDef
+        sdk_field: RxCID
+        type: enum
+        default: CID0
+        options:
+          - { name: CID0, value: 0, sdk: IPC_RxCID0 }
+          - { name: CID1, value: 1, sdk: IPC_RxCID1 }
+        help: "IPC_RxCID_TypeDef, ch32h417_ipc.h:39-43. Which core's messages this channel listens for."
+      - key: txie
+        name: Transmit interrupt
+        struct: IPC_InitTypeDef
+        sdk_field: TxIER
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "IPC_InitTypeDef.TxIER (ch32h417_ipc.h:51). Raises the channel's interrupt when the message has been taken."
+      - key: rxie
+        name: Receive interrupt
+        struct: IPC_InitTypeDef
+        sdk_field: RxIER
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "IPC_InitTypeDef.RxIER (ch32h417_ipc.h:52). Raises the channel's interrupt when a message arrives."
+      - key: auto
+        name: Auto acknowledge
+        struct: IPC_InitTypeDef
+        sdk_field: AutoEN
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "IPC_InitTypeDef.AutoEN (ch32h417_ipc.h:53)."
   IWDG:
     category: System Core
     settings:
@@ -3015,6 +3570,59 @@ peripherals:
       RX: [{ pin: PC10, af: 11 }, { pin: PC8, af: 11 }]
       SUP: [{ pin: PC9, af: 11 }]
       TX: [{ pin: PC7, af: 11 }]
+    params:
+      - key: bitrate
+        name: Bit rate divider
+        struct: SWPMI_InitTypeDef
+        sdk_field: BitRate
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: >
+          SWPMI_BRR. The header states the relation rather than the frequency:
+          SWPMI_freq = SWPMI_clk / ((BitRate + 1) * 4), with the resulting rate required to
+          land between 100 kbit/s and 2 Mbit/s (ch32h417_swpmi.h:24-27). It is a DIVIDER
+          and not a bit rate, which is why this row is a small integer; the clock tree that
+          would let the tool compute the rate for you is not modelled on this part yet.
+      - key: txbuf
+        name: Transmit buffering
+        struct: SWPMI_InitTypeDef
+        sdk_field: TxBufferingMode
+        type: enum
+        default: None
+        options:
+          - { name: "None"  , value: 0, sdk: SWPMI_TxMode_Buffering_None }
+          - { name: Single  , value: 2, sdk: SWPMI_TxMode_Buffering_Single }
+          - { name: Multiple, value: 10, sdk: SWPMI_TxMode_Buffering_Multi }
+        help: "ch32h417_swpmi.h:41-43. The `value:` figures are the macros' own encodings (0x0 / 0x2 / 0xA), which are NOT a dense 0/1/2 enum."
+      - key: rxbuf
+        name: Receive buffering
+        struct: SWPMI_InitTypeDef
+        sdk_field: RxBufferingMode
+        type: enum
+        default: None
+        options:
+          - { name: "None"  , value: 0, sdk: SWPMI_RxMode_Buffering_None }
+          - { name: Single  , value: 1, sdk: SWPMI_RxMode_Buffering_Single }
+          - { name: Multiple, value: 5, sdk: SWPMI_RxMode_Buffering_Multi }
+        help: "ch32h417_swpmi.h:46-48. Encodings 0x0 / 0x1 / 0x5, again not dense."
+      - key: loopback_off
+        name: Loopback
+        struct: SWPMI_InitTypeDef
+        sdk_field: LoopBackMode
+        const: DISABLE
+        default: DISABLE
+        depends_on: { setting: Mode, ne: Loopback }
+        help: "ch32h417_swpmi.h:34. Fixed by the Mode row: a live single-wire link is not in loopback."
+      - key: loopback_on
+        name: Loopback
+        struct: SWPMI_InitTypeDef
+        sdk_field: LoopBackMode
+        const: ENABLE
+        default: ENABLE
+        depends_on: { setting: Mode, equals: Loopback }
+        help: "ch32h417_swpmi.h:34. Fixed by the Mode row: the transceiver is looped back for self-test and the pad carries nothing."
   TIM10:
     category: Timers
     settings:
@@ -4465,6 +5073,12 @@ codegen:
     # GPIO cell. EXAM/SerDes/AcquireConfig does the same. The pins stay CLAIMED, so the
     # conflict engine still sees SerDes taking PE3-PE6; only the GPIO setup is skipped.
     SERDES: [TXP, TXN, RXP, RXN]
+    # ETH's media-dependent pairs, on the same evidence and for the same reason: the pads
+    # are driven by the built-in 10/100M PHY, not by the GPIO cell, and DS Table 2-1-1 gives
+    # them no (AFn) code. Without this the generator would emit an `af:` TODO for a pad that
+    # can never have one. The RGMII signals are NOT here - those are genuine alternate
+    # functions with real AF codes and must be configured normally.
+    ETH: [MDIRN, MDIRP, MDITN, MDITP]
 
   # AN ANALOG PAD IS `GPIO_Mode_AIN`, NOT AN ALTERNATE FUNCTION, and without this list the
   # generator could not tell the difference. `analogClaim()` (app/engine/constraints.js:255)
@@ -4491,6 +5105,28 @@ codegen:
   #
   # SERDES is not here either - see `skip_signals:` above: those pads take no GPIO
   # configuration of any kind, analog or otherwise.
+  # The SPL macro for each channel a `checkboxes` row can tick, for `sdk_repeat: channels`.
+  # KEYED BY THE CHOICE NAME, not by the signal: `selectedChannels()` in
+  # app/engine/codegen.js reads the ticked CHOICE names out of the settings, which is why
+  # the two internal channels appear here under their full labels - they have no pad and
+  # therefore no signal, and a ticked box with no macro is a TODO in the generated C.
+  # ch32h417_adc.h:83-100 defines ADC_Channel_0..17, with ADC_Channel_16 aliased
+  # ADC_Channel_TempSensor and ADC_Channel_17 aliased ADC_Channel_Vrefint (:102-103); the
+  # numeric spelling is used so the list reads as the sequence the datasheet numbers.
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            IN8: ADC_Channel_8, IN9: ADC_Channel_9, IN10: ADC_Channel_10, IN11: ADC_Channel_11,
+            IN12: ADC_Channel_12, IN13: ADC_Channel_13, IN14: ADC_Channel_14, IN15: ADC_Channel_15,
+            "IN16 (temperature sensor, internal)": ADC_Channel_16,
+            "IN17 (internal reference voltage, internal)": ADC_Channel_17 }
+    ADC2: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            IN8: ADC_Channel_8, IN9: ADC_Channel_9, IN10: ADC_Channel_10, IN11: ADC_Channel_11,
+            IN12: ADC_Channel_12, IN13: ADC_Channel_13, IN14: ADC_Channel_14, IN15: ADC_Channel_15,
+            "IN16 (temperature sensor, internal)": ADC_Channel_16,
+            "IN17 (internal reference voltage, internal)": ADC_Channel_17 }
+
   analog_signals:
     ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13, IN14, IN15]
     ADC2: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13, IN14, IN15]
@@ -4567,6 +5203,15 @@ codegen:
     USART_InitTypeDef:       { fn: USART_Init }         # ch32h417_usart.h:184
     SPI_InitTypeDef:         { fn: SPI_Init }           # ch32h417_spi.h:198
     I2C_InitTypeDef:         { fn: I2C_Init }           # ch32h417_i2c.h:302
+    ADC_InitTypeDef:         { fn: ADC_Init }          # ch32h417_adc.h:174
+    # `no_handle: true` is the data saying the Init takes the struct ALONE - these three
+    # peripherals are singletons on this part, so their base address is compiled into the
+    # SDK function rather than passed to it. Getting this wrong is not a compile error on
+    # one side: `DVP_Init(DVP, &s)` would fail to build, but omitting the flag makes the
+    # generator emit `DVP_Init(<nothing>, &s)` as a TODO instead of the call.
+    DVP_InitTypeDef:         { fn: DVP_Init,   no_handle: true }   # ch32h417_dvp.h:115
+    IPC_InitTypeDef:         { fn: IPC_Init,   no_handle: true }   # ch32h417_ipc.h:80
+    SWPMI_InitTypeDef:       { fn: SWPMI_Init, no_handle: true }   # ch32h417_swpmi.h:78
     TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }   # ch32h417_tim.h:465
     # TIM9-TIM12 have their OWN time-base struct and their own init function, and this is
     # the line that keeps the two apart. ch32h417_tim.h:125-141 defines
@@ -4618,6 +5263,15 @@ codegen:
     TIM10:  TIM10
     TIM11:  TIM11
     TIM12:  TIM12
+    # ADC1/ADC2 are `(ADC_TypeDef *)` at ch32h417.h:1758-1759. The handle is needed twice
+    # over here, and the second use is the one that is easy to forget: ADC's sampling time
+    # is not a struct member but the first argument of ADC_RegularChannelConfig(ADCx, ...),
+    # so without this key the per-channel calls are TODOs as well as the init struct.
+    ADC1:   ADC1
+    ADC2:   ADC2
+    # LPTIM_TimeBaseInit(LPTIMx, &s) - ch32h417.h:1727 and :1732, both `(LPTIM_TypeDef *)`.
+    LPTIM1: LPTIM1
+    LPTIM2: LPTIM2
 
   # Which enable register each peripheral's clock bit lives in. Generated from
   # ch32h417_rcc.h: every RCC_HB*Periph_* macro, with the bit taken as log2 of its

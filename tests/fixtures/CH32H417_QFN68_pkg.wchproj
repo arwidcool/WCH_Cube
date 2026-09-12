@@ -152,11 +152,31 @@ peripherals:
       Mode: Disable
       Channels: []
     remap: 0
+    params:
+      sample: 13.5 cycles
+      mode_dual: Regular simultaneous
+      scan: false
+      cont: false
+      nbr: 1
+      trig: Software trigger (SWSTART)
+      align: Right
+      buffer: Disabled
+      pga: x1
   ADC2:
     settings:
       Mode: Disable
       Channels: []
     remap: 0
+    params:
+      sample: 13.5 cycles
+      mode_dual: Regular simultaneous
+      scan: false
+      cont: false
+      nbr: 1
+      trig: Software trigger (SWSTART)
+      align: Right
+      buffer: Disabled
+      pga: x1
   CAN1:
     settings:
       Mode: Disable
@@ -206,6 +226,20 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      hclk_pol: Rising
+      hsync_pol: Active low
+      vsync_pol: Active low
+      caprate: Every frame
+      capmode: Snapshot
+      jpeg: false
+      rows: 0
+      cols: 0
+      crop: false
+      win_hoff: 0
+      win_vst: 0
+      win_capcnt: 0
+      win_vline: 0
   ECDC:
     settings:
       Mode: Disable
@@ -278,6 +312,13 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      channel: Channel 0
+      txcid: CID0
+      rxcid: CID0
+      txie: false
+      rxie: false
+      auto: false
   IWDG:
     settings:
       Mode: Disable
@@ -393,6 +434,10 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      bitrate: 0
+      txbuf: None
+      rxbuf: None
   TIM10:
     settings:
       Channel1: Disable

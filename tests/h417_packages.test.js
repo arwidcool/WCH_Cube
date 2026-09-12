@@ -111,28 +111,38 @@ function applyChoice(pkg, c) {
 }
 
 // --------------------------------------------------------------- 1. every pin is reachable
+// The pad types allowed to be unclaimable, because they carry no function a user configures.
+// Anything NOT in this list must be reachable, or the app has a pin nobody can use. `boot` is
+// here for CH32L103's BOOT0 should this file ever sweep it; CH32H417 declares none.
+const PAD_TYPES = new Set(['power', 'ground', 'sys', 'reset', 'boot']);
+
+/**
+ * Bonded pins on `pkg` that no peripheral routes a signal to and no pad type excuses.
+ * A function rather than a test body so the planted break at the end of this file can run
+ * the SAME check over a mutated part and insist it fires.
+ */
+function deadPins(pkg) {
+  load(pkg);
+  const claimable = claimablePins();
+  const meta = eng.M.pins || {};
+  const dead = [];
+  for (const pin of [...bondedPins(pkg)].sort()) {
+    if (claimable.has(pin)) continue;
+    const type = (meta[pin] || {}).type;
+    if (PAD_TYPES.has(type)) continue;
+    dead.push(`${pin}: bonded on ${pkg}, no peripheral routes a signal to it, and pins.${pin}.type is `
+      + `${type ? `"${type}"` : 'not declared'} — not one of ${[...PAD_TYPES].join('/')}. `
+      + 'Either a peripheral should route it, or it needs a pad type saying why it carries nothing.');
+  }
+  return dead;
+}
+
 for (const pkg of PACKAGES) {
   test(`${pkg}: every bonded pin is claimable, or is a declared power/system pad`, () => {
     // The ledger asks this of the datasheet. This asks it of the file the app loads, which
     // is what makes a "dead pad" visible: on 2026-09-12 this part shipped 207 pins that a
     // peripheral routed to and no setting could claim, with every gate green.
-    load(pkg);
-    const claimable = claimablePins();
-    const meta = eng.M.pins || {};
-    // The pad types allowed to be unclaimable, because they carry no function a user
-    // configures. Anything NOT in this list must be reachable, or the app has a pin nobody
-    // can use.
-    const PAD_TYPES = new Set(['power', 'ground', 'sys', 'reset']);
-    const dead = [];
-    for (const pin of [...bondedPins(pkg)].sort()) {
-      if (claimable.has(pin)) continue;
-      const type = (meta[pin] || {}).type;
-      if (PAD_TYPES.has(type)) continue;
-      dead.push(`${pin}: bonded on ${pkg}, no peripheral routes a signal to it, and pins.${pin}.type is `
-        + `${type ? `"${type}"` : 'not declared'} — not one of ${[...PAD_TYPES].join('/')}. `
-        + 'Either a peripheral should route it, or it needs a pad type saying why it carries nothing.');
-    }
-    assert.empty(dead, `${pkg}: bonded pins no user can claim and nothing declares as a pad`);
+    assert.empty(deadPins(pkg), `${pkg}: bonded pins no user can claim and nothing declares as a pad`);
   });
 }
 
@@ -223,59 +233,107 @@ const COLLISION_CEILING = {
 const COLLISION_OWNER = 'AGENT-1';
 const COLLISION_TASK = 'CH32H417: default pins collide';
 
-for (const pkg of PACKAGES) {
-  test(`${pkg}: switching any single peripheral on never double-claims a pad it could have avoided`, () => {
-    // THE GENERALISATION of tests/h417_ltdc.test.js. Read this file's header for why
-    // `E.conflictList` is not enough on its own: two claims with the SAME owner do not
-    // reach it, and that is exactly how four LTDC pads stayed broken through a green suite.
-    // The detector is the pin row itself — the engine joins two claims on one pad with
-    // ' / ', so a row whose signal contains ' / ' is a pad being asked to do two jobs.
-    load(pkg);
-    const bonded = bondedPins(pkg);
-    const choices = claimingChoices();
-    const defects = [], silicon = [];
-    // One entry per (peripheral, pad): see the note beside the push below.
-    const defectPads = new Set(), siliconPads = new Set();
+/**
+ * Sweep every claiming choice on `pkg` and return the collisions, split into the ones the
+ * app could have avoided (`defects`) and the ones the silicon forces (`silicon`).
+ *
+ * THE GENERALISATION of tests/h417_ltdc.test.js. Read this file's header for why
+ * `E.conflictList` is not enough on its own: two claims with the SAME owner do not reach it,
+ * and that is exactly how four LTDC pads stayed broken through a green suite. The detector is
+ * the pin row itself — the engine joins two claims on one pad with ' / ', so a row whose
+ * signal contains ' / ' is a pad being asked to do two jobs.
+ *
+ * A function rather than a test body so the planted break at the end of this file can run
+ * the SAME sweep over a mutated part and insist the ratchet fires.
+ */
+function sweepCollisions(pkg) {
+  load(pkg);
+  const bonded = bondedPins(pkg);
+  const choices = claimingChoices();
+  const defects = [], silicon = [];
+  // One entry per (peripheral, pad): see the note beside the push below.
+  const defectPads = new Set(), siliconPads = new Set();
 
-    /** Bonded pads this signal could have used instead of `pin`. */
-    const alternatives = (pid, sig, pin) => {
-      const per = eng.M.peripherals[pid] || {};
-      const opts = (per.signal_pins || {})[sig] || [];
-      return opts.map(o => String(o.pin)).filter(p => p !== pin && bonded.has(p));
-    };
+  /** Bonded pads this signal could have used instead of `pin`. */
+  const alternatives = (pid, sig, pin) => {
+    const per = eng.M.peripherals[pid] || {};
+    const opts = (per.signal_pins || {})[sig] || [];
+    return opts.map(o => String(o.pin)).filter(p => p !== pin && bonded.has(p));
+  };
 
-    for (const c of choices) {
-      const err = applyChoice(pkg, c);
-      if (err) { defects.push(err); continue; }
-      eng.compute();
-      for (const row of eng.pinRows()) {
-        const label = String(row.signal || '');
-        if (!label.includes(' / ')) continue;
-        const claims = label.split(' / ').map(s => s.trim()).filter(Boolean);
-        // Can ANY of the colliding claims move? If none can, the silicon forces it and the
-        // user has to choose; that is a fact about the part, not a defect in the app.
-        const movable = claims.filter(full => {
-          const i = full.indexOf('_');
-          if (i < 0) return false;
-          return alternatives(full.slice(0, i), full.slice(i + 1), String(row.name)).length > 0;
-        });
-        const where = `${c.pid}.${c.setting} = "${c.choice}" puts ${claims.join(' + ')} on ${row.name}`;
-        // COUNTED BY DISTINCT PAD, not by (choice x pad). The defect is "this pad is asked
-        // to do two jobs the moment you switch this peripheral on", and that is one defect
-        // however many menu entries reach it. Counting pairs made the number depend on the
-        // SHAPE OF THE MENU: splitting FMC's single `Address bus A0-A25: Enabled` into five
-        // width choices tripled the count for `FMC_A11` on PB11 without changing one pad of
-        // silicon, and the ratchet correctly called it a regression. Fixing the metric is
-        // the honest response to that; raising the ceiling would not have been.
-        const key = `${c.pid}:${row.name}`;
-        if (movable.length) {
-          if (!defectPads.has(key)) { defectPads.add(key); defects.push(`${where} — ${movable.join(', ')} had somewhere else to go`); }
-        } else if (!siliconPads.has(key)) {
-          siliconPads.add(key);
-          silicon.push(`${where} — neither claim has another bonded pad here`);
-        }
+  for (const c of choices) {
+    const err = applyChoice(pkg, c);
+    if (err) { defects.push(err); continue; }
+    eng.compute();
+    for (const row of eng.pinRows()) {
+      const label = String(row.signal || '');
+      if (!label.includes(' / ')) continue;
+      const claims = label.split(' / ').map(s => s.trim()).filter(Boolean);
+      // Can ANY of the colliding claims move? If none can, the silicon forces it and the
+      // user has to choose; that is a fact about the part, not a defect in the app.
+      const movable = claims.filter(full => {
+        const i = full.indexOf('_');
+        if (i < 0) return false;
+        return alternatives(full.slice(0, i), full.slice(i + 1), String(row.name)).length > 0;
+      });
+      const where = `${c.pid}.${c.setting} = "${c.choice}" puts ${claims.join(' + ')} on ${row.name}`;
+      // COUNTED BY DISTINCT PAD, not by (choice x pad). The defect is "this pad is asked
+      // to do two jobs the moment you switch this peripheral on", and that is one defect
+      // however many menu entries reach it. Counting pairs made the number depend on the
+      // SHAPE OF THE MENU: splitting FMC's single `Address bus A0-A25: Enabled` into five
+      // width choices tripled the count for `FMC_A11` on PB11 without changing one pad of
+      // silicon, and the ratchet correctly called it a regression. Fixing the metric is
+      // the honest response to that; raising the ceiling would not have been.
+      const key = `${c.pid}:${row.name}`;
+      if (movable.length) {
+        if (!defectPads.has(key)) { defectPads.add(key); defects.push(`${where} — ${movable.join(', ')} had somewhere else to go`); }
+      } else if (!siliconPads.has(key)) {
+        siliconPads.add(key);
+        silicon.push(`${where} — neither claim has another bonded pad here`);
       }
     }
+  }
+  return { defects, silicon, choices };
+}
+
+/**
+ * The ratchet's judgement on a sweep: `{ ok, message }`. Three ways to be wrong — the
+ * count rose (a regression), the count fell (a fix nobody recorded), or a zero-ceiling
+ * package has any — and one way to be right, which is exactly at the ceiling.
+ */
+function ratchetVerdict(pkg, defects, choices) {
+  const ceiling = COLLISION_CEILING[pkg];
+  const why =
+    `Each one is a configuration the silicon cannot honour, produced by doing nothing but switching the\n`
+    + `      peripheral on. The default IS the first bonded option in signal_pins:, so the fix is the ORDER of\n`
+    + `      that list — and it belongs in tools/gen_h417_peripherals.py (:1086 emits it in datasheet order),\n`
+    + `      NOT in the YAML it writes, or the next regeneration discards it the way it discarded the LTDC one.\n`
+    + `      Owner: ${COLLISION_OWNER}. TASKS.md: "${COLLISION_TASK}".`;
+  const shown = defects.slice(0, 12).map(d => `        - ${d}`).join('\n')
+    + (defects.length > 12 ? `\n        ... and ${defects.length - 12} more` : '');
+  if (ceiling === 0 && defects.length) {
+    return { ok: false, kind: 'nonzero', message:
+      `${pkg}: ${defects.length} default pin collision(s) that an alternative pad was free to avoid.\n      ${why}\n${shown}` };
+  }
+  if (defects.length > ceiling) {
+    return { ok: false, kind: 'regression', message:
+      `${pkg}: REGRESSION — ${defects.length} avoidable default collisions, ${ceiling} recorded. `
+      + `${defects.length - ceiling} new one(s) were introduced; the count may only go DOWN.\n      ${why}\n${shown}` };
+  }
+  if (defects.length < ceiling) {
+    return { ok: false, kind: 'stale', message:
+      `${pkg}: ${defects.length} avoidable default collisions, but COLLISION_CEILING records ${ceiling}. `
+      + `Someone fixed ${ceiling - defects.length} and did not lower the number — do that, in this file, `
+      + 'so the ceiling keeps meaning something. It may only go down, and it must be current.' };
+  }
+  return { ok: true, kind: 'at-ceiling', message:
+    `${pkg}: ${defects.length} avoidable default collision(s) at the recorded ceiling `
+    + `(${(choices || []).length} mode choices swept, owner ${COLLISION_OWNER})` };
+}
+
+for (const pkg of PACKAGES) {
+  test(`${pkg}: switching any single peripheral on never double-claims a pad it could have avoided`, () => {
+    const { defects, silicon, choices } = sweepCollisions(pkg);
     // The silicon-forced collisions are printed rather than asserted away: they are the
     // answer to "why is this not zero", and a reviewer should be able to read them.
     if (silicon.length) {
@@ -283,36 +341,11 @@ for (const pkg of PACKAGES) {
       for (const s of silicon.slice(0, 6)) console.log(`        - ${s}`);
       if (silicon.length > 6) console.log(`        ... and ${silicon.length - 6} more`);
     }
-    const ceiling = COLLISION_CEILING[pkg];
-    const why =
-      `Each one is a configuration the silicon cannot honour, produced by doing nothing but switching the\n`
-      + `      peripheral on. The default IS the first bonded option in signal_pins:, so the fix is the ORDER of\n`
-      + `      that list — and it belongs in tools/gen_h417_peripherals.py (:1086 emits it in datasheet order),\n`
-      + `      NOT in the YAML it writes, or the next regeneration discards it the way it discarded the LTDC one.\n`
-      + `      Owner: ${COLLISION_OWNER}. TASKS.md: "${COLLISION_TASK}".`;
-
-    if (ceiling === 0) {
-      assert.empty(defects, `${pkg}: default pin collisions that an alternative pad was free to avoid.\n      ${why}`);
-      return;
-    }
-    if (defects.length > ceiling) {
-      const shown = defects.slice(0, 12).map(d => `        - ${d}`).join('\n');
-      assert.ok(false,
-        `${pkg}: REGRESSION — ${defects.length} avoidable default collisions, ${ceiling} recorded. `
-        + `${defects.length - ceiling} new one(s) were introduced; the count may only go DOWN.\n`
-        + `      ${why}\n${shown}`
-        + (defects.length > 12 ? `\n        ... and ${defects.length - 12} more` : ''));
-    }
-    if (defects.length < ceiling) {
-      assert.ok(false,
-        `${pkg}: ${defects.length} avoidable default collisions, but COLLISION_CEILING records ${ceiling}. `
-        + `Someone fixed ${ceiling - defects.length} and did not lower the number — do that, in this file, `
-        + 'so the ceiling keeps meaning something. It may only go down, and it must be current.');
-    }
+    const v = ratchetVerdict(pkg, defects, choices);
+    if (!v.ok) assert.ok(false, v.message);
     // At the ceiling: report the number, never a green adjective. A part is not done while
     // this prints anything but 0, and PROGRESS.md quotes this figure.
-    console.log(`      ${pkg}: ${defects.length} avoidable default collision(s) at the recorded ceiling `
-      + `(${choices.length} mode choices swept, owner ${COLLISION_OWNER})`);
+    console.log(`      ${v.message}`);
   });
 }
 
@@ -362,4 +395,83 @@ test('QFN68 can only have I2C1 at the price of the debug port, and that is the s
     assert.ok(opts.some(p => !debugPins.has(p)),
       `I2C1_${sig} on QFN128 should have a pad that is not a debug pad; options are ${opts.join(',')}`);
   }
+});
+
+// =============================================================================
+//  THE PLANTED BREAKS — round 6, deliverable B. The three checks above are green, and green
+//  is a claim about the app worth exactly as much as the proof that it could have been red.
+//  This file's own history is the argument: its ratchet caught a real regression within an
+//  hour of being written, but only because the regression happened to arrive. A check nobody
+//  has SEEN go red is not a check.
+//
+//  HOW A BREAK IS PLANTED WITHOUT TOUCHING THE TREE. Every check here runs over `eng.M`, and
+//  `load(pkg)` rebuilds `eng.M` from the text registered under the part's name — so a
+//  mutation of the in-memory object would not survive the sweep's own reloads. Instead the
+//  part's YAML TEXT is mutated, registered under the same name, swept, and the original is
+//  re-registered in a `finally`. Nothing on disk changes, the tree is shared and stays
+//  untouched, and the restore is then PROVED by re-running the check and requiring the
+//  baseline back — a restore nobody checked is the same defect one layer down.
+// =============================================================================
+
+/** Run `fn` with the part's text mutated by `mutate`, then put the original back. */
+function withMutantMcu(mutate, fn) {
+  const file = path.join(ROOT, 'data', 'mcus', `${PART}.yaml`);
+  const src = fs.readFileSync(file, 'utf8');
+  const mut = mutate(src);
+  assert.notEqual(mut, src,
+    'the planted mutation left the text unchanged — its anchor has moved in the YAML, so this break now plants nothing');
+  eng.registerMcuFile(mut);
+  try { return fn(); } finally { eng.registerMcuFile(src); }
+}
+
+test('planted break: a forced shared default pad is caught by the collision sweep as a regression', () => {
+  // The LTDC defect, re-created on USART1: make TX's default pad (PB14 on QFN128, the first
+  // bonded option) ALSO the first option for RX. Switching USART1 to Asynchronous then puts
+  // TX and RX on one pad — and RX still has PB15/PD12/PA10/PB7 to go to, so it is AVOIDABLE,
+  // which is the only kind the ratchet counts. QFN128's ceiling is 0, so the verdict must
+  // refuse it. The anchor is USART1's exact RX line; if it moves, `withMutantMcu` says so.
+  const before = sweepCollisions('QFN128').defects.length;
+  assert.equal(before, COLLISION_CEILING.QFN128, 'the baseline is not at the ceiling, so a rise could not be attributed to the plant');
+
+  const RX = 'RX: [{ pin: PB15, af: 4 }, { pin: PD12, af: 14 }, { pin: PA10, af: 7 }, { pin: PB7, af: 7 }]';
+  const r = withMutantMcu(
+    src => src.replace(RX, 'RX: [{ pin: PB14, af: 4 }, { pin: PB15, af: 4 }, { pin: PD12, af: 14 }, { pin: PA10, af: 7 }, { pin: PB7, af: 7 }]'),
+    () => {
+      const { defects, choices } = sweepCollisions('QFN128');
+      const hit = defects.filter(d => /USART1\.Mode/.test(d) && /PB14/.test(d));
+      assert.ok(hit.length >= 1,
+        `the planted USART1 TX+RX collision on PB14 was not reported as avoidable; defects were:\n${defects.map(d => '        - ' + d).join('\n') || '        (none)'}`);
+      const v = ratchetVerdict('QFN128', defects, choices);
+      assert.notOk(v.ok, 'the ratchet passed a package with a planted collision above its ceiling');
+      assert.ok(v.kind === 'nonzero' || v.kind === 'regression', `the ratchet refused for the wrong reason: ${v.kind}`);
+      assert.match(v.message, /PB14/, 'the refusal does not name the pad, so a reader could not find it');
+      // Printed so the run's own output carries the red verbatim — the evidence for
+      // deliverable B is what the ratchet SAID, not that a test named "planted" passed.
+      console.log(`      planted refusal (${v.kind}): ${v.message.split('\n')[0]}`);
+      console.log(`        - ${hit[0]}`);
+      return defects.length;
+    });
+  assert.ok(r > before, `the plant did not raise the count (${before} -> ${r})`);
+
+  // The restore, proved rather than assumed.
+  const after = sweepCollisions('QFN128').defects.length;
+  assert.equal(after, before, `the original part was not restored after the plant (${before} -> ${after})`);
+});
+
+test('planted break: a bonded pad whose type is not a known pad type is reported dead', () => {
+  // VBAT is bonded on every package, routes no signal, and is excused only by `type: power`.
+  // Change the type to something the allow-list has never heard of and the pad must be named
+  // — with the type it carries — because the alternative is a pin nobody can use and nothing
+  // admits to. This is the 207-dead-pads class with the declaration half removed.
+  assert.empty(deadPins('QFN128'), 'the baseline has dead pins, so a new one could not be attributed to the plant');
+
+  const dead = withMutantMcu(
+    src => src.replace('  VBAT: { type: power,', '  VBAT: { type: mystery,'),
+    () => deadPins('QFN128'));
+  assert.equal(dead.length, 1, `expected exactly the planted pad to be reported dead, got ${dead.length}:\n${dead.join('\n')}`);
+  assert.match(dead[0], /^VBAT:/, 'the dead pad is not named first, where a reader looks');
+  assert.match(dead[0], /"mystery"/, 'the report does not quote the unknown type, which is the thing to fix');
+  console.log(`      planted refusal (dead pad): ${dead[0].split('. ')[0]}`);
+
+  assert.empty(deadPins('QFN128'), 'the original part was not restored after the plant');
 });

@@ -1,22 +1,126 @@
 // =============================================================================
 //  clock.js — clock tree maths. No DOM, no rendering: renderClock() (UI) draws
 //  whatever clockCalc() returns, so a new MCU's tree needs no UI change.
+//
+//  Two things a part may have more than one of, and both are data:
+//    * PLLs.  `clock.pll` is the SYS PLL and keeps that spelling; `clock.plls`
+//      is a map of the others, each with an `output:` name that a tap, another
+//      PLL or `sysclk.sources` can cite.
+//    * a tap's source.  `source:` is one name, or a LIST — and a list is a mux
+//      the user picks from, held in `S.clock.preSrc[<tap>]`.
+//  Neither names a part. `data/FORMAT.md` has the block; the rule that governs
+//  both is that a computed number which is WRONG is worse than a missing one,
+//  so every frequency here comes from the file or is not printed at all.
 // =============================================================================
 import { M, S } from './model.js';
 import { paramValue } from './params.js';
 
+// ---------------------------------------------------------------------------
+//  PLLs
+// ---------------------------------------------------------------------------
+
+/**
+ * Every PLL the file declares, the SYS PLL first.
+ *
+ * `clock.pll` stays the SYS PLL's spelling because five parts have exactly one
+ * PLL and a `plls:` map would have rewritten all five for nothing. A file that
+ * writes the SYS PLL as `plls.PLL` instead is read identically, so neither
+ * spelling is the special case and nothing downstream has to ask which was used.
+ *
+ * Each entry: `{ id, def, sys, label, output }`. `output` is the name other taps
+ * cite — `PLLCLK` for the SYS PLL, `<id>_CLK` for a named one that does not say.
+ */
+export function pllList(c) {
+  if (!c) return [];
+  const named = c.plls || {};
+  const sysDef = c.pll || named.PLL || null;
+  const entry = (id, def, sys) => ({
+    id, def, sys,
+    label: def.label || (sys ? 'PLL' : id),
+    output: def.output || (sys ? 'PLLCLK' : id + '_CLK'),
+  });
+  const out = [];
+  if (sysDef) out.push(entry('PLL', sysDef, true));
+  for (const [id, def] of Object.entries(named)) {
+    if (id === 'PLL' || !def) continue;
+    out.push(entry(id, def, false));
+  }
+  return out;
+}
+
+// The node id the UI and `feeding` use for a PLL. The SYS PLL is `PLL` — it was
+// that before `plls:` existed and an older bundle's key must keep meaning the
+// same thing — and every other one is `pll:<id>`, which cannot collide with an
+// oscillator, a prescaler (`pre:`) or a derived tap (`drv:`).
+export const pllNode = p => (p.sys ? 'PLL' : 'pll:' + p.id);
+
+/**
+ * One PLL's live state. The SYS PLL keeps the flat `pllIn` / `pllMul` keys every
+ * project file and the RCC codegen already write; a named PLL lives in
+ * `S.clock.plls[<id>]` as `{ in, mul, div }`.
+ */
+export function pllState(p, k) {
+  if (!k) return { in: 0 };
+  const held = (k.plls || {})[p.id] || {};
+  if (!p.sys) return held;
+  return { in: k.pllIn || 0, mul: k.pllMul, div: held.div };
+}
+
+function pllDefaultState(p) {
+  const st = { in: 0 };
+  const muls = p.def.multipliers || [], divs = p.def.dividers || [];
+  if (muls.length) st.mul = muls[0];
+  if (divs.length) st.div = divs[0];
+  return st;
+}
+
+// ---------------------------------------------------------------------------
+//  Taps (prescalers)
+// ---------------------------------------------------------------------------
+
+/** The sources a tap offers when its `source:` is a LIST, else null. */
+export const tapSources = v => (v && Array.isArray(v.source) ? v.source.filter(Boolean) : null);
+
+/**
+ * The source a tap is taking RIGHT NOW: its single `source:`, or the chosen entry
+ * of its list. A chosen value the file no longer offers falls back to the first —
+ * the same rule the GPIO speed follows, and for the same reason: state that names
+ * something the part does not have must never reach a frequency or the generated C.
+ */
+export function tapSource(v, name, k) {
+  const list = tapSources(v);
+  if (!list) return v.source || null;
+  const chosen = ((k || {}).preSrc || {})[name];
+  return list.includes(chosen) ? chosen : list[0];
+}
+
 // Initial clock state for an MCU's `clock:` block (null when the file has none).
+//
+// `preSrc` and `plls` are written only when the part HAS a mux or a second PLL,
+// so a project saved for one of the five single-PLL parts round-trips byte for
+// byte against a build that predates this schema.
 export function defaultClock(c) {
   if (!c) return null;
-  const pre = {};
-  for (const [k, v] of Object.entries(c.prescalers || {})) pre[k] = v.options[0];
-  return {
+  const pre = {}, preSrc = {};
+  for (const [name, v] of Object.entries(c.prescalers || {})) {
+    const opts = v.options || [];
+    pre[name] = opts.some(o => String(o) === String(v.default)) ? v.default : opts[0];
+    const list = tapSources(v);
+    if (list) preSrc[name] = list.includes(v.default_source) ? v.default_source : list[0];
+  }
+  const plls = {};
+  for (const p of pllList(c)) if (!p.sys) plls[p.id] = pllDefaultState(p);
+  const sysPll = pllList(c).find(p => p.sys);
+  const k = {
     hse: c.sources.HSE ? c.sources.HSE.mhz : 8,
     pllIn: 0,
-    pllMul: c.pll ? c.pll.multipliers[0] : 1,
+    pllMul: sysPll && (sysPll.def.multipliers || []).length ? sysPll.def.multipliers[0] : 1,
     sys: c.sysclk.sources[0],
     pre,
   };
+  if (Object.keys(preSrc).length) k.preSrc = preSrc;
+  if (Object.keys(plls).length) k.plls = plls;
+  return k;
 }
 
 // The root prescaler (the one with no `source:`) — AHB on F1-style parts, HB on V00x.
@@ -24,25 +128,53 @@ export const firstPre = c => Object.keys(c.prescalers || {}).find(n => !(c.presc
 
 /**
  * Which node ids carry a clock right now. Ids match what the UI draws:
- * HSI/HSE/LSI/LSE, PLL, SYSCLK, `pre:<name>`, `drv:<name>`. "Not feeding" is a
- * DISPLAY fact (dashed and dimmed) — it never means the user may not pick it.
+ * HSI/HSE/LSI/LSE, PLL, `pll:<name>`, SYSCLK, `pre:<name>`, `drv:<name>`. "Not
+ * feeding" is a DISPLAY fact (dashed and dimmed) — it never means the user may
+ * not pick it.
  */
 function feedingSet(c, k) {
   const on = new Set(['SYSCLK']);
-  const pllSrc = c.pll ? (c.pll.inputs[k.pllIn] || {}).source : null;
-  // a prescaler tapped straight off the PLL (USB on the dummy part) keeps the
-  // PLL running even when SYSCLK comes from somewhere else
-  if (Object.values(c.prescalers || {}).some(v => v.source === 'PLLCLK')) on.add('PLL');
-  if (k.sys === 'PLLCLK') on.add('PLL'); else on.add(k.sys);
-  if (on.has('PLL') && pllSrc) on.add(pllSrc);
   const fp = firstPre(c);
-  if (fp) on.add('pre:' + fp);
+  const plls = pllList(c);
+  const byOutput = {};
+  for (const p of plls) byOutput[p.output] = p;
+
+  // 1. the PLLs something asks for. A PLL a tap hangs off keeps running even when
+  //    SYSCLK comes from somewhere else (USB on the dummy part, USBFS on H417).
+  const want = new Set();
+  if (byOutput[k.sys]) want.add(byOutput[k.sys].id); else on.add(k.sys);
   for (const [name, v] of Object.entries(c.prescalers || {})) {
-    if (name === fp) continue;
-    const base = v.source === 'PLLCLK' ? 'PLL'
-      : (v.source && v.source !== fp && c.prescalers[v.source]) ? 'pre:' + v.source
-      : (fp ? 'pre:' + fp : 'SYSCLK');
-    if (on.has(base)) on.add('pre:' + name);
+    const s = tapSource(v, name, k);
+    if (s && byOutput[s]) want.add(byOutput[s].id);
+  }
+  // …and whatever feeds THEM, which may be another PLL (H417's USBHS_PLL can take
+  // the SYS PLL's output divided down). Bounded by the number of PLLs, so a file
+  // that wires two of them in a circle stops instead of spinning.
+  for (let pass = 0; pass <= plls.length; pass++) {
+    for (const p of plls) {
+      if (!want.has(p.id)) continue;
+      const inp = (p.def.inputs || [])[pllState(p, k).in || 0];
+      if (!inp) continue;
+      if (byOutput[inp.source]) want.add(byOutput[inp.source].id); else on.add(inp.source);
+    }
+  }
+  for (const p of plls) if (want.has(p.id)) on.add(pllNode(p));
+
+  // 2. the taps, in dependency order rather than file order: a mux may point at a
+  //    prescaler declared later in the file, and "unresolved" must not read as "off".
+  if (fp) on.add('pre:' + fp);
+  const baseNode = (name, v) => {
+    const s = tapSource(v, name, k);
+    if (!s || s === fp) return fp ? 'pre:' + fp : 'SYSCLK';
+    if (byOutput[s]) return pllNode(byOutput[s]);
+    if (s === 'SYSCLK') return 'SYSCLK';
+    if (s !== name && (c.prescalers || {})[s]) return 'pre:' + s;
+    if ((c.sources || {})[s]) return s;
+    return fp ? 'pre:' + fp : 'SYSCLK';
+  };
+  const left = Object.entries(c.prescalers || {}).filter(([n]) => n !== fp);
+  for (let pass = 0; pass <= left.length; pass++) {
+    for (const [name, v] of left) if (on.has(baseNode(name, v))) on.add('pre:' + name);
   }
   for (const d of c.derived || []) if (!fp || on.has('pre:' + fp)) on.add('drv:' + d.name);
   return on;
@@ -55,25 +187,47 @@ function feedingSet(c, k) {
  */
 export function clockSelectable(m = M) {
   const c = m.clock;
-  if (!c) return { sys: [], pllIn: [], pllMul: [], pre: {} };
+  if (!c) return { sys: [], pllIn: [], pllMul: [], pre: {}, preSrc: {}, plls: {} };
+  const inputsOf = def => (def.inputs || []).map((i, index) =>
+    ({ index, name: i.name, source: i.source, div: i.div || 1 }));
+  const list = pllList(c), sysPll = list.find(p => p.sys);
+  const plls = {};
+  for (const p of list) {
+    plls[p.id] = {
+      id: p.id, label: p.label, output: p.output, sys: p.sys,
+      inputs: inputsOf(p.def),
+      multipliers: [...(p.def.multipliers || [])],
+      dividers: [...(p.def.dividers || [])],
+      fixed: p.def.output_mhz !== undefined,
+    };
+  }
+  const pre = Object.entries(c.prescalers || {});
   return {
     sys: [...c.sysclk.sources],
-    pllIn: (c.pll ? c.pll.inputs : []).map((i, index) =>
-      ({ index, name: i.name, source: i.source, div: i.div || 1 })),
-    pllMul: c.pll ? [...c.pll.multipliers] : [],
-    pre: Object.fromEntries(Object.entries(c.prescalers || {}).map(([n, v]) => [n, [...v.options]])),
+    pllIn: sysPll ? inputsOf(sysPll.def) : [],
+    pllMul: sysPll ? [...(sysPll.def.multipliers || [])] : [],
+    pre: Object.fromEntries(pre.map(([n, v]) => [n, [...v.options]])),
+    preSrc: Object.fromEntries(pre.filter(([, v]) => tapSources(v)).map(([n, v]) => [n, tapSources(v)])),
+    plls,
   };
 }
 
-// Does HSE reach SYSCLK, directly or through the PLL? The RCC coupling hangs off
-// this: CubeMX switches the crystal on the moment the mux points at it.
+// Does HSE reach SYSCLK, directly or through the PLL chain? The RCC coupling
+// hangs off this: CubeMX switches the crystal on the moment the mux points at it.
+// The chain is WALKED rather than the one `clock.pll` hop it used to be, because a
+// part may put a second PLL between the crystal and SYSCLK.
 export function hseFeedsSysclk(m = M, s = S) {
   const c = m.clock, k = s.clock;
   if (!c || !k) return false;
   if (k.sys === 'HSE') return true;
-  if (k.sys === 'PLLCLK' && c.pll) {
-    const inp = c.pll.inputs[k.pllIn];
-    return !!inp && inp.source === 'HSE';
+  const list = pllList(c), byOutput = {};
+  for (const p of list) byOutput[p.output] = p;
+  let p = byOutput[k.sys];
+  for (let guard = 0; p && guard <= list.length; guard++) {
+    const inp = (p.def.inputs || [])[pllState(p, k).in || 0];
+    if (!inp) return false;
+    if (inp.source === 'HSE') return true;
+    p = byOutput[inp.source];
   }
   return false;
 }
@@ -81,37 +235,106 @@ export function hseFeedsSysclk(m = M, s = S) {
 /**
  * Every frequency in MHz. Back-compatible keys (SYSCLK, HCLK, PLLCLK, pllIn,
  * every prescaler output, every derived tap, `over`) plus the round-2 shape the
- * clock UI binds to: `sources`, `pll`, `sysclk`, `hclk`, `feeding`, `under`,
- * `selectable`.
+ * clock UI binds to: `sources`, `pll`, `plls`, `sysclk`, `hclk`, `feeding`,
+ * `under`, `selectable`.
  *
- * NOTE for MCU files: prescaler and derived-tap names share this object with the
- * keys above, so a prescaler may not be called `sources`, `pll`, `feeding`,
- * `over`, `under`, `selectable`, `sysclk` or `hclk`.
+ * NOTE for MCU files: prescaler names, derived-tap names and PLL OUTPUT names all
+ * share this object with the keys above, so none of them may be called `sources`,
+ * `pll`, `plls`, `feeding`, `over`, `under`, `selectable`, `sysclk` or `hclk`.
  */
 export function clockCalc(m = M, s = S) {
   const c = m.clock, k = s.clock, out = { over: [], under: [] };
-  const src = {
-    HSI: c.sources.HSI ? c.sources.HSI.mhz : 0,
-    HSE: k.hse,
-    LSI: c.sources.LSI ? c.sources.LSI.khz / 1000 : 0,
-    LSE: c.sources.LSE ? c.sources.LSE.khz / 1000 : 0,
+  // Every oscillator the file declares, not the four CH32V006 happens to have: a
+  // part may name its input clock anything (H417 feeds USBHS_PLL from ETHCLK_20M),
+  // and a source with no entry here is a source no tap could ever resolve.
+  const src = {};
+  for (const [name, d] of Object.entries(c.sources || {})) {
+    src[name] = d.khz !== undefined ? d.khz / 1000 : (name === 'HSE' ? k.hse : d.mhz);
+  }
+
+  // ---- the PLLs, resolved in dependency order --------------------------------
+  // A PLL may take another PLL's output, so file order is not evaluation order.
+  const plls = pllList(c);
+  out.plls = {};
+  const record = (p, inMhz, mhz, st, inp) => {
+    out[p.output] = mhz;
+    out.plls[p.id] = {
+      id: p.id, label: p.label, output: p.output, sys: p.sys,
+      in: inMhz, out: mhz,
+      mul: p.def.output_mhz !== undefined ? null : (st.mul !== undefined ? Number(st.mul) : 1),
+      div: st.div !== undefined ? Number(st.div) : 1,
+      index: st.in || 0, source: inp ? inp.source : null, name: inp ? inp.name : null,
+      fixed: p.def.output_mhz !== undefined,
+    };
   };
-  const pin = c.pll ? c.pll.inputs[k.pllIn] : null;
-  out.pllIn = pin ? src[pin.source] / pin.div : 0;
-  out.PLLCLK = out.pllIn * (k.pllMul || 1);
-  out.SYSCLK = k.sys === 'PLLCLK' ? out.PLLCLK : src[k.sys];
+  const pendingPll = [...plls];
+  for (let pass = 0; pass <= plls.length && pendingPll.length; pass++) {
+    for (let i = pendingPll.length - 1; i >= 0; i--) {
+      const q = pendingPll[i], st = pllState(q, k);
+      const inp = (q.def.inputs || [])[st.in || 0] || null;
+      const from = inp ? (src[inp.source] !== undefined ? src[inp.source] : out[inp.source]) : 0;
+      if (from === undefined) continue;            // its input is a PLL not resolved yet
+      const inMhz = inp ? from / (inp.div || 1) : 0;
+      const mhz = q.def.output_mhz !== undefined ? Number(q.def.output_mhz)
+        : inMhz * (st.mul !== undefined ? Number(st.mul) : 1) / (st.div !== undefined ? Number(st.div) : 1);
+      record(q, inMhz, mhz, st, inp);
+      pendingPll.splice(i, 1);
+    }
+  }
+  // A PLL whose input never resolves (a file that wires two of them in a circle)
+  // prints nothing rather than a number nobody can trace.
+  for (const q of pendingPll) record(q, 0, 0, pllState(q, k), null);
+
+  const sysPll = out.plls.PLL;
+  out.pllIn = sysPll ? sysPll.in : 0;
+  out.PLLCLK = sysPll ? sysPll.out : 0;
+  for (const q of plls) {
+    const rp = out.plls[q.id], d = q.def;
+    if (d.max_mhz && rp.out > d.max_mhz) out.over.push(q.id);
+    if (d.min_mhz && rp.out < d.min_mhz) { out.over.push(q.id); out.under.push(q.id); }
+    if (d.target_mhz && Math.abs(rp.out - d.target_mhz) > 0.01) {
+      out.over.push(q.id);
+      if (rp.out < d.target_mhz) out.under.push(q.id);
+    }
+  }
+
+  out.SYSCLK = src[k.sys] !== undefined ? src[k.sys] : (out[k.sys] !== undefined ? out[k.sys] : 0);
   if (out.SYSCLK > c.sysclk.max_mhz) out.over.push('SYSCLK');
 
+  // ---- the taps, also in dependency order ------------------------------------
   const p = c.prescalers || {}, fp = firstPre(c);
-  out.HCLK = out.SYSCLK / (fp ? k.pre[fp] : 1);
+  const divOf = name => {
+    const held = k.pre ? k.pre[name] : undefined;
+    return held !== undefined ? held : ((p[name].options || [1])[0]);
+  };
+  out.HCLK = out.SYSCLK / (fp ? divOf(fp) : 1);
   if (fp && p[fp].max_mhz && out.HCLK > p[fp].max_mhz) out.over.push(fp);
 
-  for (const [name, v] of Object.entries(p)) {
-    if (name === fp) continue;
-    const base = v.source === 'PLLCLK' ? out.PLLCLK
-      : (v.source && v.source !== fp && out[v.source] !== undefined) ? out[v.source]
-      : out.HCLK;
-    out[name] = base / k.pre[name];
+  const baseOf = (name, v) => {
+    const s = tapSource(v, name, k);
+    if (!s || s === fp) return out.HCLK;
+    if (s === 'SYSCLK') return out.SYSCLK;
+    if (src[s] !== undefined) return src[s];
+    return out[s];                                 // PLLCLK, a named PLL output, another tap
+  };
+  const taps = Object.entries(p).filter(([n]) => n !== fp);
+  const unresolved = [...taps];
+  for (let pass = 0; pass <= taps.length && unresolved.length; pass++) {
+    for (let i = unresolved.length - 1; i >= 0; i--) {
+      const [name, v] = unresolved[i];
+      const base = baseOf(name, v);
+      if (base === undefined) continue;
+      out[name] = base / divOf(name);
+      unresolved.splice(i, 1);
+    }
+  }
+  // A tap whose source names nothing this file declares hangs off HCLK, which is
+  // what it did before muxes existed; the validator is where that becomes an error.
+  for (const [name] of unresolved) out[name] = out.HCLK / divOf(name);
+
+  // The limit checks stay in FILE order so the `over` list reads the way the tree
+  // is drawn, whatever order the frequencies had to be computed in.
+  for (const [name, v] of taps) {
     if (v.max_mhz && out[name] > v.max_mhz) out.over.push(name);
     if (v.min_mhz && out[name] < v.min_mhz) { out.over.push(name); out.under.push(name); }
     if (v.target_mhz && Math.abs(out[name] - v.target_mhz) > 0.01) {
@@ -119,7 +342,12 @@ export function clockCalc(m = M, s = S) {
       if (out[name] < v.target_mhz) out.under.push(name);
     }
   }
-  for (const d of c.derived || []) out[d.name] = out.HCLK / d.div;
+  for (const d of c.derived || []) {
+    const base = d.source && d.source !== fp
+      ? (src[d.source] !== undefined ? src[d.source] : out[d.source])
+      : out.HCLK;
+    out[d.name] = (base === undefined ? out.HCLK : base) / d.div;
+  }
   if (c.sources.HSE && (k.hse < c.sources.HSE.min_mhz || k.hse > c.sources.HSE.max_mhz)) {
     out.over.push('HSE');
     if (k.hse < c.sources.HSE.min_mhz) out.under.push('HSE');
@@ -132,7 +360,7 @@ export function clockCalc(m = M, s = S) {
   const on = feedingSet(c, k);
   out.feeding = { SYSCLK: true };
   for (const id of Object.keys(c.sources)) out.feeding[id] = on.has(id);
-  if (c.pll) out.feeding.PLL = on.has('PLL');
+  for (const q of plls) out.feeding[pllNode(q)] = on.has(pllNode(q));
   for (const name of Object.keys(p)) out.feeding['pre:' + name] = on.has('pre:' + name);
   for (const d of c.derived || []) out.feeding['drv:' + d.name] = on.has('drv:' + d.name);
 
@@ -147,12 +375,13 @@ export function clockCalc(m = M, s = S) {
       over: out.over.includes(name),
     };
   }
-  const inp = c.pll ? c.pll.inputs[k.pllIn] : null;
-  out.pll = c.pll ? {
-    in: out.pllIn, out: out.PLLCLK, mul: k.pllMul || 1,
-    index: k.pllIn, source: inp ? inp.source : null, name: inp ? inp.name : null,
+  // `pll` is the SYS PLL alone and keeps every key it had; `plls` is the map.
+  out.pll = sysPll ? {
+    in: sysPll.in, out: sysPll.out, mul: sysPll.mul === null ? 1 : sysPll.mul,
+    index: sysPll.index, source: sysPll.source, name: sysPll.name,
     feeding: on.has('PLL'),
   } : null;
+  for (const q of plls) out.plls[q.id].feeding = on.has(pllNode(q));
   out.sysclk = out.SYSCLK;
   out.hclk = out.HCLK;
   out.selectable = clockSelectable(m);
