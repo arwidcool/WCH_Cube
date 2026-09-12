@@ -1466,3 +1466,34 @@ test('the PLL input note is absent when the part can write the field, and appear
   assert.equal(e.cSource().includes('PLL input'), false, 'no PLL, no note');
   e.M.codegen.rcc.pllsrc = saved;
 });
+test('CH32H417 ETH offers the built-in PHY, and NOT the MII/RMII it does not have', () => {
+  // The part's Ethernet is "MAC and 100M PHY fully integrated, and the periphery only
+  // needs capacitance", with RGMII as the other supported configuration for an external
+  // 1Gbps PHY (CH32H417DS0.md 1.4.31). MII and RMII appear NOWHERE in that datasheet, so
+  // offering them was a choice the silicon does not have - the defect class this project
+  // exists to remove. This test is the guard against them coming back.
+  const e = fresh('CH32H417');
+  const iface = e.M.peripherals.ETH.settings.find(s => s.name === 'Interface');
+  const names = iface.choices.map(c => c.name);
+  const joined = names.join(' | ');
+  // `\bMII\b` does not match inside RGMII (the M follows a word character), so this is a
+  // test for the standalone interface and not for the one that is real.
+  assert.deepEqual(names.filter(n => /\bMII\b/.test(n)), [], `MII must not be offered: ${joined}`);
+  assert.deepEqual(names.filter(n => /RMII/.test(n)), [], `RMII must not be offered: ${joined}`);
+  assert.deepEqual(names.filter(n => /RGMII/.test(n)).length, 1, `RGMII must be offered: ${joined}`);
+  const internal = iface.choices.find(c => /Internal PHY/.test(c.name));
+  assert.ok(internal, 'the built-in PHY is the configuration most users want');
+  assert.deepEqual([...internal.signals].sort(), ['MDIRN', 'MDIRP', 'MDITN', 'MDITP'],
+    'and it is the four media-dependent pads, straight to the magnetics');
+
+  // it works end to end: claiming those pads produces an init function and no complaints
+  e.setSetting('ETH', 'Interface', internal.name);
+  e.compute();
+  assert.deepEqual([...e.requiredSignals('ETH')].sort(), ['MDIRN', 'MDIRP', 'MDITN', 'MDITP']);
+  assert.ok(e.cSource().includes('    WCHCube_ETH_Init();'), 'ETH is switched on and called from the dispatcher');
+  assert.deepEqual(e.cSource().split('\n').filter(l => /TODO/.test(l)), [],
+    'and nothing about it is a TODO - the pads take no AF code and need none');
+  // the management interface stays a separate, optional choice
+  assert.ok(e.M.peripherals.ETH.settings.some(s => /SMI|MDC/.test(s.name)),
+    'MDC/MDIO is offered on its own, because the internal PHY runs without it');
+});
