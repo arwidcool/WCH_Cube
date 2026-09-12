@@ -1897,6 +1897,24 @@ document.getElementById('pin-search').addEventListener('blur', () => setTimeout(
 // ---------- 5. tree -----------------------------------------------------------
 const CAT_ORDER = ['System Core', 'Analog', 'Timers', 'Connectivity', 'Multimedia', 'Security', 'Computing', 'Trace and Debug', 'Power and Thermal', 'Utilities', 'Other'];
 const collapsed = new Set();
+
+// How peripherals are ordered wherever the app LISTS them.
+//
+// Alphabetically, with a trailing instance number read as a NUMBER: `USART2` before
+// `USART10`, `TIM2` before `TIM10`. A plain `localeCompare` sorts `TIM10` directly after
+// `TIM1`, which reads as a typo rather than as an order - the New Project table already
+// collates its columns this way and this is the same rule.
+//
+// WHY THIS IS NOT THE DATA'S ORDER: the MCU file lists peripherals in whatever order they
+// were written, and on a part with 78 of them that separates `USART1`-`USART3` from
+// `USART4`-`USART8` by a dozen rows and puts `I2C3`/`I2C4` in a different place from
+// `I2C1`/`I2C2`. The file's order carries no meaning for a reader, so the app imposes one.
+const periphOrder = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true });
+// GPIO and NVIC pin to the top of their heading rather than being sorted into it: they are
+// SYNTHETIC entries rather than peripherals, they are where pin and interrupt configuration
+// live, and burying GPIO in the middle of an alphabet would be the opposite of helpful.
+const synRank = p => (p === 'GPIO' ? 0 : p === 'NVIC' ? 1 : 2);
+const byPeripheral = (a, b) => synRank(a) - synRank(b) || periphOrder(a, b);
 // List options, UI-only: never part of S, never saved into a .wchproj.
 const TREE = { sort: 'cat', enabledOnly: false };
 const isEnabledPeriph = pid => pid === 'GPIO' ? Object.keys(S.manual).length > 0
@@ -1949,7 +1967,7 @@ function renderTree() {
   // A→Z: one flat list, no headings. Same items, same badges, different order.
   if (TREE.sort === 'az') {
     const all = ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : []), ...Object.keys(M.peripherals)]
-      .filter(shown).sort((a, b) => a.localeCompare(b));
+      .filter(shown).sort(byPeripheral);
     paintTree(all.length ? `<div class="azlist">${all.map(itemHtml).join('')}</div>` : emptyTree(q));
     return;
   }
@@ -1961,6 +1979,10 @@ function renderTree() {
   // an interrupt controller worth showing.
   cats['System Core'] = ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : [])];
   for (const [pid, P] of Object.entries(M.peripherals)) (cats[P.category || 'Other'] ||= []).push(pid);
+  // Within every heading, by name - so the USARTs are together, the I2Cs are together, and
+  // the same type never straddles another one. Each category is independent, so the
+  // headings themselves stay in CAT_ORDER above.
+  for (const list of Object.values(cats)) list.sort(byPeripheral);
   const order = [...CAT_ORDER.filter(c => cats[c]), ...Object.keys(cats).filter(c => !CAT_ORDER.includes(c))];
   let h = '';
   for (const c of order) {
@@ -3453,6 +3475,9 @@ function renderTools() {
 
   const cat = {};
   for (const [p, P] of periphs) (cat[P.category || 'Other'] ||= []).push(p);
+  // The same order the tree uses, because this is the same question asked in a different
+  // place: an unsorted list here beside a sorted one there would read as two answers.
+  for (const list of Object.values(cat)) list.sort(periphOrder);
 
   const row = (k, v) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`;
   const list = a => a.length ? esc(a.join(', ')) : '<span class="ro">none</span>';
@@ -3476,7 +3501,13 @@ function renderTools() {
     + row('GPIO speeds', list((typeof gpioSpeeds === 'function' ? gpioSpeeds() : []).map(s => s.name)))
     + `</table></section>`
     + `<section><h4>Peripherals <span class="ro">${periphs.length}</span></h4><table class="toolstab">`
-    + Object.entries(cat).map(([c, ps]) => row(c, `${ps.length} — ${list(ps)}`)).join('')
+    + Object.entries(cat).sort((a, b) => {
+      // The headings in the same order the tree puts them, for the same reason the items
+      // are sorted: the tree leads with System Core and a report that leads with whatever
+      // the file happened to list first is a second, differently-ordered answer.
+      const ia = CAT_ORDER.indexOf(a[0]), ib = CAT_ORDER.indexOf(b[0]);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a[0].localeCompare(b[0]);
+    }).map(([c, ps]) => row(c, `${ps.length} — ${list(ps)}`)).join('')
     + row('Pads not extracted yet', openPads.length
       ? `${openPads.length} — ${list(openPads.map(o => o.pid))}`
         + (openOwners.length ? ` <span class="ro">(owner: ${esc(openOwners.join(', '))})</span>` : '')
