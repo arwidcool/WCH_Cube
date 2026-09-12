@@ -296,19 +296,36 @@ peripherals:
       - name: Master Clock Output (MCO)
         choices:
           - { name: Disable }
-          - { name: SYSCLK }
-          - { name: HSI }
-          - { name: HSE }
-          - { name: PLLCLK }
+          - { name: SYSCLK, signals: [MCO] }
+          - { name: HSI,    signals: [MCO] }
+          - { name: HSE,    signals: [MCO] }
+          - { name: PLLCLK, signals: [MCO] }
+      # RM 10.2.11.1: "When LSEON=0, the LSE oscillator pin OSC32_IN/OSC32_OUT
+      # can be used as PC14/PC15 of GPIO respectively. When LSEON=1, it is used as
+      # LSE pin." So the pad is a mode choice like the HSE crystal above, and it
+      # lives on RCC because RCC_BDCTLR.LSEON is the bit that decides it.
+      # NOTE: LSE is NOT in `clock.sources` below - the clock tree has no LSE node,
+      # so this routes the pads and stops there. Recorded rather than half-modelled.
+      - name: Low Speed Clock (LSE)
+        choices:
+          - { name: Disable }
+          - { name: Crystal / ceramic resonator, signals: [OSC32_IN, OSC32_OUT] }
     # PD0/PD1 are the crystal pins out of reset and GPIO when AFIO_PCFR1[15] is set.
     # RM 10.3.2.2: "PD0 & PD1 remap bit ... 0: Pin is used as crystal pin; 1: Pin is
     # used as GPIO port." Index 0 is that reset state, so it has no macro.
+    #
+    # MCO (PA8), OSC32_IN/OSC32_OUT (PC14/PC15) and the LSE choice above are carried
+    # in BOTH entries because neither is affected by PD0PD1_RM - a signal that sits
+    # on the same pad under every value of the field belongs to every entry, and
+    # omitting it from one would make the pin unavailable whenever that remap is
+    # selected. Remap tables agree with each other about the signals they carry; an
+    # index only differs in the PIN a shared signal sits on.
     remaps:
       - name: PD0/PD1 as crystal pins (reset state)
-        pins: { OSC_IN: PD0, OSC_OUT: PD1 }
+        pins: { OSC_IN: PD0, OSC_OUT: PD1, MCO: PA8, OSC32_IN: PC14, OSC32_OUT: PC15 }
       - name: PD0/PD1 as GPIO
         macro: GPIO_Remap_PD01
-        pins: { OSC_IN: PD0, OSC_OUT: PD1 }
+        pins: { OSC_IN: PD0, OSC_OUT: PD1, MCO: PA8, OSC32_IN: PC14, OSC32_OUT: PC15 }
 
   USART1:
     category: Connectivity
@@ -805,6 +822,7 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: I2C, signals: [SCL, SDA] }
+          - { name: I2C with SMBus alert, signals: [SCL, SDA, SMBA] }
     # RM: I2C1_RM PCFR1[1] + I2C1_RM_H PCFR2[23]. RM value 01 is Reserved. The RM
     # also lists SMBA/PB5 on every mapping; it is a separate signal the SPL reaches
     # through the same macro, so it is modelled as a second choice rather than a
@@ -867,13 +885,13 @@ peripherals:
           - { name: "10-bit", value: 1, sdk: I2C_AcknowledgedAddress_10bit }
     remaps:
       - name: Default (RM 00)
-        pins: { SCL: PB6, SDA: PB7 }
+        pins: { SCL: PB6, SDA: PB7, SMBA: PB5 }
       - name: "Fully mapping (RM 10)"
         macro: GPIO_PartialRemap1_I2C1
-        pins: { SCL: PA13, SDA: PA12 }
+        pins: { SCL: PA13, SDA: PA12, SMBA: PB5 }
       - name: "Fully mapped (RM 11)"
         macro: GPIO_FullRemap_I2C1
-        pins: { SCL: PB9, SDA: PB11 }
+        pins: { SCL: PB9, SDA: PB11, SMBA: PB5 }
 
   TIM1:
     category: Timers
@@ -1342,6 +1360,24 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Independent, signals: [] }
+      # The ten external channels DS Table 2-1-1 puts on PA0-PA7, PB0 and PB1 (ADC_IN0..IN9,
+      # the pads the remap below routes). Until 2026-09-12 the file routed them and offered
+      # no way to select one - ten analog pads no user could claim, which is the defect
+      # class tools/coverage.py now reports as "routed but unclaimable". Checkboxes,
+      # because an ADC scans a SET of channels - the shape CH32V006 and CH32X035 use.
+      - name: Channels
+        type: checkboxes
+        choices:
+          - { name: IN0, signals: [IN0] }
+          - { name: IN1, signals: [IN1] }
+          - { name: IN2, signals: [IN2] }
+          - { name: IN3, signals: [IN3] }
+          - { name: IN4, signals: [IN4] }
+          - { name: IN5, signals: [IN5] }
+          - { name: IN6, signals: [IN6] }
+          - { name: IN7, signals: [IN7] }
+          - { name: IN8, signals: [IN8] }
+          - { name: IN9, signals: [IN9] }
     params:
       - key: mode
         name: Mode
@@ -1415,6 +1451,7 @@ peripherals:
         pins: { IN0: PA0, IN1: PA1, IN2: PA2, IN3: PA3, IN4: PA4, IN5: PA5, IN6: PA6, IN7: PA7, IN8: PB0, IN9: PB1 }
   IWDG:
     category: Watchdog
+    pins: { none: true, source: "CH32L103DS0.md Table 2-1-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1447,6 +1484,7 @@ peripherals:
         help: "12-bit. Timeout = (reload + 1) x prescaler / LSI. IWDG has no init struct at all - the SDK configures it by CALLING these."
   WWDG:
     category: Watchdog
+    pins: { none: true, source: "CH32L103DS0.md Table 2-1-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1487,6 +1525,17 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Power interface, signals: [] }
+      # RM 2.4.2 PWR_CSR EWUP: "WKUP is forced to be configured as an input
+      # pull-down state for waking up the MCU from standby". The pad is PA0-WKUP
+      # (DS Table 2-1-1: the pin name itself is `PA0-WKUP`, main function `WKUP`).
+      # Not a parameter: it changes which pad the peripheral holds.
+      - name: Wake-up pin
+        choices:
+          - { name: Disable }
+          - { name: "WKUP enabled (input, pull-down)", signals: [WKUP] }
+    remaps:
+      - name: WKUP on PA0
+        pins: { WKUP: PA0 }
     params:
       # RM 3.4.x PWR_CTLR [7:5] PLS[2:0], all eight levels quoted from the register
       # description. The two figures are the rising and falling threshold - the gap is
@@ -1511,6 +1560,7 @@ peripherals:
         when: { Mode: Enabled }
   FLASH:
     category: System
+    pins: { none: true, source: "CH32L103DS0.md Table 2-1-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1534,6 +1584,7 @@ peripherals:
         help: "FLASH_ACTLR LATENCY[1:0]. RM 24.3.1: 0 wait up to 36 MHz HCLK, 1 above 36 up to 64, 2 above 64."
   EXTI:
     category: System
+    pins: { none: true, source: "CH32L103DS0.md Table 2-1-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1546,6 +1597,7 @@ peripherals:
 
   DMA1:
     category: System
+    pins: { none: true, source: "CH32L103DS0.md Table 2-1-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1663,13 +1715,16 @@ peripherals:
     category: Connectivity
     notes: >
       I2C2 has NO remap on this part, for the same reason as SPI2. Its SMBA pin
-      is one of the pins this part shares (PB12), which is why it is not offered
-      as a separate signal - the DS row lists it beside SPI2_NSS and LPTIM_CH1.
+      is PB12 (DS Table 2-1-1), which the DS row lists beside SPI2_NSS and
+      LPTIM_CH1. It is offered as a second Mode choice rather than folded into
+      `I2C`, because SMBus alert is optional: claiming it unconditionally would
+      take a pad a plain I2C user does not need.
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: I2C, signals: [SCL, SDA] }
+          - { name: I2C with SMBus alert, signals: [SCL, SDA, SMBA] }
     params:
       - key: clock_speed
         name: Clock speed
@@ -1728,10 +1783,28 @@ peripherals:
           - { name: "10-bit", value: 1, sdk: I2C_AcknowledgedAddress_10bit }
     remaps:
       - name: Default (no remap)
-        pins: { SCL: PB10, SDA: PB11 }
+        pins: { SCL: PB10, SDA: PB11, SMBA: PB12 }
 
   RTC:
     category: Timers
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [] }
+      # DS Note 2 (p.18): PC13 "can be used as a general-purpose I/O port, TAMPER
+      # pin, RTC calibration clock, RTC alarm clock or second output". The three
+      # outputs are BKP_OCTLR ASOE/ASOS/CCO (RM 12 ch.4.3.2) - one pad, three
+      # sources, so they are three choices of one setting rather than three signals.
+      - name: RTC output on PC13
+        choices:
+          - { name: Disable }
+          - { name: Alarm pulse, signals: [RTC_OUT] }
+          - { name: Second pulse, signals: [RTC_OUT] }
+          - { name: Calibration clock (RTC/64), signals: [RTC_OUT] }
+    remaps:
+      - name: RTC output on PC13
+        pins: { RTC_OUT: PC13 }
     params:
       # RTC has NO init struct on this part (ch32l103_rtc.h has zero typedefs), so
       # every one of these is applied by CALLING a function - the same shape IWDG and
@@ -1758,16 +1831,30 @@ peripherals:
         help: "Compared against the counter. The alarm reaches the CPU through RTCAlarm_IRQn, EXTI line 17."
     notes: >
       A real-time clock with its own interrupt (RTC_IRQn = 19) and an alarm on
-      EXTI line 17. It claims no GPIO: its registers are in the backup domain and
-      the DS lists no RTC pin on this part. LSE is the 32.768 kHz source.
+      EXTI line 17. It claims the PC13 pad for the alarm / second / calibration
+      output (BKP_OCTLR ASOE-ASOS-CCO), which DS Note 2 names as one of PC13's
+      functions. The 32.768 kHz LSE crystal is on PC14/PC15 and is routed by
+      RCC's `Low Speed Clock (LSE)` setting, not here: it is RCC_BDCTLR.LSEON
+      that decides whether those pads are LSE or GPIO.
+
+  BKP:
+    category: System
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled, signals: [] }
-
-  BKP:
-    category: System
+      # RM 4.2.2 + DS Note 2 (p.18): the tamper input is the PC13 pad, shared with
+      # RTC_OUT. Not a parameter even though the SPL configures it with calls -
+      # BKP_TamperPinLevelConfig sets the ACTIVE LEVEL, which is the `tamper_level`
+      # param below; the pad itself is this choice.
+      - name: TAMPER pin
+        choices:
+          - { name: Disable }
+          - { name: Tamper detection input, signals: [TAMPER] }
+    remaps:
+      - name: TAMPER on PC13
+        pins: { TAMPER: PC13 }
     params:
       # No init struct here either (ch32l103_bkp.h has zero typedefs).
       - key: tamper_level
@@ -1793,16 +1880,14 @@ peripherals:
         help: "7 bits, BKP_OCTLR CAL[6:0]. Trims the RTC clock: roughly 0.95 ppm per step at 32.768 kHz."
     notes: >
       The backup registers and the TAMPER input. TAMPER_IRQn = 18 exists in the
-      enum, so the peripheral is real; the DS pin table does not give TAMPER a pin
-      of its own on this part, so nothing is claimed here rather than a guess.
-    settings:
-      - name: Mode
-        choices:
-          - { name: Disable }
-          - { name: Enabled, signals: [] }
+      enum, and the DS pin table gives the tamper function the PC13 pad, which it
+      shares with the RTC output - so it is modelled with that pad rather than
+      declared pinless. (Before this pass the note here said the DS gives TAMPER
+      no pin; it does, on the row whose pin name is literally `PC13-TAMPER-RTC`.)
 
   CRC:
     category: System
+    pins: { none: true, source: "CH32L103DS0.md Table 2-1-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     params:
       - key: id
         name: ID register
@@ -1823,6 +1908,36 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled, signals: [] }
+
+  EXTEN:
+    category: System Core
+    pins: { none: true, source: "CH32L103DS0.md Table 2-1-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
+    notes: >
+      Extended configuration unit (RM ch.25). One register, EXTEN_CTR at
+      HBPERIPH_BASE + 0x3800 (ch32l103.h:511 defines the one-member struct,
+      :792 the base, :851 the instance). RM 25.1: the unit "uses an HB clock and
+      performs a reset action only when the system is reset", so it has no clock
+      gate of its own and no interrupt. No SPL driver ships for it, so codegen
+      writes EXTEN->EXTEN_CTR directly - the same shape as CH32V006's EXTEN.
+      RM 25.1 lists three other fields this block deliberately does NOT offer:
+      LDOTRIM/ULLDOTRIM (core voltage trim, a factory-tuned value) and HSIPRE
+      (HSI feed to the PLL with or without /2). HSIPRE is a CLOCK choice and
+      belongs in `clock:`, where it is not yet modelled - recorded as a gap in
+      the notes rather than smuggled in here as a hidden register write.
+    settings:
+      - name: Lock-up reset
+        choices:
+          - { name: Disable }
+          - { name: Reset the chip on CPU lock-up }
+    params:
+      - key: lockup
+        name: Lock-up monitoring
+        sdk_none: true
+        sdk_note: "EVT ships no ch32l103_exten.h that declares a function for this unit, so it is a direct write of EXTEN_LKUPEN into EXTEN->EXTEN_CTR. Nothing to call."
+        type: bool
+        group: Basic
+        default: false
+        help: "RM 25.1 item 3: with LKUPEN set, a CPU lock-up resets the system and sets LKUPRST. LKUPRST is a write-1-to-clear status flag firmware reads after reset, so it is not offered here."
 
   USBFS:
     category: Connectivity
@@ -1846,6 +1961,9 @@ peripherals:
     category: Connectivity
     notes: >
       USB Power Delivery, Type-C. USBPD_IRQn = 65 and USBPDWakeUp_IRQn = 67.
+      CC1 is PB6 and CC2 is PB7 (DS Table 2-1-1; RM ch.10 Table 10-10 shows
+      CC1/CC2 connecting to the internal PD transceiver automatically, so there is
+      no GPIO mode to set and no remap index - the pads are fixed).
       The DS model table records which packages have the Type-C Rd pull-downs
       (K8U6, K8U7, F8U6) - a silicon difference between variants that the
       variants: block notes; it is not a pin choice, so it is not modelled as
@@ -1854,7 +1972,10 @@ peripherals:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled, signals: [] }
+          - { name: Enabled, signals: [CC1, CC2] }
+    remaps:
+      - name: CC1/CC2 on PB6/PB7
+        pins: { CC1: PB6, CC2: PB7 }
 
   OPA1:
     category: Analog

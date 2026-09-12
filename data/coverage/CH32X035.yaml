@@ -1,0 +1,84 @@
+# Coverage ledger declarations for CH32X035 - docs/COVERAGE.md is the rule, the schema and
+# the loop. Like CH32V003's, this datasheet abbreviates functions (`T1C1N`, `TX2`, `A13`,
+# `O1N2`, `C1P1`); the aliases below are that vocabulary. Patterns are tried in file order
+# and exact keys win first.
+part: CH32X035
+status: complete
+
+sources:
+  ds: data/sources/X035/Datasheets/CH32X035DS0.md
+  rm: data/sources/X035/Datasheets/CH32X035RM.md
+  header: data/sources/X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035.h
+
+# Table 2-1 is CH32X035; Table 2-2, which follows with no end marker, is CH32X033 - a
+# different part (the trap tools/extract_pins.py once fell into).
+pin_tables:
+  - { start: "Table 2-1 CH32X035 Pin definitions", end: "Table 2-2" }
+signal_table: { kind: pin_grid, start: "Table 2-3 Pin alternate and remapping functions", end: "## Chapter 3" }
+
+aliases:
+  # --- exact spellings first: the conversion prints a capital O for the digit 0 twice
+  C1NO: { to: CMP1_N0, note: "letter O for digit 0; Table 2-1 prints C1N0 (CH32X035DS0.md:2200)" }
+  C2NO: { to: CMP2_N0, note: "letter O for digit 0; Table 2-1 prints C2N0 (CH32X035DS0.md:2140)" }
+  # --- patterns, most specific first
+  A*:    ADC1_IN*
+  C*N*:  CMP*_N*                         # C1N0 -> CMP1_N0
+  C*P*:  CMP*_P*                         # C1P1 -> CMP1_P1
+  C*O:   CMP*_OUT                        # C1O  -> CMP1_OUT
+  CK*:   USART*_CK
+  CTS*:  USART*_CTS
+  RTS*:  USART*_RTS
+  RX*:   USART*_RX
+  TX*:   USART*_TX
+  O*N*:  OPA*_N*                         # O1N2 -> OPA1_N2
+  O*P*:  OPA*_P*
+  O*O*:  OPA*_O*                         # O2O1 -> OPA2_O1
+  T*BK:  TIM*_BKIN
+  T*ET:  TIM*_ETR
+  T*C*:  TIM*_CH*                        # T1C1N -> TIM1_CH1N, T3C2 -> TIM3_CH2
+
+corrections:
+  - pin: PA6
+    token: ACK4
+    replace_with: [A6, CK4_1]
+    reason: "Table 2-1 glued the analog channel A6 to the remap CK4_1 and lost the 6 (`MISO/T3C1/O1N0/ACK4_1`); Table 2-3 prints A6 and CK4_1 on PA6, and the CH32X033 table prints `A6 CK4_1`"
+    source: "CH32X035DS0.md:1734 (vs :2009 and the PA6 block of Table 2-3)"
+
+absent:
+  - token: RST
+    pin: PB7
+    reason: "Table 2-3 lists RST on PB7, but the note under it says that function exists only on CH32X033 in TSSOP20 - a different part; CH32X035.notes.md records the same"
+    source: "CH32X035DS0.md:2585"
+
+disagreements: []
+
+chapters:
+  1: "memory map and bus matrix - the architecture, not a unit"
+  2: [PWR]
+  3: [RCC]
+  4: [AWU]
+  5: [IWDG]
+  6: [WWDG]
+  7: { peripherals: [EXTI], note: "PFIC (7.1-7.4) is the nvic: block; EXTI (7.5) is the peripheral" }
+  8: "GPIO/AFIO is the pin grid itself and the remaps: tables"
+  9: [DMA1]
+  10: [ADC1]
+  11: { peripherals: [ADC1], note: "TouchKey is an ADC mode on this part - CH32X035.notes.md, commit cec2f73" }
+  12: [TIM1]
+  13: [TIM2, TIM3]
+  14: [USART1, USART2, USART3, USART4]
+  15: [I2C1]
+  16: [SPI1]
+  17: [OPA1, OPA2, CMP1, CMP2, CMP3]
+  18: [USBFS]
+  19: "ESIG is read-only silicon identity (chip UID, flash size)"
+  20: [FLASH]
+  21: [USBPD]
+  22: [PIOC]
+  23: { peripherals: [SYS], note: "DBG is SYS's debug-interface setting" }
+
+instances:
+  TKey1: ADC1        # ch32x035.h - TKey1 is an ADC_TypeDef at ADC1_BASE: TouchKey is the ADC block
+  USBFSD: USBFS      # the device and host register views of one USB controller
+  USBFSH: USBFS
+  OPA: OPA1          # one OPA/CMP register block serves both OPAs and all three comparators

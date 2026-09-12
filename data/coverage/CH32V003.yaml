@@ -1,0 +1,73 @@
+# Coverage ledger declarations for CH32V003 - docs/COVERAGE.md is the rule, the schema and
+# the loop. This datasheet abbreviates every function (`T1CH1`, `UTX`, `A3`, `OPN0`), so
+# most of this file is the vocabulary: each alias says what the DS's spelling means in the
+# file's PERIPHERAL_SIGNAL terms. Patterns are tried in file order; exact keys win first.
+part: CH32V003
+# IN EXTRACTION for one declared gap: DS Table 2-1 puts the USART1 synchronous clock UCK on
+# PD4 (default), PD7 (remaps 1 and 2) and PC5 (remap 3), RM Table 7-10 agrees, and the SPL
+# can drive it (USART_ClockInitTypeDef, ch32v00x_usart.h:51-66) - but the generator cannot
+# yet emit the second init struct, so offering the pin would claim a pad the generated C
+# never configures. CH32V003.notes.md and the USART1 block record the same. Three open rows
+# (the three UCK pads) until codegen can emit USART_ClockInit; then model it and set 0.
+status: in_extraction
+owner: AGENT-1
+task: "CH32V003: model USART1_CK once codegen emits USART_ClockInit"
+open_rows: 3
+
+sources:
+  ds: data/sources/V003/Datasheets/CH32V003.md
+  rm: data/sources/V003/Datasheets/CH32V003RM.md
+  header: data/sources/V003/Evt/EXAM/SRC/Peripheral/inc/ch32v00x.h
+
+pin_tables:
+  - { start: "Table 2-1 CH32V003xx pin definitions", end: "Table 2-2" }
+signal_table: { kind: pin_grid, start: "Table 2-2 CH32V003xx alternate function pin definitions", end: "Chapter 3" }
+
+aliases:
+  # --- exact spellings first
+  T2CH1ETR: TIM2_CH1_ETR                 # channel 1 and ETR share the pad; the file models one signal
+  AETR:  [ADC1_RETR0, ADC1_RETR1]        # the regular-group external trigger: PD3 (default) or PC2 (remap 1)
+  AETR2: [ADC1_IETR0, ADC1_IETR1]        # the injected-group trigger: PD1 (default) or PA2 (remap 1)
+  OPO:   OPA1_OUT
+  OSCI:  RCC_XI
+  OSCO:  RCC_XO
+  NRST:  SYS_RST
+  # The conversion prints `T1` as `TI` (capital I for the digit 1) on three tokens of
+  # Table 2-1; Table 2-2 spells the same functions T1CH1N, T1CH2N and T1ETR.
+  TICH1N: { to: TIM1_CH1N, note: "conversion typo, I for 1 (CH32V003.md:1102, :1106)" }
+  TICH2N: { to: TIM1_CH2N, note: "conversion typo, I for 1 (CH32V003.md:1106)" }
+  TIETR:  { to: TIM1_ETR,  note: "conversion typo, I for 1 (CH32V003.md:1098)" }
+  # --- patterns, most specific first
+  A*:     ADC1_IN*
+  OPN*:   OPA1_N*
+  OPP*:   OPA1_P*
+  T*BKIN: TIM*_BKIN
+  T*ETR:  TIM*_ETR
+  T*CH*:  TIM*_CH*                       # T1CH1N -> TIM1_CH1N, T2CH3 -> TIM2_CH3
+  U*:     USART1_*                       # UTX, URX, UCK, UCTS, URTS - one USART on this part
+
+corrections: []
+absent: []
+disagreements: []
+
+chapters:
+  1: "memory map and bus matrix - the architecture, not a unit"
+  2: [PWR]
+  3: [RCC]
+  4: [IWDG]
+  5: [WWDG]
+  6: { peripherals: [EXTI], note: "PFIC (6.1-6.3) is the nvic: block; EXTI (6.4) is the peripheral" }
+  7: "GPIO/AFIO is the pin grid itself and the remaps: tables"
+  8: [DMA1]
+  9: [ADC1]
+  10: [TIM1]
+  11: [TIM2]
+  12: [USART1]
+  13: [I2C1]
+  14: [SPI1]
+  15: "ESIG is read-only silicon identity (chip UID, flash size)"
+  16: [FLASH]
+  17: [EXTEN]
+  18: { peripherals: [SYS], note: "DBG is SYS's debug-interface setting" }
+
+instances: {}

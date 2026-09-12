@@ -1,0 +1,63 @@
+# Coverage ledger declarations for CH32V005 - docs/COVERAGE.md. CH32V005 is CH32V006
+# minus TouchKey, TIM3 and QFN32 (`inherits:`), read from the same datasheet: its own pin
+# table is Table 2-2, its RM and header are shared with CH32V006, and the two things the
+# silicon lacks are declared ABSENT below rather than left to inheritance.
+part: CH32V005
+status: complete
+
+sources:
+  ds: data/sources/V006/Datasheets/CH32V006DS0.md
+  rm: data/sources/V006/Datasheets/CH32V00XRM.md
+  header: data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X.h
+
+pin_tables:
+  - { start: "Table 2-2 CH32V005 Pin definitions", end: "Table 2-3" }
+signal_table: { kind: pin_grid, start: "Table 2-3 Pin alternate and remapping functions", end: "## Chapter 3" }
+
+aliases:
+  ADC_IN*: ADC1_IN*
+  ADC_IETR: [ADC1_IETR0, ADC1_IETR1]
+  ADC_RETR: [ADC1_RETR0, ADC1_RETR1]
+  SWDIO: SYS_SWIO
+
+corrections: []
+
+absent:
+  - chapter: 10
+    reason: "CH32V005 has no TouchKey: the DS model table gives TKEY to CH32V006 only, and the file removes peripherals.TKEY"
+    source: "CH32V006DS0.md model table (ch.1) + data/mcus/CH32V005.yaml mcu.remove"
+  - chapter: 13
+    reason: "CH32V005 has no TIM3 (SLTM): the DS model table lists TIM1 and TIM2 only for the V005 rows, and the file removes peripherals.TIM3"
+    source: "CH32V006DS0.md model table (ch.1) + data/mcus/CH32V005.yaml mcu.remove"
+  - instance: TKey1
+    reason: "defined in the shared ch32v00X.h for the family; CH32V005 has no TouchKey (see chapter 10 above)"
+    source: "CH32V006DS0.md model table (ch.1)"
+  - instance: TIM3
+    reason: "defined in the shared ch32v00X.h for the family; CH32V005 has no TIM3 (see chapter 13 above)"
+    source: "CH32V006DS0.md model table (ch.1)"
+
+disagreements: []
+
+chapters:
+  1: "memory map and bus matrix - the architecture, not a unit"
+  2: [PWR]
+  3: [RCC]
+  4: [IWDG]
+  5: [WWDG]
+  6: { peripherals: [EXTI], note: "PFIC (6.1-6.3) is the nvic: block; EXTI (6.4) is the peripheral" }
+  7: "GPIO/AFIO is the pin grid itself and the remaps: tables"
+  8: [DMA1]
+  9: [ADC1]
+  11: [TIM1]
+  12: [TIM2]
+  14: [USART1, USART2]
+  15: [I2C1]
+  16: [SPI1]
+  17: [OPA1]
+  18: [FLASH]
+  19: "ESIG is read-only silicon identity (chip UID, flash size)"
+  20: [EXTEN]
+  21: { peripherals: [SYS], note: "DBG is SYS's debug-interface setting" }
+
+instances:
+  OPA: OPA1

@@ -1,0 +1,139 @@
+# Coverage ledger declarations for CH32L103 - docs/COVERAGE.md is the rule, the schema and
+# the loop. This part is IN EXTRACTION: its open rows are counted in `open_rows:` below,
+# the count may only go down, and the part is not done while it is above zero.
+#
+#   python tools/coverage.py CH32L103        # the open rows, with the datasheet line to read
+part: CH32L103
+status: in_extraction
+owner: AGENT-1
+task: "CH32L103: close the coverage ledger"
+open_rows: 12
+
+sources:
+  ds: data/sources/l103/Datasheets/CH32L103DS0.md
+  rm: data/sources/l103/Datasheets/CH32L103RM.md
+  header: data/sources/l103/Evt/EXAM/SRC/Peripheral/inc/ch32l103.h
+
+pin_tables:
+  # The table ends at Note 1, NOT at the next table. Notes 1-5 are prose that names
+  # `OSC_IN`, `OSC_OUT` and the package pins, and while they sat inside the range the
+  # parser read the final VDD row's name together with tokens out of the note text,
+  # reporting `VDD OSC_IN` and `VDD OSC_OUT` as DS functions. Those two rows were the
+  # parser's, not the datasheet's - Table 2-1-1 gives OSC_IN to PD0 (line 1983) and
+  # OSC_OUT to PD1 (line 1990), which is what the file routes.
+  - { start: "Table 2-1-1 CH32L103 Pin definitions", end: "Note 1: Explanation of table abbreviations" }
+# Table 2-3 is badly torn by the conversion (`CAN1_R` + `X`, `CAN1_TUSBDP`); it is still a
+# second reading, and its differences are reported so they get declared, not averaged.
+signal_table: { kind: pin_grid, start: "Table 2-3 Pin alternate and remapping functions", end: "## Chapter 3" }
+
+# The datasheet names the crystal pads OSC_IN / OSC_OUT; the file names them PD0 / PD1
+# (CH32L103_pin_corrections.yaml records the rename).
+pin_aliases: { OSC_IN: PD0, OSC_OUT: PD1 }
+
+aliases:
+  USBDM: USBFS_UDM
+  USBDP: USBFS_UDP
+  LPT_OUT: LPTIM_OC                      # the DS writes the LPTIM output as LPT_OUT (remap) and LPTIM_OUT (default)
+  LPTIM_OUT: LPTIM_OC
+  OSC_IN: RCC_OSC_IN                     # the pad's own name, on the row the file calls PD0
+  OSC_OUT: RCC_OSC_OUT
+  NRST: SYS_RST
+  # The three pads whose DS token is a bare function name with no peripheral prefix,
+  # so the built-in rules cannot reach them: the file's peripheral is RCC / BKP / PWR /
+  # USBPD and the signal name carries the prefix.
+  OSC32_IN: RCC_OSC32_IN                 # RCC_BDCTLR.LSEON decides whether PC14 is LSE or GPIO
+  OSC32_OUT: RCC_OSC32_OUT
+  MCO: RCC_MCO                           # PA8, RM 10.2.11.3 Table 10-9 "MCO Clock output"
+  TAMPER: BKP_TAMPER                     # PC13, RM ch.4.2.2
+  RTC: RTC_RTC_OUT                       # PC13 RTC output pulse: calibration, alarm or second
+  WKUP: PWR_WKUP                         # PA0, RM 2.4.2 EWUP
+  CC1: USBPD_CC1                         # PB6, RM ch.10 Table 10-10
+  CC2: USBPD_CC2                         # PB7
+  I2C1_SMBA: I2C1_SMBA                   # PB5, fixed on every I2C1 mapping
+  I2C2_SMBA: I2C2_SMBA                   # PB12, I2C2 has no remap at all
+
+corrections:
+  - pin: PA12
+    token: CAN1_TUSBDP
+    replace_with: [CAN1_TX, USBDP]
+    reason: "Table 2-3 glued CAN1_TX and USBDP into one token and lost the X; Table 2-1-1 prints CAN1_TX and USBDP on PA12"
+    source: "CH32L103DS0.md:3196 (vs :2333-2335)"
+  - pin: PA12
+    token: X
+    replace_with: []
+    reason: "the X of the same CAN1_TX, carried over the page break that follows the torn token above; nothing is lost by dropping it"
+    source: "CH32L103DS0.md:3196-3215"
+
+absent:
+  # A boot strap, not a peripheral function. RM Table 1-1 reads BOOT0 and BOOT1 at
+  # reset to pick Program Flash / System memory / SRAM; DS Note 5 discusses what
+  # happens when they are not bonded. There is no AFIO field, no remap and no
+  # register that configures BOOT1, so there is nothing for the configurator to
+  # offer: an unconfigured pin is not an offering. BOOT0 is declared in the MCU
+  # file's `pins:` with `type: boot` for the same reason.
+  - token: BOOT1
+    pin: PB2
+    reason: "the boot strap is sampled at reset, not configured: RM Table 1-1 selects the boot mode from BOOT0/BOOT1 and there is no AFIO field or register for it"
+    source: "CH32L103DS0.md:2183 (PB2 BOOT1) and :2558 Note 5; CH32L103RM.md Table 1-1"
+
+# The two DS readings of the SAME silicon, and where they part company.
+disagreements:
+  - pin: PD1
+    token: OSC_OUT
+    reason: >
+      The pin-first reading gives the crystal pair both pads - Table 2-1-1 line 1983
+      puts OSC_IN on PD0 and line 1990 puts OSC_OUT on PD1. The signal-first reading
+      (Table 2-3) lists OSC_OUT under PD1 but has NO OSC_IN under PD0, so the two
+      readings disagree about the pair by one token rather than about a pin. The file
+      follows the pin-first table, which is also what DS Note 4 describes ("pin 4 and
+      pin 5 are configured as OSC_IN and OSC_OUT function pins by default after chip
+      reset, and the software can reset these two pins to PD0 and PD1 functions"), and
+      what RM 10.2.11.2 states - OSC_IN/OSC_OUT are the default function of PD0/PD1 and
+      AFIO_PCFR1[15] switches them to GPIO. Two readings kept, neither averaged.
+    source: "CH32L103DS0.md:1983 and :1990 (pin-first) vs Table 2-3 (signal-first); CH32L103DS0.md:2549-2555 Note 4"
+
+chapters:
+  1: "memory map and bus matrix - the architecture, not a unit"
+  2: [PWR]
+  3: [RCC]
+  4: [BKP]
+  5: [CRC]
+  6: [RTC]
+  7: [IWDG]
+  8: [WWDG]
+  9: { peripherals: [EXTI], note: "PFIC is the nvic: block; EXTI is the peripheral" }
+  10: "GPIO/AFIO is the pin grid itself and the remaps: tables"
+  11: [DMA1]
+  12: [ADC1]
+  # 13 Touch Key Detection (TKEY) IS the ADC block, not a unit of its own. RM 13.1:
+  # "For TKEY detection, the ADC module is needed. To enable TKEY, ensure that ADC is
+  # powered on (ADON=1), then set the TKENABLE bit in the ADC_CTLR1 register to 1", and
+  # the detection channels "reuse 10 external channels of the ADC". ch32l103.h defines
+  # `TKey1` as an ADC_TypeDef at ADC1_BASE, which is why `instances:` maps it there.
+  # Same shape as CH32V006's TouchKey, settled in round 4.
+  13: { peripherals: [ADC1], note: "TKEY is a mode of the ADC block: TKey1 is an ADC_TypeDef at ADC1_BASE, TKENABLE is an ADC_CTLR1 bit, and the detection channels are the ADC channels" }
+  14: [TIM1]
+  15: [TIM2, TIM3, TIM4]
+  16: [LPTIM]
+  17: [USART1, USART2, USART3, USART4]
+  18: [I2C1, I2C2]
+  19: [SPI1, SPI2]
+  20: [USBFS]
+  21: [USBPD]
+  22: [CAN1]
+  23: [OPA1, CMP1]
+  24: [FLASH]
+  # 25 Extended Configuration (EXTEN). Modelled: EXTEN_CTR carries the lock-up reset
+  # control that firmware sets at start-up, exactly as on CH32V006. The unit holds no
+  # pad (it is a configuration register), and its clock is the HB clock with no gate of
+  # its own.
+  25: [EXTEN]
+  26: { peripherals: [SYS], note: "DBG is SYS's debug-interface setting" }
+  27: "ESIG is read-only silicon identity (chip UID, flash size)"
+
+instances:
+  OPA: OPA1
+  TKey1: ADC1
+  USBFSD: USBFS
+  USBFSH: USBFS
+  EXTEN: EXTEN

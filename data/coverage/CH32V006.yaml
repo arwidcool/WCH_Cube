@@ -1,0 +1,75 @@
+# Coverage ledger declarations for CH32V006 - docs/COVERAGE.md is the rule, the schema and
+# the loop. Everything in here is a JUDGEMENT with a citation; the inventory it is checked
+# against is generated (data/coverage/ledger/CH32V006.yaml) and never hand-edited.
+#
+#   python tools/coverage.py CH32V006        # the open rows; exit 1 while any remain
+part: CH32V006
+status: complete
+
+sources:
+  ds: data/sources/V006/Datasheets/CH32V006DS0.md
+  rm: data/sources/V006/Datasheets/CH32V00XRM.md
+  header: data/sources/V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X.h
+
+# The pin-first reading: one row per pin, five package columns. Two tables, because the
+# datasheet gives CH32V006F4U6 its own (Table 2-1-2) and the file's `pins:` is the union.
+pin_tables:
+  - { start: "Table 2-1-1 CH32V006 Pin definitions", end: "Table 2-1-2" }
+  - { start: "Table 2-1-2 CH32V006F4U6 Pin definitions", end: "Table 2-2" }
+# The signal-first reading of the same silicon: Table 2-3, one block per pin, one column
+# per peripheral. Independent layout, so a parse error in one does not repeat in the other.
+signal_table: { kind: pin_grid, start: "Table 2-3 Pin alternate and remapping functions", end: "## Chapter 3" }
+
+# DS token -> the file's PERIPHERAL_SIGNAL. Only what the built-in rules cannot resolve
+# (literal PID_SIG, the single-instance family rule `OPA_P0` -> OPA1_P0, and a bare
+# signal name one peripheral owns) needs an entry here.
+aliases:
+  # TouchKey channel n IS ADC channel n on the same pad: RM ch.10 and the EVT TOUCHKEY
+  # example (CH32V006.notes.md); the file routes both, so one DS token stands for two.
+  ADC_IN*: [ADC1_IN*, TKEY_CH*]
+  # The ADC's two external triggers are written once each in the DS (default pin and
+  # remap 1); the file models each trigger's two pin options as two signals.
+  ADC_IETR: [ADC1_IETR0, ADC1_IETR1]
+  ADC_RETR: [ADC1_RETR0, ADC1_RETR1]
+  SWDIO: SYS_SWIO
+
+corrections:
+  - pin: PA2
+    token: X0
+    replace_with: [XO]
+    reason: "Table 2-1-2 prints the crystal output as X0 (digit zero); Table 2-1-1, Table 2-3 and RM ch.3 all print XO"
+    source: "CH32V006DS0.md:2485"
+
+absent: []
+disagreements: []
+
+# RM chapter -> the peripheral(s) that model it, or a sentence saying why it is not one.
+# Mirrors tests/completeness.test.js's RM_CHAPTERS map, which stays as the V006-only
+# regression guard; this is the copy every part carries.
+chapters:
+  1: "memory map and bus matrix - the architecture, not a unit"
+  2: [PWR]
+  3: [RCC]
+  4: [IWDG]
+  5: [WWDG]
+  6: { peripherals: [EXTI], note: "PFIC (6.1-6.3) is the nvic: block; EXTI (6.4) is the peripheral" }
+  7: "GPIO/AFIO is the pin grid itself and the remaps: tables"
+  8: [DMA1]
+  9: [ADC1]
+  10: [TKEY]
+  11: [TIM1]
+  12: [TIM2]
+  13: [TIM3]
+  14: [USART1, USART2]
+  15: [I2C1]
+  16: [SPI1]
+  17: [OPA1]
+  18: [FLASH]
+  19: "ESIG is read-only silicon identity (chip UID, flash size)"
+  20: [EXTEN]
+  21: { peripherals: [SYS], note: "DBG is SYS's debug-interface setting" }
+
+# SPL instance -> peripheral, where the names differ. Same-name instances match on their own.
+instances:
+  OPA: OPA1          # ch32v00X.h:473 - one OPA block, the file calls it OPA1
+  TKey1: ADC1        # ch32v00X.h:475 - TKey1 is an ADC_TypeDef at ADC1_BASE: TouchKey is the ADC block

@@ -961,3 +961,48 @@ bits, and a clock tree that models what the schema can hold.
 2. **`validate_mcu.py`'s `_signals_routed_by` read only `remaps:`.** On an AF-muxed part
   (`signal_pins:`) it returned an empty set, so `clock.hse_signals` failed with "not routed to
   a pin by any RCC remap" whatever the file said. Fixed to read both schemas.
+
+---
+
+## The coverage ledger — every peripheral, every function, every pin (2026-09-12, human-directed)
+
+The rule, the schema and the loop are `docs/COVERAGE.md`; the tool is `tools/coverage.py`; the
+gate is `tests/coverage.test.js`. A part is not done while `python tools/coverage.py <PART>`
+prints an open row, and `data/coverage/<PART>.yaml` records the count, which may only go down.
+
+- [x] `tools/coverage.py` + `tools/coverage_lib.py` + `tools/ledger.py`: the inventory (DS pin
+      functions, both readings; RM chapters; SPL instances) joined to the MCU file, seven checks,
+      the ratchet, and the planted-break self-test (`tools/coverage_selftest.py`).
+- [x] `validate_mcu.py`: a routed signal no choice claims is an ERROR (the reverse of the check
+      it always had); a routing-less peripheral must declare `pins: { none, source }` or
+      `pins: { open, owner, task }` - silence is an ERROR.
+- [x] CH32V006, CH32V005, CH32X035: coverage 0 open. CH32L103 ADC1's ten unselectable channels
+      given a Channels setting (DS Table 2-1-1).
+- [ ] (AGENT-1) **CH32V003: model USART1_CK once codegen emits USART_ClockInit** - three open
+      rows (UCK on PD4 / PD7 / PC5, DS Table 2-1, RM Table 7-10). Needs APP: the generator
+      cannot gate a second init struct off yet.
+- [ ] (AGENT-1) **CH32L103: close the coverage ledger** - `python tools/coverage.py CH32L103`
+      lists every row. **33 -> 12 open this cycle** (BOARD 2026-09-12T12:01Z): BKP TAMPER on
+      PC13, PWR WKUP on PA0, RTC output on PC13, RCC LSE on PC14/PC15, RCC MCO on PA8, USBPD
+      CC1/CC2 on PB6/PB7, I2C1/I2C2 SMBA on PB5/PB12, EXTEN modelled as a peripheral, chapters
+      13 (TKEY -> ADC1) and 25 (EXTEN) mapped, the PD1 OSC_OUT disagreement recorded, and BOOT1
+      declared absent with its source. **The 12 remaining are the CMP2/CMP3 pads**, blocked on
+      four `ABSENT` entries in `tests/completeness.test.js` (CMP2/CMP3 × nvic/clock) - requested
+      from AGENT-3 on the board; if they do not land by the next cycle I add them myself as a
+      recorded DECISION. Also recorded on the board: `const:` is now needed by CH32L103's CMP1
+      too, because `OPA_CMP_Init` branches on `CMP_NUM` (`ch32l103_opa.c:172,178,184`).
+- [ ] (AGENT-1) **CH32H417: close the coverage ledger** - `python tools/coverage.py CH32H417`.
+      The USB controllers' pads (DS Tables 2-2-18/19), MCO, the OPA/DAC naming, the two DS
+      readings' recorded disagreements (SerDes RX/TX, USART8 CTS/RTS, QSPI2 SIOX, SDMMC), DMAMUX.
+- [ ] (AGENT-1) **CH32H417 declares no `codegen.analog_signals`, so an analog pad is not
+      recognised** — found by AGENT-3 extending the CH32H417 fixture to claim OPA1 P0/N0/OUT0 and
+      DAC OUT1, pads the coverage ledger made reachable that no fixture had ever configured.
+      `analogClaim()` (`app/engine/constraints.js:255`) reads `codegen.analog_signals` and falls
+      back to "Analog-category peripheral on an analog-capable pin"; CH32H417 declares **neither**
+      (its `pins:` block carries no `analog:` flag, which the file header already records as a
+      declared gap). So the fallback returns false, `gpioEffectiveMode()` takes the
+      alternate-function branch, and the generated C configures **PA4, PB0, PB1 and PC4 as
+      `GPIO_Mode_AF_PP` where an analog pad must be `GPIO_Mode_AIN`** — wrong-but-compiling, the
+      defect class this round exists to remove. The TODO codegen emits beside it also tells the
+      reader to add an `af:` to a pad that has none, which is unfollowable advice (that half is
+      AGENT-2's). Evidence and the generated C: `tests/evidence/round5/2026-09-12-analog-pads.md`.

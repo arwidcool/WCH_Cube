@@ -1,0 +1,119 @@
+# Coverage ledger declarations for CH32H417 - docs/COVERAGE.md is the rule, the schema and
+# the loop. This part is IN EXTRACTION: its open rows are counted in `open_rows:` below,
+# the count may only go down, and the part is not done while it is above zero.
+#
+#   python tools/coverage.py CH32H417        # the open rows, with the datasheet line to read
+part: CH32H417
+status: in_extraction
+owner: AGENT-1
+task: "CH32H417: close the coverage ledger"
+open_rows: 113
+
+sources:
+  ds: data/sources/H417/Datasheets/CH32H417DS0.md
+  rm: data/sources/H417/Datasheets/CH32H417RM.md
+  header: data/sources/H417/Evt/EXAM/SRC/Peripheral/inc/ch32h417.h
+
+# Table 2-1-1 is CH32H417 on QFN68/88/128; 2-1-2 and 2-1-3 are CH32H416 and CH32H415.
+pin_tables:
+  - { start: "Table 2-1-1 CH32H417 Pin definitions", end: "Table 2-1-2" }
+# Tables 2-2-1 .. 2-2-31 are the signal-first reading: one table per peripheral family.
+signal_table: { kind: signal_rows, start: "Table 2-2-1 ADC Pin functions", end: "## Chapter 3" }
+
+aliases:
+  # The file models the memory controller as FMC (the SPL header is ch32h417_fmc.h); the
+  # datasheet writes its pins under three headings.
+  SDRAM_*: FMC_*
+  FSMC_*: FMC_*
+  # The DS spells the CAN pins CAN_RX/CAN_TX where the controller is the first one; Table
+  # 2-2-13 attributes both to CAN1 (tools/gen_h417_peripherals.py MERGE).
+  CAN_*: CAN1_*
+  # RGMII pins belong to the Ethernet MAC; the pin-first table names the data lines RXD/TXD
+  # and the signal-first table RD/TD.
+  RGMII_RD*: ETH_RXD*
+  RGMII_TD*: ETH_TXD*
+  RGMII_*: ETH_*
+  SWP_*: SWPMI_*
+  SWDIO: SYS_SWIO
+  # Both ADCs sample the same sixteen pads (CH32H417.notes.md), so one DS token stands for two.
+  ADC_IN*: [ADC1_IN*, ADC2_IN*]
+  DAC{1}_OUT: DAC_OUT{1}
+  # The generator moves the OPA unit digit to the end so one flat name space holds all
+  # three units: OPA1_P0 is P01 (tools/gen_h417_peripherals.py, _opa_settings).
+  OPA{1}_P{2}: OPA_P{2}{1}
+  OPA{1}_N{2}: OPA_N{2}{1}
+  OPA{1}_OUT{2}: OPA_OUT{2}{1}
+
+corrections:
+  - pin: PC2
+    token: SDRAM_CS_NO
+    replace_with: [SDRAM_CS_N0]
+    reason: "letter O for digit 0 in the conversion; Table 2-2-15 prints SDRAM_CS_N0 on PC2"
+    source: "CH32H417DS0.md Table 2-1-1 PC2 row (vs Table 2-2-15)"
+absent: []
+disagreements: []
+
+chapters:
+  1: "memory map and bus matrix - the architecture, not a unit"
+  2: [PWR]
+  3: [RCC]
+  4: "the two QingKe cores (RISC-V5F and RISC-V3F) - the CPU, not a peripheral; mcu.core names them"
+  5: [CRC]
+  6: [RTC]
+  7: [IWDG]
+  8: [WWDG]
+  9: "GPIO/AFIO is the pin grid itself and the signal_pins: tables"
+  10: [DMA1, DMA2]
+  11: [ADC1, ADC2]
+  12: [HSADC]
+  13: [TKEY]
+  14: [TIM1, TIM8]
+  15: [TIM2, TIM3, TIM4, TIM5, TIM9, TIM10, TIM11, TIM12]
+  16: [TIM6, TIM7]
+  17: [LPTIM1, LPTIM2]
+  18: [DAC]
+  19: [USART1, USART2, USART3, USART4, USART5, USART6, USART7, USART8]
+  20: [SERDES]
+  21: [I2C1, I2C2, I2C3, I2C4]
+  22: [I3C]
+  23: [SPI1, SPI2, SPI3, SPI4, I2S2, I2S3]
+  24: [USBPD]
+  25: [USBHS]
+  26: [USBFS]
+  27: [USBSS]
+  28: [CAN1, CAN2, CAN3]
+  29: [DVP]
+  30: [RNG]
+  31: [ETH]
+  32: [SDIO]
+  33: [SDMMC]
+  34: [PIOC]
+  35: [OPA, CMP]
+  36: [SAI]
+  37: [QSPI1, QSPI2]
+  38: [SWPMI]
+  39: "ESIG is read-only silicon identity (chip UID, flash size)"
+  40: [FMC]
+  41: [ECDC]
+  42: [DFSDM]
+  43: [LTDC]
+  44: [GPHA]
+  45: [DBGMCU]
+  46: [FLASH]
+  47: [UHSIF]
+
+instances:
+  TKey1: ADC1          # ch32h417.h - TKey1/TKey2 are ADC_TypeDef at the two ADC bases
+  TKey2: ADC2
+  USBFSD: USBFS
+  USBFSH: USBFS
+  USBHSD: USBHS
+  USBHSH: USBHS
+  USBSSD: USBSS
+  USBSSH: USBSS
+  SDS*: SERDES
+  DFSDM_*: DFSDM
+  FMC_*: FMC
+  LTDC_*: LTDC
+  SAI_*: SAI
+  # DMAMUX: the request router of the two DMAs - not modelled and not declared: OPEN.
