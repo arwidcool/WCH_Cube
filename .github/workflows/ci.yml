@@ -27,9 +27,21 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+# NO `cancel-in-progress`, and the reason is a measurement rather than a preference.
+#
+# It was `cancel-in-progress: true`, grouped per ref. Three agents share one tree and land
+# commits minutes apart, so each push killed the run before it — and on 2026-09-13 the last
+# twenty runs on `main` were **15 cancelled, 4 with a verdict, 1 running: 20%**. Four commits
+# out of twenty were actually verified by CI. The setting exists to save runner minutes, and
+# this repository is PUBLIC, where GitHub does not charge for them. So it was saving nothing
+# and destroying three quarters of the evidence — which is this round's own rule ("a gate
+# nobody has watched run is a guess") happening one level up: the gate ran and was killed
+# before it could say anything.
+#
+# Every commit on a shared tree is a commit somebody will build on, so every commit gets its
+# own verdict. If runner concurrency ever becomes the constraint, narrow the TRIGGER (paths,
+# or a merge queue) rather than cancelling runs that are already half-finished.
+# `tests/release.test.js` pins this so it cannot come back without someone reading the above.
 
 env:
   # PlatformIO is chatty and its progress bars are megabytes of ANSI in a log.

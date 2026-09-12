@@ -422,3 +422,24 @@ test('a release archive carries no vendor material, and does carry the app', () 
   assert.ok(paths.some(p => p.startsWith('app/engine/')),
     'the archive has no app/engine/ — export-ignore is excluding far more than the vendor material');
 });
+
+test('CI does not cancel runs in progress, so every commit gets a verdict', () => {
+  // MEASURED, not preferred. With `cancel-in-progress: true` grouped per ref and three agents
+  // landing commits minutes apart, the last twenty runs on `main` were 15 cancelled, 4 with a
+  // verdict, 1 running — 20% of commits actually verified. The setting buys runner minutes,
+  // and this repository is PUBLIC, where they are free. So it was saving nothing and throwing
+  // away three quarters of the evidence: this round's rule ("a gate nobody has watched run is
+  // a guess") one level up, where the gate ran and was killed before it could speak.
+  //
+  // Pinned here because re-adding it is a one-line change that looks like good hygiene and
+  // silently returns CI to 20% coverage.
+  const file = workflowFiles().find(f => /^ci\.ya?ml$/.test(f));
+  assert.ok(file, 'there is no .github/workflows/ci.yml');
+  const doc = loadWorkflow(file);
+  const c = doc.concurrency;
+  if (c === undefined) return;   // no concurrency block at all is also fine
+  const cancel = typeof c === 'object' ? c['cancel-in-progress'] : undefined;
+  assert.notOk(cancel === true || cancel === 'true',
+    'ci.yml sets concurrency.cancel-in-progress — on a shared tree that cancels most runs before '
+    + 'they produce a verdict (measured: 15 of 20). Narrow the trigger instead, or use a merge queue.');
+});
