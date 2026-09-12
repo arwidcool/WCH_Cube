@@ -214,10 +214,7 @@ flashed.
 ---
 
 
-**CI, in the exact words the round-6 brief requires: never run in CI.** `origin` exists and
-every commit is pushed; `.github/workflows/ci.yml` has three jobs checked by
-`tests/release.test.js`; **not one has ever executed**. Every green result in this file is a
-result on one Windows box. Round 6 deliverable A is that this sentence is replaced by a run URL.
+**CI, measured on 2026-09-12 rather than asserted: 31 runs, 30 failed, none had been read.** The pack said "never run"; the repo is public, both workflows are active, and ci.yml fired on every push since the initial commit. Every completed run failed at `node tests/run.js` on BOTH runners, `desktop` green. Three causes, all in QA's files, fixed in `14f5a5e`: Windows' default `core.autocrlf=true` (a CRLF dist; fixtures no longer equal to `projectSerialize()`), Chrome launched without `--no-sandbox` on ubuntu 24.04, and `cargo test` running in the one job that never installed Tauri's deps. **Run 34714307941 on `14f5a5e`: `firmware` (windows, the full suite WITH PlatformIO, compile gates executing) green for the first time; `desktop` green; `test` (ubuntu) red at "dist/index.html is up to date"** - a stale bundle from a data commit that did not rebuild, caught by the Linux runner, rebuilt from HEAD in a clean clone in the next commit. Failing test names now surface as public `::error` annotations. Evidence: `tests/evidence/round6/2026-09-12-ci-30-failures.md`. Not yet green on all three jobs; not yet read green; worktrees stay off.
 
 ## 2. Completed work
 

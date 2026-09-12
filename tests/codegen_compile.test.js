@@ -476,6 +476,28 @@ test('the checked-in fixtures still match what the engine produces', () => {
     + 'Regenerate and review the diff:  node tests/fixtures/make_fixtures.js\n' + (r.stdout || '') + (r.stderr || ''));
 });
 
+test('planted break: a corrupted fixture is reported STALE by --check', () => {
+  // The freshness gate above is green. Copy the fixtures to a temp folder, change one pin in
+  // one of them, and `--check --dir <tmp>` must exit non-zero naming THAT file and no other.
+  // Round 6, deliverable B: seen red, then the tree is untouched because the tree was never
+  // involved.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-stale-'));
+  for (const f of FIXTURES) fs.copyFileSync(path.join(HERE, 'fixtures', f.file), path.join(tmp, f.file));
+  const victim = FIXTURES.find(f => f.mcu === 'CH32V006') || FIXTURES[0];
+  const p = path.join(tmp, victim.file);
+  const text = fs.readFileSync(p, 'utf8');
+  const corrupted = text.replace(/^(\s+label:\s*).*$/m, '$1PLANTED');
+  assert.notEqual(corrupted, text, 'the corruption did not change the fixture text - no label: line to plant on');
+  fs.writeFileSync(p, corrupted);
+  const r = spawnSync(process.execPath, [path.join(HERE, 'fixtures', 'make_fixtures.js'), '--check', '--dir', tmp], { encoding: 'utf8' });
+  const out = (r.stdout || '') + (r.stderr || '');
+  assert.notEqual(r.status, 0, 'a corrupted fixture passed --check');
+  assert.match(out, new RegExp('STALE ' + victim.file.replace('.', '\\.')), `--check did not name the corrupted fixture:\n${out}`);
+  const staleLines = out.split('\n').filter(l => /^STALE /.test(l));
+  assert.equal(staleLines.length, 1, `expected exactly one STALE line, got:\n${out}`);
+  console.log(`      planted refusal (fixture freshness): ${staleLines[0]}`);
+});
+
 test('every fixture configures something a default project would not', () => {
   const bad = [];
   for (const f of FIXTURES) {
