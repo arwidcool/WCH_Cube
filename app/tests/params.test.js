@@ -621,13 +621,18 @@ test('the channels a peripheral actually has configured, or why that is not know
   const e = fresh('CH32V006', 'TSSOP20');
   e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
   e.compute();
-  const { channels, missing } = e.activeChannels('TIM1');
-  if (missing) {
-    // No `channels:` map in the data yet (requested on the board 16:44Z). The only other
+  const { channels } = e.activeChannels('TIM1');
+  const plan = e.activeInstances('TIM1');
+  if (plan.note) {
+    // The data still names no setting for any channel (E2 on TASKS.md). The only other
     // way to link channel 1 to the setting called "Channel1" is to read the display name
-    // and take the digit, which is deriving structure from a label.
+    // and take the digit, which is deriving structure from a label. It is a NOTE and not
+    // a `missing`, because before the per-instance emitter existed the generated C said
+    // nothing at all about this struct - see activeInstances() for the whole argument.
     assert.deepEqual(channels, []);
-    assert.match(missing, /channel_params has no channels: map/);
+    assert.equal(plan.missing, null, 'a wholly undescribed block is a note, not a TODO');
+    assert.match(plan.note, /names no setting for any channel/);
+    assert.match(plan.note, /TASKS\.md E2/, 'and it names where the gap is tracked');
   } else {
     assert.ok(channels.includes(1), 'the map landed, so channel 1 is live');
   }

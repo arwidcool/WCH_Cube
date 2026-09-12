@@ -2078,7 +2078,11 @@ const hasDmaParams = () => typeof dmaParamDefs === 'function' && typeof dmaParam
 const hasDmaConflicts = () => typeof dmaConflicts === 'function';
 const hasDmaState = () => typeof dmaState === 'function';
 const CTABS = [
-  { id: 'param', name: 'Parameter Settings', has: pid => pid !== 'GPIO' && paramRows(pid).length > 0 },
+  // `instanceGroups` is in this test because a peripheral's parameters can live ENTIRELY
+  // in its per-instance block - an LTDC layer's settable members are all in
+  // LTDC_Layer_InitTypeDef - so `paramRows()` is empty for it and the tab would not appear.
+  { id: 'param', name: 'Parameter Settings',
+    has: pid => pid !== 'GPIO' && (paramRows(pid).length > 0 || instanceGroups(pid).length > 0) },
   { id: 'nvic', name: 'NVIC Settings', has: pid => hasNvic() && nvicVectorsOf(pid).length > 0 },
   { id: 'dma', name: 'DMA Settings', has: pid => hasDma() && dmaRequestNamesOf(pid).length > 0 },
   { id: 'gpio', name: 'GPIO Settings', has: pid => pid === 'GPIO' || periphPins(pid).length > 0 },
@@ -2577,6 +2581,31 @@ const paramReadonly = d => !!(d.readonly || d.computed);
 // options are either ['A','B'] or [{name:'A',value:0}]
 const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object' ? String(o.name) : String(o)));
 
+/**
+ * The per-INSTANCE rows: one group of editors for each live channel or layer.
+ *
+ * `channel_params` fills one struct once per instance (`app/engine/params.js`), and until
+ * now it had NO editor anywhere in this page — so the generator would have emitted values
+ * nobody could set. The noun comes from the data (`applies_per`), because "Channel 1" is
+ * wrong for an LTDC layer and this page must not learn either word.
+ *
+ * Only LIVE instances are shown. An instance whose setting is off has no struct emitted
+ * for it, so an editor for it would be a control with no effect — the same rule the GPIO
+ * table's pull column follows.
+ */
+function instanceGroups(pid) {
+  if (typeof activeInstances !== 'function' || typeof getChannelParams !== 'function') return [];
+  let plan;
+  try { plan = activeInstances(pid); } catch (e) { console.error('activeInstances', pid, e); return []; }
+  const noun = plan.noun || 'channel';
+  const title = noun.charAt(0).toUpperCase() + noun.slice(1);
+  return plan.instances.map(inst => {
+    let rows = [];
+    try { rows = getChannelParams(pid, inst.n) || []; } catch (e) { console.error('getChannelParams', pid, e); }
+    return { n: inst.n, name: `${title} ${inst.n}`, rows };
+  }).filter(g => g.rows.length);
+}
+
 function paramRows(pid) {
   let rows = [];
   if (typeof getParams === 'function') {
@@ -2615,7 +2644,7 @@ function paramActive(pid, row, byName) {
 // (`data-dp`/`data-dn` -> setDmaParam). `dma.channel_params` is deliberately the same
 // schema as `params:`, and this is what lets that pay off as one set of editors.
 function paramEditor(pid, row, live, A = { o: 'pp', k: 'pn' }) {
-  const key = `data-${A.o}="${attr(pid)}" data-${A.k}="${attr(paramKey(row))}"`;
+  const key = `data-${A.o}="${attr(pid)}" data-${A.k}="${attr(paramKey(row))}"${A.extra || ''}`;
   const unit = row.unit ? `<span class="unit">${esc(row.unit)}</span>` : '';
   if (paramReadonly(row)) {
     const has = row.value !== undefined && row.value !== null && row.value !== '';
@@ -2697,7 +2726,8 @@ function computedRows(pid) {
 function paramTable(pid) {
   const rows = paramRows(pid);
   const calc = computedRows(pid);
-  if (!rows.length && !calc.length) {
+  const insts = instanceGroups(pid);
+  if (!rows.length && !calc.length && !insts.length) {
     return `<div class="empty">${esc(pid)} has no parameters yet.<br>` +
       `They arrive with the <code>params:</code> block in <code>data/mcus/${esc(M.mcu.name)}.yaml</code>.</div>`;
   }
@@ -2730,6 +2760,22 @@ function paramTable(pid) {
       const note = [paramNote(r), r.register ? `register: ${r.register}` : ''].filter(Boolean).join(' — ');
       h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${note ? `<span class="pnote">${esc(note)}</span>` : ''}</td>` +
         `<td>${paramEditor(pid, r, live && on)}</td></tr>`;
+    }
+  }
+  // One band per live instance, through the SAME editors - `channel_params` uses the same
+  // entry schema as `params:`, which is what makes a third consumer cost a loop.
+  const liveInst = typeof setChannelParam === 'function';
+  for (const g of insts) {
+    const key = `${pid}/${g.name}`, shut = paramsClosed.has(key);
+    h += `<tr class="grp${shut ? ' closed' : ''}" data-grp="${attr(key)}"><td colspan="2">${esc(g.name)}</td></tr>`;
+    if (shut) continue;
+    const byInstName = Object.fromEntries(g.rows.map(r => [paramLabel(r), r.value]));
+    for (const r of g.rows) {
+      const on = paramActive(pid, r, byInstName);
+      const cls = [on ? '' : 'off', paramReadonly(r) ? 'calc' : ''].filter(Boolean).join(' ');
+      const note = [paramNote(r), r.register ? `register: ${r.register}` : ''].filter(Boolean).join(' — ');
+      h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${note ? `<span class="pnote">${esc(note)}</span>` : ''}</td>`
+        + `<td>${paramEditor(pid, r, liveInst && on, { o: 'cp', k: 'cn', extra: ` data-ci="${attr(g.n)}"` })}</td></tr>`;
     }
   }
   if (calc.length) {
@@ -2776,6 +2822,13 @@ document.getElementById('cbody').addEventListener('change', e => {
   }
   if (el.dataset.dr) {                      // the channel selector on a request row
     try { setDmaRequest(el.dataset.dr, { [el.dataset.dk]: el.value }); }
+    catch (err) { toast(err.message); }
+    renderAll();
+    return;
+  }
+  if (el.dataset.cp) {                      // a per-instance struct member
+    try { setChannelParam(el.dataset.cp, Number(el.dataset.ci), el.dataset.cn,
+      el.type === 'checkbox' ? el.checked : el.value); }
     catch (err) { toast(err.message); }
     renderAll();
     return;

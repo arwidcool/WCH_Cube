@@ -34,7 +34,10 @@ import {
   M, S, pinType, requiredSignals, sigName, gpioSpeeds, gpioSpeedFor, gpioModes,
   gpioInputModes, isEnabled, pinExists, signalPins, signalAf, canon,
 } from './model.js';
-import { paramDefs, paramValue, paramApplies, depProblems } from './params.js';
+import {
+  paramDefs, paramValue, paramApplies, depProblems,
+  channelParamBlock, channelParamDefs, channelParamValue, activeInstances,
+} from './params.js';
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
 import { E, compute } from './engine.js';
 import { generatorOption, userSection } from './export.js';
@@ -806,14 +809,18 @@ export function cSource() {
 //  neither is one the data marks readonly - those are derived, not chosen.
 
 /** The literal to assign for one parameter, or a reason it cannot be written. */
-function paramLiteral(pid, d) {
+// `value` is optional and defaults to the peripheral-level store. A per-INSTANCE
+// parameter has the same definitions and the same literal rules but a different store
+// (`channelParamValue(pid, n, key)`), so the value is passed in rather than the whole
+// formatter being written a second time next to this one.
+function paramLiteral(pid, d, value) {
   // A `const:` member comes first because it is the most specific thing a param can be:
   // the MCU file names the one value it can take, and there is nothing to look up. OPA
   // and CMP are why - the SDK branches on `*_NUM` inside `OPA_Init`, so a struct that
   // leaves it unset configures whichever instance the uninitialised field happens to
   // name. Wrong but compiling, which is the defect class this file exists to avoid.
   if (isConstParam(d)) return { text: String(d.const) };
-  const v = paramValue(pid, d.key);
+  const v = value !== undefined ? value : paramValue(pid, d.key);
   if (d.type === 'bool') {
     const macro = v ? d.sdk_enabled : d.sdk_disabled;
     if (macro) return { text: macro };
@@ -887,6 +894,48 @@ export function initPlan(pid) {
   // wrong reason.
   const problems = [];
   for (const d of paramDefs(pid)) problems.push(...depProblems(pid, d));
+
+  // ---- one struct, applied once PER INSTANCE ---------------------------------
+  // `channel_params` (params.js). The block is filled and applied once for each LIVE
+  // instance, and what varies per instance is the function, the handle, or both:
+  // `TIM_OC1Init(TIM1, &s)` … `TIM_OC4Init(TIM1, &s)` vary the function and keep the
+  // peripheral's handle; `LTDC_LayerInit(LTDC_Layer1, &s)` keeps the function and varies
+  // the handle. Both arrive here as the same row, so this loop knows about neither.
+  //
+  // Each instance becomes an ordinary struct block, which is why `periphBlock()` needs no
+  // change to emit it: a block already carries its own `fn` and its own `handle`.
+  const cbl = channelParamBlock(pid);
+  if (cbl && cbl.struct) {
+    const plan = activeInstances(pid);
+    if (plan.missing) problems.push(plan.missing);
+    if (plan.note) notes.push(plan.note);
+    for (const inst of plan.instances) {
+      const block = {
+        struct: cbl.struct, fn: inst.fn || null,
+        // No `handle:` on the row means the peripheral's own register block, which is
+        // the timer case. An LTDC layer names its own.
+        noHandle: false, handle: inst.handle || handle || null,
+        fields: [], missing: [],
+        instance: { n: inst.n, noun: plan.noun },
+      };
+      for (const d of channelParamDefs(pid)) {
+        if (d.readonly || !paramApplies(pid, d)) continue;
+        if (!d.sdk_field) {
+          block.missing.push(`${d.name}: channel_params gives no sdk_field:, so the member name is unknown`);
+          continue;
+        }
+        const value = channelParamValue(pid, inst.n, d.key);
+        const lit = paramLiteral(pid, d, value);
+        if (lit.missing) block.missing.push(lit.missing);
+        else block.fields.push({ member: d.sdk_field, text: lit.text, name: d.name, value, unit: d.unit });
+      }
+      if (!inst.fn) {
+        block.missing.push(`channel_params names no sdk_call for ${plan.noun} ${inst.n}, `
+          + 'and this generator does not paste a function name together from a number');
+      }
+      structs.push(block);
+    }
+  }
   return { pid, structs, calls, notes, handle: handle || null, problems };
 }
 
@@ -968,7 +1017,15 @@ export function initPeripherals() {
   const e = E || compute();
   return Object.keys(M.peripherals)
     .filter(pid => isEnabled(pid))
-    .filter(pid => paramDefs(pid).length || (cfg().periph_clock && clockBitOf(pid)))
+    // `channelParamBlock` is in this test because a peripheral's parameters can live
+    // ENTIRELY in its per-instance block: LTDC's settable members are all in
+    // `LTDC_Layer_InitTypeDef`, one per layer, so `paramDefs()` is empty for it and it
+    // was dropped here before it ever reached initPlan(). Measured on the synthetic
+    // layer part: the init function was not generated at all. Every peripheral that
+    // ships today has peripheral-level params beside its channel ones, so this adds
+    // nobody to the list on the current data - checked by the byte-comparison.
+    .filter(pid => paramDefs(pid).length || channelParamBlock(pid)
+      || (cfg().periph_clock && clockBitOf(pid)))
     .sort();
 }
 
@@ -1007,6 +1064,10 @@ function periphBlock(pid) {
   for (const b of plan.structs) {
     const varName = structVar(b.struct);
     L.push(`    {`);
+    // A per-instance block is one of several identical-looking scopes, so it says which
+    // instance it is. Without this, two LTDC layers differing only in one member read as
+    // a copy-paste in the generated file.
+    if (b.instance) L.push(`        /* ${pid} ${b.instance.noun} ${b.instance.n} */`);
     L.push(`        ${b.struct} ${varName} = {0};`);
     for (const f of b.fields) {
       const human = f.unit ? `${f.value} ${f.unit}` : String(f.value);

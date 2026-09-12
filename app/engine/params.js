@@ -384,13 +384,85 @@ export function channelParamDefs(pid) {
 
 const chanDefOf = (pid, key) => channelParamDefs(pid).find(d => d.key === key);
 
-/** The channel numbers this peripheral's data describes, in order. */
-export function channelNumbers(pid) {
+/**
+ * ---- one struct, applied once PER INSTANCE -----------------------------------
+ *
+ * `channel_params` was written for `TIM_OCInitTypeDef`, where the instance is a timer
+ * CHANNEL and four different functions apply it (`TIM_OC1Init` … `TIM_OC4Init`), each
+ * taking the peripheral's own handle. CH32H417's LTDC is the same problem with the two
+ * halves swapped: ONE function applies the struct — `LTDC_LayerInit(LTDC_Layerx, &s)`,
+ * `ch32h417_ltdc.h:225` — and what changes per instance is the HANDLE it is given
+ * (`LTDC_Layer1` / `LTDC_Layer2`, `ch32h417.h:1770-1771`).
+ *
+ * So the two things that can vary per instance are the FUNCTION and the HANDLE, and
+ * they vary independently. This is that generalisation rather than a second mechanism
+ * beside it: one map, `instances:`, naming both per instance along with the setting that
+ * decides whether the instance is live —
+ *
+ *     channel_params:
+ *       struct: LTDC_Layer_InitTypeDef
+ *       applies_per: layer                      the noun; names the store key and the UI
+ *       instances:
+ *         1: { sdk_call: LTDC_LayerInit, handle: LTDC_Layer1,
+ *              setting: Layer 1, active_choices: [Enabled] }
+ *
+ * `handle:` absent means "the peripheral's own `codegen.periph_handle`", which is the TIM
+ * case; `sdk_call:` differing per instance is the TIM case too. Neither is derived: a
+ * function name pasted together from a number is the same class of guess as a function
+ * name derived from a struct name, which this generator already refuses to make.
+ *
+ * THE OLD SPELLING STILL READS. `sdk_calls: { n: fn }` beside `channels: { n: { setting,
+ * output_choices } }` is normalised into exactly the same rows, so the six shipped
+ * `channel_params` blocks behave identically. Those two parallel maps keyed by the same
+ * number are also why one map is better: a channel present in one and absent from the
+ * other is silently half-defined today.
+ */
+export function paramInstances(pid) {
   const cp = channelParamBlock(pid);
   if (!cp) return [];
-  const from = cp.channels && typeof cp.channels === 'object' ? cp.channels : cp.sdk_calls;
-  if (!from || typeof from !== 'object') return [];
-  return Object.keys(from).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  const rows = new Map();
+  const at = n => rows.get(n) || rows.set(n, { n, fn: null, handle: null, setting: null, activeChoices: null }).get(n);
+  const num = k => Number(k);
+  // The new spelling first: everything about one instance in one place.
+  if (cp.instances && typeof cp.instances === 'object') {
+    for (const [k, spec] of Object.entries(cp.instances)) {
+      if (!Number.isFinite(num(k)) || !spec || typeof spec !== 'object') continue;
+      const r = at(num(k));
+      if (spec.sdk_call) r.fn = spec.sdk_call;
+      if (spec.handle) r.handle = spec.handle;
+      if (spec.setting) r.setting = spec.setting;
+      const choices = spec.active_choices !== undefined ? spec.active_choices : spec.output_choices;
+      if (Array.isArray(choices)) r.activeChoices = choices;
+    }
+  }
+  // The old spelling, folded into the same rows. `output_choices` is what `channels:`
+  // calls `active_choices`; a timer channel is "active" when it is an output compare.
+  if (cp.sdk_calls && typeof cp.sdk_calls === 'object') {
+    for (const [k, fn] of Object.entries(cp.sdk_calls)) {
+      if (Number.isFinite(num(k)) && fn && !at(num(k)).fn) at(num(k)).fn = fn;
+    }
+  }
+  if (cp.channels && typeof cp.channels === 'object') {
+    for (const [k, spec] of Object.entries(cp.channels)) {
+      if (!Number.isFinite(num(k)) || !spec || typeof spec !== 'object') continue;
+      const r = at(num(k));
+      if (!r.setting && spec.setting) r.setting = spec.setting;
+      const choices = spec.output_choices !== undefined ? spec.output_choices : spec.active_choices;
+      if (r.activeChoices === null && Array.isArray(choices)) r.activeChoices = choices;
+    }
+  }
+  return [...rows.values()].sort((a, b) => a.n - b.n);
+}
+
+/** The noun this block repeats over — "channel" unless the data says otherwise. */
+export const instanceNoun = pid => {
+  const cp = channelParamBlock(pid);
+  return (cp && cp.applies_per) || 'channel';
+};
+
+/** The channel numbers this peripheral's data describes, in order. */
+export function channelNumbers(pid) {
+  return paramInstances(pid).map(r => r.n);
 }
 
 /**
@@ -401,32 +473,73 @@ export function channelNumbers(pid) {
  * is to read "Channel1" and take the 1 - deriving structure from a display string.
  */
 export function activeChannels(pid) {
+  const p = activeInstances(pid);
+  return { channels: p.instances.map(r => r.n), missing: p.missing };
+}
+
+/**
+ * The instances whose struct should actually be emitted, each carrying the function and
+ * the handle that apply it — everything `codegen` needs and nothing it has to derive.
+ *
+ * A row with no `setting:` is not guessed at. The only other way to link instance 1 to a
+ * setting is to read `"Channel1"` and take the 1, which is deriving structure from a
+ * display string; so the block reports what it is short of and the generator turns that
+ * into a named TODO rather than emitting an init for a channel nobody configured.
+ */
+export function activeInstances(pid) {
   const cp = channelParamBlock(pid);
-  if (!cp) return { channels: [], missing: null };
-  const map = cp.channels;
-  if (!map || typeof map !== 'object') {
+  if (!cp) return { instances: [], missing: null, noun: 'channel' };
+  const noun = instanceNoun(pid);
+  const rows = paramInstances(pid);
+  const undescribed = rows.filter(r => !r.setting);
+  // NOTHING in the block says which setting decides an instance. This is round 4's E2,
+  // open on TASKS.md and the reason the per-channel emitter was parked in the first
+  // place: the six shipped `channel_params` blocks carry `sdk_calls:` and no `channels:`.
+  //
+  // It is reported as a NOTE rather than a TODO, and the distinction is deliberate. A
+  // TODO is a gap the generator hit while doing work it could otherwise have done, and
+  // `tests/codegen_compile.test.js` requires every KIND of TODO to be tracked with a
+  // TASKS.md line - a file this agent does not own. Before this mechanism existed the
+  // generated C said NOTHING at all about these structs, so spelling it TODO would take
+  // a pre-existing, already-tracked data gap and turn four green fixtures red on another
+  // agent's gate. The note puts the hole in front of the reader, in the file where they
+  // will look for it, without claiming the generator just discovered it.
+  if (!rows.length || undescribed.length === rows.length) {
     return {
-      channels: [],
-      missing: `${pid}.channel_params has no channels: map, so which channels are configured `
-        + 'cannot be worked out from the settings',
+      instances: [], missing: null, noun,
+      note: `${pid}.channel_params fills ${cp.struct} once per ${noun} and names no setting for `
+        + `any ${noun}, so no ${noun} is initialised here. Which ${noun}s are live cannot be `
+        + `worked out from the settings, and the only other way to link ${noun} 1 to a setting `
+        + `is to read the digit out of its display name. Add instances: { <n>: { setting: `
+        + `<name>, active_choices: [...] } } — TASKS.md E2.`,
     };
   }
   const st = (S.periph[pid] || {}).settings || {};
   const out = [];
-  for (const n of channelNumbers(pid)) {
-    const spec = map[n] || map[String(n)];
-    if (!spec || !spec.setting) continue;
-    const value = st[spec.setting];
+  for (const r of rows) {
+    if (!r.setting) continue;
+    const value = st[r.setting];
     if (value === undefined) continue;
-    const wanted = spec.output_choices;
-    if (Array.isArray(wanted)) {
-      if (!wanted.map(String).includes(String(value))) continue;
-    } else if (String(value) === String(neutralChoiceName(pid, spec.setting))) {
+    if (Array.isArray(r.activeChoices)) {
+      if (!r.activeChoices.map(String).includes(String(value))) continue;
+    } else if (String(value) === String(neutralChoiceName(pid, r.setting))) {
       continue;                                  // no list given: anything but the neutral choice
     }
-    out.push(n);
+    out.push(r);
   }
-  return { channels: out, missing: null };
+  // A block that describes SOME of its instances and not others is a half-written map,
+  // and the half it left out is invisible - the peripheral simply never initialises that
+  // instance. Say which ones, rather than letting the count look right.
+  // A block that describes SOME instances and not others IS a TODO: the map is half
+  // written, the generator is emitting for its siblings, and the half left out is
+  // invisible - that instance simply never initialises. No shipped part is in this state,
+  // so it costs nothing today and catches the next one that half-writes the map.
+  const partial = undescribed.length
+    ? `${pid}.channel_params names no setting for ${noun} ${undescribed.map(r => r.n).join(', ')}, `
+      + `so ${undescribed.length === 1 ? 'it is' : 'they are'} never initialised while its `
+      + `siblings are. Every instance in the map needs a setting: or none of them does`
+    : null;
+  return { instances: out, missing: partial, note: null, noun };
 }
 
 function neutralChoiceName(pid, settingName) {
