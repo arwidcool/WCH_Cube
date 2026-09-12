@@ -1285,8 +1285,18 @@ def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]]
                         f"{pid}: setting `{s['name']}` choice `{c['name']}` names signal "
                         f"`{sig}`, which this peripheral does not route. Signals it has: "
                         f"{sorted(short_names)[:12]}")
-    out("    settings:")
-    for s in settings:
+    # The extras fragment may REPLACE this block outright, the same way it replaces `pins:`
+    # and `notes:`. This file's own header promises that for "any top-level key it defines",
+    # and until 2026-09-12 it was only honoured for those two - so an extras fragment with a
+    # `settings:` key produced a block with `settings:` written TWICE.
+    #
+    # That is worse than it sounds, and it is why this is a guard and not a tidy-up: PyYAML's
+    # safe_load takes the LAST duplicate key silently, so validate_mcu.py, verify_sdk_names.py
+    # and coverage.py all reported 0 errors, while js-yaml THROWS and the app would not load
+    # the part at all. Three green Python gates over a file the configurator cannot open.
+    if "settings" not in extra_keys:
+        out("    settings:")
+    for s in (settings if "settings" not in extra_keys else []):
         out(f"      - name: {yaml_scalar(s['name'])}")
         # `type: checkboxes` was DROPPED here, and dropping it is not a cosmetic loss: a
         # checkbox row became a single-choice row, so the engine's default moved from

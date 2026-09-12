@@ -234,6 +234,8 @@ for (const pkg of PACKAGES) {
     const bonded = bondedPins(pkg);
     const choices = claimingChoices();
     const defects = [], silicon = [];
+    // One entry per (peripheral, pad): see the note beside the push below.
+    const defectPads = new Set(), siliconPads = new Set();
 
     /** Bonded pads this signal could have used instead of `pin`. */
     const alternatives = (pid, sig, pin) => {
@@ -258,8 +260,20 @@ for (const pkg of PACKAGES) {
           return alternatives(full.slice(0, i), full.slice(i + 1), String(row.name)).length > 0;
         });
         const where = `${c.pid}.${c.setting} = "${c.choice}" puts ${claims.join(' + ')} on ${row.name}`;
-        if (movable.length) defects.push(`${where} — ${movable.join(', ')} had somewhere else to go`);
-        else silicon.push(`${where} — neither claim has another bonded pad here`);
+        // COUNTED BY DISTINCT PAD, not by (choice x pad). The defect is "this pad is asked
+        // to do two jobs the moment you switch this peripheral on", and that is one defect
+        // however many menu entries reach it. Counting pairs made the number depend on the
+        // SHAPE OF THE MENU: splitting FMC's single `Address bus A0-A25: Enabled` into five
+        // width choices tripled the count for `FMC_A11` on PB11 without changing one pad of
+        // silicon, and the ratchet correctly called it a regression. Fixing the metric is
+        // the honest response to that; raising the ceiling would not have been.
+        const key = `${c.pid}:${row.name}`;
+        if (movable.length) {
+          if (!defectPads.has(key)) { defectPads.add(key); defects.push(`${where} — ${movable.join(', ')} had somewhere else to go`); }
+        } else if (!siliconPads.has(key)) {
+          siliconPads.add(key);
+          silicon.push(`${where} — neither claim has another bonded pad here`);
+        }
       }
     }
     // The silicon-forced collisions are printed rather than asserted away: they are the

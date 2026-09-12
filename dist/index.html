@@ -2698,27 +2698,38 @@ peripherals:
       through its own registers and the clock tree only.
   FMC:
     category: Memory
-    settings:
-      - name: "Address bus A0-A25"
-        choices:
-          - { name: Disable }
-          - { name: Enabled, signals: [A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, A23, A24, A25] }
-      - name: "Data bus D0-D31"
-        choices:
-          - { name: Disable }
-          - { name: Enabled, signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26, D27, D28, D29, D30, D31] }
-      - name: Clock
-        choices:
-          - { name: Disable }
-          - { name: Enabled, signals: [CLK] }
-      - name: "NOR/PSRAM and NAND control (FSMC)"
-        choices:
-          - { name: Disable }
-          - { name: Enabled, signals: [NE1, NE2, NE3, NE4, NADV, NBL0, NBL1, NBL2, NBL3, NOE, NWE, NWAIT, NCE2, INT2] }
-      - name: "SDRAM control"
-        choices:
-          - { name: Disable }
-          - { name: Enabled, signals: [BA0, BA1, CAS_N, RAS_N, WE_N, CKE0, CKE1, CS_N0, CS_N1, DQM0, DQM1, DQM2, DQM3] }
+    # THE BUSES ARE SELECTABLE BY WIDTH, NOT ALL-OR-NOTHING, and the reason is a real board:
+    # an 8080 8-bit parallel TFT (ILI9341 / ST7789 / SSD1963 and friends) is driven by FSMC
+    # and needs ELEVEN pins - D0-D7, one chip select, NOE, NWE, and ONE address line used as
+    # the RS/DC command-data select. The generated model offered `Data bus D0-D31: Enabled`
+    # and `Address bus A0-A25: Enabled` as single switches, so asking for that display
+    # claimed 103 of the 116 bonded pads on QFN128 and made the part unplannable for the
+    # most common thing anyone attaches to an FSMC. Measured before this change: FSMC
+    # control alone 48 pads, plus the data bus 80, plus the address bus 103.
+    #
+    # The widths are the silicon's, not a convenience: `FMC_BCRx.MWID[5:4]` (RM 40, Table
+    # 40-17 at CH32H417RM.md:57002) selects 8 / 16 / 32 bits, and the SDK spells the three
+    # out as `FMC_MemoryDataWidth_8b` / `_16b` / `_32b` (ch32h417_fmc.h:278-280). The
+    # address groups are the ones a real design uses: one line for an 8080 RS/DC, then the
+    # bank sizes.
+    #
+    # EVERY SIGNAL THE GENERATOR ROUTED IS STILL CLAIMABLE - that is a hard requirement, not
+    # a nicety: a routed signal no choice can name is a dead pad, a `validate_mcu.py` ERROR
+    # and a coverage row (docs/COVERAGE.md check 1). The 86 signals are covered as
+    # 32 data + 26 address + 5 chip selects + 2 strobes + 7 optional + 1 clock + 13 SDRAM.
+    #
+    # HOW TO WIRE AN 8080 PARALLEL DISPLAY, since that is what this reshaping was for:
+    #   Bus mode ... "8080 LCD, 8-bit"   (or 16-bit, or the NE2 variants)
+    # and that is the whole pin plan - the preset claims D0-D7, A0 as the panel's RS/DC,
+    # NE1 as its CS and NOE/NWE as its RD/WR, so the rows below stay on Disable. Add an
+    # ordinary GPIO output for the panel's RESET and one for the backlight; neither is an
+    # FSMC signal. With an 8-bit bus A0 is the byte address, so the command register is at
+    # the bank base and the data register one byte above it - which is why the RS line is
+    # A0 and not A16.
+    #
+    # The `Memory bus` entries in the same dropdown claim data lines ONLY, and leave the
+    # address width, the chip select and the strobes to the rows below, because a memory
+    # wants a real address bus where a display wants exactly one line.
     signal_pins:
       A0: [{ pin: PA14, af: 3 }, { pin: PF5, af: 12 }, { pin: PE11, af: 15 }]
       A1: [{ pin: PB3, af: 12 }, { pin: PE12, af: 15 }, { pin: PA15, af: 12 }]
@@ -2806,6 +2817,90 @@ peripherals:
       NWE: [{ pin: PD5, af: 12 }]
       RAS_N: [{ pin: PC15, af: 9 }, { pin: PF3, af: 3 }, { pin: PE5, af: 9 }, { pin: PC10, af: 1 }]
       WE_N: [{ pin: PA7, af: 12 }, { pin: PC1, af: 15 }, { pin: PC0, af: 12 }]
+    settings:
+      # ONE dropdown for both jobs, because the alternative is two that can disagree.
+      # The four `8080 LCD` entries are COMPLETE wirings - data lines, the RS/DC address
+      # line, the chip select and both strobes - so a parallel display is one pick and the
+      # rows below stay on `Disable`. The `Memory bus` entries claim only data lines and
+      # leave the address width, chip select and strobes to those rows, because a memory
+      # needs a real address bus and an LCD needs exactly one line.
+      #
+      # THERE IS NO 6800 MODE, and that is the silicon, not an omission. FSMC drives an
+      # 8080-style bus: separate read and write strobes (`NOE`/`NWE`), and `FMC_BCRx.MTYP`
+      # selects SRAM / PSRAM / NOR only (ch32h417_fmc.h:273-275) - there is no register
+      # that turns NOE/NWE into a 6800 E + R/W pair. A 6800-wired panel is handled at the
+      # PANEL: essentially every controller of this class (ILI9341, ST7789, SSD1963, the
+      # HD44780-alikes) has IM[2:0] / PS strap pins that select the 8080 interface, and you
+      # strap it to 8080 and use one of the entries below. Offering a "6800" choice here
+      # would be offering a mode the controller does not have.
+      - name: "Bus mode"
+        choices:
+          - { name: Disable }
+          - { name: "8080 LCD, 8-bit (D0-D7, RS=A0, CS=NE1, RD=NOE, WR=NWE)",
+              signals: [D0, D1, D2, D3, D4, D5, D6, D7, A0, NE1, NOE, NWE] }
+          - { name: "8080 LCD, 16-bit (D0-D15, RS=A0, CS=NE1, RD=NOE, WR=NWE)",
+              signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, A0, NE1, NOE, NWE] }
+          - { name: "8080 LCD, 8-bit on CS2 (NE2)",
+              signals: [D0, D1, D2, D3, D4, D5, D6, D7, A0, NE2, NOE, NWE] }
+          - { name: "8080 LCD, 16-bit on CS2 (NE2)",
+              signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, A0, NE2, NOE, NWE] }
+          - { name: "Memory bus, 8-bit (D0-D7)", signals: [D0, D1, D2, D3, D4, D5, D6, D7] }
+          - { name: "Memory bus, 16-bit (D0-D15)", signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15] }
+          - { name: "Memory bus, 32-bit (D0-D31)", signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26, D27, D28, D29, D30, D31] }
+      - name: "Address lines"
+        choices:
+          - { name: Disable }
+          - { name: "A0 only (8080 RS/DC)", signals: [A0] }
+          - { name: "A0-A7", signals: [A0, A1, A2, A3, A4, A5, A6, A7] }
+          - { name: "A0-A15", signals: [A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15] }
+          - { name: "A0-A18", signals: [A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18] }
+          - { name: "A0-A25", signals: [A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, A23, A24, A25] }
+      - name: "Chip select"
+        type: checkboxes
+        choices:
+          - { name: NE1, signals: [NE1] }
+          - { name: NE2, signals: [NE2] }
+          - { name: NE3, signals: [NE3] }
+          - { name: NE4, signals: [NE4] }
+          - { name: "NCE2 (NAND)", signals: [NCE2] }
+      - name: "NOR/PSRAM and NAND control (FSMC)"
+        choices:
+          - { name: Disable }
+          - { name: "Read/write strobes (NOE, NWE)", signals: [NOE, NWE] }
+      - name: "Optional FSMC signals"
+        type: checkboxes
+        choices:
+          - { name: "NWAIT (wait input)", signals: [NWAIT] }
+          - { name: "NADV (address valid, muxed bus)", signals: [NADV] }
+          - { name: "NBL0 (byte lane 0)", signals: [NBL0] }
+          - { name: "NBL1 (byte lane 1)", signals: [NBL1] }
+          - { name: "NBL2 (byte lane 2)", signals: [NBL2] }
+          - { name: "NBL3 (byte lane 3)", signals: [NBL3] }
+          - { name: "INT2 (NAND interrupt)", signals: [INT2] }
+      - name: "Clock"
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [CLK] }
+      - name: "SDRAM control"
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [BA0, BA1, CAS_N, RAS_N, WE_N, CKE0, CKE1, CS_N0, CS_N1, DQM0, DQM1, DQM2, DQM3] }
+    notes: >
+      Flexible memory controller. The data and address buses are picked by WIDTH rather
+      than switched on whole, because the width is a real register field
+      (`FMC_BCRx.MWID[5:4]`, RM 40 Table 40-17; `FMC_MemoryDataWidth_8b/_16b/_32b` in
+      ch32h417_fmc.h:278-280) and because a narrow bus is the common case, not the
+      exception. An 8080 8-bit parallel TFT wants `Data bus width: 8-bit`,
+      `Address lines: A0 only` (A0 is the panel's RS/DC - on an 8-bit bus A0 is the byte
+      address, so the command register sits at the bank base and the data register one
+      byte above), `Chip select: NE1`, and `NOR/PSRAM and NAND control: Read/write
+      strobes` for the panel's RD and WR. That is eleven pins; switching the whole
+      controller on used to claim 103. The panel's RESET and backlight are ordinary
+      GPIO outputs and are not FSMC signals.
+      The generator emits no FMC init struct yet - `FMC_NORSRAMInit()` needs the timing
+      block (address setup, data setup, bus turnaround) which is a property of the panel
+      and not of the pin plan - so this peripheral configures pins and the clock enable,
+      and the timings go in your own code. Nothing here guesses a number.
   GPHA:
     category: Graphics
     settings:

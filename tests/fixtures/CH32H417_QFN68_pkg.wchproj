@@ -227,10 +227,12 @@ peripherals:
     remap: 0
   FMC:
     settings:
-      Address bus A0-A25: Disable
-      Data bus D0-D31: Disable
-      Clock: Disable
+      Bus mode: Disable
+      Address lines: Disable
+      Chip select: []
       NOR/PSRAM and NAND control (FSMC): Disable
+      Optional FSMC signals: []
+      Clock: Disable
       SDRAM control: Disable
     remap: 0
   GPHA:
