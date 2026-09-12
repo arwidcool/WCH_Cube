@@ -274,10 +274,18 @@ flowchart TB
     F --> H["tests/generated_project.test.js<br/>build the whole folder, standalone"]
 ```
 
-**1. Every name must be traceable to a source.** Precedence is **EVT → Reference Manual →
-Datasheet**. Precedence matters because EVT and the RM answer different questions: EVT says what
-the SDK will compile, the RM says what the silicon does. When they disagree, both are recorded
-and neither is averaged.
+**1. Every name must be traceable to a source.** Precedence for *which document wins* is
+**EVT → Reference Manual → Datasheet**. Precedence matters because EVT and the RM answer
+different questions: EVT says what the SDK will compile, the RM says what the silicon does.
+When they disagree, both are recorded and neither is averaged.
+
+Precedence for *which copy of a document you read* is the other order, and it is about cost:
+**the markdown conversion first, the original PDF last, and only when the conversion is
+missing, unreadable or demonstrably incomplete.** A `.md` greps, diffs and is cited by line;
+a PDF is slow, cannot be diffed, and is read by word position by a `tools/recover_*.py` that
+prints a `PDF FALLBACK:` line saying why it was needed — then writes the recovered cells back
+into the repo so the page is opened once. `data/sources/README.md` has the full rule and
+`tests/source_order.test.js` enforces it.
 
 > *"The other CH32 parts have it" is not a citation.*
 

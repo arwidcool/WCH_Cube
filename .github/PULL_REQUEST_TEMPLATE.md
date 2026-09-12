@@ -35,7 +35,11 @@ Tick what you actually ran. If you did not run one, leave it and say why below.
 
 ## If this changes a hardware fact
 
-Every claim needs a source, and the precedence is **EVT → Reference Manual → Datasheet**.
+Every claim needs a source, and the precedence for *which document wins* is
+**EVT → Reference Manual → Datasheet**. For *which copy of a document you read*, it is the
+other way round on cost: the **markdown conversion first**, the original PDF only as a last
+resort — missing, unreadable or demonstrably incomplete — read by a script that says why
+(`PDF FALLBACK:`) and writes the recovered cells back into the repo.
 
 - Datasheet table / RM section / EVT `file:line`:
 - Was the fact re-derived by a second pass (`tools/extract_pins.py`, `tools/extract_remaps.py`)

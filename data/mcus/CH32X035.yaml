@@ -2032,7 +2032,10 @@ peripherals:
 # lost - which is why the remaining rows are recoverable in principle but not yet.
 #
 # STILL OPEN, recorded rather than guessed, and tracked in CH32X035.notes.md:
-# USART1_TX/RX, USART4_TX/RX, and every TIM1 and TIM2 request. See the board.
+# USART1_TX/RX, USART4_TX/RX, and every TIM1 and TIM2 request. The PDF recovery for the
+# lost columns now exists - agents/proposals/x035_dma_requests.py, agreeing with the
+# markdown row order and nine EVT anchors on all 27 requests - but it is a PROPOSAL and
+# not merged here. See the board.
 dma:
   controller: DMA1
   channels: 8

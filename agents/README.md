@@ -136,6 +136,13 @@ that cycle.
   **"The other CH32 parts have it" is not a citation.**
 - Precedence for anything the software must *name*: **EVT → RM → DS → anything else.** Where EVT
   and the RM disagree they answer different questions; record both, average neither.
+- **Read the markdown conversion first; the PDF is the LAST resort.** Which document wins is the
+  rule above; which *copy* you read is this one, and it is about cost: a `.md` greps, diffs and
+  can be cited by line, a PDF cannot. Open the PDF only when the markdown is missing, unreadable,
+  or demonstrably incomplete — never because it looks clearer. A script that opens one prints a
+  `PDF FALLBACK:` line saying why, recovers by script with a check against numbers the datasheet
+  states elsewhere, and the recovered cells are written back into the repo so it is read **once**.
+  `tests/source_order.test.js` enforces it; the full rule is `data/sources/README.md`.
 - The app must open with **zero console errors or warnings** on every part × every package.
 - The generator must never emit plausible-looking wrong code. If it cannot work something out from
   the data, it emits a `TODO` naming exactly what is missing.

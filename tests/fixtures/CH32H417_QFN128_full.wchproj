@@ -154,6 +154,312 @@ peripherals:
       counter: Up
       ckd: '1'
       arpe: false
+  ADC1:
+    settings:
+      Mode: Disable
+      Channels: Disable
+    remap: 0
+  ADC2:
+    settings:
+      Mode: Disable
+    remap: 0
+  CAN1:
+    settings:
+      Mode: Disable
+    remap: 0
+  CAN2:
+    settings:
+      Mode: Disable
+    remap: 0
+  CAN3:
+    settings:
+      Mode: Disable
+    remap: 0
+  CMP:
+    settings:
+      Mode: Disable
+    remap: 0
+  CRC:
+    settings:
+      Mode: Disable
+    remap: 0
+  DAC:
+    settings:
+      Channel 1: Disable
+      Channel 2: Disable
+    remap: 0
+  DBGMCU:
+    settings:
+      Debug in low power: Disable
+    remap: 0
+  DFSDM:
+    settings:
+      Channel 0: Disable
+      Channel 1: Disable
+      Clock output: Disable
+    remap: 0
+  DMA1:
+    settings:
+      Mode: Disable
+    remap: 0
+  DMA2:
+    settings:
+      Mode: Disable
+    remap: 0
+  DVP:
+    settings:
+      Mode: Disable
+    remap: 0
+  ECDC:
+    settings:
+      Mode: Disable
+    remap: 0
+  ETH:
+    settings:
+      Interface: Disable
+    remap: 0
+  EXTI:
+    settings:
+      Mode: Disable
+    remap: 0
+  FLASH:
+    settings:
+      Mode: Disable
+    remap: 0
+  FMC:
+    settings:
+      NOR/PSRAM: Disable
+      SDRAM: Disable
+    remap: 0
+  GPHA:
+    settings:
+      Mode: Disable
+    remap: 0
+  HSADC:
+    settings:
+      Mode: Disable
+    remap: 0
+  HSEM:
+    settings:
+      Mode: Disable
+    remap: 0
+  I2C3:
+    settings:
+      Mode: Disable
+    remap: 0
+  I2C4:
+    settings:
+      Mode: Disable
+    remap: 0
+  I2S2:
+    settings:
+      Mode: Disable
+    remap: 0
+  I2S3:
+    settings:
+      Mode: Disable
+    remap: 0
+  IPC:
+    settings:
+      Mode: Disable
+    remap: 0
+  IWDG:
+    settings:
+      Mode: Disable
+    remap: 0
+  LPTIM1:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      ETR: Disable
+    remap: 0
+  LPTIM2:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      ETR: Disable
+    remap: 0
+  LTDC:
+    settings:
+      Colour depth: Disable
+      Sync and clock: Disable
+    remap: 0
+  OPA:
+    settings:
+      OPA1: Disable
+      OPA2: Disable
+      OPA3: Disable
+    remap: 0
+  PIOC:
+    settings:
+      Mode: Disable
+    remap: 0
+  PWR:
+    settings:
+      Mode: Disable
+    remap: 0
+  QSPI1:
+    settings:
+      Mode: Disable
+    remap: 0
+  QSPI2:
+    settings:
+      Mode: Disable
+    remap: 0
+  RCC:
+    settings:
+      High Speed Clock (HSE): Disable
+      Master Clock Output (MCO): Disable
+    remap: 0
+  RNG:
+    settings:
+      Mode: Disable
+    remap: 0
+  RTC:
+    settings:
+      Wakeup: Disable
+    remap: 0
+  SAI:
+    settings:
+      Block A: Disable
+      Block B: Disable
+    remap: 0
+  SDIO:
+    settings:
+      Mode: Disable
+    remap: 0
+  SDMMC:
+    settings:
+      Mode: Disable
+    remap: 0
+  SERDES:
+    settings:
+      Mode: Disable
+    remap: 0
+  SPI3:
+    settings:
+      Mode: Disable
+      Hardware NSS Signal: Disable (software NSS)
+    remap: 0
+  SPI4:
+    settings:
+      Mode: Disable
+      Hardware NSS Signal: Disable (software NSS)
+    remap: 0
+  SWPMI:
+    settings:
+      Mode: Disable
+    remap: 0
+  TIM10:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      ETR: Disable
+    remap: 0
+  TIM11:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      ETR: Disable
+    remap: 0
+  TIM12:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      ETR: Disable
+    remap: 0
+  TIM5:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      ETR: Disable
+    remap: 0
+  TIM6:
+    settings:
+      Mode: Disable
+    remap: 0
+  TIM7:
+    settings:
+      Mode: Disable
+    remap: 0
+  TIM8:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Break Input: Disable
+      ETR: Disable
+    remap: 0
+  TIM9:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      ETR: Disable
+    remap: 0
+  TKEY:
+    settings:
+      Mode: Disable
+    remap: 0
+  UHSIF:
+    settings:
+      Mode: Disable
+    remap: 0
+  USART4:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+  USART5:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+  USART6:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+  USART7:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+  USART8:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+  USBFS:
+    settings:
+      Mode: Disable
+    remap: 0
+  USBHS:
+    settings:
+      Mode: Disable
+    remap: 0
+  USBPD:
+    settings:
+      Mode: Disable
+    remap: 0
+  USBSS:
+    settings:
+      Mode: Disable
+    remap: 0
+  WWDG:
+    settings:
+      Mode: Disable
+    remap: 0
 gpio_manual:
   PC0: GPIO_Output
   PC1: GPIO_Input
@@ -177,7 +483,10 @@ gpio_settings:
 clock:
   hse: 25
   pllIn: 0
-  pllMul: 1
+  pllMul: 4
   sys: HSI
   pre:
     HB: 1
+    FPRE: 1
+    HB2: 1
+    ADC: 2

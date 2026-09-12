@@ -3,8 +3,9 @@
 The ongoing source of truth for where this project stands. Keep it current: if a
 statement here stops being true, change it here first.
 
-- **Last updated:** 2026-09-12 (round 5, AGENT-3 cycle 2 — CI made publish-ready, and the
-  case-sensitivity defects that preparing it exposed)
+- **Last updated:** 2026-09-12 (round 5, AGENT-3 cycle 2 — CI made publish-ready, the
+  case-sensitivity defects that preparing it exposed, and one reading order for the data
+  sources: markdown first, PDF last, in `tools/source_docs.py` and `tests/source_order.test.js`)
 - **Branch:** `main` (no remote). **One shared working tree**, three agents, one working
   directory (`agents/`); rounds 1–4 are archived under `agents/history/`.
 - **Verified this pass:** `python build.py` → OK · `node tests/run.js` → **ALL GREEN, 0
@@ -36,8 +37,22 @@ statement here stops being true, change it here first.
   cites **against the case the filesystem actually has**, with both a wrong-case path and a
   wrong-case `codegen.sdk.evt` planted to prove it bites. It is the same defect as
   `codegen.header: ch32v00x.h` one field over, and it was found by preparing CI rather than
-  by running it.
-- **Also new this pass:** the issue chooser's three `contact_links` pointed at
+  by running it.- **New this pass: the data sources have one reading order, and it is markdown first, PDF last.**
+  Every drop arrives as a PDF with a converted `.md` beside it, and the conversion is now the
+  documented working source: it greps, it diffs, it can be cited by line, and a second pass can
+  check it. The original PDF is the **last resort** — opened only when the conversion is missing,
+  unreadable or *demonstrably* incomplete, and then by a script that prints a `PDF FALLBACK:` line
+  saying why, recovers by word position with a check against numbers the datasheet states
+  elsewhere, and writes the recovered cells back into the repo so the page is opened once. It is
+  implemented in `tools/source_docs.py` (both recovery scripts and the L103 markdown parser now
+  resolve through it), stated in `data/sources/README.md`, carried into `agents/README.md`,
+  `agents/PROMPT.txt`, `agents/AGENT_1_DATA.md`, `docs/ADDING-A-PART.md`, `docs/HOW-IT-WORKS.md`,
+  `data/FORMAT.md` and the PR template, and enforced by `tests/source_order.test.js`: a PDF with
+  no conversion beside it fails the build, and so does a script that opens a PDF without saying
+  why. **Two stale claims went with it, and they are why the rule needed writing down:**
+  `data/mcus/CH32L103.notes.md` said "This drop has no PDF" and asked a human for a second source
+  while `CH32L103DS0.PDF` sat in the folder, and `data/sources/README.md` still said the EVT
+  folders were empty and listed two parts where there are now five.- **Also new this pass:** the issue chooser's three `contact_links` pointed at
   `https://github.com/OWNER/REPO/...` — three buttons that would 404 the moment the
   repository was published. Removed, with the guidance moved into the templates as relative
   markdown (which is correct in a fork and after a rename), and a check that fails if that

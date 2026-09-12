@@ -4,6 +4,15 @@ CH32X035 RM v1.9 §9.2.3 "DMA Request Mapping" — the peripheral → channel ta
 from the ORIGINAL PDF by word position rather than from the markdown conversion, which
 kept the rows and lost the columns (AGENT-1, round-4 board, 17:26Z).
 
+PDF FALLBACK: RM Table 9-2. This is the last-resort reading of the rule in
+`data/sources/README.md` ("Read the markdown first. The PDF is the last resort."), and
+the reason is structural rather than aesthetic: the conversion kept each peripheral's
+request names in order and lost the `Channel N` columns entirely, so NO request can be
+placed into a channel from the markdown at all. The markdown is still read here — as the
+independent second statement of row order — and it must agree with the PDF reading on
+every row's token set, which is what makes the recovered columns checkable instead of
+merely plausible.
+
     python agents/proposals/x035_dma_requests.py [path/to/CH32X035RM.pdf]
 
 Method — two independent readings that must agree:
@@ -20,12 +29,24 @@ failed when one does not.
 It is a PROPOSAL for AGENT-1's `data/mcus/CH32X035.yaml` `dma.requests`, not a tool that
 edits it: `data/` is theirs. Requires pymupdf (installed on this box).
 """
+import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'tools'))
+import source_docs  # the markdown-first policy, in one place
+
 import pymupdf
 
-PDF = sys.argv[1] if len(sys.argv) > 1 else 'data/sources/X035/Datasheets/CH32X035RM.pdf'
+if len(sys.argv) > 1:
+    PDF = pathlib.Path(sys.argv[1])
+else:
+    PDF = source_docs.pdf('X035', 'CH32X035RM')
+assert PDF is not None, 'x035_dma_requests: no RM PDF in data/sources/X035/Datasheets'
+source_docs.announce_pdf_fallback(
+    'RM Table 9-2 (DMA request mapping): the markdown conversion kept the rows and lost '
+    'the channel columns, so the markdown cannot place a request into a channel. It is '
+    'still read below, as the independent statement of row order.')
 doc = pymupdf.open(PDF)
 
 # ---- locate the table: the page whose text has "9.2.3 DMA Request Mapping" ------------
@@ -88,7 +109,8 @@ for n, pi in enumerate(pages):
                 positional[tok] = c
 
 # ---- reading 2: the markdown's row order, and the EVT-example anchors ----------------
-MD = re.sub(r'RM\.pdf$', 'RM.md', PDF) if PDF.endswith('.pdf') else 'data/sources/X035/Datasheets/CH32X035RM.md'
+MD = source_docs.markdown('X035', 'CH32X035RM')
+assert MD is not None, 'x035_dma_requests: no RM markdown in data/sources/X035/Datasheets'
 md = open(MD, encoding='utf-8').read().splitlines()
 i0 = next(i for i, l in enumerate(md) if l.startswith('Peripheral Channel1'))
 i1 = next(i for i in range(i0, len(md)) if md[i].lstrip('#').strip().startswith('9.3 Register Description'))

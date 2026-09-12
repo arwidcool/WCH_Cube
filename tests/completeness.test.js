@@ -146,6 +146,34 @@ const ABSENT = {
   'TIM3.nvic': 'THE RECORDED CONTRADICTION, and it survived the EVT drop: this part HAS a TIM3, and there is no TIM3 vector. '
     + 'RM Table 6-1 omits it, IRQn_Type ends at OPCM_IRQn = 40, and startup_ch32v00X.S agrees. Two independent sources, '
     + 'so it is recorded rather than invented. See CH32V006.notes.md',
+
+  // --- CH32H417: absences read off `IRQn_Type` in ch32h417.h, which is the complete
+  //     list (125 members, ch32h417.h:39-169) and was cross-checked against the v3f
+  //     startup table by tools/extract_h417_setup.py --audit: every member has a
+  //     handler, so a missing vector here is genuinely missing rather than unextracted.
+  'CH32H417.ADC2.nvic': 'shares `ADC1_2_IRQn = 69` with ADC1 - the enum has ONE vector for '
+    + 'both ADC units, and ch32h417.h declares no ADC2_IRQn. Same shape as CH32X035\'s '
+    + 'CMP1/2/3 sharing OPA_IRQn: a shared interrupt is a fact about the silicon, not a gap',
+  'CH32H417.CMP.nvic': 'the comparator has no vector of its own in ch32h417.h - IRQn_Type '
+    + 'contains no CMP or OPCM entry, so the OPA/CMP interrupt is not modelled on this part '
+    + 'at all. Recorded as absent rather than assigned to a neighbour to make the cell tick',
+  'CH32H417.CRC.nvic': 'no CRC entry in ch32h417.h\'s IRQn_Type - this part raises no CRC '
+    + 'interrupt',
+  'CH32H417.DAC.nvic': 'no DAC entry in ch32h417.h\'s IRQn_Type - the DAC is driven by DMA '
+    + 'and raises no interrupt of its own here',
+  'CH32H417.DBGMCU.nvic': 'Debug Support (RM ch.45) is not an interrupt source; no DBGMCU '
+    + 'entry exists in IRQn_Type',
+  // I2S2/I2S3 are SPI peripherals in I2S mode here, not blocks of their own (RM ch.23 is
+  // "SPI/I2S"), so their interrupt IS the SPI vector - which `nvic:` already owns under
+  // SPI2 and SPI3. Same shape as CH32X035's TKEY raising the ADC vector.
+  'CH32H417.I2S2.nvic': 'I2S2 is SPI2 in I2S mode (RM ch.23 is "SPI/I2S"), so its interrupt '
+    + 'is `SPI2_IRQn`, which `nvic:` already records under SPI2. ch32h417.h has no I2S2_IRQn',
+  'CH32H417.I2S3.nvic': 'I2S3 is SPI3 in I2S mode; its interrupt is `SPI3_IRQn`, already '
+    + 'recorded under SPI3. ch32h417.h has no I2S3_IRQn',
+  'CH32H417.OPA.nvic': 'ch32h417.h\'s IRQn_Type contains no OPA or OPCM entry, so the '
+    + 'op-amp/comparator block raises no modelled interrupt on this part',
+  'CH32H417.PWR.nvic': 'no PVD or PWR entry in ch32h417.h\'s IRQn_Type - the power '
+    + 'controller raises no interrupt here (RM ch.2 gives it no vector)',
 };
 
 /**
@@ -205,6 +233,16 @@ const excused = (part, pid, cell) =>
  */
 const IN_EXTRACTION = {
   CH32X035: ['AGENT-1', 'CH32X035 extraction: `params:` for the peripherals that have none'],
+  // CH32H417 arrived as a whole new family with 47 RM chapters and 41 SPL headers. Its
+  // PERIPHERAL SET is complete (78 entries, generated from the DS + the SPL headers) and
+  // so are its pins, its clock tree, its 125 vectors and its 73 clock-enable bits, but
+  // `params:` for the ~70 peripherals that have none is real work: each parameter needs
+  // its init-struct field and its option macros verified against ch32h417_*.h, which is
+  // what `tools/verify_sdk_names.py` checks. Declared in-extraction so those cells print
+  // with an owner rather than failing a shared gate for a job nobody has done yet - and
+  // so the day the TASKS.md line is ticked they all become hard failures with no edit
+  // here, which is what stops this table outliving its excuse.
+  CH32H417: ['AGENT-3', 'CH32H417: `params:` for the peripherals that have none'],
 };
 const SOFT_CELLS = new Set(['params', 'clock']);
 

@@ -42,6 +42,12 @@ data/sources/<PART>/Evt/ or in ~/.platformio/packages/framework-wch-noneos-sdk. 
 file and line. "The other CH32 parts have it" is not a citation. Precedence for anything
 the software must name: EVT → RM → DS.
 
+Read the documents themselves in a fixed order too: the **markdown conversion FIRST, the
+original PDF only as a last resort** — missing, unreadable or demonstrably incomplete,
+never because it is nicer to read. `data/sources/README.md` states the rule; a script that
+opens a PDF prints a `PDF FALLBACK:` line saying why, recovers by script rather than by eye,
+and writes the recovered cells back into the repo so nobody opens it again.
+
 Gate every commit on:
     python build.py && node tests/run.js            (python, not python3; must be ALL GREEN)
 

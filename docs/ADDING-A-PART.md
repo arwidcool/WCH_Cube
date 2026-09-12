@@ -21,26 +21,47 @@ Three things per part, all from the vendor. In order of usefulness:
 | 2 | **The Reference Manual** (RM) | Same | The register-level truth: remap field positions, DMA request tables, interrupt vector tables, clock tree. |
 | 3 | **The Datasheet** (DS) | Same | Pin tables per package, the model/ordering table, electrical limits, and the notes — which is where the *gotchas* live (shorted pins, package-specific reset pins, per-pin restrictions). |
 
-Convert the PDFs to Markdown if you can. The extraction tools and any AI agent work far better
-on text than on a PDF, and the conversions are what makes the diffs in this repo meaningful.
-Keep the original PDFs beside them anyway — the CH32X035 DMA request map was recovered from the
-PDF after the Markdown conversion destroyed a table, and that would have been impossible
-without the original.
+**Convert the PDFs to Markdown.** The markdown is what everything here reads — the extraction
+tools, the agents, the diffs and you: it greps, it can be cited by line, and a second pass can
+check it. **Keep the original PDFs beside the conversions anyway**, because it is the last
+resort: the CH32X035 DMA request map was recovered from the PDF after the conversion destroyed
+a table, and CH32L103's pin table needs it for the `-` placeholder cells the conversion drops.
 
-> **The DS conversion is often mangled.** For CH32X035, pin rows split across lines and all
-> seven package columns merged into single cells. Expect this, and expect that a *parser plus a
-> second-pass diff* is what fixes it. Eyeballing a mangled table is how a wrong pin count ships.
+The order is a rule, not a preference — **markdown first, PDF last** — and a fallback has to
+earn itself:
+
+1. read the markdown; if the table parses, that is the answer;
+2. open the PDF only when the conversion **demonstrably** cannot answer — missing, unreadable,
+   or a table it destroyed — never because it looks clearer;
+3. when you do: say why in a `PDF FALLBACK:` line in the tool, recover **by script**, and check
+   the result against numbers the datasheet states elsewhere (pin numbers running 1..N, the
+   model table's I/O count per package, the surviving row order). A plausible-looking wrong
+   table is the one outcome worse than no table;
+4. write the recovered cells into a declared file beside the conversion, cite it in
+   `<PART>.notes.md` together with the PDF's table, and never open that PDF again.
+
+`tools/source_docs.py` implements that order for the tools, `data/sources/README.md` is the long
+form, and `tests/source_order.test.js` fails the build if a PDF in a `Datasheets/` folder has no
+conversion beside it or if a script opens one without saying why.
+
+> **The DS conversion is often mangled — that is normal, and it is step 5 below, not a reason to
+> reach for the PDF.** For CH32X035, pin rows split across lines and all seven package columns
+> merged into single cells. Expect it, and expect that a *parser plus a second-pass diff* is what
+> fixes most of it; the part a parser cannot fix is the part that earns the PDF. Eyeballing a
+> mangled table is how a wrong pin count ships.
 
 ## Where the files go
 
 ```
 data/sources/<PART>/
 ├── Datasheets/
-│   ├── <PART>DS0.md      the datasheet
-│   ├── <PART>DS0.pdf     keep the original (optional, but do it)
-│   └── <PART>RM.md       the reference manual
+│   ├── <PART>DS0.md      the datasheet, as markdown   <- read THIS first
+│   ├── <PART>DS0.pdf     the original, kept for the last resort
+│   ├── <PART>RM.md       the reference manual, as markdown
+│   ├── <PART>RM.pdf      the original
+│   └── *_corrections.yaml   cells recovered from the PDF, declared and cited
 └── Evt/                  the vendor package, unzipped, exactly as shipped
-    └── EXAM/SRC/Peripheral/inc/*.h    ← the headers the tools actually read
+    └── EXAM/SRC/Peripheral/inc/*.h    <- the headers the tools actually read
 ```
 
 `<PART>` is the family name the YAML will use — `V006`, `X035`, `V003`. Existing folders use
@@ -87,6 +108,11 @@ the constraints**. A prompt that produces usable output looks roughly like:
 >
 > Then run `python tools/validate_mcu.py data/mcus/CH32V003.yaml` and
 > `python tools/verify_sdk_names.py data/mcus/CH32V003.yaml` and fix what they report.
+>
+> Read the **markdown** only — the PDF is the last resort and you do not open it by eye. If a
+> table the YAML needs is destroyed by the conversion (dropped columns, lost placeholder
+> cells), say which table and what is missing, and stop there; that is a `tools/recover_*.py`
+> job with its own checks, not a reading exercise.
 
 That last paragraph is the important one. Without it you will get a file that parses, validates,
 looks entirely plausible, and contains a mode the silicon does not have.

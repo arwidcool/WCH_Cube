@@ -538,9 +538,20 @@ def _setting_named(periph: dict, name: str):
 
 
 def _signals_routed_by(periph: dict) -> set:
+    """Every signal a peripheral can route to a pin, under EITHER remap schema.
+
+    `remaps:` is the whole-peripheral choice every CH32V00x part uses, and its signals
+    live in each remap's `pins:` map. `signal_pins:` is the per-pin schema CH32H417 needs
+    (RM 9.3.2.2, GPIOx_AFRL/AFRH), where a peripheral lists each signal's pins directly.
+    Reading only `remaps` made this helper return an empty set for an AF-muxed part, so
+    `clock.hse_signals` failed with "not routed to a pin by any RCC remap" no matter what
+    the file said - a false negative on the one shape the second family uses.
+    """
     routed = set()
     for rm in periph.get("remaps") or []:
         routed |= set((rm or {}).get("pins") or {})
+    for sig in (periph.get("signal_pins") or {}):
+        routed.add(sig)
     return routed
 
 

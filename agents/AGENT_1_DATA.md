@@ -14,6 +14,26 @@ assumed rather than read. **A citation is a `file:line` or a table number, not a
 source does not support it, it goes in `.notes.md` as an open question and on the board as
 `BLOCKED` — never in the YAML.
 
+## The sources, and the order you read them in
+
+**Markdown first, PDF last.** Every drop is converted to markdown, the conversion sits in
+the part's `Datasheets/` folder with the original beside it, and the conversion is what you
+read: it greps, it diffs, it can be cited by line, and a second pass can check it. Open the
+PDF only when the markdown **cannot** answer — missing, unreadable, or demonstrably
+incomplete (a dropped column, a lost `-` placeholder, a table the conversion destroyed).
+"The PDF is clearer" is not a reason. This is `data/sources/README.md`, and the rules that
+make a fallback honest are there too: say why in a `PDF FALLBACK:` line, recover by script
+with a check against numbers the datasheet states elsewhere, and write the recovered cells
+back into the repo once so the PDF is read one time and no more. `tests/source_order.test.js`
+fails the build on a PDF with no conversion beside it, and on a script that opens one without
+saying why.
+
+When you write a tool: default it to the markdown through `tools/source_docs.py`, which is
+the one place the order is implemented. `source_docs.choose()` refuses to reach for a PDF
+silently, `source_docs.require_markdown()` exits naming the fallback route instead of
+handing back a PDF, and `source_docs.announce_pdf_fallback(reason)` is the banner that
+makes a fallback visible on every run.
+
 ## P0 — Deliverable A: the constraint mechanism (this is the round)
 
 1. **Design and post the schema early.** Every other agent is blocked on its shape. Post it on

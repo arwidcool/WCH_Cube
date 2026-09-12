@@ -4,20 +4,89 @@ Nothing in `data/mcus/*.yaml` or in the generated C is allowed to state a
 hardware fact that does not come from this folder. Extraction provenance goes in
 the matching `data/mcus/<PART>.notes.md`, citing the table it came from.
 
+## Read the markdown first. The PDF is the last resort.
+
+Every drop arrives as a PDF. Each one is **converted to markdown**, and where the
+original was kept it sits beside its conversion as `<name>.pdf` / `<name>.PDF`.
+The conversion is the **working source** — for the tools, for an agent and for a
+human — and the original is the fallback for the cases where the conversion cannot
+answer. That order is not a preference, it is the difference between a fact you can
+diff and a fact you have to squint at:
+
+| | Markdown (`*.md`) | Original PDF |
+|---|---|---|
+| grep / diff / cite by line | yes | no |
+| read by `tools/extract_*.py` | yes | only by a `recover_*.py` |
+| a wrong reading | caught by the tool's own checks | caught by you, by eye |
+| cost | seconds | minutes per table, per page |
+
+**The order:**
+
+1. **Read the markdown.** If the table parses, that answer is the answer. It is also
+   the only version a second-pass diff can check, which is the standard every part in
+   `data/mcus/` has met.
+2. **Open the PDF only when the markdown cannot answer** — it is missing, unreadable,
+   or *demonstrably* incomplete (the conversion dropped a column, a placeholder cell,
+   or a whole table). "The PDF is probably clearer" is not a reason; a table that
+   parses cleanly in the markdown is already the better source.
+3. **When the PDF is needed, the recovery follows three rules** — all three exist
+   because each was learned the hard way:
+   - **it says why, in a `PDF FALLBACK:` line.** In the tool's docstring and on every
+     run, in the words that name the missing thing. A PDF read that does not say why
+     it was necessary is the case this page exists to stop.
+   - **it is a script, not a pair of eyes.** `tools/recover_*.py` reads the page by
+     word position and then checks its own output against the datasheet's own numbers
+     (pin numbers `1..N` with no gaps, the model table's I/O count per package, the
+     surviving row order). A plausible-looking wrong table is the one outcome worse
+     than no table, and only a check can tell the two apart.
+   - **it is written back into the repo, once.** The recovered cells land in a
+     declared file next to the conversion (X035's are
+     `data/sources/X035/Datasheets/CH32X035_pin_corrections.yaml`), the part's
+     `.notes.md` cites the PDF by page/table **and** the declared file, and nobody has
+     to open the PDF again. A fact that lives only inside a PDF has not been extracted.
+4. **A PDF never stands alone.** Every PDF in a `Datasheets/` folder has its markdown
+   conversion beside it; `tests/source_order.test.js` fails the build if one appears
+   without the other, and if a script opens a PDF without saying why.
+
+Which drops this has actually been needed for, and what it cost — kept here so the
+next person can see the shape of the problem rather than rediscover it:
+
+| Part | The markdown's defect | The recovery |
+|---|---|---|
+| CH32X035 | RM Table 9-2 (DMA requests) lost its **columns**; DS Table 2-1 lost `-` placeholder cells | `agents/proposals/x035_dma_requests.py`, `CH32X035_pin_corrections.yaml` |
+| CH32L103 | DS Table 2-1-1 **drops the `-` placeholder cells**, so a row's five numbers cannot be told apart by position | `tools/recover_l103_pins_from_pdf.py` |
+| CH32H417, CH32V003 | pin rows wrap, a name splits mid-token, a leading `-` disappears | not needed so far — the markdown was enough for the pin tables, with a parser and a 1..N assertion |
+
 ## Layout
 
-One folder per part family, two folders inside it:
+One folder per part family, two folders inside it. The conversion is the file with the
+citable name; a PDF beside it is the fallback above and nothing else:
 
 ```
 data/sources/
 ├── V006/
 │   ├── Datasheets/     CH32V006DS0.md   the datasheet, as markdown
 │   │                   CH32V00XRM.md    the reference manual, as markdown
-│   └── Evt/            the WCH EVT package for this part  (EMPTY — see below)
-└── X035/
-    ├── Datasheets/     CH32X035DS0.md, CH32X035RM.md
-    └── Evt/            (EMPTY — see below)
+│   └── Evt/            the WCH EVT package for this part
+├── X035/
+│   ├── Datasheets/     CH32X035DS0.md, CH32X035RM.md
+│   │                   CH32X035DS0.pdf, CH32X035RM.pdf     + the two recoveries
+│   └── Evt/            the WCH EVT package
+├── V003/
+│   ├── Datasheets/     CH32V003.md, CH32V003RM.md  (+ .pdf/.PDF originals)
+│   └── Evt/
+├── H417/
+│   ├── Datasheets/     CH32H417DS0.md, CH32H417RM.md  (+ CH32H417DS0.PDF)
+│   └── Evt/
+└── l103/
+    ├── datasheets/     CH32L103DS0.md, CH32L103RM.md  (+ the two .PDF originals)
+    └── evt/
 ```
+
+`H417` and `l103` keep the spelling their drop arrived with; the tools search
+recursively and case-insensitively, and `codegen.sdk.evt` cites the path as it exists,
+which is what `tests/source_paths.test.js` checks. `V003` arrived lower-case and was
+renamed to match the documented spelling — see `PROGRESS.md` for why that mattered.
 
 This layout replaced the earlier flat one on 2026-09-11; `CH32V006DS0.md` and
 `CH32V00XRM.md` used to sit directly in `data/sources/`. Paths written before
@@ -29,8 +98,9 @@ that date — in `data/FORMAT.md`, `data/mcus/CH32V006.notes.md`,
 WCH ships an **EVT** package for each part: the Standard Peripheral Library
 sources and headers, the startup files, the linker scripts, the `.svd`, and
 worked examples. **An EVT package will be provided for every MCU this project
-supports**, in that part's `Evt/` folder. Those folders exist and are empty
-today — the drop has not happened yet.
+supports**, in that part's `Evt/` folder — see "Which parts have EVT" below for
+which of them have landed (the answer is all of them; the paragraph that used to
+sit here said the folders were empty, and it was stale for two rounds).
 
 When a package lands it becomes the **highest authority** for anything the
 software has to *name* or *call*:
@@ -44,6 +114,12 @@ software has to *name* or *call*:
 Precedence, highest first:
 
 **EVT sources → Reference Manual → Datasheet → anything else.**
+
+That order decides *which document is right* when two of them disagree. It is a
+different question from the one at the top of this page, which decides *which copy
+of one document you read* — **its markdown, or its PDF as a last resort**. Both
+apply at once: an EVT header outranks the RM, and the RM's markdown is read before
+the RM's PDF.
 
 Where the EVT sources and the RM disagree, they are answering different
 questions: EVT says what the SDK will compile, the RM says what the silicon
@@ -72,13 +148,16 @@ against itself passed, 267 tests passed and a browser passed. Only a compiler di
 
 ## Which parts have EVT, and where its headers are
 
-**Both drops have landed.** They are no longer empty, and `00_PROJECT.md` and the round-3
+**Every drop has landed.** They are no longer empty, and `00_PROJECT.md` and the round-3
 agent packs are stale where they say otherwise.
 
 | Part | EVT | SPL headers | Startup |
 |---|---|---|---|
 | CH32V005, CH32V006 | `V006/Evt/` | `V006/Evt/EXAM/SRC/Peripheral/inc/ch32v00X_*.h` | `.../Startup/startup_ch32v00X.S` |
+| CH32V003 | `V003/Evt/` | `V003/Evt/EXAM/SRC/Peripheral/inc/ch32v00x_*.h` (small x, a different series) | `.../Startup/` |
 | CH32X035 | `X035/Evt/` | `X035/Evt/EXAM/SRC/Peripheral/inc/ch32x035_*.h` | `.../Startup/` |
+| CH32H417 | `H417/Evt/` | `H417/Evt/EXAM/SRC/Peripheral/inc/ch32h417_*.h` | `.../Startup/` |
+| CH32L103 | `l103/evt/` | `l103/evt/EXAM/SRC/Peripheral/inc/ch32l103_*.h` | `.../Startup/` |
 | WCH-DUMMY32-C8 | n/a | synthetic — declares `codegen.sdk: { synthetic: true }`; lives in `tests/fixtures/mcus/`, never in `data/mcus/` | |
 
 The layout is not the one the round-3 brief guessed: the headers sit under `EXAM/SRC/`,
@@ -93,10 +172,11 @@ then configures GPIOC pin 4. `PUB/` holds the evaluation-board schematics.
 
 ## CH32X035, confirmed against its EVT headers before extraction starts
 
-`data/mcus/CH32X035.yaml` does not exist yet. These facts are recorded here so that
-whoever writes it starts from checked ground instead of re-deriving it — and **every one
-of them differs from the CH32V00x family**, which is the whole argument against
-inheriting by analogy.
+**Historical, and kept because it is the reasoning that produced the file:** these facts
+were checked before `data/mcus/CH32X035.yaml` was written from them, and all of them held.
+They are recorded here so that the next part of this family starts from checked ground
+instead of re-deriving it — and **every one of them differs from the CH32V00x family**,
+which is the whole argument against inheriting by analogy.
 
 | Fact | CH32X035 | CH32V005/V006 |
 |---|---|---|
@@ -117,9 +197,14 @@ The DS markdown for this part is badly mangled by PDF extraction: pin rows are s
 across lines and the seven package columns are merged into single cells. Table 2-1 cannot
 be read by eye reliably, so the extraction wants a script and a second-pass diff in the
 way `tools/extract_pins.py` and `tools/extract_remaps.py` did for CH32V006 — 232 pin
-assignments, 0 differences. Budget it as a multi-cycle job, not an afternoon.
+assignments, 0 differences. **Two places needed the PDF instead of the markdown** — the
+rows whose `-` placeholders the conversion dropped
+(`data/sources/X035/Datasheets/CH32X035_pin_corrections.yaml`) and
+RM Table 9-2's DMA request columns (`agents/proposals/x035_dma_requests.py`). Both were
+recovered by script, checked against numbers the datasheet states elsewhere, and written
+back into the repo: the rule at the top of this page, applied twice.
 
-### Until the EVT drop arrives
+### PlatformIO's packaged copy of the SDK — the cross-check, not the source
 
 PlatformIO already installs a packaged copy of the same vendor code at
 `~/.platformio/packages/framework-wch-noneos-sdk` (`Peripheral/<series>/inc`,

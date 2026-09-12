@@ -836,7 +836,11 @@ one pin, and a whole-peripheral enumeration is 8.5e20 entries. Measured by
 - [x] Generated `main.c` reads `codegen.clock_update_fn` / `sdi_printf_fn` instead of naming
       SDK functions this part renames — three link failures, no part named in `app/` (AGENT-4)
 - [ ] Which family owns MEU6/WEU6 — DS contradicts itself 3 sources to 1 (AGENT-1)
-- [ ] `data/sources/H417/` rename to the documented `Datasheets/` + `Evt/` layout (AGENT-1)
+- [x] `data/sources/H417/` rename to the documented `Datasheets/` + `Evt/` layout (AGENT-1)
+      → **closed 2026-09-12.** Both folders are there with exactly that case
+        (`data/sources/H417/Datasheets/CH32H417DS0.md`, `.../CH32H417RM.md`, `data/sources/H417/Evt/`),
+        `codegen.sdk.evt: H417` resolves, and `tests/source_paths.test.js` is green — it was the
+        test that would have caught it either way.
 - [ ] How the dual core (RISC-V5F 400 MHz + RISC-V3F 160 MHz) is modelled (AGENT-1)
 - [ ] Draw a 128-pin QFN — 32 pins a side, no existing layout/legibility case (AGENT-2)
       → **Measured 2026-09-12 (AGENT-3), and the answer is that the UI job does not change.**
@@ -876,3 +880,80 @@ Still open, and none of it blocks the mechanism — all four are argued in
       files per package (AGENT-1)
 - [ ] CH32H416 / CH32H415 — DS Tables 2-1-2 and 2-1-3, on QFN60X6, whose geometry is already
       in `packages.yaml`. Separate parts under the repo's own rule (AGENT-1)
+
+### Data sources — markdown first, PDF last resort  (2026-09-12, human-directed)
+
+Five drops now, each one arriving as a PDF with a markdown conversion beside it, and two
+recoveries have already needed the original. The order was implicit in the tools and stated
+nowhere, so it is now written down once, implemented once, and checked:
+
+- [x] **`data/sources/README.md` — "Read the markdown first. The PDF is the last resort."** The
+      four-step fallback protocol (read the markdown → open the PDF only when it demonstrably
+      cannot answer → say why and recover by script with checks → write the cells back once), the
+      current five-part layout with each drop's casing, and the table of which drops have actually
+      needed the PDF and what the conversion had destroyed. Stale claims in the same file fixed:
+      "the EVT folders are empty today" (all five have landed) and a two-part EVT table.
+- [x] **`tools/source_docs.py`** — the order in code. `choose()` returns the markdown and reaches
+      for a PDF only with an announced fallback; `require_markdown()` exits naming the fallback
+      route so a markdown-only tool cannot silently take a PDF; `announce_pdf_fallback()` is the
+      `PDF FALLBACK:` banner; `markdown()`/`pdf()` resolve part and file case-insensitively.
+- [x] **`tools/recover_l103_pins_from_pdf.py`** — prints the reason it needs the PDF (7 of 51 rows
+      of Table 2-1-1 start with fewer than five cells) and **refuses to open the PDF** when
+      `markdown_short_rows()` finds zero, i.e. when the conversion can answer. Its `--yaml` block
+      carries the provenance.
+- [x] **`tools/extract_l103_pins.py`** — markdown only, through `require_markdown()`. Its "This
+      drop has no PDF" paragraph was simply false: `CH32L103DS0.PDF` is in the drop.
+- [x] **`agents/proposals/x035_dma_requests.py`** — `PDF FALLBACK:` marker and banner, and both of
+      its sources now resolve through `source_docs` (it still reads the markdown for row order and
+      the EVT anchors, which is what makes the recovered columns checkable).
+- [x] **`data/mcus/CH32L103.notes.md`** — the false "no PDF" claim and the §4 request for a second
+      source a human would have had to find. Both corrected, with the recovery's real state.
+- [x] **Propagated to** `agents/README.md` (rules that never bend), `agents/PROMPT.txt`,
+      `agents/AGENT_1_DATA.md` (a new "sources, and the order you read them in" section),
+      `docs/ADDING-A-PART.md`, `docs/HOW-IT-WORKS.md`, `data/FORMAT.md`, the PR template.
+- [x] **`tests/source_order.test.js`** — three checks: a PDF in a `Datasheets/` folder with no
+      conversion beside it fails; a script that reads a PDF with no `PDF FALLBACK:` reason fails;
+      and the markdown-only extractors may name no PDF at all. Plus a planted-break half, so a
+      check that stopped looking at anything cannot read as green.
+
+### CH32H417 - the peripheral set and the clock (AGENT-3, human-directed)
+
+The human's brief: CH32H417 looked half-built - most peripherals missing, the clock stubbed.
+Session of 2026-09-12. Result: **13 peripherals -> 78**, 125 NVIC vectors, 73 clock-enable
+bits, and a clock tree that models what the schema can hold.
+
+- [x] `tools/extract_h417_setup.py` - the non-pin setup blocks. `--nvic` emits the 125-vector
+      table from `ch32h417.h`'s `IRQn_Type` cross-checked against the startup `.S`; `--audit`
+      cross-checks both and exits 2 on a mismatch.
+- [x] `tools/gen_h417_peripherals.py` - assembles the `peripherals:` block: pin data
+      mechanical from `extract_h417_pins.py`, settings per peripheral TYPE from the RM.
+      `--splice` writes it into the MCU file; `--missing` shows the gap.
+- [x] 78 peripherals (from 13), every one with `signal_pins:` where it holds a pin.
+- [x] `nvic:` - 125 vectors, PFIC scheme with **4 priority bits at [7:4]** (where CH32V00x has
+      two and CH32X035 three), four nesting groups, DMA channels, EXTI line ranges.
+- [x] `codegen.periph_clock` - all 73 `RCC_HB*Periph_*` bits across the three buses.
+- [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
+      SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
+- [ ] **(AGENT-3) CH32H417: `params:` for the peripherals that have none.**
+      The part's peripheral SET is complete - 78 entries from the DS + the 41 SPL headers -
+      along with its pins (950 AF assignments, mechanical), its clock tree, its 125 NVIC
+      vectors and its 73 clock-enable bits, but ~70 peripherals have no `params:` block, so
+      Parameter Settings has no rows for them. Each parameter needs its `struct:`/`sdk_field:`
+      and every option's `sdk:` macro traced to that part's own header, which is what
+      `tools/verify_sdk_names.py` checks; inventing them wholesale would put names nobody
+      compiled into `data/`. Held in `tests/completeness.test.js`'s `IN_EXTRACTION`, so those
+      cells print with this line as their owner and become hard failures the day it is
+      ticked - which is what stops the exemption outliving the job.
+- [ ] The four secondary PLLs and the eight peripheral clock muxes (schema limit).
+
+**Two findings that outrank the data work**, both filed on the board:
+
+1. **The two startup tables do not align.** `startup_ch32h417_v3f.S` starts at `.word _start`
+  (index 0) and `startup_ch32h417_v5f.S` does not, so its table is one entry short at the
+  front. Reading v5f index-for-index against `IRQn_Type` names the **wrong handler for every
+  peripheral vector** - an interrupt that never fires or fires the wrong function, silent in
+  both directions. Anchored on the ISA's fixed exception numbers, and `--audit` reports the
+  offset on every run.
+2. **`validate_mcu.py`'s `_signals_routed_by` read only `remaps:`.** On an AF-muxed part
+  (`signal_pins:`) it returned an empty set, so `clock.hse_signals` failed with "not routed to
+  a pin by any RCC remap" whatever the file said. Fixed to read both schemas.

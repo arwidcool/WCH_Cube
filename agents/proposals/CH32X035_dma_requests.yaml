@@ -4,6 +4,11 @@
 # PDF (data/sources/X035/Datasheets/CH32X035RM.pdf, p.82–83), not from the markdown conversion
 # that kept the rows and lost the columns (round-4 board, AGENT-1 17:26Z).
 #
+# PDF FALLBACK, under the rule in data/sources/README.md ("Read the markdown first. The PDF is
+# the last resort."): the conversion has no channel columns at all, so no request can be placed
+# into a channel from it. The markdown is still read by the script below, as the independent
+# statement of row order, and the two must agree on every row's token set.
+#
 # Derived by agents/proposals/x035_dma_requests.py, which refuses to print this block unless
 # three readings agree, and they do:
 #   1. POSITIONAL — every request word placed under the "Channel N" header it sits beneath,

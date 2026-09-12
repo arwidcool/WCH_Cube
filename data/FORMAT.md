@@ -1096,7 +1096,11 @@ second line of defence.
 
 ## Adding a part
 
-1. Put the datasheet and reference manual as markdown in `data/sources/`.
+1. Put the datasheet and reference manual as markdown in `data/sources/`, and keep the
+   original PDFs beside them: the **markdown is read first** and the PDF only as a last
+   resort, when the conversion is missing, unreadable or demonstrably incomplete
+   (`data/sources/README.md`, and `tools/source_docs.py` implements the order for the
+   tools).
 2. Write `data/mcus/<PART>.yaml` and `<PART>.notes.md`, citing a table for every block.
 3. Add any missing package geometry to `data/packages/packages.yaml`, with pitch and body
    size from the datasheet's package chapter.
