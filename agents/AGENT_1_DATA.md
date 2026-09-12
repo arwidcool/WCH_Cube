@@ -255,8 +255,41 @@ Numbers: ledger **0 / 0 / 0 / 0 / 0 / 0**. H417 `params:` **43 of 78 remain** (L
 two planning rows for fifteen real ones, so the count held while the content improved).
 Collisions QFN68 **4** / QFN88 0 / QFN128 0.
 
-Next: teach `_losses()` to compare choice lists, so the next hand-edit in a generated block
-refuses instead of reverting. Then LPTIM1/2 (one struct, but an anonymous union -
-`LPTIM_ClockPolarity` and `LPTIM_EncoderMode` share storage, so at most one may be written),
-QSPI1/2, I2S2/3, SDIO, SDMMC, GPHA, HSADC. FMC/ETH/ECDC/FMC_NAND/FMC_SDRAM stay blocked on
-the nested-struct shape (REQUEST 19:33Z) - five peripherals behind one change.
+**Cycle 5 - 2026-09-12T21:47Z. `params:` 43 -> 39 of 78.** I2S2, I2S3, SDIO, HSADC, and
+`_losses()` now compares setting rows and their choices - planted the exact ETH case that
+slipped past it, watched it print ``ETH.settings.`Interface`: choice(s) gone`` and exit 2,
+restored.
+
+- **Three of the four repeat one pattern, and it is worth naming because it keeps recurring
+  on this part: a `settings:` row already decides a struct member.** I2S's `Mode` is
+  `I2S_Mode` AND `I2S_MCLKOutput`, because it is also what claims the MCK pad - so a
+  dropdown would let a project claim the pad and switch the driver off. SDIO's `Mode` is
+  `SDIO_BusWide`, because it is what claims D0 / D0-D3 / D0-D7. Both become `const:` rows
+  with one dependency each, the same shape ADC, DVP and SWPMI already use.
+- **I2S's handle is SPI2 / SPI3.** `I2S_Init(SPI_TypeDef*, ...)` - the I2S is a MODE of the
+  SPI block, not a peripheral beside it, which is also why enabling both halves of one block
+  is a configuration the silicon cannot honour. Recorded in `init_structs`.
+- **HSADC ships 3 of 11 members and DECLARES the other 8.** They are a DMA transfer in
+  flight: two 32-bit receive addresses, three lengths, and three switches that mean nothing
+  until those addresses point somewhere real. A buffer address is a symbol this tool cannot
+  know, so they stay at the zero-initialiser and `notes:` names which eight and why - rather
+  than rows that write zeros over what the user set up.
+
+Red, and who owns it: **3 tests, all AGENT-2's** - `app/tests/instances.test.js` `:263`,
+`:376`, `:392`, made false by the TIM `channels:` maps landing, with `:376` being the one
+whose own message says "when the last one does, delete this test". Exact edits in my 21:41Z
+QA-FAIL. AGENT-3 closed the other four in `18ac944` the same cycle they were reported, and
+inverted the assertion that needed inverting rather than porting it.
+
+Gates: `codegen_compile` 18, `completeness` 15, `strict` 25, `h417` 64, all ALL GREEN, plus
+`validate_mcu`, `verify_sdk_names` and `coverage --gate` at 0. Compiled twice on
+CH32H417QEU6: I2S2 Master Transmit + HSADC on IN4/IN5, and SDIO in SD 8-bit.
+
+Numbers: ledger **0 / 0 / 0 / 0 / 0 / 0**. H417 `params:` **39 of 78 remain**.
+Collisions QFN68 **4** / QFN88 0 / QFN128 0.
+
+Next: LPTIM1/2 (one struct, but an anonymous union - `LPTIM_ClockPolarity` and
+`LPTIM_EncoderMode` share storage, so at most one may be written), QSPI1/2, SDMMC, GPHA,
+CAN1-3, DAC, RTC, SAI. Then the four QFN68 default collisions, which have waited two rounds.
+FMC/ETH/ECDC/FMC_NAND/FMC_SDRAM stay blocked on the nested-struct shape (REQUEST 19:33Z) -
+five peripherals behind one change.

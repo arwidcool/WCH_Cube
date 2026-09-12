@@ -131,9 +131,16 @@ jobs:
       - name: Run tests
         shell: bash
         run: |
-          set -o pipefail
+          # `set +e` is load-bearing, not tidiness. GitHub runs every `run:` block as
+          # `bash --noprofile --norc -eo pipefail`, so `set -e` is ALREADY on: a failing
+          # pipeline aborts the step THERE and the annotation block below never executes.
+          # That is why 30+ failing runs published nothing but "Process completed with exit
+          # code 1" - the eyes were written and had been switched off by the shell's own
+          # defaults. Disable it for the one command whose failure we intend to handle.
+          set +e
           node tests/run.js 2>&1 | tee run.log
           rc=${PIPESTATUS[0]}
+          set -e
           if [ "$rc" -ne 0 ]; then
             grep -E '^  x ' run.log | sed 's/^  x /::error title=test failed::/' || true
             grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true
@@ -244,9 +251,16 @@ jobs:
       # `::error` annotations, readable without a token.
       - name: Run the tests with PlatformIO available
         run: |
-          set -o pipefail
+          # `set +e` is load-bearing, not tidiness. GitHub runs every `run:` block as
+          # `bash --noprofile --norc -eo pipefail`, so `set -e` is ALREADY on: a failing
+          # pipeline aborts the step THERE and the annotation block below never executes.
+          # That is why 30+ failing runs published nothing but "Process completed with exit
+          # code 1" - the eyes were written and had been switched off by the shell's own
+          # defaults. Disable it for the one command whose failure we intend to handle.
+          set +e
           node tests/run.js 2>&1 | tee run.log
           rc=${PIPESTATUS[0]}
+          set -e
           if [ "$rc" -ne 0 ]; then
             grep -E '^  x ' run.log | sed 's/^  x /::error title=test failed::/' || true
             grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true

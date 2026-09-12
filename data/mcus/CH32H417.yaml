@@ -2539,6 +2539,14 @@ peripherals:
       through its own registers and the clock tree only.
   HSADC:
     category: Analog
+    # ONLY THE THREE MEMBERS THAT ARE A CONFIGURATION ARE ROWS. `HSADC_InitTypeDef` has
+    # eleven, and the other eight describe a DMA transfer in progress rather than the
+    # converter: two 32-bit receive ADDRESSES, three transfer LENGTHS, and the DMA,
+    # dual-buffer and burst-mode switches that only mean anything once those addresses
+    # point at real buffers (ch32h417_hsadc.h:22-56). Those are firmware state, not a pin
+    # or clock plan, and a buffer address is a symbol this tool cannot know - so they are
+    # left at the struct's zero-initialiser and named in `notes:` rather than offered as
+    # rows that would write zeros over whatever the user set up.
     settings:
       - name: Mode
         choices:
@@ -2562,6 +2570,49 @@ peripherals:
       IN4: [{ pin: PF8 }]
       IN5: [{ pin: PF9 }]
       IN6: [{ pin: PF10 }]
+    params:
+      - key: datasize
+        name: Data size
+        struct: HSADC_InitTypeDef
+        sdk_field: HSADC_DataSize
+        type: enum
+        default: 16-bit
+        options:
+          - { name: 16-bit, value: 0, sdk: HSADC_DataSize_16b }
+          - { name: 8-bit , value: 1, sdk: HSADC_DataSize_8b }
+        help: "ch32h417_hsadc.h:67-68. How wide each sample is in the receive buffer - 8-bit halves the memory a burst costs and throws away the low byte."
+      - key: firstcycle
+        name: First conversion cycle
+        struct: HSADC_InitTypeDef
+        sdk_field: HSADC_FirstConversionCycle
+        type: enum
+        default: "8"
+        options:
+          - { name: "8" , value: 0, sdk: HSADC_First_Conversion_Cycle_8 }
+          - { name: "9" , value: 1, sdk: HSADC_First_Conversion_Cycle_9 }
+          - { name: "10", value: 2, sdk: HSADC_First_Conversion_Cycle_10 }
+        help: "ch32h417_hsadc.h:60-63. How many cycles the converter takes before its first sample is valid; the three the header offers are 8, 9 and 10."
+      - key: clkdiv
+        name: Clock division
+        struct: HSADC_InitTypeDef
+        sdk_field: HSADC_ClockDivision
+        type: int
+        default: 0
+        min: 0
+        max: 63
+        help: "ch32h417_hsadc.h:32-33, a number between 0x00 and 0x3F. The high-speed ADC's own divider off its clock source; the clock tree that would let this tool show you the resulting sample rate is not modelled on this part yet."
+    notes: >
+      High-speed ADC. Pick its pads on the `Channels` row - IN0 to IN6, seven dedicated
+      analog inputs - and its converter setup in Parameter Settings.
+      THE EIGHT DMA MEMBERS OF `HSADC_InitTypeDef` ARE DELIBERATELY NOT ROWS:
+      `HSADC_RxAddress0` and `HSADC_RxAddress1` are buffer addresses, symbols in your own
+      program that this tool cannot know; `HSADC_BurstMode_TransferLen`,
+      `HSADC_BurstMode_DMA_LastTransferLen` and `HSADC_DMA_TransferLen` are the lengths
+      of a transfer into them; and `HSADC_DMA`, `HSADC_DualBuffer` and `HSADC_BurstMode`
+      only mean anything once those addresses point somewhere real
+      (ch32h417_hsadc.h:22-56). They stay at the struct's zero-initialiser, so set them
+      in the USER CODE block before starting a conversion. The three rows above are the
+      whole of what is a configuration rather than a transfer.
   HSEM:
     category: System Core
     settings:
@@ -2701,6 +2752,106 @@ peripherals:
       MCK: [{ pin: PC6, af: 5 }, { pin: PB5, af: 8 }]
       SD: [{ pin: PC1, af: 5 }, { pin: PC3, af: 5 }, { pin: PB15, af: 5 }]
       WS: [{ pin: PB12, af: 5 }, { pin: PA11, af: 5 }, { pin: PB4, af: 7 }, { pin: PB9, af: 5 }]
+    params:
+      - key: mode_mtx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_MasterTx
+        depends_on: { setting: Mode, equals: Master Transmit }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:122). Fixed by the Mode row."
+      - key: mode_mrx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_MasterRx
+        depends_on: { setting: Mode, equals: Master Receive }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:123). Fixed by the Mode row."
+      - key: mode_stx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_SlaveTx
+        depends_on: { setting: Mode, equals: Slave Transmit }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:120). Fixed by the Mode row."
+      - key: mode_srx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_SlaveRx
+        depends_on: { setting: Mode, equals: Slave Receive }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:121). Fixed by the Mode row."
+      - key: mclk_on
+        name: Master clock output
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_MCLKOutput
+        const: I2S_MCLKOutput_Enable
+        depends_on: { setting: Mode, in: [Master Transmit, Master Receive] }
+        help: "SPI_I2SPR MCKOE (ch32h417_spi.h:139). Not a separate row because the Mode row is what claims the MCK pad: the two master modes route it and the two slave modes do not, so a dropdown here could switch the driver off under a pad the project has claimed."
+      - key: mclk_off
+        name: Master clock output
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_MCLKOutput
+        const: I2S_MCLKOutput_Disable
+        depends_on: { setting: Mode, in: [Slave Transmit, Slave Receive] }
+        help: "SPI_I2SPR MCKOE (ch32h417_spi.h:140). A slave takes its clock from the other end, so MCK is not driven and the pad is not claimed."
+      - key: standard
+        name: Standard
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Standard
+        type: enum
+        default: Philips
+        options:
+          - { name: Philips      , value: 0, sdk: I2S_Standard_Phillips }
+          - { name: MSB justified, value: 1, sdk: I2S_Standard_MSB }
+          - { name: LSB justified, value: 2, sdk: I2S_Standard_LSB }
+          - { name: PCM short    , value: 3, sdk: I2S_Standard_PCMShort }
+          - { name: PCM long     , value: 4, sdk: I2S_Standard_PCMLong }
+        help: "SPI_I2SCFGR I2SSTD and PCMSYNC (ch32h417_spi.h:126-130). The macro is spelled `Phillips`, with two l's, in the vendor header; the label here is the correct spelling and the `sdk:` is the header's."
+      - key: dataformat
+        name: Data format
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_DataFormat
+        type: enum
+        default: 16-bit
+        options:
+          - { name: 16-bit                , value: 0, sdk: I2S_DataFormat_16b }
+          - { name: 16-bit in a 32-bit frame, value: 1, sdk: I2S_DataFormat_16bextended }
+          - { name: 24-bit                , value: 3, sdk: I2S_DataFormat_24b }
+          - { name: 32-bit                , value: 5, sdk: I2S_DataFormat_32b }
+        help: "SPI_I2SCFGR DATLEN and CHLEN (ch32h417_spi.h:133-136). The `value:` figures are the macros' own encodings, which are NOT dense - 16b extended is 1 and 24b is 3, because the two fields are packed together."
+      - key: audiofreq
+        name: Audio sampling frequency
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_AudioFreq
+        type: enum
+        default: 48 kHz
+        options:
+          - { name: 8 kHz    , value: 8000,   sdk: I2S_AudioFreq_8k }
+          - { name: 11.025 kHz, value: 11025, sdk: I2S_AudioFreq_11k }
+          - { name: 16 kHz   , value: 16000,  sdk: I2S_AudioFreq_16k }
+          - { name: 22.05 kHz, value: 22050,  sdk: I2S_AudioFreq_22k }
+          - { name: 32 kHz   , value: 32000,  sdk: I2S_AudioFreq_32k }
+          - { name: 44.1 kHz , value: 44100,  sdk: I2S_AudioFreq_44k }
+          - { name: 48 kHz   , value: 48000,  sdk: I2S_AudioFreq_48k }
+          - { name: 96 kHz   , value: 96000,  sdk: I2S_AudioFreq_96k }
+          - { name: 192 kHz  , value: 192000, sdk: I2S_AudioFreq_192k }
+        help: >
+          The rate the prescaler is computed for (ch32h417_spi.h:143-151). Unlike most
+          enums in this file the macro IS the number - I2S_AudioFreq_48k is 48000 - so the
+          `value:` column is the frequency itself and not a register code. The header also
+          defines I2S_AudioFreq_Default as 2, which is a prescaler sentinel rather than a
+          rate and is deliberately not offered here.
+      - key: cpol
+        name: Clock idle state
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: I2S_CPOL_Low }
+          - { name: High, value: 1, sdk: I2S_CPOL_High }
+        help: "SPI_I2SCFGR CKPOL (ch32h417_spi.h:155-156). The level CK sits at between frames."
   I2S3:
     category: Connectivity
     settings:
@@ -2716,6 +2867,106 @@ peripherals:
       MCK: [{ pin: PC7, af: 6 }, { pin: PB6, af: 5 }]
       SD: [{ pin: PA13, af: 1 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }]
       WS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
+    params:
+      - key: mode_mtx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_MasterTx
+        depends_on: { setting: Mode, equals: Master Transmit }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:122). Fixed by the Mode row."
+      - key: mode_mrx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_MasterRx
+        depends_on: { setting: Mode, equals: Master Receive }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:123). Fixed by the Mode row."
+      - key: mode_stx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_SlaveTx
+        depends_on: { setting: Mode, equals: Slave Transmit }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:120). Fixed by the Mode row."
+      - key: mode_srx
+        name: I2S mode
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Mode
+        const: I2S_Mode_SlaveRx
+        depends_on: { setting: Mode, equals: Slave Receive }
+        help: "SPI_I2SCFGR I2SCFG (ch32h417_spi.h:121). Fixed by the Mode row."
+      - key: mclk_on
+        name: Master clock output
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_MCLKOutput
+        const: I2S_MCLKOutput_Enable
+        depends_on: { setting: Mode, in: [Master Transmit, Master Receive] }
+        help: "SPI_I2SPR MCKOE (ch32h417_spi.h:139). Not a separate row because the Mode row is what claims the MCK pad: the two master modes route it and the two slave modes do not, so a dropdown here could switch the driver off under a pad the project has claimed."
+      - key: mclk_off
+        name: Master clock output
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_MCLKOutput
+        const: I2S_MCLKOutput_Disable
+        depends_on: { setting: Mode, in: [Slave Transmit, Slave Receive] }
+        help: "SPI_I2SPR MCKOE (ch32h417_spi.h:140). A slave takes its clock from the other end, so MCK is not driven and the pad is not claimed."
+      - key: standard
+        name: Standard
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_Standard
+        type: enum
+        default: Philips
+        options:
+          - { name: Philips      , value: 0, sdk: I2S_Standard_Phillips }
+          - { name: MSB justified, value: 1, sdk: I2S_Standard_MSB }
+          - { name: LSB justified, value: 2, sdk: I2S_Standard_LSB }
+          - { name: PCM short    , value: 3, sdk: I2S_Standard_PCMShort }
+          - { name: PCM long     , value: 4, sdk: I2S_Standard_PCMLong }
+        help: "SPI_I2SCFGR I2SSTD and PCMSYNC (ch32h417_spi.h:126-130). The macro is spelled `Phillips`, with two l's, in the vendor header; the label here is the correct spelling and the `sdk:` is the header's."
+      - key: dataformat
+        name: Data format
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_DataFormat
+        type: enum
+        default: 16-bit
+        options:
+          - { name: 16-bit                , value: 0, sdk: I2S_DataFormat_16b }
+          - { name: 16-bit in a 32-bit frame, value: 1, sdk: I2S_DataFormat_16bextended }
+          - { name: 24-bit                , value: 3, sdk: I2S_DataFormat_24b }
+          - { name: 32-bit                , value: 5, sdk: I2S_DataFormat_32b }
+        help: "SPI_I2SCFGR DATLEN and CHLEN (ch32h417_spi.h:133-136). The `value:` figures are the macros' own encodings, which are NOT dense - 16b extended is 1 and 24b is 3, because the two fields are packed together."
+      - key: audiofreq
+        name: Audio sampling frequency
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_AudioFreq
+        type: enum
+        default: 48 kHz
+        options:
+          - { name: 8 kHz    , value: 8000,   sdk: I2S_AudioFreq_8k }
+          - { name: 11.025 kHz, value: 11025, sdk: I2S_AudioFreq_11k }
+          - { name: 16 kHz   , value: 16000,  sdk: I2S_AudioFreq_16k }
+          - { name: 22.05 kHz, value: 22050,  sdk: I2S_AudioFreq_22k }
+          - { name: 32 kHz   , value: 32000,  sdk: I2S_AudioFreq_32k }
+          - { name: 44.1 kHz , value: 44100,  sdk: I2S_AudioFreq_44k }
+          - { name: 48 kHz   , value: 48000,  sdk: I2S_AudioFreq_48k }
+          - { name: 96 kHz   , value: 96000,  sdk: I2S_AudioFreq_96k }
+          - { name: 192 kHz  , value: 192000, sdk: I2S_AudioFreq_192k }
+        help: >
+          The rate the prescaler is computed for (ch32h417_spi.h:143-151). Unlike most
+          enums in this file the macro IS the number - I2S_AudioFreq_48k is 48000 - so the
+          `value:` column is the frequency itself and not a register code. The header also
+          defines I2S_AudioFreq_Default as 2, which is a prescaler sentinel rather than a
+          rate and is deliberately not offered here.
+      - key: cpol
+        name: Clock idle state
+        struct: I2S_InitTypeDef
+        sdk_field: I2S_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: I2S_CPOL_Low }
+          - { name: High, value: 1, sdk: I2S_CPOL_High }
+        help: "SPI_I2SCFGR CKPOL (ch32h417_spi.h:155-156). The level CK sits at between frames."
   IPC:
     category: System Core
     settings:
@@ -3593,6 +3844,12 @@ peripherals:
       SD_B: [{ pin: PA13, af: 13 }, { pin: PE3, af: 6 }, { pin: PF6, af: 6 }]
   SDIO:
     category: Connectivity
+    # THE BUS WIDTH IS THE MODE ROW, and that is why `SDIO_BusWide` is not a second
+    # dropdown. `Mode` offers SD 1-bit / 4-bit / 8-bit, and those are what claim D0, D0-D3
+    # and D0-D7 respectively - so a width chosen separately could configure a four-bit bus
+    # on a project that only wired one data line, which is the offered-but-impossible
+    # defect in its usual direction. The three `const:` rows below each depend on one of
+    # those choices, so exactly one is written.
     settings:
       - name: Mode
         choices:
@@ -3611,6 +3868,81 @@ peripherals:
       D5: [{ pin: PE13, af: 8 }, { pin: PB9, af: 10 }]
       D6: [{ pin: PC6, af: 9 }, { pin: PE14, af: 8 }]
       D7: [{ pin: PC7, af: 9 }, { pin: PE15, af: 8 }]
+    params:
+      - key: width_1b
+        name: Bus width
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_BusWide
+        const: SDIO_BusWide_1b
+        depends_on: { setting: Mode, equals: SD 1-bit }
+        help: "SDIO_CLKCR WIDBUS (ch32h417_sdio.h:103). Fixed by the Mode row, which is what claims the data pads."
+      - key: width_4b
+        name: Bus width
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_BusWide
+        const: SDIO_BusWide_4b
+        depends_on: { setting: Mode, equals: SD 4-bit }
+        help: "SDIO_CLKCR WIDBUS (ch32h417_sdio.h:104). Fixed by the Mode row."
+      - key: width_8b
+        name: Bus width
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_BusWide
+        const: SDIO_BusWide_8b
+        depends_on: { setting: Mode, equals: SD 8-bit }
+        help: "SDIO_CLKCR WIDBUS (ch32h417_sdio.h:105). Fixed by the Mode row."
+      - key: clkdiv
+        name: Clock divider
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_ClockDiv
+        type: int
+        default: 118
+        min: 0
+        max: 255
+        help: >
+          SDIO_CLKCR CLKDIV, 0x00-0xFF. SDIO_CK = SDIOCLK / (CLKDIV + 2), so 118 gives
+          the 400 kHz identification clock from a 48 MHz SDIOCLK and is the value every
+          card needs until it is initialised. Raise it afterwards in your own code - the
+          card's own CSD says how far.
+      - key: clkedge
+        name: Clock edge
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_ClockEdge
+        type: enum
+        default: Rising
+        options:
+          - { name: Rising , value: 0, sdk: SDIO_ClockEdge_Rising }
+          - { name: Falling, value: 1, sdk: SDIO_ClockEdge_Falling }
+        help: "SDIO_CLKCR NEGEDGE (ch32h417_sdio.h:91-92). Which edge of SDIO_CK the bus is sampled on."
+      - key: clkbypass
+        name: Clock divider bypass
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_ClockBypass
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: SDIO_ClockBypass_Disable }
+          - { name: Enabled , value: 1, sdk: SDIO_ClockBypass_Enable }
+        help: "SDIO_CLKCR BYPASS (ch32h417_sdio.h:95-96). Feeds SDIOCLK straight to the card and makes the divider above irrelevant - far too fast for identification, so leave it off until the card is up."
+      - key: clkpwrsave
+        name: Clock power save
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_ClockPowerSave
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: SDIO_ClockPowerSave_Disable }
+          - { name: Enabled , value: 1, sdk: SDIO_ClockPowerSave_Enable }
+        help: "SDIO_CLKCR PWRSAV (ch32h417_sdio.h:99-100). Stops SDIO_CK while the bus is idle. Some cards want a running clock, so the default is off."
+      - key: flowctrl
+        name: Hardware flow control
+        struct: SDIO_InitTypeDef
+        sdk_field: SDIO_HardwareFlowControl
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: SDIO_HardwareFlowControl_Disable }
+          - { name: Enabled , value: 1, sdk: SDIO_HardwareFlowControl_Enable }
+        help: "SDIO_CLKCR HWFC_EN (ch32h417_sdio.h:108-109). Stalls the clock rather than overrunning the FIFO."
   SDMMC:
     category: Connectivity
     settings:
@@ -5477,6 +5809,13 @@ codegen:
     # generator emit `DVP_Init(<nothing>, &s)` as a TODO instead of the call.
     DVP_InitTypeDef:         { fn: DVP_Init,   no_handle: true }   # ch32h417_dvp.h:115
     LTDC_InitTypeDef:        { fn: LTDC_Init,  no_handle: true }   # ch32h417_ltdc.h:220
+    SDIO_InitTypeDef:        { fn: SDIO_Init,  no_handle: true }   # ch32h417_sdio.h:232
+    HSADC_InitTypeDef:       { fn: HSADC_Init, no_handle: true }   # ch32h417_hsadc.h:95
+    # I2S_Init takes a SPI_TypeDef*, not an I2S one - the I2S is a MODE of the SPI block,
+    # not a peripheral beside it (ch32h417_spi.h:199). So I2S2's handle is SPI2 and I2S3's
+    # is SPI3, which is also why turning both halves of one block on at once is a
+    # configuration the silicon cannot honour: one register set, two personalities.
+    I2S_InitTypeDef:         { fn: I2S_Init }                      # ch32h417_spi.h:199
     # The LAYER struct is not in this table on purpose. It is applied per INSTANCE, so its
     # function and handle come from `channel_params.instances` - LTDC_LayerInit with
     # LTDC_Layer1 or LTDC_Layer2 (ch32h417_ltdc.h:225, ch32h417.h:1770-1771) - and an entry
@@ -5543,6 +5882,8 @@ codegen:
     # LPTIM_TimeBaseInit(LPTIMx, &s) - ch32h417.h:1727 and :1732, both `(LPTIM_TypeDef *)`.
     LPTIM1: LPTIM1
     LPTIM2: LPTIM2
+    I2S2:   SPI2
+    I2S3:   SPI3
 
   # Which enable register each peripheral's clock bit lives in. Generated from
   # ch32h417_rcc.h: every RCC_HB*Periph_* macro, with the bit taken as log2 of its

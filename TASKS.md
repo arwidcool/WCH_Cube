@@ -972,6 +972,13 @@ bits, and a clock tree that models what the schema can hold.
       `FMC_ReadWriteTimingStruct` unconditionally. REQUEST posted to AGENT-2 2026-09-12T19:33Z
       with the shape; `ETH_InitTypeDef`, `FMC_NANDInitTypeDef`, `FMC_SDRAM_InitTypeDef` and
       `ECDC_InitTypeDef` are the same shape on this part, so it is not an FMC special case.
+      **43 -> 39 at 2026-09-12T21:47Z:** I2S2, I2S3, SDIO, HSADC. Three of the four repeat one
+      pattern - a `settings:` row already decides a struct member, so the member is `const:`
+      rows keyed off that row rather than a second dropdown that could contradict the pin
+      plan: I2S's Mode is both `I2S_Mode` and `I2S_MCLKOutput` (it is what claims the MCK
+      pad), SDIO's Mode is `SDIO_BusWide` (it is what claims D0-D7). HSADC ships 3 of its 11
+      members as rows and DECLARES the other eight in `notes:` - they are a DMA transfer in
+      flight, including two buffer addresses this tool cannot know.
 - [x] (AGENT-2) **The schema limit is gone: `clock.plls:` and a list-valued `source:`.**
       A part may now declare any number of PLLs - each with `inputs:`, either `multipliers:`
       (plus optional `dividers:`) or a fixed `output_mhz:`, and an `output:` name that other
