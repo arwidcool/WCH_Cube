@@ -11,6 +11,7 @@
 import { defaultClock } from './clock.js';
 import { resolveInherits } from './inherit.js';
 import { record, clearHistory } from './history.js';
+import { isConstParam } from './util.js';
 
 export const PACKAGES = {};          // package id -> geometry (from data/packages/packages.yaml)
 export const MCU_FILES = {};         // mcu.name -> yaml source text (bundled + opened from disk)
@@ -118,7 +119,14 @@ export function initState(m) {
   for (const [pid, P] of Object.entries(m.peripherals)) {
     // params are values (baud, period); settings decide pins. Separate maps on purpose.
     const params = {};
-    for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
+    for (const d of (Array.isArray(P.params) ? P.params : [])) {
+      // A `const:` member has no value for the user to hold: the MCU file names the one
+      // it can take and codegen writes that. Seeding it with `undefined` would serialize
+      // a null into every .wchproj that carries this peripheral. The predicate is shared
+      // with params.js because THAT module cannot be imported here - it imports this one.
+      if (!d || d.key === undefined || isConstParam(d)) continue;
+      params[String(d.key)] = d.default;
+    }
     // channelParams: TIM_OCInitTypeDef is filled once per CHANNEL, so its values are
     // keyed by the channel number the data uses. Empty until somebody sets one.
     // `remap` is an index into `remaps:`; `afPins` is signal -> pin for a part that

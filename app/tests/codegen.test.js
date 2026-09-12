@@ -1282,6 +1282,82 @@ test('a prose-shaped or mis-targeted when: is reported rather than obeyed', () =
 });
 
 // =============================================================================
+//  Round-6 P3 — `const:` reaches the struct as a literal
+// =============================================================================
+//  `params.js` owns the model half (never drawn, never stored, never settable); this is
+//  the half that matters for silicon: the member is IN the struct. OPA and CMP begin
+//  their init struct with a `*_NUM` and the SDK branches on it, so a struct that leaves
+//  it unset configures whichever instance the uninitialised field happens to name.
+
+const CONST_STRUCT = `
+mcu:
+  name: CH32V006-CONSTCODE
+  inherits: CH32V006
+codegen:
+  init_structs:
+    OPA_InitTypeDef: { fn: OPA_Init, no_handle: true }
+peripherals:
+  OPA9:
+    category: Analog
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [PSEL] }
+    remaps:
+      - name: Default
+        pins: { PSEL: PA2 }
+    params:
+      - { key: num, name: Which one, const: OPA9, struct: OPA_InitTypeDef, sdk_field: OPA_NUM }
+      - key: psel
+        name: Positive input
+        struct: OPA_InitTypeDef
+        sdk_field: OPA_PSEL
+        type: enum
+        default: P0
+        options:
+          - { name: P0, value: 0, sdk: OPA_PSEL_P0 }
+`;
+const withConstStruct = () => {
+  const e = fresh('CH32V006');
+  e.registerMcuFile(CONST_STRUCT);
+  e.loadMcu('CH32V006-CONSTCODE');
+  e.setSetting('OPA9', 'Mode', 'Enabled');
+  e.compute();
+  return e;
+};
+
+test('a const: member is written into its struct as the literal the file names', () => {
+  const e = withConstStruct();
+  const c = e.cSource();
+  assert.ok(c.includes('OPA_InitStructure.OPA_NUM = OPA9;'),
+    'the member is assigned, not skipped - this is the line an unset OPA_NUM would lose');
+  assert.match(c, /OPA_NUM = OPA9;\s+\/\* Which one: OPA9 \*\//,
+    'and the comment shows the value, so the file reads the same as for a chosen field');
+  assert.ok(c.includes('OPA_Init(&OPA_InitStructure);'), 'no_handle still applies the struct alone');
+  assert.deepEqual(e.initPlan('OPA9').structs[0].fields.map(f => f.member), ['OPA_NUM', 'OPA_PSEL'],
+    'in file order, member names from the data');
+  assert.deepEqual(e.initPlan('OPA9').problems, [], 'and a const: param is not a dependency problem');
+});
+
+test('a struct whose only param is a const: member is still emitted', () => {
+  // The rule is "a struct is emitted when at least one of its params applies", and a
+  // const: param has no `when:` to close it - so it is always applicable and the struct
+  // can never be dropped. Worth pinning: an empty OPA_Init(&s) is the defect, and the
+  // plausible way to write the filter wrong is to exclude non-editable params.
+  const e = fresh('CH32V006');
+  e.registerMcuFile(CONST_STRUCT.replace(/^ {6}- key: psel[\s\S]*?sdk: OPA_PSEL_P0[^\n]*\n/m, ''));
+  e.loadMcu('CH32V006-CONSTCODE');
+  assert.deepEqual(e.paramDefs('OPA9').map(d => d.key), ['num'], 'setup: only the const member is left');
+  e.setSetting('OPA9', 'Mode', 'Enabled');
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('OPA_InitStructure.OPA_NUM = OPA9;'), 'the struct is emitted and filled');
+  assert.ok(c.includes('OPA_Init(&OPA_InitStructure);'));
+  assert.deepEqual(e.getParams('OPA9'), [], 'and the Parameters tab has nothing to draw for it');
+});
+
+// =============================================================================
 //  Round-6 P3 — the clock word must not go quiet about a field it does not write
 // =============================================================================
 //  Every part with a PLL but no `codegen.rcc.pllsrc` used to emit a word covering SW

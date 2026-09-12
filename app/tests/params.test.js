@@ -3,7 +3,7 @@
 // No shipped MCU file carries `params:` yet (AGENT-1 has the schema in
 // app/assets/params.stub.yaml), so these derive a part that does. Deriving with
 // inherits keeps the fixture honest: it is CH32V006 plus exactly the block under test.
-import { test, assert, fresh, eng } from './_harness.js';
+import { test, assert, fresh, mcuNames } from './_harness.js';
 
 const PARAMS = `
 mcu:
@@ -375,6 +375,86 @@ test('depProblems does not guess at an equality against something unenumerated',
   const d = e.paramDefs('USART1')[0];
   const dep = { kind: 'param', name: 'baud', op: 'equals', value: 999999 };
   assert.deepEqual(e.depProblems('USART1', { ...d, when: undefined, deps: [dep] }), []);
+});
+
+// ---- `const:` — a member fixed by WHICH INSTANCE this is ------------------------
+// OPA and CMP begin their init struct with a `*_NUM` and the SDK branches on it
+// (`ch32x035_opa.c:117`), so a struct that leaves it unset configures whichever instance
+// the uninitialised field happens to name. It cannot be an editable choice - offering
+// OPA1 a choice of "OPA2" offers a choice the silicon lacks - and it cannot be
+// `readonly:`, which codegen filters out of the init plan ENTIRELY, dropping the member
+// instead of filling it.
+const CONST_PARAM = `
+mcu:
+  name: CH32V006-CONST
+  inherits: CH32V006
+peripherals:
+  USART1:
+    params:
+      - { key: num, name: Which one, const: USART1, struct: USART_InitTypeDef, sdk_field: USART_NUM }
+      - { key: baud, name: Baud rate, type: int, default: 115200, min: 110, max: 4500000 }
+`;
+const withConst = () => {
+  const e = fresh();
+  e.registerMcuFile(CONST_PARAM);
+  e.loadMcu('CH32V006-CONST');
+  e.compute();
+  return e;
+};
+
+test('a const: member has a value without ever entering the store', () => {
+  const e = withConst();
+  assert.equal(e.paramValue('USART1', 'num'), 'USART1', 'the value is the literal in the file');
+  assert.deepEqual(e.S.periph.USART1.params, { baud: 115200 },
+    'and nothing is stored for it - only the two keys a user can change');
+  assert.equal('num' in e.S.periph.USART1.params, false);
+});
+
+test('a const: member is never drawn as a control', () => {
+  const e = withConst();
+  const shown = e.getParams('USART1').map(p => p.key);
+  assert.deepEqual(shown, ['baud'], 'the list the UI renders has no const member in it');
+  // but it is still a parameter as far as the definition list is concerned, because
+  // codegen reads the same list to decide what the struct contains
+  assert.deepEqual(e.paramDefs('USART1').map(p => p.key), ['num', 'baud']);
+});
+
+test('a const: member cannot be set, by a control or by a file', () => {
+  const e = withConst();
+  assert.throws(() => e.setParam('USART1', 'num', 'USART2'), /fixed at USART1 by the MCU file/);
+  assert.equal(e.paramValue('USART1', 'num'), 'USART1', 'and the refusal did not change it');
+  const dropped = e.applyParams('USART1', { num: 'USART2', baud: 9600 });
+  assert.equal(dropped.length, 1);
+  assert.match(dropped[0], /fixed at USART1 by the MCU file, not settable/);
+  assert.equal(e.paramValue('USART1', 'baud'), 9600, 'the settable one beside it still applied');
+});
+
+// The predicate lives in util.js precisely because `initState()` (model.js) and
+// `paramDefaults()` (params.js) both need it and params.js imports model.js, so
+// model.js cannot import it back. This is the assertion that keeps the two honest: the
+// store `initState()` builds must have exactly the keys `paramDefaults()` returns.
+//
+// It runs over the REAL files first, and that loop is vacuous until DATA writes its
+// first `const:` member - measured, not assumed: removing the guard from initState() left
+// this test green while the store grew a `num: undefined`. The synthetic part at the end
+// is what makes the test able to fail, and it is what a real part will exercise later.
+test('the two places that seed the parameter store agree about const: members', () => {
+  const check = (label, e) => {
+    for (const pid of Object.keys(e.M.peripherals)) {
+      assert.deepEqual(Object.keys(e.S.periph[pid].params).sort(),
+        Object.keys(e.paramDefaults(e.M.peripherals[pid])).sort(),
+        `${label} ${pid}: initState() and paramDefaults() disagreed`);
+    }
+  };
+  for (const name of mcuNames()) check(name, fresh(name));
+  const synthetic = fresh();
+  synthetic.registerMcuFile(CONST_PARAM);
+  synthetic.loadMcu('CH32V006-CONST');
+  check('the synthetic const: part', synthetic);
+  // and the synthetic part really does carry one, or the line above is the same kind of
+  // green tick as the real-file loop
+  assert.equal(synthetic.paramDefs('USART1').some(d => d.const !== undefined), true,
+    'setup: the synthetic part has a const: member for the two to disagree about');
 });
 
 test('paramRegisterValue hands codegen the encoding behind the choice', () => {

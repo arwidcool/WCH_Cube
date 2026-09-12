@@ -13922,6 +13922,21 @@ constraints:
 //  util.js — the few primitives every other engine module needs.
 // =============================================================================
 
+/**
+ * Is this parameter definition a `const:` member - one whose value is fixed by WHICH
+ * INSTANCE the peripheral is, rather than chosen by the user? (`ch32x035_opa.h:139`
+ * OPA_NUM, and CMP's, which `ch32x035_opa.c:117` branches on.)
+ *
+ * It lives here, in the module with no dependencies, because two modules that cannot
+ * import each other both need the answer: `model.js` seeds the parameter store in
+ * `initState()` and `params.js` filters the list the UI draws, and `params.js` already
+ * imports `model.js`. Two copies of this predicate would drift silently - a const member
+ * that reached the store would put a null into every .wchproj that carries the
+ * peripheral - so there is one definition and `app/tests/params.test.js` asserts the two
+ * callers agree.
+ */
+const isConstParam = d => !!d && d.const !== undefined;
+
 // Deep copy that keeps Sets as Sets (the checkbox settings in S are Sets) and
 // does not depend on structuredClone, which jsdom does not implement and older
 // webviews do not have. The data is plain YAML: scalars, arrays, maps, Sets.
@@ -14269,6 +14284,7 @@ function batch(label, fn) {
 
 
 
+
 const PACKAGES = {};          // package id -> geometry (from data/packages/packages.yaml)
 const MCU_FILES = {};         // mcu.name -> yaml source text (bundled + opened from disk)
 
@@ -14375,7 +14391,14 @@ function initState(m) {
   for (const [pid, P] of Object.entries(m.peripherals)) {
     // params are values (baud, period); settings decide pins. Separate maps on purpose.
     const params = {};
-    for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
+    for (const d of (Array.isArray(P.params) ? P.params : [])) {
+      // A `const:` member has no value for the user to hold: the MCU file names the one
+      // it can take and codegen writes that. Seeding it with `undefined` would serialize
+      // a null into every .wchproj that carries this peripheral. The predicate is shared
+      // with params.js because THAT module cannot be imported here - it imports this one.
+      if (!d || d.key === undefined || isConstParam(d)) continue;
+      params[String(d.key)] = d.default;
+    }
     // channelParams: TIM_OCInitTypeDef is filled once per CHANNEL, so its values are
     // keyed by the channel number the data uses. Empty until somebody sets one.
     // `remap` is an index into `remaps:`; `afPins` is signal -> pin for a part that
@@ -14694,6 +14717,7 @@ function setPackage(pkg) {
 
 
 
+
 // export.js already owns the name `num` at top level, and the browser bundle is one scope.
 const toNumber = v => (typeof v === 'number' ? v : Number(String(v).trim()));
 
@@ -14775,6 +14799,16 @@ function normaliseParamDefs(list) {
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
     sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
     sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
+    // A member whose value is fixed by WHICH INSTANCE this is, not by the user. OPA and
+    // CMP begin their init struct with a `*_NUM` and the SDK branches on it
+    // (`ch32x035_opa.c:117`: `if (OPA_InitStruct->OPA_NUM == OPA1)`), so a struct with
+    // the member unset configures whichever instance the garbage happens to name.
+    //
+    // It is not an editable choice - offering OPA1 a choice of "OPA2" would offer a
+    // choice the silicon does not have - and it is not `readonly:` either, because
+    // codegen filters those out of the init plan ENTIRELY: the member would be dropped
+    // rather than filled. So it is its own kind, emitted as a literal and never drawn.
+    'const': d.const,
   }));
 }
 
@@ -14788,7 +14822,13 @@ function paramDefs(pid) {
 function paramDefaults(P) {
   const out = {};
   for (const d of (P && Array.isArray(P.params) ? P.params : [])) {
-    if (d && (d.key !== undefined || d.name !== undefined)) out[paramKey(d)] = d.default;
+    if (!d || (d.key === undefined && d.name === undefined)) continue;
+    // A `const:` member has nothing for the user to store, and seeding it with
+    // `undefined` would put a null into every .wchproj that carries this peripheral.
+    // `isConstParam` is the same predicate `initState()` uses, from the one module both
+    // can import - see util.js for why it is not defined in either of these two.
+    if (isConstParam(d)) continue;
+    out[paramKey(d)] = d.default;
   }
   return out;
 }
@@ -14942,7 +14982,9 @@ function depProblems(pid, def) {
 /** Everything the UI needs to draw the Parameter Settings tab for one peripheral. */
 function getParams(pid) {
   const store = (S.periph[pid] && S.periph[pid].params) || {};
-  return paramDefs(pid).map(d => ({
+  // A `const:` member is never a control: there is exactly one value it can take, and it
+  // is the one codegen will write. Drawing it would offer a choice the silicon lacks.
+  return paramDefs(pid).filter(d => !isConstParam(d)).map(d => ({
     ...d,
     value: store[d.key] !== undefined ? store[d.key] : d.default,
     applicable: paramApplies(pid, d),
@@ -14953,7 +14995,10 @@ function paramValue(pid, key) {
   const store = (S.periph[pid] && S.periph[pid].params) || {};
   if (store[key] !== undefined) return store[key];
   const d = defOf(pid, key);
-  return d ? d.default : undefined;
+  if (!d) return undefined;
+  // A `const:` member's value is the literal the MCU file gives, not a default the user
+  // could have changed - so it is returned here and the store is never consulted for it.
+  return isConstParam(d) ? d.const : d.default;
 }
 
 /** Set one parameter. Validates, coerces, and records exactly one undo step. */
@@ -14965,6 +15010,9 @@ function setParam(pid, key, value) {
     throw new Error(`${pid} has no parameter "${key}"${known ? ` (has: ${known})` : ' (it has none)'}`);
   }
   if (d.readonly) throw new Error(`${pid}.${d.name} is fixed by the hardware and cannot be set`);
+  if (isConstParam(d)) {
+    throw new Error(`${pid}.${d.name} is fixed at ${d.const} by the MCU file and cannot be set`);
+  }
   const v = validateParam(d, value, `${pid}.${d.name}`);
   record(`${pid} ${d.name}`);
   (S.periph[pid].params ||= {})[key] = v;
@@ -14992,6 +15040,10 @@ function applyParams(pid, obj) {
   for (const [key, value] of Object.entries(obj)) {
     const d = defs.find(x => x.key === key);
     if (!d) { dropped.push(`${pid}.${key}: no such parameter any more`); continue; }
+    if (isConstParam(d)) {
+      dropped.push(`${pid}.${key}: fixed at ${d.const} by the MCU file, not settable`);
+      continue;
+    }
     try { store[key] = validateParam(d, value, `${pid}.${d.name}`); }
     catch (e) { dropped.push(e.message); }
   }
@@ -17082,6 +17134,7 @@ function projectApply(src) {
 
 
 
+
 const PIN_RE = /^P([A-Z])(\d+)$/;
 const hex = (v, digits = 8) => '0x' + (v >>> 0).toString(16).toUpperCase().padStart(digits, '0') + 'U';
 const bin = (v, bits) => (v >>> 0).toString(2).padStart(bits, '0');
@@ -17743,6 +17796,12 @@ function cSource() {
 
 /** The literal to assign for one parameter, or a reason it cannot be written. */
 function paramLiteral(pid, d) {
+  // A `const:` member comes first because it is the most specific thing a param can be:
+  // the MCU file names the one value it can take, and there is nothing to look up. OPA
+  // and CMP are why - the SDK branches on `*_NUM` inside `OPA_Init`, so a struct that
+  // leaves it unset configures whichever instance the uninitialised field happens to
+  // name. Wrong but compiling, which is the defect class this file exists to avoid.
+  if (isConstParam(d)) return { text: String(d.const) };
   const v = paramValue(pid, d.key);
   if (d.type === 'bool') {
     const macro = v ? d.sdk_enabled : d.sdk_disabled;

@@ -43,6 +43,7 @@ import { PROJECT } from './project.js';
 import {
   constraintFor, constraintSentence, skippedClaim, gpioEffectiveMode,
 } from './constraints.js';
+import { isConstParam } from './util.js';
 
 const PIN_RE = /^P([A-Z])(\d+)$/;
 const hex = (v, digits = 8) => '0x' + (v >>> 0).toString(16).toUpperCase().padStart(digits, '0') + 'U';
@@ -705,6 +706,12 @@ export function cSource() {
 
 /** The literal to assign for one parameter, or a reason it cannot be written. */
 function paramLiteral(pid, d) {
+  // A `const:` member comes first because it is the most specific thing a param can be:
+  // the MCU file names the one value it can take, and there is nothing to look up. OPA
+  // and CMP are why - the SDK branches on `*_NUM` inside `OPA_Init`, so a struct that
+  // leaves it unset configures whichever instance the uninitialised field happens to
+  // name. Wrong but compiling, which is the defect class this file exists to avoid.
+  if (isConstParam(d)) return { text: String(d.const) };
   const v = paramValue(pid, d.key);
   if (d.type === 'bool') {
     const macro = v ? d.sdk_enabled : d.sdk_disabled;

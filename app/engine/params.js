@@ -12,6 +12,7 @@
 // =============================================================================
 import { M, S, neutralChoice } from './model.js';
 import { record } from './history.js';
+import { isConstParam } from './util.js';
 
 // export.js already owns the name `num` at top level, and the browser bundle is one scope.
 const toNumber = v => (typeof v === 'number' ? v : Number(String(v).trim()));
@@ -94,6 +95,16 @@ export function normaliseParamDefs(list) {
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
     sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
     sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
+    // A member whose value is fixed by WHICH INSTANCE this is, not by the user. OPA and
+    // CMP begin their init struct with a `*_NUM` and the SDK branches on it
+    // (`ch32x035_opa.c:117`: `if (OPA_InitStruct->OPA_NUM == OPA1)`), so a struct with
+    // the member unset configures whichever instance the garbage happens to name.
+    //
+    // It is not an editable choice - offering OPA1 a choice of "OPA2" would offer a
+    // choice the silicon does not have - and it is not `readonly:` either, because
+    // codegen filters those out of the init plan ENTIRELY: the member would be dropped
+    // rather than filled. So it is its own kind, emitted as a literal and never drawn.
+    'const': d.const,
   }));
 }
 
@@ -107,7 +118,13 @@ export function paramDefs(pid) {
 export function paramDefaults(P) {
   const out = {};
   for (const d of (P && Array.isArray(P.params) ? P.params : [])) {
-    if (d && (d.key !== undefined || d.name !== undefined)) out[paramKey(d)] = d.default;
+    if (!d || (d.key === undefined && d.name === undefined)) continue;
+    // A `const:` member has nothing for the user to store, and seeding it with
+    // `undefined` would put a null into every .wchproj that carries this peripheral.
+    // `isConstParam` is the same predicate `initState()` uses, from the one module both
+    // can import - see util.js for why it is not defined in either of these two.
+    if (isConstParam(d)) continue;
+    out[paramKey(d)] = d.default;
   }
   return out;
 }
@@ -261,7 +278,9 @@ export function depProblems(pid, def) {
 /** Everything the UI needs to draw the Parameter Settings tab for one peripheral. */
 export function getParams(pid) {
   const store = (S.periph[pid] && S.periph[pid].params) || {};
-  return paramDefs(pid).map(d => ({
+  // A `const:` member is never a control: there is exactly one value it can take, and it
+  // is the one codegen will write. Drawing it would offer a choice the silicon lacks.
+  return paramDefs(pid).filter(d => !isConstParam(d)).map(d => ({
     ...d,
     value: store[d.key] !== undefined ? store[d.key] : d.default,
     applicable: paramApplies(pid, d),
@@ -272,7 +291,10 @@ export function paramValue(pid, key) {
   const store = (S.periph[pid] && S.periph[pid].params) || {};
   if (store[key] !== undefined) return store[key];
   const d = defOf(pid, key);
-  return d ? d.default : undefined;
+  if (!d) return undefined;
+  // A `const:` member's value is the literal the MCU file gives, not a default the user
+  // could have changed - so it is returned here and the store is never consulted for it.
+  return isConstParam(d) ? d.const : d.default;
 }
 
 /** Set one parameter. Validates, coerces, and records exactly one undo step. */
@@ -284,6 +306,9 @@ export function setParam(pid, key, value) {
     throw new Error(`${pid} has no parameter "${key}"${known ? ` (has: ${known})` : ' (it has none)'}`);
   }
   if (d.readonly) throw new Error(`${pid}.${d.name} is fixed by the hardware and cannot be set`);
+  if (isConstParam(d)) {
+    throw new Error(`${pid}.${d.name} is fixed at ${d.const} by the MCU file and cannot be set`);
+  }
   const v = validateParam(d, value, `${pid}.${d.name}`);
   record(`${pid} ${d.name}`);
   (S.periph[pid].params ||= {})[key] = v;
@@ -311,6 +336,10 @@ export function applyParams(pid, obj) {
   for (const [key, value] of Object.entries(obj)) {
     const d = defs.find(x => x.key === key);
     if (!d) { dropped.push(`${pid}.${key}: no such parameter any more`); continue; }
+    if (isConstParam(d)) {
+      dropped.push(`${pid}.${key}: fixed at ${d.const} by the MCU file, not settable`);
+      continue;
+    }
     try { store[key] = validateParam(d, value, `${pid}.${d.name}`); }
     catch (e) { dropped.push(e.message); }
   }

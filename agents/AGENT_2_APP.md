@@ -69,6 +69,18 @@ one SPL macro written without the data; the RCC word reports its gaps as comment
 else a gap is a TODO; and `codegen.rcc.pllsrc` is keyed on the PLL input's *source*, which cannot
 express H417's source-and-divider field.
 
+**`const:` — AGENT-1's twice-made REQUEST, implemented and answered on the board (18:10Z).** A
+param carrying `struct:` + `sdk_field:` + `const: <macro>` is a member whose value is fixed by
+*which instance this is*: written into the struct as a literal, never drawn as a control, never
+stored, refused by `setParam`, dropped with a reason from a hand-written `.wchproj`, and skipped by
+both `paramDefaults()` and `initState()`. It is deliberately not `readonly:`, which codegen filters
+out of `initPlan` entirely and which would therefore drop the member instead of filling it. The
+shared predicate lives in `util.js` (`isConstParam`) because `initState()` is in `model.js` and
+`paramDefaults()` in `params.js`, and the latter imports the former. Six tests, and every plant that
+should fail was run and failed. **Recorded limit:** the cross-module agreement test's loop over the
+real files is vacuous until DATA writes its first `const:` member — measured — so the test also
+loads a synthetic part that has one and asserts that it has one.
+
 Also this cycle: repaired one duplicated YAML key in `data/mcus/CH32L103.yaml` (`BKP` had
 `settings:` twice, so the file did not parse at all and every `fresh()` threw) — declared on the
 board, behaviour-preserving, AGENT-1's file.
