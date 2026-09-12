@@ -117,6 +117,22 @@ jobs:
             exit 1
           fi
 
+      # The legibility and layout suites are WIDTH comparisons, so the font decides the answer.
+      # The app asks for `"Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial,
+      # sans-serif` and a bare ubuntu runner has none of them: Chrome falls back to DejaVu Sans,
+      # which is wider than Segoe UI at the same size, and boxes that fit on the dev machine
+      # clip here. Liberation Sans is METRIC-COMPATIBLE with Arial, which the stack names, so
+      # installing it makes this runner measure what a user with Arial measures instead of a
+      # generic fallback nothing in the app asked for.
+      #
+      # This is not a way of making the check pass: a real Linux user with none of these fonts
+      # would still see the clipping, and that is a finding about the layout's font tolerance
+      # which belongs to AGENT-2 and is on the board. It is a way of making the check measure
+      # ONE thing on both runners, so a red means "the layout changed" and not "the font did".
+      # `tests/legibility.test.js` prints the family it actually resolved, on every run.
+      - name: Fonts the app actually asks for (metric-compatible)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-liberation
+
       # The real-browser suites need a browser and SKIP loudly without one. Say
       # which one was found, rather than leaving a green run that quietly skipped
       # every layout, legibility and clock check.

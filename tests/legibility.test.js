@@ -61,8 +61,52 @@ function report(found, what) {
     for (const f of found) process.stdout.write(`          - ${f}\n`);
     return;
   }
-  assert.empty(found, `${what} — and TASKS.md C1 is marked done, so these are regressions`);
+  assert.empty(found, `${what} — and TASKS.md C1 is marked done, so these are regressions.\n`
+    + '      Before reading these as a layout change, check WHICH FONT measured them: every finding here\n'
+    + '      is a width, and a box that fits in Segoe UI can clip in DejaVu. The test below prints the\n'
+    + '      resolved family, and CI installs the metric-compatible fonts so both runners measure the\n'
+    + '      same thing. A finding that only appears under a different font is a finding about the\n'
+    + '      layout\'s tolerance, not about the change that happened to be in front of it.');
 }
+
+/**
+ * What font the browser ACTUALLY used, and how wide a known string is in it.
+ *
+ * Every check in this file is a width comparison, so the font decides the answer. The app asks
+ * for `"Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif`;
+ * a bare ubuntu runner has NONE of those and falls back to DejaVu Sans, which is wider than
+ * Segoe UI at the same size. That is enough to clip a box that is fine on the dev machine, and
+ * on 2026-09-13 it turned two of these checks red on Linux and green on Windows with no layout
+ * change between them. Recorded on every run so the next person does not have to guess.
+ */
+const FONT_PROBE = `
+  const el = document.querySelector('.app') || document.body;
+  const cs = getComputedStyle(el);
+  const cv = document.createElement('canvas').getContext('2d');
+  cv.font = cs.fontSize + ' ' + cs.fontFamily;
+  const probe = 'Open project… Parameter Settings PLLCLK';
+  // Which family actually rendered: measure the probe against each candidate alone.
+  const asked = cs.fontFamily.split(',').map(s => s.trim().replace(/^["']|["']$/g, ''));
+  const widths = {};
+  for (const f of asked.concat(['monospace'])) { cv.font = cs.fontSize + ' ' + JSON.stringify(f); widths[f] = Math.round(cv.measureText(probe).width); }
+  cv.font = cs.fontSize + ' ' + cs.fontFamily;
+  return { asked, stack: cs.fontFamily, size: cs.fontSize, probeWidth: Math.round(cv.measureText(probe).width), widths };
+`;
+
+test('the font these measurements actually used is recorded on every run', async () => {
+  if (!browserAvailable()) return assert.ok(true, NO_BROWSER);
+  const r = await withPage(async page => { await page.goto(); return page.eval(FONT_PROBE); });
+  // A width of 0 would mean the probe never measured anything, and every check below would be
+  // comparing nothing to nothing while reading green.
+  assert.ok(r.probeWidth > 0, `the font probe measured a width of ${r.probeWidth} - the checks in this file are measuring nothing`);
+  const resolved = r.asked.find(f => r.widths[f] === r.probeWidth) || '(none of the asked-for families)';
+  process.stdout.write(`        font in use: ${resolved}  (${r.size}, probe ${r.probeWidth}px)\n`);
+  process.stdout.write(`        stack asked for: ${r.stack}\n`);
+  if (resolved === '(none of the asked-for families)') {
+    process.stdout.write('        NOTE: none of the requested families is installed, so this run measured a\n'
+      + '        generic fallback. Width findings here are about font tolerance, not layout.\n');
+  }
+});
 
 /** The sizes, zooms and themes the round-2 audit used. Same grid, every run. */
 const GRID = [
