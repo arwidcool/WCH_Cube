@@ -158,12 +158,53 @@ test('the SDK-name checker catches its own planted breaks', () => {
   if (res.missing) skip(`no python interpreter on PATH (tried: ${res.tried.join(', ')})`);
   if (/PyYAML is required/.test(res.out)) skip('PyYAML is not installed — pip install pyyaml');
 
-  assert.equal(res.status, 0, `the checker's own self-test failed:\n${res.out}`);
+  // The status assertion comes AFTER the tally is classified, below - the self-test exits 1 on
+  // ANY miss, including one it could not possibly exercise here, and asserting on the exit code
+  // first made this test red on CI's `test` job for a reason that says nothing about the checker.
   // "0 planted breaks, 0 caught" would exit 0 and mean nothing. Insist it bit.
   const m = /(\d+)\s+planted break\(s\),\s*(\d+)\s+caught,\s*(\d+)\s+missed/.exec(res.out);
   assert.ok(m, `could not read a planted-break tally out of the self-test output:\n${res.out}`);
   const [, planted, caught, missed] = m.map(Number);
   assert.ok(planted > 0, 'the self-test planted no breaks at all, so it proves nothing');
-  assert.equal(missed, 0, `${missed} planted break(s) went uncaught:\n${res.out}`);
-  assert.equal(caught, planted, `${planted} planted, ${caught} caught:\n${res.out}`);
+
+  // A MISSED break has two very different causes and they must not be added together.
+  //
+  //   (a) the checker RAN and did not catch it   -> a hole in the checker. Always a failure.
+  //   (b) the checker could not run HERE         -> the tool it needs is not installed, it
+  //                                                 reports NOT CHECKED, and the planted break
+  //                                                 sails past for a reason that says nothing
+  //                                                 about the checker's quality.
+  //
+  // (b) is real and reproducible: one of the breaks is a `pio_board` naming a board the ch32v
+  // PlatformIO platform does not ship, and catching it requires that platform on disk. On CI's
+  // `test` job there is deliberately no PlatformIO, so this test was RED there and GREEN on the
+  // `firmware` job, with nothing between them but the tool. Reproduced locally by pointing HOME
+  // at an empty directory: 35 planted, 34 caught, 1 missed, and the missed one says NOT CHECKED.
+  //
+  // So: (a) is still zero-tolerance. (b) is reported the way every other unrunnable check in
+  // this repository is - named, counted, and run for real in the job that HAS the tool. A skip
+  // is not a pass, and this is why the `firmware` job runs the whole suite a second time.
+  const missedBlocks = res.out.split(/^\s*MISSED\s+/m).slice(1);
+  const unrunnable = missedBlocks.filter(b => /NOT CHECKED/.test(b));
+  const realHoles = missedBlocks.filter(b => !/NOT CHECKED/.test(b));
+
+  assert.empty(realHoles.map(b => b.split('\n')[0].trim()),
+    `planted break(s) the checker RAN over and did not catch - a hole in the checker:\n${res.out}`);
+
+  if (unrunnable.length) {
+    process.stdout.write(`        ${unrunnable.length} planted break(s) could not be exercised here, `
+      + 'because the checker they target reports NOT CHECKED without its tool:\n');
+    for (const b of unrunnable) process.stdout.write(`          - ${b.split('\n')[0].trim()}\n`);
+    process.stdout.write('        They run for real in CI\'s `firmware` job, which installs PlatformIO.\n');
+  }
+  assert.equal(caught + unrunnable.length, planted,
+    `${planted} planted, ${caught} caught, ${unrunnable.length} unrunnable here - the three do not add up:\n${res.out}`);
+  assert.equal(missed, unrunnable.length,
+    `${missed} missed but ${unrunnable.length} explained by a missing tool:\n${res.out}`);
+
+  // Nothing excuses a non-zero exit when every break WAS exercisable here: that is either a
+  // hole the classification above failed to see, or the self-test itself falling over.
+  if (!unrunnable.length) {
+    assert.equal(res.status, 0, `the checker's own self-test failed:\n${res.out}`);
+  }
 });
