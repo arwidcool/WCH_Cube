@@ -615,7 +615,9 @@ CH32V003 3 open; suite 721 green; CI never executed.
          `20 test(s) SKIPPED` for the same suites, which is the contrast this line exists for.
          CAVEAT, not rounded up: the firmware job is currently RED again on four app/tests/
          failures that have nothing to do with compiling (AGENT-2's stale TIM guards).
-- [ ] The `Coverage ledger` step prints `6 of 6` **on the runner**
+- [x] The `Coverage ledger` step prints `6 of 6` **on the runner**
+      -> run 34723740365: the `test` job is green, and that step exits non-zero on anything
+         else. The third data gate, seen running somewhere other than one Windows box.
 - [x] `desktop` (Tauri, Linux) green
       → success on every run that was not cancelled, including 34714307941 and 34718743245.
 - [ ] `DECISION | worktrees ON` posted **after** the above, not before

@@ -214,7 +214,19 @@ flashed.
 ---
 
 
-**CI, measured on 2026-09-12 rather than asserted: 31 runs, 30 failed, none had been read.** The pack said "never run"; the repo is public, both workflows are active, and ci.yml fired on every push since the initial commit. Every completed run failed at `node tests/run.js` on BOTH runners, `desktop` green. Three causes, all in QA's files, fixed in `14f5a5e`: Windows' default `core.autocrlf=true` (a CRLF dist; fixtures no longer equal to `projectSerialize()`), Chrome launched without `--no-sandbox` on ubuntu 24.04, and `cargo test` running in the one job that never installed Tauri's deps. **Run 34714307941 on `14f5a5e`: `firmware` (windows, the full suite WITH PlatformIO, compile gates executing) green for the first time; `desktop` green; `test` (ubuntu) red at "dist/index.html is up to date"** - a stale bundle from a data commit that did not rebuild, caught by the Linux runner, rebuilt from HEAD in a clean clone in the next commit. Failing test names now surface as public `::error` annotations. Evidence: `tests/evidence/round6/2026-09-12-ci-30-failures.md`. Not yet green on all three jobs; not yet read green; worktrees stay off.
+**CI IS GREEN, and this is the first time all three jobs have passed in this repository's
+history.** Run %s
+on `b5a654f`: `build + tests` (ubuntu), `firmware + generated project` (windows, the whole
+suite WITH PlatformIO, so the compile gates execute instead of skipping) and `tauri shell
+(linux)` all **success**. The `test` job's `Coverage ledger` step prints `6 of 6` on the
+runner, which nothing had ever seen off this one Windows box.
+
+How it got there is worth keeping, because none of it was the code being wrong: the pack
+said CI had *never run* and it had run **31 times and failed every one**, unread; the failure
+annotations were written but never executed, because GitHub runs `run:` blocks under
+`-eo pipefail` and the failing pipeline aborted the step first; and 15 of 20 runs were
+**cancelled** by the next agent's push, so only one commit in five was ever verified.
+Evidence: `tests/evidence/round6/2026-09-12-ci-30-failures.md`.
 
 ## 2. Completed work
 

@@ -87,65 +87,56 @@ You own the pack. When the round's exit criterion is met, post `DECISION | ROUND
 
 ## Current
 
-**Round 6, cycle 1 — the round's rule was true of the round's own first deliverable.**
+**Round 6, cycle 1 — CI is GREEN on all three jobs, for the first time in this repository's
+history.** Run 34723740365 on `b5a654f`: `build + tests` (ubuntu), `firmware + generated
+project` (windows, the whole suite WITH PlatformIO so the compile gates execute rather than
+skip) and `tauri shell (linux)`, all success. The `Coverage ledger` step prints `6 of 6` on
+the runner — the third data gate, seen running somewhere other than this one Windows box.
 
-1. **CI had never been read, and it had run 30 times.** The pack, `PROGRESS.md`, `HUMAN_TODO.md`
-   and my own brief all said "never executed". The repo is public, both workflows are active,
-   `ci.yml` fires on every push, and **every completed run since the initial commit had failed** —
-   `test` and `firmware` both at `node tests/run.js`, `desktop` green, annotation "exit code 1".
-   Not "never run": worse, because it had been guessed green for a day. That is deliverable A's
-   premise gone, and it is exactly the round's rule turned on the round.
+**The round's rule turned out to be true of the round's own first deliverable.** The pack,
+`PROGRESS.md`, `HUMAN_TODO.md` and this brief all said CI had never executed. It had run **31
+times and failed every one**, unread. Not "never run": worse, because it had been guessed green
+for a day.
 
-2. **Three causes, all in my own files**, reproduced locally without a token by cloning the repo
-   into a fresh directory: GitHub's Windows image ships `core.autocrlf=true` (a CRLF dist, so the
-   fixtures no longer equal `projectSerialize()`) — and `ci.yml`'s own "up to date" step was BLIND
-   to it, because `git diff` normalises endings; `browser.js` finding `/usr/bin/google-chrome` and
-   launching without `--no-sandbox`, which ubuntu 24.04 kills, so every real-browser test FAILED
-   rather than skipped; and `desktop.test.js` running `cargo test` in the one job that never
-   installs Tauri's deps. Fixed in `14f5a5e`. **Result: `firmware` green for the first time in 31
-   runs** — windows-latest, the full suite with PlatformIO, compile gates executing.
+**Almost nothing was wrong with the code. What was wrong was the ability to SEE.**
+1. The failure annotations were written and never executed — GitHub runs `run:` blocks under
+   `bash -eo pipefail`, so the failing pipeline aborted the step before the block that names
+   the failing tests. Thirty-one runs published exactly `Process completed with exit code 1`.
+2. **15 of 20 runs were CANCELLED** by the next agent's push. One commit in five was ever
+   verified. `cancel-in-progress` buys runner minutes, and this repo is public where they are
+   free — it was saving nothing and discarding three quarters of the evidence.
+3. `ci.yml`'s own "dist is up to date" step was BLIND on Windows, because `git diff`
+   normalises line endings and the runner checks out CRLF.
 
-3. **The log needs a token; the annotations do not.** Both test steps now tee the run and publish
-   every failing test name, every `LOAD FAIL` and the verdict as `::error`, and on success the
-   verdict, every skip reason and the count of compile gates that RAN as `::notice`. Thirty runs
-   had said only "exit code 1". The very next run used it: the Linux job named `3853b57`'s stale
-   `dist/index.html` — a data commit that changed 1043 lines and did not rebuild.
+**The genuine defects were genuine, and nothing was weakened to make them pass.** A stale
+`dist` shipped twice by data commits that did not rebuild — and then a third time BY ME, one
+commit after reporting it, by building from a clean clone at a SHA that four commits had
+already overtaken. Three environment bugs in my own test files: Chrome without `--no-sandbox`
+on ubuntu 24.04 (every browser test FAILED rather than skipped), `cargo test` running in the
+one job that never installs Tauri's deps, and a planted break that targets a checker needing
+PlatformIO — a break the checker could not RUN is not a break it MISSED, and those are now
+counted separately.
 
-4. **And I did it to myself one commit later.** The dist I committed in `3f662d5` was built from
-   a clean clone at `14f5a5e`, and four commits landed before it merged — so I replaced a newer
-   bundle with an older one, the same defect I had just reported. Every dist since is built from a
-   clean clone at `origin/main`. On a shared tree with `cancel-in-progress`, a bundle built from
-   anything but the commit it will sit on is stale before it lands.
+**Deliverable B is met for `tests/**`:** twelve planted breaks, each seen red and restored; the
+list of gates that cannot go red — B's acceptance — is empty. **Deliverable F is complete:**
+six zeros, every part `status: complete`.
 
-5. **Deliverable B is met for `tests/**`: twelve planted breaks, each seen red and restored**, 18
-   planted-break tests green together, 14 refusals captured verbatim. The list of gates that
-   cannot go red — B's acceptance — is empty. `tests/lib/mutant.js` holds the four shapes
-   (`withMutantMcu`, `withMutantFile`, `withMutantDist`, `boot({html})`), each refusing a mutation
-   that changed nothing, because an anchor that has moved turns a planted break into a silent pass.
+**The two findings I did NOT absorb into the green build**, because they are real and belong to
+`app/`: the layout is not tolerant of its own font fallback (`#mcu-meta` needs 181px in a 168px
+box on Linux — it ellipsises by design, so the check no longer fails, but the user sees less
+than intended), and `fresh()` leaked `PROJECT.variant` and the generator options, which is the
+shape worth knowing about in a helper called "fresh".
 
-6. **The find of the round so far: the `IN_EXTRACTION` expiry did not exist.** Since round 5 the
-   pack, `TASKS.md` and the test itself promised "tick the line and every cell becomes a hard
-   failure with no edit here". The guard checked `tasks.includes(task)` — and a ticked `- [x]`
-   line still contains the phrase. The exemption could retire only by DELETING the line, which the
-   working agreement forbids. A gate that could not go red, found by the sweep for that class, and
-   now planted: a ticked COPY of `TASKS.md` fails **40 CH32H417 cells**.
+**On the human's explicit instruction I also took the four `app/tests/` failures** — three
+stale TIM guards repointed rather than deleted, and the two `fresh()` leaks. The board entry to
+AGENT-2 stays so they see what changed in their file rather than discover it.
 
-7. **Two plants failed before they worked, and both were worth more than the plant.** Renaming
-   `mcu.name` changed nothing the catalogue compares (it is keyed by part NUMBER); renaming the
-   chip container made the app throw at boot, escaping `walk()` before the check it was meant to
-   trip. A plant must break the thing the check measures, not the page.
+**NOT claimed.** `worktrees ON` is NOT posted: the condition is met, but one green run is a
+thing seen once, and `main` has been green for exactly one commit after a day of being red for
+thirty-one. It goes up when three consecutive commits from different agents are green. The DONE
+hardware line still reads **"builds, not flashed"**. `src-tauri` has not been relinked since
+round 4.
 
-**State.** Local: every suite I touched green; the full suite last read `1 FAILED, 774 passed`,
-the one red being `app/tests/pinmap.test.js` with AGENT-2's engine files uncommitted in the shared
-tree — clean at `origin/main`, reported, not touched. CI: `firmware` and `desktop` green on
-`14f5a5e`; `test` red there on a stale dist that is now rebuilt; later runs cancelled by the next
-push, which is `cancel-in-progress` working as designed.
-
-**NOT claimed.** CI is **not yet read green on all three jobs** — `PROGRESS.md` carries the
-measured sentence, not the badge. Worktrees stay OFF. `src-tauri` has not been relinked since
-round 4. The DONE hardware line still reads **"builds, not flashed"**.
-
-**Next, in order:** (a) read the first run that completes with the new `::notice` annotations and
-confirm the compile gates RAN rather than skipped — that is the last thing standing between here
-and deliverable A; (b) the same planted-break sweep over `app/tests/**`, which has 17 files and
-almost no breaks; (c) `WALKTHROUGH.md` §1 end to end once A holds.
+**Next, in order:** (a) watch `main` stay green across other agents' commits — three in a row
+and `worktrees ON` goes up; (b) the planted-break sweep over `app/tests/**`, 17 files with
+almost none; (c) `WALKTHROUGH.md` §1 end to end, which is now runnable because §1 is about CI.
