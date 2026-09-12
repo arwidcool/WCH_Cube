@@ -1,0 +1,136 @@
+# CH32H417 dedicated-function pins, for tools/gen_h417_peripherals.py
+#
+# WHY THIS FILE EXISTS. The AF parser behind the generator reads `SIGNAL(AFn)`
+# entries. A pad whose UHSIF/DAC/ADC/OPA/SERDES function is its OWN function rather
+# than an alternate one carries NO AF code in DS Table 2-1-1, so the parser cannot
+# see it - and UHSIF_CLK/PORT<n> and SDMMC_* are missing from its output entirely.
+# Result: DAC, ADC1, ADC2, HSADC, OPA, SDMMC, SERDES and UHSIF all read as
+# "holds no pin on any package" while the datasheet gives them pins.
+#
+# SOURCE: data/sources/H417/Datasheets/CH32H417DS0.md.
+#   DAC, ADC1, ADC2, HSADC, OPA, SERDES - Table 2-1-1 (pin-first), read by
+#     tools/gen_h417_dedicated_pins.py via tools/audit_h417_all_pins.py, whose parse
+#     agrees with the datasheet on all 95 pins (the QFN128 I/O count).
+#   SDMMC, UHSIF - Table 2-2-12 and Table 2-2-16 (signal-first). Table 2-1-1 writes
+#     the AFIO_PCFR1 remap value into the name (`UHSIF_CLK_1`, DS Note 3), which read
+#     literally turns one signal into up to four, and its wrapped lines lose the digit
+#     and leave a trailing underscore that appears nowhere in the datasheet.
+# A `None` AF means the DS gives no AF code: the pad function is dedicated.
+
+dedicated_pins:
+  DAC:
+    OUT1: [{ pin: PA4 }]
+    OUT2: [{ pin: PA5 }]
+  ADC1:
+    IN0: [{ pin: PA0 }]
+    IN1: [{ pin: PA1 }]
+    IN2: [{ pin: PA2 }]
+    IN3: [{ pin: PA3 }]
+    IN4: [{ pin: PA4 }]
+    IN5: [{ pin: PA5 }]
+    IN6: [{ pin: PA6 }]
+    IN7: [{ pin: PA7 }]
+    IN8: [{ pin: PB0 }]
+    IN9: [{ pin: PB1 }]
+    IN10: [{ pin: PC0 }]
+    IN11: [{ pin: PC1 }]
+    IN12: [{ pin: PC2 }]
+    IN13: [{ pin: PC3 }]
+    IN14: [{ pin: PC4 }]
+    IN15: [{ pin: PC5 }]
+  HSADC:
+    IN0: [{ pin: PC0 }]
+    IN1: [{ pin: PC1 }]
+    IN2: [{ pin: PC2 }]
+    IN3: [{ pin: PC3 }]
+    IN4: [{ pin: PF8 }]
+    IN5: [{ pin: PF9 }]
+    IN6: [{ pin: PF10 }]
+  OPA:
+    N01: [{ pin: PB1 }]
+    N02: [{ pin: PE8 }]
+    N03: [{ pin: PC3 }]
+    N11: [{ pin: PA7 }]
+    N12: [{ pin: PF12 }]
+    N13: [{ pin: PA3 }]
+    P01: [{ pin: PB0 }]
+    P02: [{ pin: PE9 }]
+    P03: [{ pin: PC2 }]
+    P11: [{ pin: PA6 }]
+    P12: [{ pin: PF11 }]
+    P13: [{ pin: PA2 }]
+    OUT01: [{ pin: PC4 }]
+    OUT02: [{ pin: PE7 }]
+    OUT03: [{ pin: PA0 }]
+    OUT11: [{ pin: PA5 }]
+    OUT12: [{ pin: PB1 }]
+    OUT13: [{ pin: PA4 }]
+  SDMMC:
+    D0: [{ pin: PB13 }, { pin: PC8 }, { pin: PD0 }]
+    D1: [{ pin: PC9 }, { pin: PD1 }]
+    D2: [{ pin: PB10 }, { pin: PC10 }, { pin: PD2 }]
+    D3: [{ pin: PB11 }, { pin: PC11 }, { pin: PD3 }]
+    D4: [{ pin: PA14 }, { pin: PD4 }]
+    D5: [{ pin: PA15 }, { pin: PD5 }]
+    D6: [{ pin: PC6 }, { pin: PD6 }]
+    D7: [{ pin: PC7 }, { pin: PD7 }]
+    CMD: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
+    STR: [{ pin: PC11 }, { pin: PD10 }, { pin: PD3 }]
+    STS: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
+    SDCK: [{ pin: PC12 }, { pin: PD11 }]
+    SLVCK: [{ pin: PC12 }, { pin: PD11 }]
+  SERDES:
+    RXN: [{ pin: PE6 }]
+    RXP: [{ pin: PE5 }]
+    TXN: [{ pin: PE4 }]
+    TXP: [{ pin: PE3 }]
+  UHSIF:
+    CLK: [{ pin: PC0 }, { pin: PD9 }, { pin: PF11 }, { pin: PF14 }]
+    PORT0: [{ pin: PC1 }, { pin: PF12 }]
+    PORT1: [{ pin: PC2 }, { pin: PF13 }]
+    PORT2: [{ pin: PC3 }, { pin: PE7 }]
+    PORT3: [{ pin: PB0 }, { pin: PC1 }, { pin: PE8 }]
+    PORT4: [{ pin: PB1 }, { pin: PC2 }, { pin: PE9 }]
+    PORT5: [{ pin: PC3 }, { pin: PE10 }]
+    PORT6: [{ pin: PB0 }, { pin: PE11 }]
+    PORT7: [{ pin: PB1 }, { pin: PE12 }]
+    PORT8: [{ pin: PE13 }]
+    PORT9: [{ pin: PE14 }]
+    PORT10: [{ pin: PE15 }]
+    PORT11: [{ pin: PB10 }]
+    PORT12: [{ pin: PB11 }]
+    PORT13: [{ pin: PB12 }]
+    PORT14: [{ pin: PB13 }]
+    PORT15: [{ pin: PB14 }]
+    PORT16: [{ pin: PD10 }]
+    PORT17: [{ pin: PD11 }]
+    PORT18: [{ pin: PD12 }]
+    PORT19: [{ pin: PD13 }]
+    PORT20: [{ pin: PD14 }]
+    PORT21: [{ pin: PD15 }]
+    PORT22: [{ pin: PF0 }]
+    PORT23: [{ pin: PF1 }]
+    PORT24: [{ pin: PF2 }]
+    PORT25: [{ pin: PC6 }]
+    PORT26: [{ pin: PC7 }]
+    PORT27: [{ pin: PC8 }]
+    PORT28: [{ pin: PC9 }]
+    PORT29: [{ pin: PA13 }]
+    PORT30: [{ pin: PA14 }]
+    PORT31: [{ pin: PA15 }]
+    PORT32: [{ pin: PC10 }]
+    PORT33: [{ pin: PC11 }]
+    PORT34: [{ pin: PC12 }]
+    PORT35: [{ pin: PD0 }]
+    PORT36: [{ pin: PD1 }]
+    PORT37: [{ pin: PD2 }]
+    PORT38: [{ pin: PD3 }]
+    PORT39: [{ pin: PD4 }]
+    PORT40: [{ pin: PD5 }]
+    PORT41: [{ pin: PD6 }]
+    PORT42: [{ pin: PD7 }]
+    PORT43: [{ pin: PF3 }]
+    PORT44: [{ pin: PF4 }]
+    PORT45: [{ pin: PF5 }]
+    PORT46: [{ pin: PE0 }]
+    PORT47: [{ pin: PE1 }]

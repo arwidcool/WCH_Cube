@@ -162,6 +162,7 @@ peripherals:
   ADC2:
     settings:
       Mode: Disable
+      Channels: Disable
     remap: 0
   CAN1:
     settings:
@@ -220,15 +221,18 @@ peripherals:
     remap: 0
   EXTI:
     settings:
-      Mode: Disable
+      EXTI trigger edge: Rising edge
     remap: 0
   FLASH:
     settings:
-      Mode: Disable
+      Independent watchdog start (IWDG_SW): Started by software (factory default)
+      Reset on entering Standby (STANDBY_RST): No reset (factory default)
+      Reset on entering Stop (STOP_RST): No reset (factory default)
     remap: 0
   FMC:
     settings:
       NOR/PSRAM: Disable
+      NAND: Disable
       SDRAM: Disable
     remap: 0
   GPHA:
@@ -296,7 +300,8 @@ peripherals:
     remap: 0
   PWR:
     settings:
-      Mode: Disable
+      Programmable Voltage Detector (PVD): Disable
+      Low power mode: None
     remap: 0
   QSPI1:
     settings:

@@ -43,6 +43,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PINS = ROOT / "tools" / "extract_h417_pins.py"
 MCU = ROOT / "data" / "mcus" / "CH32H417.yaml"
 
+# The generated section's opening line, used to find and REPLACE it on --refresh.
+MARK_START = "\n  # " + "=" * 73 + "\n  #  Everything below this line was GENERATED"
+
 
 def af_map() -> dict[str, dict[str, list[tuple[str, int, str | None]]]]:
     """{peripheral: {signal: [(pin, af, note), ...]}} from the AF parser, via its JSON.
@@ -79,27 +82,38 @@ def af_map() -> dict[str, dict[str, list[tuple[str, int, str | None]]]]:
 
 # ---------------------------------------------------------------- DS group -> peripheral
 #
-# Some DS groups are one peripheral's pins under several headings, and some headings are
-# not peripherals at all. Merging them wrongly splits a peripheral in the UART tree and
-# worse, splits its pins across two entries so neither can see a conflict on them.
+# Some DS groups are the same peripheral under two headings, and merging them wrongly
+# splits a peripheral in the UART tree - and worse, splits its pins across two entries so
+# neither can see a conflict on them.
+#
+# **This map was WRONG until 2026-09-12, and in a way worth recording.** It used to carry
+# `VP: USBHS`, `C4: USBPD`, `DC: USBPD` and `DIO: USBPD` as well. Those keys did not name
+# real headings: they were FRAGMENTS of signal names that Table 2-1-1's PDF conversion had
+# split across a line break (`D VP_D0`, `I2 C4_SMBA`, `LT DC_G5`, `S DIO_D0`). The broken
+# parse produced signal names like `VP_D0` and grouped them under a peripheral called `VP`,
+# and this map then filed those under USBHS - so **DVP pins were being attributed to the
+# USB controller**. Repairing the split (`extract_h417_pins.py`, `repair_split_names`)
+# removed the phantom groups, and this map is now what it always claimed to be: a list of
+# real DS headings that mean one peripheral.
+#
+# `check_merge_keys()` below fails the generator if a key here is not a heading the DS
+# actually uses, so a dead entry cannot sit here looking load-bearing again.
 MERGE = {
     "RGMII": "ETH",        # the RGMII pins of the same MAC (RM ch.31)
     "SDRAM": "FMC",        # the SDRAM controller is FMC's bank (RM ch.40)
-    "RAM": "FMC",          # DS spells a few data lines `RAM_D*` where FMC says `FSMC_D*`
-    "DRAM": "FMC",
     "FSMC": "FMC",         # the SPL header is ch32h417_fmc.h, so FMC is the name the SDK uses
     "CC1": "USBPD",        # Type-C CC lines (RM ch.24)
     "CC2": "USBPD",
-    "VP": "USBHS",         # USB PHY pins (RM ch.25/27)
-    "DC": "USBPD",
-    "DIO": "USBPD",
     "MCO": "RCC",          # the clock output is RCC's, not a peripheral of its own
-    "C4": "USBPD",
+    # The DS spells the CAN pins `CAN_RX`/`CAN_TX` (no instance number) on the rows where
+    # the controller is the first one - PA13 says `CAN_RX(AF5)` and PA14 `CAN_TX(AF5)`, and
+    # DS Table 2-2-13 attributes both to CAN1. Leaving this unmapped dropped those two
+    # assignments entirely: the file's CAN1_RX/CAN1_TX were short a pin each, and PA13/PA14
+    # showed no CAN function at all. Found by `tools/audit_h417_af.py`.
+    "CAN": "CAN1",
 }
-# Headings that are a signal of an existing peripheral, not a peripheral of its own.
-# `CAN` is the DS's generic row for CAN1's pins, `MCO`/`RAM`/`DRAM`/`C4` are single
-# signals, and `IPC_CH` is IPC's channel number rather than a block.
-NOT_A_PERIPHERAL = {"RAM", "DRAM", "MCO", "C4", "CAN", "IPC_CH"}
+# Headings that are a signal of an existing peripheral rather than a peripheral of its own.
+NOT_A_PERIPHERAL = {"MCO"}
 
 # Which tree section each peripheral appears under. Matches the categories the other four
 # parts use, so the UI needs no new heading.
@@ -125,7 +139,7 @@ CATEGORY = {
     "TIM1": "Timers", "TIM2": "Timers", "TIM3": "Timers", "TIM4": "Timers",
     "TIM5": "Timers", "TIM8": "Timers", "TIM9": "Timers", "TIM10": "Timers",
     "TIM11": "Timers", "TIM12": "Timers", "LPTIM1": "Timers", "LPTIM2": "Timers",
-    "RTC": "Timers", "IWDG": "System Core", "WWDG": "System Core",
+    "TIM6": "Timers", "TIM7": "Timers", "RTC": "Timers", "IWDG": "System Core", "WWDG": "System Core",
     "ADC1": "Analog", "ADC2": "Analog", "HSADC": "Analog", "DAC": "Analog",
     "OPA": "Analog", "CMP": "Analog", "DFSDM": "Analog", "TKEY": "Analog",
     "FSMC": "Memory", "FMC": "Memory", "GPHA": "Graphics", "LTDC": "Graphics",
@@ -458,14 +472,78 @@ SETTINGS: dict[str, list[dict]] = {
         ],
     }],
     "SERDES": [{
+        # SERDES has differential pads of its own (SSTXA/SSTXB/SSRXA/SSRXB, DS Table
+        # 2-1-1) and they carry NO AF code - they are not GPIOs - so nothing in the per-pin
+        # AF map names them and `signal_pins:` cannot describe them. The entry exists so the
+        # block appears in the tree; its pins are declared in `pins:` as type `sys`.
         "name": "Mode",
         "choices": [
-            {"name": "Disable"},
-            {"name": "Enabled", "signals": ["VP_D0", "VP_D4", "VP_D5", "VP_VSYNC"]},
+            {"name": "Disable", "default": True},
+            {"name": "Enabled"},
+        ],
+    }],
+    # RCC is generated rather than hand-written so a `--refresh` cannot lose it. The HSE
+    # choice's name must match `clock.hse_setting` and its signals must cover
+    # `clock.hse_signals`, which is what makes picking HSE switch the crystal on through the
+    # conflict engine and claim XI/XO on the chip.
+    "RCC": [{
+        "name": "High Speed Clock (HSE)",
+        "choices": [
+            {"name": "Disable", "default": True},
+            {"name": "BYPASS clock source"},
+            {"name": "Crystal / ceramic resonator", "signals": ["XI", "XO"]},
+        ],
+    }, {
+        # RM 3.4.2 MCO[3:0]: 00xx none, 0100 SYSCLK, 0101 HSI, 0110 HSE, 0111 PLL/2,
+        # 1000 UTMI, 1001 USBSS_PLL/2, 1010 ETH_PLL/8, 1011 SERDES_PLL/16.
+        "name": "Master Clock Output (MCO)",
+        "choices": [
+            {"name": "Disable", "default": True},
+            {"name": "SYSCLK"}, {"name": "HSI"}, {"name": "HSE"}, {"name": "PLLCLK/2"},
+            {"name": "UTMI clock"}, {"name": "USBSS_PLL/2"}, {"name": "ETH_PLL/8"},
+            {"name": "SERDES_PLL/16"},
         ],
     }],
 }
 # Which template a peripheral instance uses when its own name has no entry.
+# ---- the four blocks whose signals the AF parser cannot see (see _load_dedicated_pins).
+# Their pin lists come from data/sources/H417/dedicated_pins.yaml, so these are the
+# CHOICES only - "which options does this block have" is a hardware question.
+SETTINGS["DAC"] = [{
+    "name": "Channel 1",
+    "choices": [{"name": "Disable"}, {"name": "Output on pin", "signals": ["OUT1"]}],
+}, {
+    "name": "Channel 2",
+    "choices": [{"name": "Disable"}, {"name": "Output on pin", "signals": ["OUT2"]}],
+}]
+SETTINGS["ADC"] = [{
+    "name": "Mode",
+    "choices": [{"name": "Disable"}, {"name": "Independent"},
+                {"name": "Dual (with the other ADC)"}],
+}, {
+    # One choice per channel would be sixteen rows; the first channel is offered here so
+    # the pin grid can reach the analog pads at all, and the RM's own channel list is the
+    # rest. Offered rather than silent because a pin with no way to claim it is the same
+    # defect as the DAC had.
+    "name": "Channels",
+    "choices": [{"name": "Disable"}, {"name": "Channel 0 (IN0)", "signals": ["IN0"]},
+                {"name": "Channel 4 (IN4)", "signals": ["IN4"]}],
+}]
+SETTINGS["HSADC"] = [{
+    "name": "Mode",
+    "choices": [{"name": "Disable"}, {"name": "Enabled"}],
+}]
+SETTINGS["OPA"] = [{
+    "name": "OPA1",
+    "choices": [{"name": "Disable"}, {"name": "Enabled"}],
+}, {
+    "name": "OPA2",
+    "choices": [{"name": "Disable"}, {"name": "Enabled"}],
+}, {
+    "name": "OPA3",
+    "choices": [{"name": "Disable"}, {"name": "Enabled"}],
+}]
+
 TYPE_OF = {
     **{f"USART{i}": "USART" for i in range(1, 9)},
     **{f"SPI{i}": "SPI" for i in range(1, 5)},
@@ -479,14 +557,126 @@ TYPE_OF = {
     "FSMC": "FSMC", "ETH": "ETH", "LTDC": "LTDC", "DVP": "DVP", "SAI": "SAI",
     "SWPMI": "SWPMI", "PIOC": "PIOC", "DFSDM": "DFSDM", "SDIO": "SDIO",
     "I3C": "I3C", "RTC": "RTC", "USBPD": "USBPD", "SERDES": "SERDES",
+    "RCC": "RCC",
+    # The four whose pins the AF parser cannot see; their settings are added below.
+    "DAC": "DAC", "ADC1": "ADC", "ADC2": "ADC", "HSADC": "HSADC", "OPA": "OPA",
 }
 
-# Peripherals with pins in the DS but no mode row worth offering: they are claimed
-# wholesale or not at all.
-NO_SETTINGS = {"USBHS", "USBFS", "USBSS", "RCC", "DMA1", "DMA2", "EXTI", "PWR", "FLASH",
+__import__("pathlib")
+
+# Peripherals that get an entry even when the AF map names no pin for them: they are
+# claimed wholesale, or their pads carry no AF code (SERDES' differential pair), so the
+# per-pin map cannot reach them. `nvic:` and `codegen.periph_clock` both name some of
+# these, and `validate_mcu.py` fails a vector whose owner is not a peripheral here.
+# `SYS` is not one of them - it is hand-written in the file, with its own settings.
+NO_SETTINGS = {"USBHS", "USBFS", "USBSS", "SERDES", "DMA1", "DMA2", "EXTI", "PWR", "FLASH",
                "IWDG", "WWDG", "CRC", "ECDC", "HSEM", "IPC", "DBGMCU", "ADC1", "ADC2",
                "HSADC", "DAC", "OPA", "CMP", "RNG", "SDMMC", "GPHA", "SYS", "TKEY",
-               "UHSIF", "SERDES", "TIM6", "TIM7"}
+               "UHSIF", "TIM6", "TIM7"}
+
+# ---- `Mode` entries ---------------------------------------------------------------
+#
+# `tests/completeness.test.js` requires every peripheral of every real part to offer at
+# least one setting WITH A CHOICE, and it is right to: a peripheral whose settings are
+# empty is a peripheral the user cannot switch on. Getting that cell right is not a
+# formality - `DMA1` with no mode row means the generated C never enables its clock.
+#
+# The wording follows the part's own precedents rather than being invented per
+# peripheral. `Mode: [Disable, Enabled]` is what H417's `HSADC` and `SERDES` already say,
+# and what CH32X035 says for `PIOC` and `AWU`; `Disable`/`Activated` is CH32X035's for
+# `DMA1`, `IWDG` and `WWDG`, kept verbatim so the two parts read alike. `EXTI`,
+# `PWR` and `FLASH` are copied from CH32V006 and CH32X035, whose option-byte and
+# trigger-edge names are already reviewed.
+#
+# No `signals:` key is used here: these peripherals have no pins in the AF map (their
+# signals are either none at all or a whole block), so naming signals would reference
+# signal names that do not exist. `HSADC` and `SERDES` are already written that way.
+def _mode(choices):
+    return [{"name": "Mode", "choices": [{"name": c} for c in choices]}]
+
+
+ENABLED = _mode(["Disable", "Enabled"])
+ACTIVATED = _mode(["Disable", "Activated"])
+
+# Per-peripheral settings, where the mode row alone is not the whole story.
+MODES: dict[str, list[dict]] = {
+    "CRC": ENABLED,
+    "ECDC": ENABLED,
+    "GPHA": ENABLED,
+    "HSEM": ENABLED,
+    "IPC": ENABLED,
+    "RNG": ENABLED,
+    "SERDES": ENABLED,
+    "TKEY": ENABLED,
+    "TIM6": ENABLED,
+    "TIM7": ENABLED,
+    "UHSIF": ENABLED,
+    # CH32H417 had this row before the peripheral block was regenerated (`Debug in low
+    # power`), and RM ch.45 "Debug Support" is the chapter that gives it. Keeping the
+    # name and the wording it had.
+    "DBGMCU": [{"name": "Debug in low power",
+                "choices": [{"name": "Disable"}, {"name": "Enabled"}]}],
+    # Copying CH32X035's exact wording for the three watchdogs and the DMA controller.
+    "DMA1": ACTIVATED,
+    "DMA2": ACTIVATED,
+    "IWDG": ACTIVATED,
+    "WWDG": ACTIVATED,
+    # CH32X035 `EXTI`: the trigger edge is the whole of EXTI's user-visible
+    # configuration on this family (EXTI_RTENR / EXTI_FTENR).
+    "EXTI": [{"name": "EXTI trigger edge",
+              "choices": [{"name": "Rising edge"}, {"name": "Falling edge"},
+                          {"name": "Both edges"}]}],
+    # CH32X035 `PWR`: RM ch.2 gives the PVD (2.2.2) and the low-power modes (2.3).
+    "PWR": [
+        {"name": "Programmable Voltage Detector (PVD)",
+         "choices": [{"name": "Disable"}, {"name": "Enabled"}]},
+        {"name": "Low power mode",
+         "choices": [{"name": "None"}, {"name": "Sleep"}, {"name": "Stop"},
+                     {"name": "Standby"}]},
+    ],
+    # CH32X035 `FLASH`, with H417's own option-byte names - RM ch.46 is
+    # "Flash Memory and User Option Bytes".
+    "FLASH": [
+        {"name": "Independent watchdog start (IWDG_SW)",
+         "choices": [{"name": "Started by software (factory default)"},
+                     {"name": "Started by hardware"}]},
+        {"name": "Reset on entering Standby (STANDBY_RST)",
+         "choices": [{"name": "No reset (factory default)"}, {"name": "Reset"}]},
+        {"name": "Reset on entering Stop (STOP_RST)",
+         "choices": [{"name": "No reset (factory default)"}, {"name": "Reset"}]},
+    ],
+    # RM ch.40: "The FMC manages expanded connectivity to different types of memory,
+    # including: SDRAM, NAND Flash, and synchronous/asynchronous static memory", and the
+    # feature list names the static-memory regions and PSRAM. One row per controller,
+    # which is also how the DS splits them - Table 2-2-14 FSMC, Table 2-2-15 SDRAM.
+    "FMC": [
+        {"name": "NOR/PSRAM", "choices": [{"name": "Disable"}, {"name": "Enabled"}]},
+        {"name": "NAND", "choices": [{"name": "Disable"}, {"name": "Enabled"}]},
+        {"name": "SDRAM", "choices": [{"name": "Disable"}, {"name": "Enabled"}]},
+    ],
+    # RM ch.35 lists CMP's own features: selectable input pins, a selectable output pin
+    # and a digital filter. Only `OUT` reaches a pad the AF map can see, so the mode row
+    # carries the choice - `HSADC` and `SERDES` are written the same way.
+    "CMP": _mode(["Disable", "Enabled"]),
+    # RM ch.30: the RNG "can be disabled individually to reduce power consumption".
+    # RM ch.33 SDMMC: "Communication modes support single-wire, four-wire, and eight-wire
+    # configurations" - so the mode row carries the bus width, exactly as the
+    # hand-written `SDIO` above it does. Signal names are SDMMC's own (`SDCK`, not `CK`).
+    "SDMMC": [{"name": "Mode",
+               "choices": [
+                   {"name": "Disable"},
+                   {"name": "SD 1-bit", "signals": ["SDCK", "CMD", "D0"]},
+                   {"name": "SD 4-bit", "signals": ["SDCK", "CMD", "D0", "D1", "D2", "D3"]},
+                   {"name": "SD 8-bit", "signals": ["SDCK", "CMD", "D0", "D1", "D2", "D3",
+                                                    "D4", "D5", "D6", "D7"]},
+               ]}],
+    # RM ch.25/26/27 each give the controller "USB Host functionality and USB Device
+    # functionality". CH32X035's `USBFS` spells its choices "(FS)"; these keep the speed
+    # in the name because H417 has all three controllers at once.
+    "USBFS": _mode(["Disable", "Device (FS)", "Host (FS)"]),
+    "USBHS": _mode(["Disable", "Device (HS)", "Host (HS)"]),
+    "USBSS": _mode(["Disable", "Device (SS)", "Host (SS)"]),
+}
 
 
 def yaml_scalar(v: str) -> str:
@@ -495,6 +685,55 @@ def yaml_scalar(v: str) -> str:
         return v
     return '"' + v.replace('"', '\\"') + '"'
 
+# Signals a peripheral owns that carry NO AF code, so the per-pin map cannot know them.
+# Their pads are dedicated (`type: sys` in `pins:`, like XI/XO) or reset-state functions,
+# and the only way to say "this peripheral claims this pad" is here. Each is a citation,
+# not a guess: DS Table 2-1-1 lists the pad, and RM ch.9 says the reset-state multiplexer
+# selects AF0 - so the pad's function is fixed rather than chosen from a list.
+SUPPLEMENT: dict[str, dict[str, list[tuple[str, int | None, str | None]]]] = {
+    "RCC": {
+        # `clock.hse_signals` names these two, so RCC must route them or the HSE coupling
+        # cannot switch the crystal on and `validate_mcu.py` fails its coupling check.
+        "XI": [("XI", None, "dedicated HSE crystal input pad; not a GPIO on any package")],
+        "XO": [("XO", None, "dedicated HSE crystal output pad; not a GPIO on any package")],
+    },
+    "SYS": {
+        "SWIO": [("PB9", None, "SWIO/SWDIO, DS Table 2-1-1 - no AF code: this is the pad's "
+                               "reset-state function, selected by the reset multiplexer")],
+        "SWCLK": [("PB8", None, "SWCLK, DS Table 2-1-1 - likewise")],
+    },
+}
+
+
+def _load_dedicated_pins() -> dict[str, dict[str, list[tuple[str, int | None, str | None]]]]:
+    """Dedicated-function pads, from `data/sources/H417/dedicated_pins.yaml`.
+
+    An AF parser can only see `SIGNAL(AFn)`. A pad whose UHSIF/DAC/ADC/OPA/SERDES function
+    is its OWN function carries no AF code in DS Table 2-1-1, and UHSIF/SDMMC are missing
+    from the parser's output entirely - so `DAC`, `ADC1`, `ADC2`, `HSADC`, `OPA`, `SDMMC`,
+    `SERDES` and `UHSIF` all came out as "holds no pin on any package" while the datasheet
+    gives them pins. `DAC` was the visible one: it offered "Output on pin" with no pin.
+
+    That file is written by `tools/gen_h417_dedicated_pins.py` from the same independent
+    parse as `tools/audit_h417_all_pins.py`, whose 95-pin read matches the datasheet's own
+    QFN128 I/O count. This function only reads it; the citations live in the data.
+    """
+    path = pathlib.Path(__file__).resolve().parent.parent / "data/sources/H417/dedicated_pins.yaml"
+    if not path.exists():
+        return {}
+    import yaml as _yaml
+    doc = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    out: dict[str, dict[str, list[tuple[str, int | None, str | None]]]] = {}
+    for pid, sigs in (doc.get("dedicated_pins") or {}).items():
+        for sig, rows in (sigs or {}).items():
+            out.setdefault(pid, {})[sig] = [
+                (r["pin"], r.get("af"), r.get("notes")) for r in rows
+            ]
+    return out
+
+
+SUPPLEMENT.update(_load_dedicated_pins())
+
 
 def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]], out=print) -> None:
     cat = CATEGORY.get(pid, "Connectivity")
@@ -502,28 +741,44 @@ def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]]
     out(f"    category: {cat}")
 
     tpl = TYPE_OF.get(pid)
-    settings = SETTINGS.get(tpl) if tpl else None
-    if settings:
-        out("    settings:")
-        for s in settings:
-            out(f"      - name: {yaml_scalar(s['name'])}")
-            out("        choices:")
-            for c in s["choices"]:
-                sig = c.get("signals")
-                if sig:
-                    out(f"          - {{ name: {yaml_scalar(c['name'])}, "
-                        f"signals: [{', '.join(sig)}] }}")
-                else:
-                    out(f"          - {{ name: {yaml_scalar(c['name'])} }}")
+    settings = MODES.get(pid) or (SETTINGS.get(tpl) if tpl else None)
+    if not settings:
+        # A peripheral with no settings is not a cosmetic gap: `completeness.test.js`
+        # fails it, because a peripheral the user cannot switch on is a peripheral the
+        # generated C never enables. Emitting `settings: {}` here is how that got in
+        # once; refusing to write the block at all is how it cannot get in again.
+        raise SystemExit(
+            f"{pid}: no settings. Add a `Mode` row to MODES above, or a TYPE_OF entry "
+            f"whose type has a SETTINGS template.")
+    out("    settings:")
+    for s in settings:
+        out(f"      - name: {yaml_scalar(s['name'])}")
+        out("        choices:")
+        for c in s["choices"]:
+            sig = c.get("signals")
+            if sig:
+                out(f"          - {{ name: {yaml_scalar(c['name'])}, "
+                    f"signals: [{', '.join(sig)}] }}")
+            else:
+                out(f"          - {{ name: {yaml_scalar(c['name'])} }}")
 
     # signal_pins: every pin/AF pair is the datasheet's, in signal-name order.
     if sigs:
         out("    signal_pins:")
         for sig in sorted(sigs):
             short = sig[len(pid) + 1:] if sig.startswith(pid + "_") else sig
-            parts = []
+            parts, seen = [], set()
             for pin, af, note in sigs[sig]:
-                entry = f"{{ pin: {pin}, af: {af}"
+                # `signal_pins:` is keyed by PIN - the engine stores the choice per pin - so a
+                # second entry for the same pin is dead data, and `validate_mcu.py` rejects it
+                # outright. It happens where two DS headings merge onto one signal name and
+                # the same pad carries both (`FMC_A5` on PB6 from FSMC and from SDRAM).
+                if pin in seen:
+                    continue
+                seen.add(pin)
+                entry = f"{{ pin: {pin}"
+                if af is not None:
+                    entry += f", af: {af}"
                 if note:
                     entry += f", notes: {yaml_scalar(note)}"
                 parts.append(entry + " }")
@@ -533,17 +788,20 @@ def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]]
         out("      through its own registers and the clock tree only.")
 
 
-def splice(add: list[str], *, dry_run: bool = False) -> int:
+def splice(add: list[str], *, dry_run: bool = False, refresh: bool = False) -> int:
     """Insert the generated blocks into the MCU file, keeping the hand-written ones.
 
     Text surgery rather than a YAML round-trip, deliberately: `PyYAML` would drop every
-    comment in a 1 600-line file whose comments are the citations, and this repository's
+    comment in a 2 000-line file whose comments are the citations, and this repository's
     rule is that a fact without its citation is a guess.
+
+    `refresh` REPLACES the generated section rather than only appending to it. Without it a
+    re-run cannot correct a block it already wrote, which is exactly what was needed once
+    the AF parser was fixed: the existing peripheral blocks carried signal names built from
+    broken fragments (`VP_D0`, `C4_SMBA`) and appending would have left both versions.
     """
     text = MCU.read_text(encoding="utf-8")
-    pstart = text.index("\nperipherals:")
-    pend = text.index("\ngpio:", pstart)
-    have = set(re.findall(r"^  ([A-Z][A-Za-z0-9]*):$", text[pstart:pend], re.M))
+    pend = text.index("\ngpio:")
 
     banner = (
         "\n  # =========================================================================\n"
@@ -553,23 +811,64 @@ def splice(add: list[str], *, dry_run: bool = False) -> int:
         "  #  is transcribed by hand - 950 assignments cannot be hand-copied without an\n"
         "  #  error, and a wrong AF code compiles and drives the wrong pin.\n"
         "  #\n"
+        "  #  Cross-checked against the DS's OWN second reading, Tables 2-2-x, which are\n"
+        "  #  peripheral-first where 2-1-1 is pin-first: tools/audit_h417_af.py compares\n"
+        "  #  the two and reports every difference in both directions. That audit is what\n"
+        "  #  found 12 signal names the PDF had split across a line break.\n"
+        "  #\n"
         "  #  `settings:` are per peripheral TYPE, from the reference manual's functional\n"
         "  #  description. `params:` are deliberately NOT generated: a parameter needs\n"
         "  #  its init-struct field and its option macros checked against ch32h417_*.h,\n"
         "  #  and inventing them would put names nobody compiled into data/.\n"
         "  #\n"
-        "  #  Regenerate:  python tools/gen_h417_peripherals.py --splice\n"
+        "  #  Regenerate:  python tools/gen_h417_peripherals.py --splice --refresh\n"
         "  # =========================================================================\n"
     )
-    new = text[:pend] + banner + "".join(add) + text[pend:]
+
+    if refresh:
+        at = text.find(MARK_START)
+        if at < 0:
+            sys.exit(f"--refresh: the generated section marker is not in {MCU.name}. "
+                     "--splice first, or the marker was edited away.")
+        # The generated region ends at the next TOP-LEVEL key, not at `gpio:`. Ending it at
+        # `gpio:` (this function's first version) swallowed every section inserted after the
+        # peripherals - it silently deleted the whole `nvic:` block, 125 vectors, because
+        # they sat inside the range it replaced. A generated region must be bounded by its
+        # own structure, not by whatever happens to come next in the file.
+        end = re.search(r"^[A-Za-z]", text[at:], re.M)
+        if not end:
+            sys.exit("--refresh: found no top-level key after the generated section, so the "
+                     "region it should replace cannot be bounded")
+        pend = at + end.start()
+        head = text[:at]
+        print(f"refreshing the generated section: {pend - at} bytes replaced")
+    else:
+        head = text[:pend]
+    new = head + banner + "".join(add) + text[pend:]
     if dry_run:
         print(f"would write {len(new)} bytes (was {len(text)}), "
-              f"{len(add)} peripheral block(s) added")
+              f"{len(add)} peripheral block(s) written")
         return 0
     MCU.write_text(new, encoding="utf-8")
     print(f"wrote {MCU.relative_to(ROOT).as_posix()}: {len(new)} bytes (was {len(text)}), "
-          f"{len(add)} peripheral block(s) added")
+          f"{len(add)} peripheral block(s) written")
     return 0
+
+
+def check_merge_keys(groups: dict) -> list[str]:
+    """Every MERGE / NOT_A_PERIPHERAL key must name a heading the DS actually uses.
+
+    This is the guard that would have caught the phantom-key bug: `VP`, `C4`, `DC` and
+    `DIO` were keys for headings that no real DS table produces - they were fragments of
+    signal names broken by a page break - and the map silently filed DVP pins under the
+    USB controller. A key that matches nothing is either dead (remove it) or, as here, a
+    symptom of a parse that is inventing names.
+    """
+    bad = []
+    for key in sorted(set(MERGE) | NOT_A_PERIPHERAL):
+        if key not in groups:
+            bad.append(key)
+    return bad
 
 
 def main() -> int:
@@ -579,12 +878,31 @@ def main() -> int:
                     help="which peripherals the MCU file does not have yet")
     ap.add_argument("--splice", action="store_true",
                     help="insert the missing blocks into data/mcus/CH32H417.yaml")
+    ap.add_argument("--refresh", action="store_true",
+                    help="with --splice: REPLACE the generated section instead of adding to it")
     ap.add_argument("--dry-run", action="store_true", help="with --splice: show, do not write")
     a = ap.parse_args()
 
     groups = af_map()
 
+    # A MERGE / NOT_A_PERIPHERAL key that names no real DS heading is a dead entry, and the
+    # last time this file had four of them they were hiding a parse bug that moved pins to
+    # the wrong peripheral. Refuse rather than warn.
+    dead = check_merge_keys(groups)
+    if dead:
+        sys.exit("gen_h417_peripherals: MERGE / NOT_A_PERIPHERAL names heading(s) the DS does "
+                 f"not produce: {', '.join(dead)}. Either they are dead (remove them) or the "
+                 "pin parser is inventing names, which is how DVP pins ended up on USBHS.")
+
     # Fold the DS's extra headings into the peripheral they belong to.
+    #
+    # **A merge must UNION, not replace.** The first version did `merged[target][name] = opts`,
+    # so when two headings re-prefixed onto the same signal name one silently overwrote the
+    # other: `CAN: CAN1` wiped CAN1's own RX/TX pins, leaving `CAN1_RX: PA13(AF5)` where Table
+    # 2-2-13 lists four; and `SDRAM`/`FSMC -> FMC` both produce `FMC_A0`, `FMC_D0` and the
+    # other shared names, so whichever came second replaced the first. A replaced entry looks
+    # exactly like a correct one, which is why nothing else caught it -
+    # `tools/audit_h417_af.py` reported the lost pins as gaps.
     merged: dict[str, dict[str, list[tuple[str, int, str | None]]]] = collections.defaultdict(dict)
     for g, sigs in groups.items():
         if g in NOT_A_PERIPHERAL:
@@ -596,11 +914,25 @@ def main() -> int:
             # leaving the old heading on makes a signal nothing can select - which the
             # validator catches as "can be selected but gives it no pin".
             name = target + "_" + sig[len(g) + 1:] if sig.startswith(g + "_") else sig
-            merged[target][name] = opts
+            bucket = merged[target].setdefault(name, [])
+            for pin, af, note in opts:
+                if not any(p == pin and a == af for p, a, _ in bucket):
+                    bucket.append((pin, af, note))
+            merged[target][name] = sorted(bucket, key=lambda e: (e[0], e[1]))
 
     # Add the peripherals the SPL ships that hold no pin, so the tree shows them.
     for pid in sorted(NO_SETTINGS):
         merged.setdefault(pid, {})
+
+    # Signals with no AF code, which the per-pin map cannot carry. Applied last so a
+    # supplement entry wins: these are pads the peripheral owns by construction, not
+    # choices, and for XI/XO `validate_mcu.py` requires exactly this to hold the HSE
+    # coupling together.
+    for pid, sigs in SUPPLEMENT.items():
+        merged.setdefault(pid, {})
+        for sig, entries in sigs.items():
+            full = sig if sig.startswith(pid + "_") else f"{pid}_{sig}"
+            merged[pid][full] = list(entries)
 
     if a.missing:
         text = MCU.read_text(encoding="utf-8")
@@ -617,21 +949,42 @@ def main() -> int:
         return 0
 
     if a.splice or a.dry_run:
-        # Emit only what the file does not already model by hand: the hand-written
-        # blocks carry `params:` verified against the SPL, and a generated block would
-        # replace that with an empty one.
+        # On a refresh every generated peripheral is rewritten; otherwise only the ones the
+        # file does not already model by hand, because the hand-written blocks carry
+        # `params:` verified against the SPL and a generated block would empty them.
         text = MCU.read_text(encoding="utf-8")
         pstart = text.index("\nperipherals:")
         pend = text.index("\ngpio:", pstart)
-        have = set(re.findall(r"^  ([A-Z][A-Za-z0-9]*):$", text[pstart:pend], re.M))
+        own = set(re.findall(r"^  ([A-Z][A-Za-z0-9]*):$", text[pstart:pend], re.M))
+        if a.refresh:
+            # Everything after the marker is generated, so all of it is rewritten - but the
+            # HAND-WRITTEN blocks that sit BEFORE the marker must still be excluded, or the
+            # file would carry two definitions of the same peripheral and YAML would keep
+            # the last one, silently discarding the hand-written `params:` and its citations.
+            at = text.find(MARK_START)
+            if at >= 0:
+                generated = set(re.findall(r"^  ([A-Z][A-Za-z0-9]*):$", text[at:pend], re.M))
+                hand = own - generated
+            else:
+                hand = set()
+            add = []
+            for pid in sorted(merged):
+                if pid in hand:
+                    continue
+                buf: list[str] = []
+                emit_peripheral(pid, merged[pid], out=buf.append)
+                add.append("\n".join(buf) + "\n")
+            print(f"refresh: rewriting {len(add)} generated peripheral(s); "
+                  f"{len(hand)} hand-written block(s) kept: {', '.join(sorted(hand))}")
+            return splice(add, dry_run=a.dry_run, refresh=True)
         add = []
         for pid in sorted(merged):
-            if pid in have:
+            if pid in own:
                 continue
-            buf: list[str] = []
+            buf = []
             emit_peripheral(pid, merged[pid], out=buf.append)
             add.append("\n".join(buf) + "\n")
-        print(f"{len(have)} modelled by hand (kept): {', '.join(sorted(have))}")
+        print(f"{len(own)} modelled by hand (kept): {', '.join(sorted(own))}")
         print(f"{len(add)} to add")
         return splice(add, dry_run=a.dry_run)
 

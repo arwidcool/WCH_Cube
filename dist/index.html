@@ -2295,12 +2295,17 @@ peripherals:
   #  is transcribed by hand - 950 assignments cannot be hand-copied without an
   #  error, and a wrong AF code compiles and drives the wrong pin.
   #
+  #  Cross-checked against the DS's OWN second reading, Tables 2-2-x, which are
+  #  peripheral-first where 2-1-1 is pin-first: tools/audit_h417_af.py compares
+  #  the two and reports every difference in both directions. That audit is what
+  #  found 12 signal names the PDF had split across a line break.
+  #
   #  `settings:` are per peripheral TYPE, from the reference manual's functional
   #  description. `params:` are deliberately NOT generated: a parameter needs
   #  its init-struct field and its option macros checked against ch32h417_*.h,
   #  and inventing them would put names nobody compiled into data/.
   #
-  #  Regenerate:  python tools/gen_h417_peripherals.py --splice
+  #  Regenerate:  python tools/gen_h417_peripherals.py --splice --refresh
   # =========================================================================
   ADC1:
     category: Analog
@@ -2309,13 +2314,29 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Independent }
-          - { name: Dual (with ADC2) }
+          - { name: "Dual (with the other ADC)" }
       - name: Channels
         choices:
           - { name: Disable }
-          - { name: IN0 }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+          - { name: "Channel 0 (IN0)", signals: [IN0] }
+          - { name: "Channel 4 (IN4)", signals: [IN4] }
+    signal_pins:
+      IN0: [{ pin: PA0 }]
+      IN1: [{ pin: PA1 }]
+      IN10: [{ pin: PC0 }]
+      IN11: [{ pin: PC1 }]
+      IN12: [{ pin: PC2 }]
+      IN13: [{ pin: PC3 }]
+      IN14: [{ pin: PC4 }]
+      IN15: [{ pin: PC5 }]
+      IN2: [{ pin: PA2 }]
+      IN3: [{ pin: PA3 }]
+      IN4: [{ pin: PA4 }]
+      IN5: [{ pin: PA5 }]
+      IN6: [{ pin: PA6 }]
+      IN7: [{ pin: PA7 }]
+      IN8: [{ pin: PB0 }]
+      IN9: [{ pin: PB1 }]
   ADC2:
     category: Analog
     settings:
@@ -2323,7 +2344,12 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Independent }
-          - { name: Dual (with ADC1) }
+          - { name: "Dual (with the other ADC)" }
+      - name: Channels
+        choices:
+          - { name: Disable }
+          - { name: "Channel 0 (IN0)", signals: [IN0] }
+          - { name: "Channel 4 (IN4)", signals: [IN4] }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   CAN1:
@@ -2337,8 +2363,8 @@ peripherals:
           - { name: Silent, signals: [TX, RX] }
           - { name: "Loopback and Silent", signals: [TX, RX] }
     signal_pins:
-      RX: [{ pin: PA11, af: 9 }, { pin: PD0, af: 9 }, { pin: PB6, af: 3 }, { pin: PB8, af: 9 }]
-      TX: [{ pin: PA12, af: 9 }, { pin: PD1, af: 9 }, { pin: PB7, af: 3 }, { pin: PB9, af: 9 }]
+      RX: [{ pin: PA11, af: 9 }, { pin: PA13, af: 5 }, { pin: PB6, af: 3 }, { pin: PB8, af: 9 }, { pin: PD0, af: 9 }]
+      TX: [{ pin: PA12, af: 9 }, { pin: PA14, af: 5 }, { pin: PB7, af: 3 }, { pin: PB9, af: 9 }, { pin: PD1, af: 9 }]
   CAN2:
     category: Connectivity
     settings:
@@ -2363,17 +2389,17 @@ peripherals:
           - { name: Silent, signals: [TX, RX] }
           - { name: "Loopback and Silent", signals: [TX, RX] }
     signal_pins:
-      RX: [{ pin: PF6, af: 2 }, { pin: PC4, af: 6 }, { pin: PD12, af: 5 }, { pin: PF4, af: 2 }]
-      TX: [{ pin: PF7, af: 2 }, { pin: PC5, af: 6 }, { pin: PD13, af: 5 }, { pin: PF3, af: 2 }]
+      RX: [{ pin: PC4, af: 6 }, { pin: PD12, af: 5 }, { pin: PF4, af: 2 }, { pin: PF6, af: 2 }]
+      TX: [{ pin: PC5, af: 6 }, { pin: PD13, af: 5 }, { pin: PF3, af: 2 }, { pin: PF7, af: 2 }]
   CMP:
     category: Analog
     settings:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Comparator }
+          - { name: Enabled }
     signal_pins:
-      OUT: [{ pin: PE6, af: 11 }, { pin: PA6, af: 10 }, { pin: PC5, af: 13 }, { pin: PE12, af: 13 }, { pin: PE15, af: 13 }, { pin: PB12, af: 13 }, { pin: PA8, af: 12 }]
+      OUT: [{ pin: PA6, af: 10 }, { pin: PA8, af: 12 }, { pin: PB12, af: 13 }, { pin: PC5, af: 13 }, { pin: PE12, af: 13 }, { pin: PE15, af: 13 }, { pin: PE6, af: 11 }]
   CRC:
     category: System Core
     settings:
@@ -2386,20 +2412,21 @@ peripherals:
   DAC:
     category: Analog
     settings:
-      - name: Channel 1
+      - name: "Channel 1"
         choices:
           - { name: Disable }
-          - { name: Output on pin }
-      - name: Channel 2
+          - { name: "Output on pin", signals: [OUT1] }
+      - name: "Channel 2"
         choices:
           - { name: Disable }
-          - { name: Output on pin }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+          - { name: "Output on pin", signals: [OUT2] }
+    signal_pins:
+      OUT1: [{ pin: PA4 }]
+      OUT2: [{ pin: PA5 }]
   DBGMCU:
     category: System Core
     settings:
-      - name: Debug in low power
+      - name: "Debug in low power"
         choices:
           - { name: Disable }
           - { name: Enabled }
@@ -2424,17 +2451,17 @@ peripherals:
           - { name: "CKOUT enabled", signals: [CKOUT] }
     signal_pins:
       CKIN0: [{ pin: PC0, af: 3 }]
-      CKIN1: [{ pin: PC2, af: 3 }, { pin: PB2, af: 4 }, { pin: PB13, af: 6 }, { pin: PD7, af: 6 }]
-      CKOUT: [{ pin: PC2, af: 6 }, { pin: PB0, af: 6 }, { pin: PE9, af: 3 }, { pin: PD10, af: 3 }, { pin: PD3, af: 3 }]
+      CKIN1: [{ pin: PB13, af: 6 }, { pin: PB2, af: 4 }, { pin: PC2, af: 3 }, { pin: PD7, af: 6 }]
+      CKOUT: [{ pin: PB0, af: 6 }, { pin: PC2, af: 6 }, { pin: PD10, af: 3 }, { pin: PD3, af: 3 }, { pin: PE9, af: 3 }]
       DATIN0: [{ pin: PC1, af: 3 }]
-      DATIN1: [{ pin: PC3, af: 3 }, { pin: PB1, af: 6 }, { pin: PB12, af: 6 }, { pin: PD6, af: 4 }]
+      DATIN1: [{ pin: PB1, af: 6 }, { pin: PB12, af: 6 }, { pin: PC3, af: 3 }, { pin: PD6, af: 4 }]
   DMA1:
     category: System Core
     settings:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: Activated }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   DMA2:
@@ -2443,7 +2470,7 @@ peripherals:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: Activated }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   DVP:
@@ -2455,21 +2482,21 @@ peripherals:
           - { name: "8-bit", signals: [D0, D1, D2, D3, D4, D5, D6, D7, HSYNC, VSYNC, PCLK] }
           - { name: "10-bit", signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, HSYNC, VSYNC, PCLK] }
     signal_pins:
-      D0: [{ pin: PA9, af: 13 }, { pin: PE0, af: 11 }]
-      D1: [{ pin: PC7, af: 13 }, { pin: PA10, af: 13 }, { pin: PE1, af: 11 }]
-      D10: [{ pin: PD6, af: 13 }, { pin: PB5, af: 13 }]
-      D11: [{ pin: PF10, af: 13 }, { pin: PF0, af: 12 }, { pin: PD2, af: 13 }]
-      D2: [{ pin: PE2, af: 13 }, { pin: PB13, af: 13 }, { pin: PC8, af: 13 }, { pin: PF4, af: 13 }]
-      D3: [{ pin: PE3, af: 13 }, { pin: PC9, af: 13 }, { pin: PF5, af: 13 }]
-      D4: [{ pin: PE4, af: 13 }, { pin: PD12, af: 13 }]
-      D5: [{ pin: PD3, af: 13 }, { pin: PF14, af: 11 }, { pin: PB3, af: 13 }, { pin: PB6, af: 13 }]
-      D6: [{ pin: PE5, af: 13 }, { pin: PD14, af: 13 }, { pin: PB8, af: 13 }]
-      D7: [{ pin: PE6, af: 13 }, { pin: PD15, af: 13 }, { pin: PB9, af: 13 }]
+      D0: [{ pin: PA9, af: 13 }, { pin: PC6, af: 13 }, { pin: PE0, af: 11 }]
+      D1: [{ pin: PA10, af: 13 }, { pin: PC7, af: 13 }, { pin: PE1, af: 11 }]
+      D10: [{ pin: PB5, af: 13 }, { pin: PD6, af: 13 }]
+      D11: [{ pin: PD2, af: 13 }, { pin: PF0, af: 12 }, { pin: PF10, af: 13 }]
+      D2: [{ pin: PB13, af: 13 }, { pin: PC8, af: 13 }, { pin: PE2, af: 13 }, { pin: PF4, af: 13 }]
+      D3: [{ pin: PC9, af: 13 }, { pin: PE3, af: 13 }, { pin: PF5, af: 13 }]
+      D4: [{ pin: PC11, af: 13 }, { pin: PD12, af: 13 }, { pin: PE4, af: 13 }]
+      D5: [{ pin: PB3, af: 13 }, { pin: PB6, af: 13 }, { pin: PD13, af: 13 }, { pin: PD3, af: 13 }, { pin: PF14, af: 11 }]
+      D6: [{ pin: PB8, af: 13 }, { pin: PD14, af: 13 }, { pin: PE5, af: 13 }]
+      D7: [{ pin: PB9, af: 13 }, { pin: PD15, af: 13 }, { pin: PE6, af: 13 }]
       D8: [{ pin: PC10, af: 13 }, { pin: PF4, af: 11 }]
       D9: [{ pin: PC12, af: 13 }, { pin: PF3, af: 11 }]
       HSYNC: [{ pin: PA4, af: 13 }, { pin: PB13, af: 8 }]
-      PCLK: [{ pin: PA6, af: 13 }, { pin: PF13, af: 11 }, { pin: PB12, af: 15 }]
-      VSYNC: [{ pin: PA5, af: 11 }, { pin: PF3, af: 13 }, { pin: PB7, af: 13 }]
+      PCLK: [{ pin: PA6, af: 13 }, { pin: PB12, af: 15 }, { pin: PF13, af: 11 }]
+      VSYNC: [{ pin: PA5, af: 11 }, { pin: PB14, af: 15 }, { pin: PB7, af: 13 }, { pin: PF3, af: 13 }]
   ECDC:
     category: System Core
     settings:
@@ -2512,25 +2539,38 @@ peripherals:
   EXTI:
     category: System Core
     settings:
-      - name: Mode
+      - name: "EXTI trigger edge"
         choices:
-          - { name: Disable }
-          - { name: Enabled }
+          - { name: "Rising edge" }
+          - { name: "Falling edge" }
+          - { name: "Both edges" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   FLASH:
     category: System Core
     settings:
-      - name: Mode
+      - name: "Independent watchdog start (IWDG_SW)"
         choices:
-          - { name: Disable }
-          - { name: Enabled }
+          - { name: "Started by software (factory default)" }
+          - { name: "Started by hardware" }
+      - name: "Reset on entering Standby (STANDBY_RST)"
+        choices:
+          - { name: "No reset (factory default)" }
+          - { name: Reset }
+      - name: "Reset on entering Stop (STOP_RST)"
+        choices:
+          - { name: "No reset (factory default)" }
+          - { name: Reset }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   FMC:
     category: Memory
     settings:
-      - name: NOR/PSRAM
+      - name: "NOR/PSRAM"
+        choices:
+          - { name: Disable }
+          - { name: Enabled }
+      - name: NAND
         choices:
           - { name: Disable }
           - { name: Enabled }
@@ -2539,8 +2579,8 @@ peripherals:
           - { name: Disable }
           - { name: Enabled }
     signal_pins:
-      A0: [{ pin: PE11, af: 15 }, { pin: PA14, af: 3 }, { pin: PF5, af: 12 }]
-      A1: [{ pin: PE12, af: 15 }, { pin: PA15, af: 12 }, { pin: PB3, af: 12 }]
+      A0: [{ pin: PA14, af: 3 }, { pin: PE11, af: 15 }, { pin: PF5, af: 12 }]
+      A1: [{ pin: PA15, af: 12 }, { pin: PB3, af: 12 }, { pin: PE12, af: 15 }]
       A10: [{ pin: PB10, af: 12 }, { pin: PD10, af: 0 }]
       A11: [{ pin: PB11, af: 12 }, { pin: PD11, af: 0 }]
       A12: [{ pin: PB12, af: 12 }, { pin: PD12, af: 0 }]
@@ -2550,68 +2590,68 @@ peripherals:
       A16: [{ pin: PD11, af: 12 }]
       A17: [{ pin: PD12, af: 12 }]
       A18: [{ pin: PD13, af: 12 }]
-      A19: [{ pin: PE3, af: 12 }, { pin: PB10, af: 6 }]
-      A2: [{ pin: PE13, af: 15 }, { pin: PB4, af: 12 }]
-      A20: [{ pin: PE4, af: 12 }, { pin: PB11, af: 2 }]
-      A21: [{ pin: PE5, af: 12 }, { pin: PB12, af: 3 }]
-      A22: [{ pin: PE6, af: 12 }, { pin: PB13, af: 15 }]
-      A23: [{ pin: PE2, af: 12 }, { pin: PB14, af: 0 }]
+      A19: [{ pin: PB10, af: 6 }, { pin: PE3, af: 12 }]
+      A2: [{ pin: PB4, af: 12 }, { pin: PE13, af: 15 }]
+      A20: [{ pin: PB11, af: 2 }, { pin: PE4, af: 12 }]
+      A21: [{ pin: PB12, af: 3 }, { pin: PE5, af: 12 }]
+      A22: [{ pin: PB13, af: 15 }, { pin: PE6, af: 12 }]
+      A23: [{ pin: PB14, af: 0 }, { pin: PE2, af: 12 }]
       A24: [{ pin: PE1, af: 12 }]
       A25: [{ pin: PD2, af: 11 }]
-      A3: [{ pin: PE14, af: 14 }, { pin: PE0, af: 0 }, { pin: PB8, af: 12 }]
-      A4: [{ pin: PE15, af: 15 }, { pin: PE1, af: 0 }, { pin: PB9, af: 12 }]
-      A5: [{ pin: PC13, af: 12 }, { pin: PB10, af: 0 }, { pin: PB6, af: 11 }]
-      A6: [{ pin: PB11, af: 0 }, { pin: PA10, af: 10 }]
-      A7: [{ pin: PB12, af: 0 }, { pin: PA11, af: 10 }]
-      A8: [{ pin: PB13, af: 0 }, { pin: PA12, af: 10 }]
-      A9: [{ pin: PB14, af: 0 }, { pin: PD9, af: 0 }, { pin: PA13, af: 10 }]
+      A3: [{ pin: PB8, af: 12 }, { pin: PE0, af: 0 }, { pin: PE14, af: 14 }]
+      A4: [{ pin: PB9, af: 12 }, { pin: PE1, af: 0 }, { pin: PE15, af: 15 }]
+      A5: [{ pin: PB10, af: 0 }, { pin: PB6, af: 1 }, { pin: PC13, af: 12 }]
+      A6: [{ pin: PA10, af: 10 }, { pin: PB11, af: 0 }]
+      A7: [{ pin: PA11, af: 10 }, { pin: PB12, af: 0 }]
+      A8: [{ pin: PA12, af: 10 }, { pin: PB13, af: 0 }]
+      A9: [{ pin: PA13, af: 10 }, { pin: PB14, af: 0 }, { pin: PD9, af: 0 }]
       BA0: [{ pin: PB1, af: 7 }, { pin: PB14, af: 12 }]
-      BA1: [{ pin: PE10, af: 15 }, { pin: PB15, af: 12 }, { pin: PA13, af: 3 }]
+      BA1: [{ pin: PA13, af: 3 }, { pin: PB15, af: 12 }, { pin: PE10, af: 15 }]
       CAS_N: [{ pin: PC0, af: 15 }, { pin: PF12, af: 12 }]
-      CKE0: [{ pin: PE5, af: 9 }, { pin: PC3, af: 12 }, { pin: PC5, af: 12 }, { pin: PF3, af: 4 }]
-      CKE1: [{ pin: PE6, af: 7 }, { pin: PC14, af: 9 }, { pin: PF4, af: 4 }, { pin: PB5, af: 12 }]
-      CLK: [{ pin: PE2, af: 9 }, { pin: PF2, af: 12 }, { pin: PF14, af: 1 }]
-      CS_N0: [{ pin: PE3, af: 9 }, { pin: PC4, af: 12 }, { pin: PD6, af: 3 }]
-      CS_N1: [{ pin: PE4, af: 9 }, { pin: PF0, af: 4 }, { pin: PD7, af: 3 }, { pin: PB6, af: 12 }]
+      CKE0: [{ pin: PC3, af: 12 }, { pin: PC5, af: 12 }, { pin: PE5, af: 9 }, { pin: PF3, af: 4 }]
+      CKE1: [{ pin: PB5, af: 12 }, { pin: PC14, af: 9 }, { pin: PE6, af: 7 }, { pin: PF4, af: 4 }]
+      CLK: [{ pin: PD3, af: 12 }, { pin: PE2, af: 9 }, { pin: PF14, af: 1 }, { pin: PF2, af: 12 }]
+      CS_N0: [{ pin: PC4, af: 12 }, { pin: PD6, af: 3 }, { pin: PE3, af: 9 }]
+      CS_N1: [{ pin: PB6, af: 12 }, { pin: PD7, af: 3 }, { pin: PE4, af: 9 }, { pin: PF0, af: 4 }]
       CS_NO: [{ pin: PC2, af: 12 }]
       D0: [{ pin: PD13, af: 0 }, { pin: PD14, af: 12 }]
       D1: [{ pin: PD14, af: 0 }, { pin: PD15, af: 12 }]
-      D10: [{ pin: PE13, af: 12 }, { pin: PA9, af: 0 }, { pin: PD0, af: 1 }]
-      D11: [{ pin: PE14, af: 12 }, { pin: PA10, af: 0 }, { pin: PD1, af: 1 }]
-      D12: [{ pin: PE15, af: 12 }, { pin: PA11, af: 0 }, { pin: PD2, af: 1 }]
-      D13: [{ pin: PD8, af: 12 }, { pin: PA12, af: 0 }, { pin: PD3, af: 1 }]
-      D14: [{ pin: PD9, af: 12 }, { pin: PA13, af: 0 }, { pin: PD4, af: 1 }]
-      D15: [{ pin: PD10, af: 12 }, { pin: PA14, af: 0 }, { pin: PD5, af: 1 }]
+      D10: [{ pin: PA9, af: 0 }, { pin: PD0, af: 1 }, { pin: PE13, af: 12 }]
+      D11: [{ pin: PA10, af: 0 }, { pin: PD1, af: 1 }, { pin: PE14, af: 12 }]
+      D12: [{ pin: PA11, af: 0 }, { pin: PD2, af: 1 }, { pin: PE15, af: 12 }]
+      D13: [{ pin: PA12, af: 0 }, { pin: PC8, af: 4 }, { pin: PD3, af: 1 }, { pin: PD8, af: 12 }]
+      D14: [{ pin: PA13, af: 0 }, { pin: PC9, af: 7 }, { pin: PD4, af: 1 }, { pin: PD9, af: 12 }]
+      D15: [{ pin: PA14, af: 0 }, { pin: PD10, af: 12 }, { pin: PD5, af: 1 }]
       D16: [{ pin: PC14, af: 12 }, { pin: PC3, af: 11 }]
-      D17: [{ pin: PC15, af: 12 }, { pin: PE10, af: 3 }, { pin: PB5, af: 11 }]
-      D18: [{ pin: PF6, af: 12 }, { pin: PE11, af: 3 }]
-      D19: [{ pin: PF7, af: 12 }, { pin: PE12, af: 3 }]
-      D2: [{ pin: PD15, af: 0 }, { pin: PD0, af: 12 }]
-      D20: [{ pin: PA9, af: 8 }]
-      D21: [{ pin: PA10, af: 8 }]
-      D22: [{ pin: PA11, af: 8 }]
+      D17: [{ pin: PB5, af: 11 }, { pin: PC15, af: 12 }, { pin: PE10, af: 3 }]
+      D18: [{ pin: PE11, af: 3 }, { pin: PF6, af: 12 }]
+      D19: [{ pin: PE12, af: 3 }, { pin: PF7, af: 12 }]
+      D2: [{ pin: PD0, af: 12 }, { pin: PD15, af: 0 }]
+      D20: [{ pin: PA9, af: 8 }, { pin: PF8, af: 12 }]
+      D21: [{ pin: PA10, af: 8 }, { pin: PF9, af: 12 }]
+      D22: [{ pin: PA11, af: 8 }, { pin: PF10, af: 12 }]
       D23: [{ pin: PA0, af: 12 }, { pin: PA12, af: 8 }]
       D24: [{ pin: PA1, af: 12 }, { pin: PC10, af: 3 }]
       D25: [{ pin: PA2, af: 12 }, { pin: PC11, af: 3 }]
       D26: [{ pin: PA3, af: 12 }, { pin: PC12, af: 3 }]
-      D27: [{ pin: PE5, af: 10 }, { pin: PA4, af: 12 }]
-      D28: [{ pin: PE6, af: 10 }, { pin: PA5, af: 12 }]
+      D27: [{ pin: PA4, af: 12 }, { pin: PE5, af: 10 }]
+      D28: [{ pin: PA5, af: 12 }, { pin: PE6, af: 10 }]
       D29: [{ pin: PB0, af: 12 }, { pin: PF5, af: 3 }]
-      D3: [{ pin: PF0, af: 2 }, { pin: PD1, af: 12 }]
+      D3: [{ pin: PD1, af: 12 }, { pin: PF0, af: 2 }]
       D30: [{ pin: PB1, af: 12 }, { pin: PE0, af: 3 }]
       D31: [{ pin: PB2, af: 12 }, { pin: PE1, af: 3 }]
-      D4: [{ pin: PF1, af: 2 }]
-      D5: [{ pin: PE8, af: 12 }, { pin: PF2, af: 2 }]
-      D6: [{ pin: PE9, af: 12 }, { pin: PC6, af: 0 }]
-      D7: [{ pin: PC7, af: 0 }]
-      D8: [{ pin: PE11, af: 12 }, { pin: PC8, af: 0 }]
-      D9: [{ pin: PE12, af: 12 }, { pin: PC9, af: 0 }]
-      DQM0: [{ pin: PC2, af: 15 }, { pin: PC12, af: 0 }]
-      DQM1: [{ pin: PE3, af: 1 }, { pin: PC3, af: 15 }, { pin: PC11, af: 0 }]
-      DQM2: [{ pin: PA0, af: 15 }, { pin: PA6, af: 6 }, { pin: PC10, af: 0 }, { pin: PB9, af: 3 }]
-      DQM3: [{ pin: PA8, af: 6 }, { pin: PA15, af: 0 }]
+      D4: [{ pin: PC0, af: 4 }, { pin: PE7, af: 12 }, { pin: PF1, af: 2 }]
+      D5: [{ pin: PC1, af: 4 }, { pin: PE8, af: 12 }, { pin: PF2, af: 2 }]
+      D6: [{ pin: PC2, af: 4 }, { pin: PC6, af: 0 }, { pin: PE9, af: 12 }]
+      D7: [{ pin: PC3, af: 4 }, { pin: PC7, af: 0 }, { pin: PE10, af: 12 }]
+      D8: [{ pin: PC6, af: 4 }, { pin: PC8, af: 0 }, { pin: PE11, af: 12 }]
+      D9: [{ pin: PC7, af: 4 }, { pin: PC9, af: 0 }, { pin: PE12, af: 12 }]
+      DQM0: [{ pin: PC12, af: 0 }, { pin: PC2, af: 15 }]
+      DQM1: [{ pin: PC11, af: 0 }, { pin: PC3, af: 15 }, { pin: PE3, af: 1 }]
+      DQM2: [{ pin: PA0, af: 15 }, { pin: PA6, af: 6 }, { pin: PB9, af: 3 }, { pin: PC10, af: 0 }]
+      DQM3: [{ pin: PA15, af: 0 }, { pin: PA8, af: 6 }]
       INT2: [{ pin: PF1, af: 12 }]
-      NADV: [{ pin: PF14, af: 12 }, { pin: PB7, af: 12 }]
+      NADV: [{ pin: PB7, af: 12 }, { pin: PF14, af: 12 }]
       NBL0: [{ pin: PC12, af: 0 }]
       NBL1: [{ pin: PC11, af: 0 }]
       NBL2: [{ pin: PC10, af: 0 }]
@@ -2624,8 +2664,8 @@ peripherals:
       NOE: [{ pin: PD4, af: 12 }]
       NWAIT: [{ pin: PD6, af: 12 }]
       NWE: [{ pin: PD5, af: 12 }]
-      RAS_N: [{ pin: PE5, af: 9 }, { pin: PC15, af: 9 }, { pin: PC10, af: 1 }, { pin: PF3, af: 3 }]
-      WE_N: [{ pin: PC0, af: 12 }, { pin: PC1, af: 15 }, { pin: PA7, af: 12 }]
+      RAS_N: [{ pin: PC10, af: 1 }, { pin: PC15, af: 9 }, { pin: PE5, af: 9 }, { pin: PF3, af: 3 }]
+      WE_N: [{ pin: PA7, af: 12 }, { pin: PC0, af: 12 }, { pin: PC1, af: 15 }]
   GPHA:
     category: Graphics
     settings:
@@ -2642,8 +2682,14 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+    signal_pins:
+      IN0: [{ pin: PC0 }]
+      IN1: [{ pin: PC1 }]
+      IN2: [{ pin: PC2 }]
+      IN3: [{ pin: PC3 }]
+      IN4: [{ pin: PF8 }]
+      IN5: [{ pin: PF9 }]
+      IN6: [{ pin: PF10 }]
   HSEM:
     category: System Core
     settings:
@@ -2661,9 +2707,9 @@ peripherals:
           - { name: Disable }
           - { name: I2C, signals: [SCL, SDA] }
     signal_pins:
-      SCL: [{ pin: PA8, af: 4 }, { pin: PA14, af: 7 }]
-      SDA: [{ pin: PC9, af: 4 }, { pin: PA13, af: 7 }]
-      SMBA: [{ pin: PA9, af: 4 }, { pin: PA15, af: 7 }]
+      SCL: [{ pin: PA14, af: 7 }, { pin: PA8, af: 4 }]
+      SDA: [{ pin: PA13, af: 7 }, { pin: PC9, af: 4 }]
+      SMBA: [{ pin: PA15, af: 7 }, { pin: PA9, af: 4 }]
   I2C4:
     category: Connectivity
     settings:
@@ -2672,9 +2718,9 @@ peripherals:
           - { name: Disable }
           - { name: I2C, signals: [SCL, SDA] }
     signal_pins:
-      SCL: [{ pin: PF12, af: 2 }, { pin: PD12, af: 4 }, { pin: PB6, af: 6 }, { pin: PB8, af: 6 }]
-      SDA: [{ pin: PF13, af: 2 }, { pin: PD13, af: 4 }, { pin: PB7, af: 6 }, { pin: PB9, af: 6 }]
-      SMBA: [{ pin: PF11, af: 2 }, { pin: PB5, af: 6 }, { pin: PB9, af: 11 }]
+      SCL: [{ pin: PB6, af: 6 }, { pin: PB8, af: 6 }, { pin: PD12, af: 4 }, { pin: PF12, af: 2 }]
+      SDA: [{ pin: PB7, af: 6 }, { pin: PB9, af: 6 }, { pin: PD13, af: 4 }, { pin: PF13, af: 2 }]
+      SMBA: [{ pin: PB5, af: 6 }, { pin: PB9, af: 11 }, { pin: PD11, af: 4 }, { pin: PF11, af: 2 }]
   I2S2:
     category: Connectivity
     settings:
@@ -2686,10 +2732,10 @@ peripherals:
           - { name: "Slave Transmit", signals: [CK, WS, SD] }
           - { name: "Slave Receive", signals: [CK, WS, SD] }
     signal_pins:
-      CK: [{ pin: PB10, af: 5 }, { pin: PB13, af: 5 }, { pin: PA9, af: 5 }, { pin: PA12, af: 5 }, { pin: PD3, af: 5 }]
+      CK: [{ pin: PA12, af: 5 }, { pin: PA9, af: 5 }, { pin: PB10, af: 5 }, { pin: PB13, af: 5 }, { pin: PD3, af: 5 }]
       MCK: [{ pin: PB5, af: 8 }]
-      SD: [{ pin: PC1, af: 5 }, { pin: PC3, af: 5 }, { pin: PB15, af: 5 }]
-      WS: [{ pin: PB12, af: 5 }, { pin: PA11, af: 5 }, { pin: PB4, af: 7 }, { pin: PB9, af: 5 }]
+      SD: [{ pin: PB15, af: 5 }, { pin: PC1, af: 5 }, { pin: PC3, af: 5 }]
+      WS: [{ pin: PA11, af: 5 }, { pin: PB12, af: 5 }, { pin: PB4, af: 7 }, { pin: PB9, af: 5 }]
   I2S3:
     category: Connectivity
     settings:
@@ -2701,10 +2747,10 @@ peripherals:
           - { name: "Slave Transmit", signals: [CK, WS, SD] }
           - { name: "Slave Receive", signals: [CK, WS, SD] }
     signal_pins:
-      CK: [{ pin: PA14, af: 1 }, { pin: PC10, af: 6 }, { pin: PB3, af: 6 }]
-      MCK: [{ pin: PC7, af: 6 }, { pin: PB6, af: 5 }]
-      SD: [{ pin: PB2, af: 7 }, { pin: PA13, af: 1 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }, { pin: PB5, af: 7 }]
-      WS: [{ pin: PA4, af: 6 }, { pin: PA15, af: 6 }]
+      CK: [{ pin: PA14, af: 1 }, { pin: PB3, af: 6 }, { pin: PC10, af: 6 }]
+      MCK: [{ pin: PB6, af: 5 }, { pin: PC7, af: 6 }]
+      SD: [{ pin: PA13, af: 1 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }]
+      WS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
   IPC:
     category: System Core
     settings:
@@ -2720,7 +2766,7 @@ peripherals:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: Activated }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   LPTIM1:
@@ -2781,32 +2827,32 @@ peripherals:
           - { name: Enabled, signals: [CLK, HSYNC, VSYNC, DE] }
     signal_pins:
       B0: [{ pin: PE4, af: 14 }, { pin: PF1, af: 8 }, { pin: PF3, af: 14 }]
-      B1: [{ pin: PD14, af: 8 }, { pin: PA10, af: 14 }, { pin: PC10, af: 10 }, { pin: PD0, af: 14 }, { pin: PE0, af: 14 }]
-      B2: [{ pin: PA3, af: 9 }, { pin: PC9, af: 14 }, { pin: PA13, af: 8 }, { pin: PD2, af: 14 }, { pin: PD6, af: 14 }, { pin: PF4, af: 14 }]
-      B3: [{ pin: PD10, af: 14 }, { pin: PA8, af: 13 }, { pin: PD7, af: 14 }, { pin: PF5, af: 14 }, { pin: PE0, af: 15 }]
-      B4: [{ pin: PE12, af: 14 }, { pin: PA10, af: 12 }, { pin: PA15, af: 10 }, { pin: PC11, af: 14 }, { pin: PD4, af: 14 }, { pin: PE0, af: 9 }, { pin: PE1, af: 15 }]
-      B5: [{ pin: PA3, af: 14 }, { pin: PD5, af: 14 }, { pin: PF14, af: 15 }, { pin: PB5, af: 3 }]
+      B1: [{ pin: PA10, af: 14 }, { pin: PC10, af: 10 }, { pin: PD0, af: 14 }, { pin: PD14, af: 8 }, { pin: PE0, af: 14 }]
+      B2: [{ pin: PA13, af: 8 }, { pin: PA3, af: 9 }, { pin: PC9, af: 14 }, { pin: PD2, af: 14 }, { pin: PD6, af: 14 }, { pin: PF4, af: 14 }]
+      B3: [{ pin: PA8, af: 13 }, { pin: PD10, af: 14 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }]
+      B4: [{ pin: PA10, af: 12 }, { pin: PA15, af: 10 }, { pin: PC11, af: 14 }, { pin: PD4, af: 14 }, { pin: PE0, af: 9 }, { pin: PE1, af: 15 }, { pin: PE12, af: 14 }]
+      B5: [{ pin: PA3, af: 14 }, { pin: PB5, af: 3 }, { pin: PD5, af: 14 }, { pin: PF14, af: 15 }]
       B6: [{ pin: PA14, af: 14 }, { pin: PA15, af: 14 }, { pin: PB8, af: 14 }]
-      B7: [{ pin: PD8, af: 14 }, { pin: PD2, af: 9 }, { pin: PB9, af: 14 }]
-      CLK: [{ pin: PE14, af: 13 }, { pin: PB14, af: 14 }, { pin: PF1, af: 14 }, { pin: PA15, af: 15 }]
-      DE: [{ pin: PF10, af: 14 }, { pin: PC5, af: 14 }, { pin: PE13, af: 14 }, { pin: PC12, af: 15 }]
-      G0: [{ pin: PE5, af: 14 }, { pin: PB1, af: 14 }, { pin: PB14, af: 6 }]
-      G1: [{ pin: PE6, af: 14 }, { pin: PB0, af: 14 }]
-      G2: [{ pin: PC0, af: 11 }, { pin: PA6, af: 14 }, { pin: PD15, af: 7 }, { pin: PD5, af: 15 }]
-      G3: [{ pin: PE11, af: 14 }, { pin: PC9, af: 10 }, { pin: PD6, af: 15 }, { pin: PF4, af: 9 }]
+      B7: [{ pin: PB9, af: 14 }, { pin: PD2, af: 9 }, { pin: PD8, af: 14 }]
+      CLK: [{ pin: PA15, af: 15 }, { pin: PB14, af: 14 }, { pin: PE14, af: 13 }, { pin: PF1, af: 14 }]
+      DE: [{ pin: PC12, af: 15 }, { pin: PC5, af: 14 }, { pin: PE13, af: 14 }, { pin: PF10, af: 14 }]
+      G0: [{ pin: PB1, af: 14 }, { pin: PB14, af: 6 }, { pin: PE5, af: 14 }]
+      G1: [{ pin: PB0, af: 14 }, { pin: PE6, af: 14 }]
+      G2: [{ pin: PA6, af: 14 }, { pin: PC0, af: 11 }, { pin: PD15, af: 7 }, { pin: PD5, af: 15 }]
+      G3: [{ pin: PC9, af: 10 }, { pin: PD6, af: 15 }, { pin: PE11, af: 14 }, { pin: PF4, af: 9 }]
       G4: [{ pin: PB10, af: 14 }, { pin: PC8, af: 14 }, { pin: PD7, af: 15 }]
-      G5: [{ pin: PB11, af: 14 }, { pin: PF3, af: 15 }]
+      G5: [{ pin: PB11, af: 14 }, { pin: PC1, af: 14 }, { pin: PF3, af: 15 }]
       G6: [{ pin: PC7, af: 14 }, { pin: PF4, af: 15 }]
-      G7: [{ pin: PB15, af: 14 }, { pin: PF2, af: 14 }, { pin: PD3, af: 14 }, { pin: PF5, af: 15 }]
-      HSYNC: [{ pin: PA6, af: 11 }, { pin: PC6, af: 14 }, { pin: PC10, af: 15 }]
+      G7: [{ pin: PB15, af: 14 }, { pin: PD3, af: 14 }, { pin: PF2, af: 14 }, { pin: PF5, af: 15 }]
+      HSYNC: [{ pin: PA6, af: 11 }, { pin: PC10, af: 15 }, { pin: PC6, af: 14 }]
       R0: [{ pin: PA0, af: 14 }, { pin: PA14, af: 15 }, { pin: PE1, af: 14 }]
       R1: [{ pin: PA2, af: 14 }, { pin: PF0, af: 11 }]
-      R2: [{ pin: PA1, af: 14 }, { pin: PD13, af: 3 }, { pin: PC10, af: 14 }]
-      R3: [{ pin: PB0, af: 9 }, { pin: PD12, af: 11 }, { pin: PA15, af: 9 }, { pin: PD0, af: 15 }]
-      R4: [{ pin: PA5, af: 14 }, { pin: PD11, af: 11 }, { pin: PA11, af: 14 }, { pin: PD1, af: 15 }]
-      R5: [{ pin: PC0, af: 14 }, { pin: PA9, af: 14 }, { pin: PA12, af: 14 }, { pin: PD2, af: 15 }]
-      R6: [{ pin: PE2, af: 14 }, { pin: PB1, af: 9 }, { pin: PA8, af: 14 }, { pin: PC12, af: 14 }, { pin: PD3, af: 15 }]
-      R7: [{ pin: PC4, af: 14 }, { pin: PE15, af: 14 }, { pin: PF0, af: 14 }, { pin: PD4, af: 15 }]
+      R2: [{ pin: PA1, af: 14 }, { pin: PC10, af: 14 }, { pin: PD13, af: 3 }]
+      R3: [{ pin: PA15, af: 9 }, { pin: PB0, af: 9 }, { pin: PD0, af: 15 }, { pin: PD12, af: 11 }]
+      R4: [{ pin: PA11, af: 14 }, { pin: PA5, af: 14 }, { pin: PD1, af: 15 }, { pin: PD11, af: 11 }]
+      R5: [{ pin: PA12, af: 14 }, { pin: PA9, af: 14 }, { pin: PC0, af: 14 }, { pin: PD2, af: 15 }]
+      R6: [{ pin: PA8, af: 14 }, { pin: PB1, af: 9 }, { pin: PC12, af: 14 }, { pin: PD3, af: 15 }, { pin: PE2, af: 14 }]
+      R7: [{ pin: PC4, af: 14 }, { pin: PD4, af: 15 }, { pin: PE15, af: 14 }, { pin: PF0, af: 14 }]
       VSYNC: [{ pin: PA4, af: 14 }, { pin: PA7, af: 14 }, { pin: PB12, af: 10 }, { pin: PC11, af: 15 }]
   OPA:
     category: Analog
@@ -2823,8 +2869,25 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+    signal_pins:
+      N01: [{ pin: PB1 }]
+      N02: [{ pin: PE8 }]
+      N03: [{ pin: PC3 }]
+      N11: [{ pin: PA7 }]
+      N12: [{ pin: PF12 }]
+      N13: [{ pin: PA3 }]
+      OUT01: [{ pin: PC4 }]
+      OUT02: [{ pin: PE7 }]
+      OUT03: [{ pin: PA0 }]
+      OUT11: [{ pin: PA5 }]
+      OUT12: [{ pin: PB1 }]
+      OUT13: [{ pin: PA4 }]
+      P01: [{ pin: PB0 }]
+      P02: [{ pin: PE9 }]
+      P03: [{ pin: PC2 }]
+      P11: [{ pin: PA6 }]
+      P12: [{ pin: PF11 }]
+      P13: [{ pin: PA2 }]
   PIOC:
     category: Connectivity
     settings:
@@ -2833,15 +2896,21 @@ peripherals:
           - { name: Disable }
           - { name: "Programmable IO", signals: [IO0, IO1] }
     signal_pins:
-      IO0: [{ pin: PE3, af: 5 }, { pin: PC1, af: 7 }, { pin: PA0, af: 5 }, { pin: PF12, af: 3 }, { pin: PB8, af: 5 }]
-      IO1: [{ pin: PE4, af: 4 }, { pin: PC0, af: 5 }, { pin: PC2, af: 8 }, { pin: PF13, af: 5 }, { pin: PF14, af: 5 }, { pin: PB9, af: 7 }]
+      IO0: [{ pin: PA0, af: 5 }, { pin: PB8, af: 5 }, { pin: PC1, af: 7 }, { pin: PE3, af: 5 }, { pin: PF12, af: 3 }]
+      IO1: [{ pin: PB9, af: 7 }, { pin: PC0, af: 5 }, { pin: PC2, af: 8 }, { pin: PE4, af: 4 }, { pin: PF13, af: 5 }, { pin: PF14, af: 5 }]
   PWR:
     category: System Core
     settings:
-      - name: Mode
+      - name: "Programmable Voltage Detector (PVD)"
         choices:
           - { name: Disable }
           - { name: Enabled }
+      - name: "Low power mode"
+        choices:
+          - { name: None }
+          - { name: Sleep }
+          - { name: Stop }
+          - { name: Standby }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   QSPI1:
@@ -2857,10 +2926,10 @@ peripherals:
       SCK: [{ pin: PB2, af: 9 }]
       SCSN: [{ pin: PB6, af: 10 }]
       SCSXN: [{ pin: PC11, af: 9 }]
-      SIO0: [{ pin: PF8, af: 10 }, { pin: PD11, af: 9 }, { pin: PC9, af: 9 }]
-      SIO1: [{ pin: PF9, af: 10 }, { pin: PD12, af: 9 }, { pin: PC10, af: 9 }]
-      SIO2: [{ pin: PF7, af: 10 }, { pin: PD14, af: 9 }]
-      SIO3: [{ pin: PF6, af: 10 }, { pin: PA1, af: 9 }, { pin: PD13, af: 9 }]
+      SIO0: [{ pin: PC9, af: 9 }, { pin: PD11, af: 9 }, { pin: PF8, af: 10 }]
+      SIO1: [{ pin: PC10, af: 9 }, { pin: PD12, af: 9 }, { pin: PF9, af: 10 }]
+      SIO2: [{ pin: PD14, af: 9 }, { pin: PF7, af: 10 }]
+      SIO3: [{ pin: PA1, af: 9 }, { pin: PD13, af: 9 }, { pin: PF6, af: 10 }]
       SIOX0: [{ pin: PE7, af: 10 }]
       SIOX1: [{ pin: PE8, af: 10 }]
       SIOX2: [{ pin: PE9, af: 10 }, { pin: PF3, af: 9 }]
@@ -2875,53 +2944,39 @@ peripherals:
           - { name: "Dual-SPI", signals: [SCK, SCSN, SIO0, SIO1] }
           - { name: "Quad-SPI", signals: [SCK, SCSN, SIO0, SIO1, SIO2, SIO3] }
     signal_pins:
-      SCK: [{ pin: PF6, af: 4 }, { pin: PE10, af: 7 }, { pin: PF0, af: 5 }]
-      SCSN: [{ pin: PF7, af: 4 }, { pin: PE11, af: 7 }, { pin: PF1, af: 5 }]
-      SCSXN: [{ pin: PC1, af: 10 }, { pin: PB10, af: 11 }]
-      SIO0: [{ pin: PF8, af: 4, notes: "DS Table 2-1-1 gives this pin AF4 and AF8 for this signal; `signal_pins:` takes one AF code per pin, so AF4 is used and AF8 also work here" }, { pin: PE12, af: 7 }, { pin: PF2, af: 5 }]
-      SIO1: [{ pin: PF9, af: 4 }, { pin: PE13, af: 7 }]
-      SIO2: [{ pin: PF10, af: 4 }, { pin: PE14, af: 7 }]
+      SCK: [{ pin: PE10, af: 7 }, { pin: PF0, af: 5 }, { pin: PF6, af: 4 }]
+      SCSN: [{ pin: PE11, af: 7 }, { pin: PF1, af: 5 }, { pin: PF7, af: 4 }]
+      SCSXN: [{ pin: PB10, af: 11 }, { pin: PC1, af: 10 }]
+      SIO0: [{ pin: PE12, af: 7 }, { pin: PF2, af: 5 }, { pin: PF8, af: 4, notes: "DS Table 2-1-1 gives this pin AF4 and AF8 for this signal; `signal_pins:` takes one AF code per pin, so AF4 is used and AF8 also work here" }]
+      SIO1: [{ pin: PE13, af: 7 }, { pin: PF9, af: 4 }]
+      SIO2: [{ pin: PE14, af: 7 }, { pin: PF10, af: 4 }]
       SIO3: [{ pin: PC0, af: 10 }, { pin: PE15, af: 7 }]
-      SIOX0: [{ pin: PC2, af: 10 }, { pin: PB11, af: 11 }, { pin: PB13, af: 11 }]
-      SIOX1: [{ pin: PC3, af: 10 }, { pin: PB12, af: 11 }, { pin: PB14, af: 11 }]
+      SIOX0: [{ pin: PB11, af: 11 }, { pin: PB13, af: 11 }, { pin: PC2, af: 10 }]
+      SIOX1: [{ pin: PB12, af: 11 }, { pin: PB14, af: 11 }, { pin: PC3, af: 10 }]
       SIOX2: [{ pin: PA0, af: 4 }]
       SIOX3: [{ pin: PA1, af: 4 }]
   RCC:
     category: System Core
-    # The HSE choice names match `clock.hse_setting` / `clock.hse_signals` above, so
-    # picking HSE as a clock source switches the crystal on through the normal conflict
-    # engine and claims XI/XO on the chip - the coupling CH32V006 established.
-    #
-    # `Hardware reset pin` is absent on purpose: unlike CH32V00x there is no RST_MODE
-    # option byte here. NRST is its own pad (DS Table 2-1-1) rather than a GPIO that can
-    # be reassigned, so there is no choice to offer.
     settings:
-      - name: High Speed Clock (HSE)
+      - name: "High Speed Clock (HSE)"
         choices:
-          - { name: Disable, default: true }
-          - { name: BYPASS clock source }
-          - { name: Crystal / ceramic resonator, signals: [XI, XO] }
-      - name: Master Clock Output (MCO)
-        # RM 3.4.2 MCO[3:0]: 00xx none, 0100 SYSCLK, 0101 HSI, 0110 HSE, 0111 PLL/2,
-        # 1000 UTMI, 1001 USBSS_PLL/2, 1010 ETH_PLL/8, 1011 SERDES_PLL/16.
+          - { name: Disable }
+          - { name: "BYPASS clock source" }
+          - { name: "Crystal / ceramic resonator", signals: [XI, XO] }
+      - name: "Master Clock Output (MCO)"
         choices:
-          - { name: Disable, default: true }
+          - { name: Disable }
           - { name: SYSCLK }
           - { name: HSI }
           - { name: HSE }
-          - { name: PLLCLK/2 }
-          - { name: UTMI clock }
-          - { name: USBSS_PLL/2 }
-          - { name: ETH_PLL/8 }
-          - { name: SERDES_PLL/16 }
+          - { name: "PLLCLK/2" }
+          - { name: "UTMI clock" }
+          - { name: "USBSS_PLL/2" }
+          - { name: "ETH_PLL/8" }
+          - { name: "SERDES_PLL/16" }
     signal_pins:
-      MCO: [{ pin: PB0, af: 0, notes: "DS Table 2-1-1: MCO is AF0 on PB0" }]
-      # XI/XO are dedicated oscillator pads (DS Table 2-1-1, `sys` in `pins:`), not
-      # AF-selected GPIOs - so they carry a pin and no AF code, exactly like the debug
-      # pair on SYS. `clock.hse_signals` names them, so picking HSE as a source claims
-      # them through the normal conflict engine.
-      XI: [{ pin: XI, notes: "dedicated HSE input pad; not a GPIO on any package" }]
-      XO: [{ pin: XO, notes: "dedicated HSE output pad; not a GPIO on any package" }]
+      XI: [{ pin: XI, notes: "dedicated HSE crystal input pad; not a GPIO on any package" }]
+      XO: [{ pin: XO, notes: "dedicated HSE crystal output pad; not a GPIO on any package" }]
   RNG:
     category: Security
     settings:
@@ -2954,14 +3009,14 @@ peripherals:
           - { name: Asynchronous, signals: [FS_B, SCK_B, SD_B, MCLK_B] }
           - { name: Synchronous, signals: [FS_B, SCK_B, SD_B, MCLK_B] }
     signal_pins:
-      FS_A: [{ pin: PE4, af: 6 }, { pin: PC3, af: 7 }]
-      FS_B: [{ pin: PF9, af: 6 }, { pin: PA15, af: 13 }]
-      MCLK_A: [{ pin: PE2, af: 6 }, { pin: PC0, af: 7 }, { pin: PF1, af: 6 }]
-      MCLK_B: [{ pin: PF7, af: 6 }, { pin: PC9, af: 15 }]
-      SCK_A: [{ pin: PE5, af: 6 }, { pin: PC2, af: 7 }]
-      SCK_B: [{ pin: PF8, af: 6 }, { pin: PA14, af: 13 }]
-      SD_A: [{ pin: PE6, af: 6 }, { pin: PC1, af: 7 }, { pin: PB2, af: 6 }, { pin: PD6, af: 6 }]
-      SD_B: [{ pin: PE3, af: 6 }, { pin: PF6, af: 6 }, { pin: PA13, af: 13 }]
+      FS_A: [{ pin: PC3, af: 7 }, { pin: PE4, af: 6 }]
+      FS_B: [{ pin: PA15, af: 13 }, { pin: PF9, af: 6 }]
+      MCLK_A: [{ pin: PC0, af: 7 }, { pin: PE2, af: 6 }, { pin: PF1, af: 6 }]
+      MCLK_B: [{ pin: PC9, af: 15 }, { pin: PF7, af: 6 }]
+      SCK_A: [{ pin: PC2, af: 7 }, { pin: PE5, af: 6 }]
+      SCK_B: [{ pin: PA14, af: 13 }, { pin: PF8, af: 6 }]
+      SD_A: [{ pin: PB2, af: 6 }, { pin: PC1, af: 7 }, { pin: PD6, af: 6 }, { pin: PE6, af: 6 }]
+      SD_B: [{ pin: PA13, af: 13 }, { pin: PE3, af: 6 }, { pin: PF6, af: 6 }]
   SDIO:
     category: Connectivity
     settings:
@@ -2972,36 +3027,51 @@ peripherals:
           - { name: "SD 4-bit", signals: [CK, CMD, D0, D1, D2, D3] }
           - { name: "SD 8-bit", signals: [CK, CMD, D0, D1, D2, D3, D4, D5, D6, D7] }
     signal_pins:
-      CK: [{ pin: PC1, af: 11 }, { pin: PB11, af: 8 }]
+      CK: [{ pin: PB11, af: 8 }, { pin: PC1, af: 11 }]
       CMD: [{ pin: PA0, af: 9 }, { pin: PB10, af: 8 }]
-      D0: [{ pin: PE8, af: 8 }]
-      D1: [{ pin: PE9, af: 8 }, { pin: PB15, af: 9 }]
-      D2: [{ pin: PE10, af: 8 }, { pin: PB3, af: 9 }]
-      D3: [{ pin: PE11, af: 8 }, { pin: PB4, af: 9 }]
-      D4: [{ pin: PE12, af: 8 }, { pin: PB8, af: 10 }]
-      D5: [{ pin: PE13, af: 8 }, { pin: PB9, af: 10 }]
-      D6: [{ pin: PE14, af: 8 }, { pin: PC6, af: 9 }]
-      D7: [{ pin: PE15, af: 8 }, { pin: PC7, af: 9 }]
+      D0: [{ pin: PB14, af: 9 }, { pin: PE8, af: 8 }]
+      D1: [{ pin: PB15, af: 9 }, { pin: PE9, af: 8 }]
+      D2: [{ pin: PB3, af: 9 }, { pin: PE10, af: 8 }]
+      D3: [{ pin: PB4, af: 9 }, { pin: PE11, af: 8 }]
+      D4: [{ pin: PB8, af: 10 }, { pin: PE12, af: 8 }]
+      D5: [{ pin: PB9, af: 10 }, { pin: PE13, af: 8 }]
+      D6: [{ pin: PC6, af: 9 }, { pin: PE14, af: 8 }]
+      D7: [{ pin: PC7, af: 9 }, { pin: PE15, af: 8 }]
   SDMMC:
     category: Connectivity
     settings:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: SD 1-bit }
-          - { name: SD 4-bit }
-          - { name: eMMC 8-bit }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+          - { name: "SD 1-bit", signals: [SDCK, CMD, D0] }
+          - { name: "SD 4-bit", signals: [SDCK, CMD, D0, D1, D2, D3] }
+          - { name: "SD 8-bit", signals: [SDCK, CMD, D0, D1, D2, D3, D4, D5, D6, D7] }
+    signal_pins:
+      CMD: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
+      D0: [{ pin: PB13 }, { pin: PC8 }, { pin: PD0 }]
+      D1: [{ pin: PC9 }, { pin: PD1 }]
+      D2: [{ pin: PB10 }, { pin: PC10 }, { pin: PD2 }]
+      D3: [{ pin: PB11 }, { pin: PC11 }, { pin: PD3 }]
+      D4: [{ pin: PA14 }, { pin: PD4 }]
+      D5: [{ pin: PA15 }, { pin: PD5 }]
+      D6: [{ pin: PC6 }, { pin: PD6 }]
+      D7: [{ pin: PC7 }, { pin: PD7 }]
+      SDCK: [{ pin: PC12 }, { pin: PD11 }]
+      SLVCK: [{ pin: PC12 }, { pin: PD11 }]
+      STR: [{ pin: PC11 }, { pin: PD10 }, { pin: PD3 }]
+      STS: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
   SERDES:
     category: Connectivity
     settings:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled, signals: [VP_D0, VP_D4, VP_D5, VP_VSYNC] }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+          - { name: Enabled }
+    signal_pins:
+      RXN: [{ pin: PE6 }]
+      RXP: [{ pin: PE5 }]
+      TXN: [{ pin: PE4 }]
+      TXP: [{ pin: PE3 }]
   SPI3:
     category: Connectivity
     settings:
@@ -3020,10 +3090,10 @@ peripherals:
           - { name: "Hardware NSS Input", signals: [NSS] }
           - { name: "Hardware NSS Output", signals: [NSS] }
     signal_pins:
-      MISO: [{ pin: PC9, af: 5 }, { pin: PC11, af: 6 }, { pin: PB4, af: 6 }]
-      MOSI: [{ pin: PB2, af: 7 }, { pin: PA13, af: 1 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }, { pin: PB5, af: 7 }]
-      NSS: [{ pin: PA4, af: 6 }, { pin: PA15, af: 6 }]
-      SCK: [{ pin: PA14, af: 1 }, { pin: PC10, af: 6 }, { pin: PB3, af: 6 }]
+      MISO: [{ pin: PB4, af: 6 }, { pin: PC11, af: 6 }, { pin: PC9, af: 5 }]
+      MOSI: [{ pin: PA13, af: 1 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }]
+      NSS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
+      SCK: [{ pin: PA14, af: 1 }, { pin: PB3, af: 6 }, { pin: PC10, af: 6 }]
   SPI4:
     category: Connectivity
     settings:
@@ -3042,10 +3112,10 @@ peripherals:
           - { name: "Hardware NSS Input", signals: [NSS] }
           - { name: "Hardware NSS Output", signals: [NSS] }
     signal_pins:
-      MISO: [{ pin: PE5, af: 5 }, { pin: PE13, af: 5 }]
-      MOSI: [{ pin: PE6, af: 5 }, { pin: PE14, af: 5 }]
-      NSS: [{ pin: PE4, af: 5 }, { pin: PE11, af: 5 }]
-      SCK: [{ pin: PE2, af: 5 }, { pin: PE12, af: 5 }]
+      MISO: [{ pin: PE13, af: 5 }, { pin: PE5, af: 5 }]
+      MOSI: [{ pin: PE14, af: 5 }, { pin: PE6, af: 5 }]
+      NSS: [{ pin: PE11, af: 5 }, { pin: PE4, af: 5 }]
+      SCK: [{ pin: PE12, af: 5 }, { pin: PE2, af: 5 }]
   SWPMI:
     category: Connectivity
     settings:
@@ -3057,7 +3127,7 @@ peripherals:
           - { name: Loopback, signals: [IO, RX, TX] }
     signal_pins:
       IO: [{ pin: PC6, af: 11 }]
-      RX: [{ pin: PC8, af: 11 }, { pin: PC10, af: 11 }]
+      RX: [{ pin: PC10, af: 11 }, { pin: PC8, af: 11 }]
       SUP: [{ pin: PC9, af: 11 }]
       TX: [{ pin: PC7, af: 11 }]
   TIM10:
@@ -3092,11 +3162,11 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      CH1: [{ pin: PF8, af: 9 }, { pin: PA6, af: 9 }, { pin: PB6, af: 0 }]
-      CH2: [{ pin: PF9, af: 9 }, { pin: PA7, af: 9 }, { pin: PB7, af: 0 }]
-      CH3: [{ pin: PF6, af: 9 }, { pin: PA3, af: 8 }, { pin: PB8, af: 1 }]
-      CH4: [{ pin: PF7, af: 9 }, { pin: PA4, af: 9 }, { pin: PB9, af: 1 }]
-      ETR: [{ pin: PF10, af: 8 }, { pin: PA5, af: 9 }, { pin: PB5, af: 0 }]
+      CH1: [{ pin: PA6, af: 9 }, { pin: PB6, af: 0 }, { pin: PF8, af: 9 }]
+      CH2: [{ pin: PA7, af: 9 }, { pin: PB7, af: 0 }, { pin: PF9, af: 9 }]
+      CH3: [{ pin: PA3, af: 8 }, { pin: PB8, af: 1 }, { pin: PF6, af: 9 }]
+      CH4: [{ pin: PA4, af: 9 }, { pin: PB9, af: 1 }, { pin: PF7, af: 9 }]
+      ETR: [{ pin: PA5, af: 9 }, { pin: PB5, af: 0 }, { pin: PF10, af: 8 }]
   TIM11:
     category: Timers
     settings:
@@ -3129,10 +3199,10 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      CH1: [{ pin: PF6, af: 13 }, { pin: PD3, af: 2 }, { pin: PE0, af: 13 }]
-      CH2: [{ pin: PF7, af: 13 }, { pin: PD4, af: 2 }, { pin: PE1, af: 13 }]
-      CH3: [{ pin: PF8, af: 13 }, { pin: PD5, af: 2 }, { pin: PD7, af: 13 }]
-      CH4: [{ pin: PF9, af: 13 }, { pin: PD6, af: 2 }]
+      CH1: [{ pin: PD3, af: 2 }, { pin: PE0, af: 13 }, { pin: PF6, af: 13 }]
+      CH2: [{ pin: PD4, af: 2 }, { pin: PE1, af: 13 }, { pin: PF7, af: 13 }]
+      CH3: [{ pin: PD5, af: 2 }, { pin: PD7, af: 13 }, { pin: PF8, af: 13 }]
+      CH4: [{ pin: PD6, af: 2 }, { pin: PF9, af: 13 }]
       ETR: [{ pin: PB2, af: 13 }, { pin: PD5, af: 13 }]
   TIM12:
     category: Timers
@@ -3166,10 +3236,10 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      CH1: [{ pin: PE3, af: 3 }, { pin: PB1, af: 5 }]
-      CH2: [{ pin: PE4, af: 3 }, { pin: PB2, af: 5 }, { pin: PE13, af: 2 }]
-      CH3: [{ pin: PE5, af: 3 }, { pin: PF12, af: 13 }, { pin: PE14, af: 2 }]
-      CH4: [{ pin: PE6, af: 3 }, { pin: PF13, af: 13 }, { pin: PE15, af: 2 }]
+      CH1: [{ pin: PB1, af: 5 }, { pin: PE3, af: 3 }]
+      CH2: [{ pin: PB2, af: 5 }, { pin: PE13, af: 2 }, { pin: PE4, af: 3 }]
+      CH3: [{ pin: PE14, af: 2 }, { pin: PE5, af: 3 }, { pin: PF12, af: 13 }]
+      CH4: [{ pin: PE15, af: 2 }, { pin: PE6, af: 3 }, { pin: PF13, af: 13 }]
       ETR: [{ pin: PB0, af: 13 }, { pin: PB3, af: 14 }]
   TIM5:
     category: Timers
@@ -3203,13 +3273,13 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      CH1: [{ pin: PC1, af: 2 }, { pin: PA0, af: 2 }, { pin: PD12, af: 6 }]
-      CH2: [{ pin: PC2, af: 2 }, { pin: PA1, af: 2 }, { pin: PD13, af: 6 }]
-      CH3: [{ pin: PC3, af: 2 }, { pin: PA2, af: 2 }, { pin: PD14, af: 6 }]
+      CH1: [{ pin: PA0, af: 2 }, { pin: PC1, af: 2 }, { pin: PD12, af: 6 }]
+      CH2: [{ pin: PA1, af: 2 }, { pin: PC2, af: 2 }, { pin: PD13, af: 6 }]
+      CH3: [{ pin: PA2, af: 2 }, { pin: PC3, af: 2 }, { pin: PD14, af: 6 }]
       CH4: [{ pin: PA3, af: 2 }, { pin: PB0, af: 4 }, { pin: PD15, af: 6 }]
       ETR: [{ pin: PA4, af: 2 }, { pin: PD11, af: 6 }]
   TIM6:
-    category: Connectivity
+    category: Timers
     settings:
       - name: Mode
         choices:
@@ -3218,7 +3288,7 @@ peripherals:
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   TIM7:
-    category: Connectivity
+    category: Timers
     settings:
       - name: Mode
         choices:
@@ -3265,15 +3335,15 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      BKIN: [{ pin: PC0, af: 0 }, { pin: PA6, af: 3 }, { pin: PB12, af: 2 }]
-      BKIN2: [{ pin: PB13, af: 2 }, { pin: PA8, af: 3 }]
-      CH1: [{ pin: PE3, af: 0 }, { pin: PC6, af: 3 }]
-      CH1N: [{ pin: PC1, af: 0 }, { pin: PA5, af: 3 }, { pin: PA7, af: 3 }]
-      CH2: [{ pin: PE4, af: 0 }, { pin: PC7, af: 3 }]
-      CH2N: [{ pin: PC2, af: 0 }, { pin: PB0, af: 3 }, { pin: PB14, af: 3 }]
-      CH3: [{ pin: PE5, af: 0 }, { pin: PC8, af: 3 }]
-      CH3N: [{ pin: PC3, af: 0 }, { pin: PB1, af: 3 }, { pin: PB15, af: 3 }]
-      CH4: [{ pin: PE6, af: 0 }, { pin: PC9, af: 3 }]
+      BKIN: [{ pin: PA6, af: 3 }, { pin: PB12, af: 2 }, { pin: PC0, af: 0 }]
+      BKIN2: [{ pin: PA8, af: 3 }, { pin: PB13, af: 2 }]
+      CH1: [{ pin: PC6, af: 3 }, { pin: PE3, af: 0 }]
+      CH1N: [{ pin: PA5, af: 3 }, { pin: PA7, af: 3 }, { pin: PC1, af: 0 }]
+      CH2: [{ pin: PC7, af: 3 }, { pin: PE4, af: 0 }]
+      CH2N: [{ pin: PB0, af: 3 }, { pin: PB14, af: 3 }, { pin: PC2, af: 0 }]
+      CH3: [{ pin: PC8, af: 3 }, { pin: PE5, af: 0 }]
+      CH3N: [{ pin: PB1, af: 3 }, { pin: PB15, af: 3 }, { pin: PC3, af: 0 }]
+      CH4: [{ pin: PC9, af: 3 }, { pin: PE6, af: 0 }]
       ETR: [{ pin: PA0, af: 3 }, { pin: PF2, af: 3 }]
   TIM9:
     category: Timers
@@ -3309,8 +3379,8 @@ peripherals:
     signal_pins:
       CH1: [{ pin: PA0, af: 6 }, { pin: PB14, af: 2 }, { pin: PC9, af: 6 }]
       CH2: [{ pin: PA1, af: 6 }, { pin: PB10, af: 2 }, { pin: PB15, af: 2 }, { pin: PC10, af: 2 }]
-      CH3: [{ pin: PE5, af: 4 }, { pin: PA2, af: 4 }, { pin: PB12, af: 8 }, { pin: PC12, af: 2 }]
-      CH4: [{ pin: PE6, af: 4 }, { pin: PA3, af: 4 }, { pin: PB11, af: 9 }, { pin: PC11, af: 2 }]
+      CH3: [{ pin: PA2, af: 4 }, { pin: PB12, af: 8 }, { pin: PC12, af: 2 }, { pin: PE5, af: 4 }]
+      CH4: [{ pin: PA3, af: 4 }, { pin: PB11, af: 9 }, { pin: PC11, af: 2 }, { pin: PE6, af: 4 }]
       ETR: [{ pin: PA4, af: 4 }, { pin: PB13, af: 4 }, { pin: PC8, af: 6 }]
   TKEY:
     category: Analog
@@ -3328,8 +3398,56 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+    signal_pins:
+      CLK: [{ pin: PC0 }, { pin: PD9 }, { pin: PF11 }, { pin: PF14 }]
+      PORT0: [{ pin: PC1 }, { pin: PF12 }]
+      PORT1: [{ pin: PC2 }, { pin: PF13 }]
+      PORT10: [{ pin: PE15 }]
+      PORT11: [{ pin: PB10 }]
+      PORT12: [{ pin: PB11 }]
+      PORT13: [{ pin: PB12 }]
+      PORT14: [{ pin: PB13 }]
+      PORT15: [{ pin: PB14 }]
+      PORT16: [{ pin: PD10 }]
+      PORT17: [{ pin: PD11 }]
+      PORT18: [{ pin: PD12 }]
+      PORT19: [{ pin: PD13 }]
+      PORT2: [{ pin: PC3 }, { pin: PE7 }]
+      PORT20: [{ pin: PD14 }]
+      PORT21: [{ pin: PD15 }]
+      PORT22: [{ pin: PF0 }]
+      PORT23: [{ pin: PF1 }]
+      PORT24: [{ pin: PF2 }]
+      PORT25: [{ pin: PC6 }]
+      PORT26: [{ pin: PC7 }]
+      PORT27: [{ pin: PC8 }]
+      PORT28: [{ pin: PC9 }]
+      PORT29: [{ pin: PA13 }]
+      PORT3: [{ pin: PB0 }, { pin: PC1 }, { pin: PE8 }]
+      PORT30: [{ pin: PA14 }]
+      PORT31: [{ pin: PA15 }]
+      PORT32: [{ pin: PC10 }]
+      PORT33: [{ pin: PC11 }]
+      PORT34: [{ pin: PC12 }]
+      PORT35: [{ pin: PD0 }]
+      PORT36: [{ pin: PD1 }]
+      PORT37: [{ pin: PD2 }]
+      PORT38: [{ pin: PD3 }]
+      PORT39: [{ pin: PD4 }]
+      PORT4: [{ pin: PB1 }, { pin: PC2 }, { pin: PE9 }]
+      PORT40: [{ pin: PD5 }]
+      PORT41: [{ pin: PD6 }]
+      PORT42: [{ pin: PD7 }]
+      PORT43: [{ pin: PF3 }]
+      PORT44: [{ pin: PF4 }]
+      PORT45: [{ pin: PF5 }]
+      PORT46: [{ pin: PE0 }]
+      PORT47: [{ pin: PE1 }]
+      PORT5: [{ pin: PC3 }, { pin: PE10 }]
+      PORT6: [{ pin: PB0 }, { pin: PE11 }]
+      PORT7: [{ pin: PB1 }, { pin: PE12 }]
+      PORT8: [{ pin: PE13 }]
+      PORT9: [{ pin: PE14 }]
   USART4:
     category: Connectivity
     settings:
@@ -3349,9 +3467,9 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PF1, af: 7 }, { pin: PC8, af: 7 }]
-      CTS: [{ pin: PF0, af: 7 }, { pin: PE1, af: 7 }]
-      RTS: [{ pin: PF2, af: 7 }, { pin: PE0, af: 7 }]
+      CK: [{ pin: PC8, af: 7 }, { pin: PF1, af: 7 }]
+      CTS: [{ pin: PE1, af: 7 }, { pin: PF0, af: 7 }]
+      RTS: [{ pin: PE0, af: 7 }, { pin: PF2, af: 7 }]
       RX: [{ pin: PC7, af: 7 }, { pin: PF3, af: 7 }]
       TX: [{ pin: PC6, af: 7 }, { pin: PF4, af: 7 }]
   USART5:
@@ -3373,11 +3491,11 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PE15, af: 11 }, { pin: PD6, af: 11 }]
+      CK: [{ pin: PD6, af: 11 }, { pin: PE15, af: 11 }]
       CTS: [{ pin: PE1, af: 4 }]
       RTS: [{ pin: PD7, af: 4 }]
       RX: [{ pin: PE2, af: 4 }, { pin: PF5, af: 4 }]
-      TX: [{ pin: PE3, af: 11 }, { pin: PE0, af: 4 }]
+      TX: [{ pin: PE0, af: 4 }, { pin: PE3, af: 11 }]
   USART6:
     category: Connectivity
     settings:
@@ -3397,11 +3515,11 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PE2, af: 8 }, { pin: PA2, af: 3 }, { pin: PB10, af: 9 }, { pin: PA10, af: 6 }, { pin: PD3, af: 8 }]
+      CK: [{ pin: PA10, af: 6 }, { pin: PA2, af: 3 }, { pin: PB10, af: 9 }, { pin: PD3, af: 8 }, { pin: PE2, af: 8 }]
       CTS: [{ pin: PB0, af: 8 }, { pin: PB15, af: 8 }]
-      RTS: [{ pin: PB14, af: 8 }, { pin: PA15, af: 8 }]
-      RX: [{ pin: PA1, af: 8 }, { pin: PA11, af: 6 }, { pin: PC11, af: 8 }, { pin: PD0, af: 8 }, { pin: PB8, af: 8 }]
-      TX: [{ pin: PA0, af: 8 }, { pin: PA12, af: 6 }, { pin: PC10, af: 8 }, { pin: PD1, af: 8 }, { pin: PB9, af: 8 }]
+      RTS: [{ pin: PA15, af: 8 }, { pin: PB14, af: 8 }]
+      RX: [{ pin: PA1, af: 8 }, { pin: PA11, af: 6 }, { pin: PB8, af: 8 }, { pin: PC11, af: 8 }, { pin: PD0, af: 8 }]
+      TX: [{ pin: PA0, af: 8 }, { pin: PA12, af: 6 }, { pin: PB9, af: 8 }, { pin: PC10, af: 8 }, { pin: PD1, af: 8 }]
   USART7:
     category: Connectivity
     settings:
@@ -3421,11 +3539,11 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PB14, af: 13 }, { pin: PD4, af: 8 }, { pin: PB4, af: 14 }]
+      CK: [{ pin: PB14, af: 13 }, { pin: PB4, af: 14 }, { pin: PD4, af: 8 }]
       CTS: [{ pin: PC9, af: 8 }]
       RTS: [{ pin: PC8, af: 8 }]
-      RX: [{ pin: PB12, af: 14 }, { pin: PD2, af: 8 }, { pin: PB5, af: 14 }]
-      TX: [{ pin: PB13, af: 14 }, { pin: PC12, af: 8 }, { pin: PB6, af: 14 }]
+      RX: [{ pin: PB12, af: 14 }, { pin: PB5, af: 14 }, { pin: PD2, af: 8 }]
+      TX: [{ pin: PB13, af: 14 }, { pin: PB6, af: 14 }, { pin: PC12, af: 8 }]
   USART8:
     category: Connectivity
     settings:
@@ -3445,38 +3563,31 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PE6, af: 8 }, { pin: PF10, af: 7 }, { pin: PA14, af: 11 }, { pin: PB7, af: 10 }]
-      CTS: [{ pin: PF9, af: 7 }, { pin: PF10, af: 11 }]
+      CK: [{ pin: PA14, af: 11 }, { pin: PB7, af: 10 }, { pin: PE6, af: 8 }, { pin: PF10, af: 7 }]
+      CTS: [{ pin: PF10, af: 11 }, { pin: PF9, af: 7 }]
       RTS: [{ pin: PF8, af: 7 }, { pin: PF9, af: 11 }]
-      RX: [{ pin: PF6, af: 7 }, { pin: PE7, af: 7 }, { pin: PA8, af: 11 }, { pin: PB3, af: 11 }]
-      TX: [{ pin: PF7, af: 7 }, { pin: PE8, af: 7 }, { pin: PA15, af: 11 }, { pin: PB4, af: 11 }]
+      RX: [{ pin: PA8, af: 11 }, { pin: PB3, af: 11 }, { pin: PE7, af: 7 }, { pin: PF6, af: 7 }]
+      TX: [{ pin: PA15, af: 11 }, { pin: PB4, af: 11 }, { pin: PE8, af: 7 }, { pin: PF7, af: 7 }]
   USBFS:
     category: Connectivity
-    # RM ch.26, Full-speed Host/Device. No DP/DM pin is claimed until a mode is picked,
-    # because which pads are used depends on the mode.
     settings:
       - name: Mode
         choices:
-          - { name: Disable, default: true }
-          - { name: Device (FS) }
-          - { name: Host (FS) }
-          - { name: OTG (FS) }
+          - { name: Disable }
+          - { name: "Device (FS)" }
+          - { name: "Host (FS)" }
+    notes: This peripheral holds no pin on any package; it is configured
+      through its own registers and the clock tree only.
   USBHS:
     category: Connectivity
-    # RM ch.25, High-speed Host/Device, 480 MHz from USBHS_PLL. Its PHY pins are the
-    # `VP_*`/`D*` rows DS Table 2-1-1 lists under its own heading.
     settings:
       - name: Mode
         choices:
-          - { name: Disable, default: true }
-          - { name: Device (HS) }
-          - { name: Host (HS) }
-          - { name: OTG (HS) }
-    signal_pins:
-      D0: [{ pin: PC6, af: 13 }]
-      D4: [{ pin: PC11, af: 13 }]
-      D5: [{ pin: PD13, af: 13 }]
-      VSYNC: [{ pin: PB14, af: 15 }]
+          - { name: Disable }
+          - { name: "Device (HS)" }
+          - { name: "Host (HS)" }
+    notes: This peripheral holds no pin on any package; it is configured
+      through its own registers and the clock tree only.
   USBPD:
     category: Connectivity
     settings:
@@ -3489,39 +3600,25 @@ peripherals:
     signal_pins:
       CC1: [{ pin: PB3, af: 4 }]
       CC2: [{ pin: PB4, af: 4 }]
-      D0: [{ pin: PB14, af: 9 }]
-      G5: [{ pin: PC1, af: 14 }]
   USBSS:
     category: Connectivity
-    # RM ch.27, SuperSpeed. Clocked from USBSS_PLL (125 MHz).
     settings:
       - name: Mode
         choices:
-          - { name: Disable, default: true }
-          - { name: Device (SS) }
-          - { name: Host (SS) }
-          - { name: OTG (SS) }
+          - { name: Disable }
+          - { name: "Device (SS)" }
+          - { name: "Host (SS)" }
+    notes: This peripheral holds no pin on any package; it is configured
+      through its own registers and the clock tree only.
   WWDG:
     category: System Core
     settings:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: Activated }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
-
-# Generated by tools/extract_h417_setup.py --nvic. Do not hand-edit.
-#
-# irqn    IRQn_Type in data/sources/H417/Evt/EXAM/SRC/Peripheral/inc/ch32h417.h
-# handler the .word table in .../Startup/startup_ch32h417_v3f.S
-# vector  the INDEX of that table entry, which is the number the enum uses
-# alignment offset applied to that table: 0 entry(ies) skipped at the front
-#
-# The PFIC scheme is read from core_riscv.h's `NVIC_SetPriority` comment block:
-# FOUR priority bits at [7:4], with [3:0] reserved. **This part has four priority
-# bits** where CH32V00x has two and CH32X035 has three, and the nesting split is
-# selectable at runtime through CSR 0x804 on the V5F core.
 nvic:
   controller: PFIC
   scheme:
