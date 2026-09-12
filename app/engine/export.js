@@ -3,7 +3,7 @@
 //  First real output of the Generate button (Phase 3). C code generation will
 //  join these once the pin table is trusted.
 // =============================================================================
-import { M, S, pinType, gpioSpeedFor } from './model.js';
+import { M, S, pinType, gpioSpeedFor, signalAf, sigName } from './model.js';
 import { validateParam } from './params.js';
 import { record } from './history.js';
 import { E, compute } from './engine.js';
@@ -11,6 +11,9 @@ import { clockCalc, firstPre } from './clock.js';
 // `user` is codegen's: main.c carries the same USER CODE blocks under the same
 // option, and two copies of that helper would be two things to keep in step.
 import { cFiles, gpioPlan, cfg, user } from './codegen.js';
+// The same answer codegen gives about whether GPIO_Init may touch a pad, so the pin map
+// and the generated C cannot disagree about which pads belong to the part itself.
+import { skippedClaim } from './constraints.js';
 // project.js imports generatorOptions from here, so this is a cycle. It is safe
 // because neither side reads the other at module-evaluation time - PROJECT is only
 // touched inside functions - and build.py concatenates both into one scope anyway.
@@ -68,6 +71,163 @@ export function pinTableCsv() {
   return [COLS.join(','), ...pinRows().map(r => [r.num, r.name, r.signal, r.mode, r.pull, r.speed, r.label, note(r)].map(esc).join(','))].join('\n') + '\n';
 }
 
+// ---- BoardPins.h -------------------------------------------------------------
+//  The pin map on its own, so somebody who already has a project can drop ONE file
+//  into it and refer to their pins by function or by label instead of by number.
+//
+//  This is deliberately NOT part of `cFiles()`. That pair is the initialisation code
+//  and the compile gate treats its two names as fixed; a header that configures
+//  nothing belongs beside it rather than inside it. It is also why nothing here is
+//  emitted when there is nothing to configure: a file of macros for a board with no
+//  pins assigned would be a page of nothing.
+//
+//  Every macro comes from the configuration - `E.pins[].claims` for which peripheral
+//  function is on which pad, `signalAf()` for the AF code, `S.gpio[].label` for a user
+//  label. Nothing is derived from the peripheral's name and nothing is guessed: a pin
+//  whose AF code the data does not state simply has no `_AF` macro, which is the same
+//  refusal `afPlan()` makes when it declines to invent one.
+
+/** Uppercase C identifier, so a user label with a space in it still yields a macro. */
+const cIdentOf = s => String(s).toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+/** `PA9` -> `{ port: 'A', bit: 9 }`, or null for a pad that is not a port pin. */
+function portBitOf(pin) {
+  const m = /^P([A-H])(\d+)$/.exec(String(pin));
+  return m ? { port: m[1], bit: Number(m[2]) } : null;
+}
+
+/**
+ * The pin map as a C header.
+ *
+ * Returns `{ text, entries, collisions }`. `collisions` is not decoration: two
+ * different pins wanting the same macro name is a `#define` that silently keeps the
+ * last one, which is a wrong build nobody sees. The caller reports it; the file itself
+ * carries a comment naming it so the header cannot be used without noticing.
+ */
+export function pinMap() {
+  const e = E || compute();
+  const byName = new Map();          // BOARD_X -> entry
+  const collisions = [];
+  const add = (base, ent, why) => {
+    if (!base) return;
+    const prev = byName.get(base);
+    if (prev) {
+      // Same pad from the same source is the same fact written twice.
+      if (prev.pin === ent.pin) return;
+      // Two DIFFERENT pads wanting one macro name is not something to resolve by
+      // precedence: emitting either one gives the user a board where `BOARD_LED_A` is a
+      // pad they did not mean, and the file compiles. So NEITHER is emitted - a build
+      // that uses the name fails to compile, which is the loud failure, and the clash is
+      // reported below and in the file itself.
+      byName.delete(base);
+      collisions.push(`${base}: ${prev.pin} (${prev.why}) and ${ent.pin} (${why})`);
+      return;
+    }
+    byName.set(base, { ...ent, why });
+  };
+
+  for (const [canonPin, info] of Object.entries(e.pins)) {
+    for (const claim of info.claims) {
+      // A peripheral's claim. `GPIO` is the pin driven directly and is not a function
+      // name worth a macro of its own - the label below covers that case.
+      if (claim.who === 'GPIO' || !M.peripherals[claim.who]) continue;
+      const pin = claim.via || canonPin;
+      const pb = portBitOf(pin);
+      if (!pb) continue;
+      // `claim.signal` is ALREADY qualified - `sigName(pid, sig)` is `PID_SIG`, which is
+      // what the engine stores and what `skippedClaim()` expects. `signalAf()` is the one
+      // that wants the RAW signal, because that is the key in `signal_pins:`.
+      const name = claim.signal;
+      const raw = name.startsWith(`${claim.who}_`) ? name.slice(claim.who.length + 1) : name;
+      add(`BOARD_${cIdentOf(name)}`, {
+        name, pin, ...pb,
+        af: signalAf(claim.who, raw, pin),
+        skipped: skippedClaim({ who: claim.who, signal: name }),
+        label: (S.gpio[pin] || {}).label || '',
+      }, `peripheral ${name}`);
+    }
+  }
+  // A user label is its own macro: it is the one name in the file the user chose, and
+  // the reason they can write BOARD_STATUS_LED instead of GPIO_Pin_13.
+  for (const [pin, g] of Object.entries(S.gpio)) {
+    const label = (g.label || '').trim();
+    const pb = portBitOf(pin);
+    if (!label || !pb) continue;
+    add(`BOARD_${cIdentOf(label)}`, {
+      name: label, pin, ...pb, af: null, skipped: false, label, user: true,
+    }, `label "${label}"`);
+  }
+
+  const entries = [...byName.entries()].map(([macro, v]) => ({ macro, ...v }))
+    .sort((a, b) => a.macro.localeCompare(b.macro));
+
+  const lines = [];
+  const b = t => ` * ${t}`;
+  lines.push('/* ' + '='.repeat(70));
+  lines.push(b(`BoardPins.h — ${M.mcu.name}${S.pkg ? `, ${S.pkg}` : ''}`));
+  lines.push(' *');
+  lines.push(b('Generated by WCHCube from the configuration in this project. Do not edit'));
+  lines.push(b('by hand: change the configuration and generate again.'));
+  lines.push(' *');
+  lines.push(b(`Project : ${PROJECT.name}${PROJECT.variant ? ` (${PROJECT.variant})` : ''}`));
+  lines.push(b(`Part    : ${M.mcu.name}  ${S.pkg}`));
+  lines.push(' *');
+  lines.push(b('This is the PIN MAP, not a driver. It names the pads this configuration'));
+  lines.push(b('uses so your own project can ask for them by function or by label instead'));
+  lines.push(b('of by pin number. Nothing here configures anything.'));
+  if (!entries.length) {
+    lines.push(' *');
+    lines.push(b('NO PIN IS ASSIGNED, so there is nothing to map yet. Assign a pin or a'));
+    lines.push(b('peripheral function on the Pinout tab and generate again.'));
+  } else {
+    lines.push(' *');
+    lines.push(b('macro'.padEnd(38) + ' ' + 'pad'.padEnd(6) + ' ' + 'AF'.padEnd(4) + ' source'));
+    for (const v of entries) {
+      const mac = v.macro.padEnd(38);
+      const pad = String(v.pin).padEnd(6);
+      const af = (v.af === null || v.af === undefined ? '\u2014' : String(v.af)).padEnd(4);
+      lines.push(b(`${mac} ${pad} ${af} ${v.user ? `label "${v.label}"` : v.name}`));
+    }
+  }
+  // The pads that are not GPIO and cannot be assigned: worth listing so the file is a
+  // complete picture of the part rather than only of the bits that are configurable.
+  const fixed = Object.entries(M.pins).filter(([, p]) => p.type && p.type !== 'io').map(([p]) => p);
+  if (fixed.length) {
+    lines.push(' *');
+    lines.push(b(`Not GPIO, so not in the map: ${fixed.sort().join(', ')}`));
+  }
+  for (const c of collisions) lines.push(b(`COLLISION (not emitted): ${c}`));
+  lines.push(' ' + '='.repeat(70) + ' */');
+  lines.push('');
+  lines.push('#ifndef BOARD_PINS_H');
+  lines.push('#define BOARD_PINS_H');
+  lines.push('');
+  lines.push(`#include "${cfg().header || 'debug.h'}"`);
+  lines.push('');
+  // Aligned, because this list is meant to be read as a table: a ragged column of
+  // GPIOA/GPIO_Pin_9 is harder to scan than a straight one, and it costs nothing.
+  const wide = entries.length ? Math.max(...entries.map(v => `${v.macro}_PORT`.length)) : 0;
+  for (const v of entries) {
+    lines.push(`/* ${v.pin} — ${v.user ? `"${v.label}"` : v.name}`
+      + `${v.af === null || v.af === undefined ? '' : `, AF${v.af}`}`
+      + `${v.skipped ? ', not driven by GPIO_Init' : ''} */`);
+    const p = `${v.macro}_PORT`.padEnd(wide);
+    const q = `${v.macro}_PIN`.padEnd(wide);
+    lines.push(`#define ${p}  GPIO${v.port}`);
+    lines.push(`#define ${q}  GPIO_Pin_${v.bit}`);
+    if (v.af !== null && v.af !== undefined) {
+      lines.push(`#define ${`${v.macro}_AF`.padEnd(wide)}  GPIO_AF${v.af}`);
+    }
+    lines.push('');
+  }
+  lines.push('#endif /* BOARD_PINS_H */');
+  lines.push('');
+  return { text: lines.join('\n'), entries, collisions };
+}
+
+/** Just the text, for the file list. */
+export const pinMapHeader = () => pinMap().text;
+
 export function clockSummaryMarkdown() {
   if (!M.clock) return `# ${M.mcu.name} — clocks\n\nThis MCU file has no clock section.\n`;
   const c = M.clock, k = S.clock, r = clockCalc();
@@ -124,6 +284,24 @@ const GENERATOR_OPTIONS = [
     help: 'Regeneration copies the body of every /* USER CODE BEGIN x */ … /* USER CODE END x */ '
       + 'block out of the file being replaced. A block whose marker no longer exists is never '
       + 'dropped silently - it is moved to the end of the file under USER CODE ORPHANED.',
+  },
+  {
+    key: 'pin_map',
+    name: 'Also generate BoardPins.h, the pin map on its own',
+    type: 'bool',
+    default: true,
+    help: 'A header naming every pad this configuration uses, by peripheral function and by '
+      + 'your own labels — so a project of your own can include it and write BOARD_USART1_TX '
+      + 'instead of GPIO_Pin_9. It configures nothing: it is the map, not the driver.',
+  },
+  {
+    key: 'pin_map_only',
+    name: 'ONLY the pin map — no project, and no part number needed',
+    type: 'bool',
+    default: false,
+    help: 'Output is BoardPins.h on its own, for dropping into a project you already have. '
+      + 'The PlatformIO files are skipped, and so is the part number, which is only needed to '
+      + 'pick a board. This overrides the option above.',
   },
 ];
 
@@ -274,9 +452,22 @@ export function mergeUserCode(previous, next) {
 export function generateAll() {
   const base = `${M.mcu.name}_${S.pkg}`;
   const out = [];
+  // The pin map alone, when that is the whole ask. `cFiles()` is deliberately not part
+  // of it: the initialisation code needs the AFIO/RCC words the MCU file may not state,
+  // and a user dropping `BoardPins.h` into their own project has their own init.
+  if (generatorOption('pin_map_only')) {
+    out.push({ name: 'BoardPins.h', language: 'c', text: pinMapHeader() });
+    if (generatorOption('reports')) {
+      out.push({ name: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
+      out.push({ name: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
+      out.push({ name: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
+    }
+    return out;
+  }
   for (const [name, text] of Object.entries(cFiles())) {
     out.push({ name, language: 'c', text });
   }
+  if (generatorOption('pin_map')) out.push({ name: 'BoardPins.h', language: 'c', text: pinMapHeader() });
   if (generatorOption('reports')) {
     out.push({ name: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
     out.push({ name: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
@@ -604,6 +795,21 @@ function readmeMd(t) {
  * Throws when the selected part number has no PlatformIO board - see pioTarget().
  */
 export function projectFiles() {
+  const base = `${M.mcu.name}_${S.pkg}`;
+  const pinHeader = { path: 'BoardPins.h', language: 'c', text: pinMapHeader() };
+  // Scope: the pin map on its own. No `pioTarget()` is asked for, and that is the point
+  // - a part number is needed only to choose a PlatformIO board, and somebody dropping
+  // this header into their own project has no use for one. Asking for it anyway would
+  // disable Generate with "pick a part number" on a job that does not need one.
+  if (generatorOption('pin_map_only')) {
+    const out = [pinHeader];
+    if (generatorOption('reports')) {
+      out.push({ path: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
+      out.push({ path: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
+      out.push({ path: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
+    }
+    return out.map(f => ({ ...f, name: f.path.slice(f.path.lastIndexOf('/') + 1) }));
+  }
   const t = pioTarget();
   if (t.missing) {
     throw new Error(`Cannot generate a PlatformIO project: ${t.missing}. `
@@ -621,8 +827,13 @@ export function projectFiles() {
     const sub = name.endsWith('.h') ? 'include' : 'src';
     out.push({ path: `${PIO_COMPONENT_DIR}/${sub}/${name}`, language: 'c', text });
   }
+  // The pin map goes in the component's include directory, beside wchcube_init.h, so a
+  // generated project can `#include "BoardPins.h"` the same way and gets the same path
+  // whether it was generated here or dropped in by hand.
+  if (generatorOption('pin_map')) {
+    out.push({ path: `${PIO_COMPONENT_DIR}/include/BoardPins.h`, language: 'c', text: pinMapHeader() });
+  }
   if (generatorOption('reports')) {
-    const base = `${M.mcu.name}_${S.pkg}`;
     out.push({ path: `docs/${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
     out.push({ path: `docs/${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
   }

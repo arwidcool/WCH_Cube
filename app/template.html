@@ -3702,8 +3702,13 @@ function renderPmConfig(files) {
 
 /** One sentence for the Generate button: what it will make, and where it will land. */
 function pmDeliverSentence(n, total) {
-  const what = n === total
-    ? `the whole project — ${n} file${n === 1 ? '' : 's'}`
+  // "the whole project" is wrong once the scope option is on: what comes out is a pin map
+  // and nothing else, and a sentence that oversells it is the kind of small lie this app
+  // does not tell anywhere else.
+  const onlyMap = typeof generatorOption === 'function' && generatorOption('pin_map_only');
+  const all = n === total;
+  const what = all
+    ? (onlyMap ? `the pin map — ${n} file${n === 1 ? '' : 's'}` : `the whole project — ${n} file${n === 1 ? '' : 's'}`)
     : `${n} of ${total} files`;
   if (pmIsDesktop()) return `Writes ${what} into a folder you pick, under "${pmFolderName()}/".`;
   if (PM.outDir) return `Writes ${what} into "${pmFolderName()}/" inside the folder you chose under Output.`;
@@ -3883,6 +3888,10 @@ function pmEnvName(variant) {
 }
 
 function pmDescribe(f) {
+  // Before the general `.h` case, because BoardPins.h is not an init header: it declares
+  // no function and configures nothing, it names the pads. Calling it "the init entry
+  // points" would send the reader looking for something that is not in it.
+  if (f.name === 'BoardPins.h') return 'pin map — which pad carries which function, and your labels';
   if (/\.h$/.test(f.name)) return 'C header — the init entry points';
   if (/\.c$/.test(f.name)) return 'C source — GPIO, AFIO and clock initialisation';
   if (/pinout\.md$/.test(f.name)) return 'pin table, Markdown';

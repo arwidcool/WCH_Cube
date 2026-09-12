@@ -61,6 +61,23 @@ test('--format c writes the two init files, --out puts them on disk', () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('--format pins-h writes BoardPins.h on its own', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-cli-'));
+  try {
+    // A fixture with pins assigned, so there is a map to write rather than an empty one.
+    const fx = path.join(ROOT, 'tests', 'fixtures', 'CH32V006_TSSOP20_full.wchproj');
+    const r = run(['--project', fx, '--format', 'pins-h', '--out', dir, '--quiet']);
+    assert.equal(r.code, 0, r.err);
+    assert.deepEqual(fs.readdirSync(dir), ['BoardPins.h'], 'the header and nothing else');
+    const h = fs.readFileSync(path.join(dir, 'BoardPins.h'), 'utf8');
+    assert.match(h, /#ifndef BOARD_PINS_H/);
+    assert.match(h, /#define BOARD_USART1_TX_PIN\s+GPIO_Pin_\d+/);
+    assert.match(h, /#define BOARD_USART1_TX_PORT\s+GPIO[A-H]/);
+    // The label the fixture sets is in there too, under the name the user chose.
+    assert.match(h, /BOARD_STATUS_LED_PIN/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('--format json reports conflicts, clocks and peripheral status', () => {
   const r = run(['CH32V006', '--package', 'TSSOP20', '--format', 'json', '--quiet']);
   assert.equal(r.code, 0, r.err);

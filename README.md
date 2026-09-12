@@ -117,6 +117,37 @@ get a native save dialog.
 **Open project** restores all of it. One project is one MCU on one package. The matching
 MCU file has to be loaded first — bundled, in your override folder, or via **Open MCU file…**.
 
+## Generate
+
+One button, on the **Project Manager** tab, producing one of two scopes.
+
+**The project** (default) is a PlatformIO folder you can open and flash:
+
+```
+<name>/
+├── platformio.ini, README.md, .gitignore
+├── src/main.c
+├── lib/wchcube_generated/include/{wchcube_init.h, BoardPins.h}
+├── lib/wchcube_generated/src/wchcube_init.c
+└── docs/            pin table (md + csv) and clock summary
+```
+
+**Only the pin map** turns off everything above and outputs `BoardPins.h` alone. Use it when
+you already have a project of your own: the file names every pad the configuration uses, so
+you can write `BOARD_USART1_TX` instead of `GPIO_Pin_9`. It configures nothing — it is the
+map, not the driver.
+
+```c
+#define BOARD_USART1_TX_PORT  GPIOA
+#define BOARD_USART1_TX_PIN   GPIO_Pin_9
+#define BOARD_USART1_TX_AF    GPIO_AF7
+#define BOARD_STATUS_LED_PIN  GPIO_Pin_13      /* your own label */
+```
+
+Because that scope needs no board, it also works on a package no PlatformIO board exists
+for — a part number is only needed to pick one. `node tools/wchcube_cli.js <part> --format
+pins-h` does the same from a script, and `--option pin_map_only=1` sets the scope.
+
 ## Add an MCU
 
 1. Start from `data/mcus/CH32V006.yaml` — a complete real part with datasheet citations

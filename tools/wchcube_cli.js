@@ -26,7 +26,7 @@ import * as eng from '../app/engine/index.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = path.join(ROOT, 'data');
 
-const FORMATS = ['pins-md', 'pins-csv', 'clocks-md', 'c', 'json'];
+const FORMATS = ['pins-md', 'pins-csv', 'pins-h', 'clocks-md', 'c', 'json'];
 
 const USAGE = `wchcube — headless pinout, clocks and code generation
 
@@ -179,6 +179,7 @@ function outputs(formats) {
   for (const f of formats) {
     if (f === 'pins-md') files[`${base}_pinout.md`] = eng.pinTableMarkdown();
     else if (f === 'pins-csv') files[`${base}_pinout.csv`] = eng.pinTableCsv();
+    else if (f === 'pins-h') files['BoardPins.h'] = eng.pinMapHeader();
     else if (f === 'clocks-md') files[`${base}_clocks.md`] = eng.clockSummaryMarkdown();
     else if (f === 'c') Object.assign(files, eng.cFiles());
     else if (f === 'json') files[`${base}.json`] = JSON.stringify(report(), null, 2) + '\n';
