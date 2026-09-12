@@ -180,7 +180,7 @@ const ABSENT = {
   //     OPA has an interrupt" is exactly the kind of family-wide assumption
   //     round 4 and round 5 exist to break, and it would have been wrong here.
   'CH32V003.OPA1.nvic': 'CH32V003 has NO OPA interrupt. `IRQn_Type` in '
-    + 'data/sources/V003/evt/EXAM/SRC/Peripheral/inc/ch32v00x.h is the complete list and ends at '
+    + 'data/sources/V003/Evt/EXAM/SRC/Peripheral/inc/ch32v00x.h is the complete list and ends at '
     + '`TIM2_IRQn = 38`; a search for `OPA.*IRQn` in that header returns nothing, where '
     + 'CH32V006 has `OPCM_IRQn = 40`. The part\'s own notes say the same. Recorded as absent '
     + 'rather than left blank because the two are different: ABSENT is "the silicon does not '

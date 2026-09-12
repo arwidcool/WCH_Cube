@@ -91,6 +91,12 @@ export async function launch({ headless = true, timeoutMs = 20000 } = {}) {
     'about:blank',
   ];
   if (headless) args.unshift('--headless=new', '--disable-gpu');
+  // On a CI runner only. ubuntu-latest (24.04) restricts unprivileged user namespaces, and
+  // Chrome's sandbox needs them: without this flag it aborts at launch, the CDP port never
+  // answers, and every real-browser test FAILS rather than skips - because a browser WAS
+  // found. That is what the `test` job did on every push until 2026-09-12. Never on a
+  // developer machine: the sandbox is the point there.
+  if (process.env.CI) args.unshift('--no-sandbox');
   const proc = spawn(exe, args, { stdio: 'ignore' });
   proc.on('error', () => { /* reported by the fetch loop below */ });
   // A live child process and an open socket both keep Node's event loop alive, so

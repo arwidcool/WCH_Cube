@@ -285,6 +285,21 @@ test('the Rust unit tests in src-tauri pass', () => {
   // `cargo test` is the only thing that actually runs safe_relative(). Round 3
   // found that src-tauri had NEVER been compiled; the fix for that is not to
   // compile it once by hand, it is to put it in the suite everyone runs.
+  // `cargo` being on PATH is not the same as being able to compile a Tauri app. On Linux the
+  // crate needs webkit2gtk / gtk3 / libsoup from apt, which only the `desktop` CI job installs
+  // - and that job runs `cargo test --release --locked` itself, so the Rust tests ARE run
+  // where their environment exists. In the `test` job cargo is present and the libraries
+  // are not, and this test failed there on every push until 2026-09-12: a check running in a
+  // job that lacks its environment reads as a defect in the code. Skip with the reason on
+  // Linux when pkg-config cannot find the toolkit; on Windows (WebView2) there is no such
+  // dependency and the test runs as before.
+  if (process.platform === 'linux') {
+    const pc = spawnSync('pkg-config', ['--exists', 'webkit2gtk-4.1'], { encoding: 'utf8' });
+    if (pc.error || pc.status !== 0) {
+      skip('Tauri\'s Linux system libraries are not installed here (pkg-config finds no webkit2gtk-4.1) '
+        + '- the desktop CI job installs them and runs cargo test itself');
+    }
+  }
   const r = spawnSync('cargo', ['test', '--quiet'], { cwd: SRC, encoding: 'utf8' });
   if (r.error) skip(`cargo is not on PATH (${r.error.code}) — the Rust half of the shell was not run`);
   const out = ((r.stdout || '') + (r.stderr || '')).trim();

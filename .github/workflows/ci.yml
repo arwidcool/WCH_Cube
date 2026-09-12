@@ -43,6 +43,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      # BEFORE checkout, on purpose. GitHub's Windows image ships `core.autocrlf=true`, so every
+      # LF file in this repo checks out as CRLF there: build.py then emits a CRLF dist, and the
+      # fixtures no longer match `projectSerialize()`. The "up to date" step below is BLIND to
+      # that - `git diff` normalises line endings before comparing - which is how 30 runs failed
+      # at "Run tests" while every step before it was green. Harmless on Linux; symmetric on
+      # purpose so the two jobs check out the same bytes. `longpaths`: the H417 EVT drop has a
+      # 220-character path, 14 short of the Windows limit from the runner's D:\a\ prefix.
+      - name: Check out the bytes that were committed (no autocrlf, long paths on)
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -112,8 +123,23 @@ jobs:
       # with a printed reason and the runner counts them. The `firmware` job below
       # runs the same suite with PlatformIO installed, which is where they run for
       # real. Every other suite is green here or the build fails.
+      # The run's log needs a token to read; its ANNOTATIONS do not - they are public on a
+      # public repo (GET /repos/{r}/check-runs/{id}/annotations). So on failure every
+      # `  x <file>  <test>` line and every LOAD FAIL becomes a `::error` annotation, and the
+      # failing test names can be read from outside without a login. Without this, 30 runs
+      # failed at this step and the only readable fact was "Process completed with exit code 1".
       - name: Run tests
-        run: node tests/run.js
+        shell: bash
+        run: |
+          set -o pipefail
+          node tests/run.js 2>&1 | tee run.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            grep -E '^  x ' run.log | sed 's/^  x /::error title=test failed::/' || true
+            grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true
+            grep -E '^[0-9]+ FAILED' run.log | sed 's/^/::error title=verdict::/' || true
+          fi
+          exit "$rc"
 
   # ---------------------------------------------------------------------------
   firmware:
@@ -138,6 +164,12 @@ jobs:
       run:
         shell: bash
     steps:
+      # See the same step in `test`: this runner's git defaults to autocrlf=true, and that is the
+      # whole reason this job failed at "Run the tests" on every push while `pio run` passed.
+      - name: Check out the bytes that were committed (no autocrlf, long paths on)
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -203,8 +235,19 @@ jobs:
       - name: Build dist/index.html
         run: python build.py
 
+      # Same tee-and-annotate as the `test` job: failing test names become public
+      # `::error` annotations, readable without a token.
       - name: Run the tests with PlatformIO available
-        run: node tests/run.js
+        run: |
+          set -o pipefail
+          node tests/run.js 2>&1 | tee run.log
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            grep -E '^  x ' run.log | sed 's/^  x /::error title=test failed::/' || true
+            grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true
+            grep -E '^[0-9]+ FAILED' run.log | sed 's/^/::error title=verdict::/' || true
+          fi
+          exit "$rc"
 
   # ---------------------------------------------------------------------------
   desktop:
