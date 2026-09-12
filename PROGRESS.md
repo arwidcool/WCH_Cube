@@ -21,16 +21,16 @@ statement here stops being true, change it here first.
   every part to its declared status. `validate_mcu.py` gained the reverse-direction check (a
   routed signal no choice claims is an ERROR) and the `pins: { none | open }` declaration a
   routing-less peripheral must make. **Coverage, quoted from `python tools/coverage.py --quiet`
-  at 2026-09-12T12:19Z** — the numbers move as rows close, so read the tool rather than this
+  at 2026-09-12T16:36Z** — the numbers move as rows close, so read the tool rather than this
   line, and treat what follows as a dated snapshot:
 
   ```
-    CH32H417   OPEN 113  (modelled 1234, absent 20, disagreements 0)
-    CH32L103   OPEN 13   (modelled 260, absent 10, disagreements 1)
-    CH32V003   OPEN 3    (modelled 113, absent 10, disagreements 0)
-    CH32V005   OPEN 0    (modelled 214, absent 14, disagreements 0)
-    CH32V006   OPEN 0    (modelled 218, absent 11, disagreements 0)
-    CH32X035   OPEN 0    (modelled 278, absent 11, disagreements 0)
+    CH32H417   OPEN 50  (modelled 1254, absent 23, disagreements 0)
+    CH32L103   OPEN 12  (modelled 260, absent 11, disagreements 1)
+    CH32V003   OPEN 3  (modelled 113, absent 10, disagreements 0)
+    CH32V005   OPEN 0  (modelled 214, absent 14, disagreements 0)
+    CH32V006   OPEN 0  (modelled 218, absent 11, disagreements 0)
+    CH32X035   OPEN 0  (modelled 278, absent 11, disagreements 0)
   ```
 
   CH32V006, CH32V005 and CH32X035 are `complete`; CH32V003, CH32L103 and CH32H417 are
@@ -613,6 +613,20 @@ the source in `src/`, and builds:
 | `CH32V006_QFN32_full.wchproj` | CH32V006 QFN32 | `CH32V006K8U6` | **compiles and links** |
 | `CH32V005_TSSOP20_full.wchproj` | CH32V005 TSSOP20 | `CH32V005F6P6` | **compiles and links** |
 | `CH32X035_QFN28_full.wchproj` | CH32X035 QFN28 | `CH32X035G8U6` | **compiles and links** |
+| `CH32V003_TSSOP20_full.wchproj` | CH32V003 TSSOP20 | `CH32V003F4P6` | **compiles and links** |
+| `CH32H417_QFN128_full.wchproj` | CH32H417 QFN128 | `CH32H417QEU6` | **compiles and links** |
+| `CH32H417_QFN68_pkg.wchproj` | CH32H417 QFN68 | `CH32H417WEU6` | **compiles and links** |
+| `CH32L103_QFN32_full.wchproj` | CH32L103 QFN32 | `CH32L103K8U6` | **compiles and links** |
+
+**The last two rows of the CH32H417 pair are one check, not two.** CH32H417 is the first
+part here where the PACKAGE decides which pins a peripheral can reach — 301 of its signals
+have a different set of bonded options on QFN68 than on QFN128 — and until 2026-09-12 one
+QFN128 fixture stood for all three packages, so that path had never been compiled. The two
+fixtures make the same four engine calls and land on different pads: `USART1_RX` emits
+`GPIO_PinAFConfig(GPIOD, GPIO_PinSource12, GPIO_AF14)` on QFN68 and `(GPIOB,
+GPIO_PinSource15, GPIO_AF4)` on QFN128 — a different port, pin and AF code, all three wrong
+together if the generator ignored the package, and all three compiling either way. Evidence,
+with both listings: `tests/evidence/round5/2026-09-12-h417-package-pads.md`.
 
 These fixtures **assign pins**. Between them: ports A/C/D and A/B/C/D, non-default
 USART1 and SPI1 remaps, an HSE crystal, a PWM output, an ADC channel, a labelled

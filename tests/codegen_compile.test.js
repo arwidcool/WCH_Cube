@@ -287,8 +287,23 @@ const SDK = path.join(process.env.USERPROFILE || process.env.HOME || '', '.platf
  * Returns { files: {name -> text}, from: '<a path>' } or null if neither exists.
  */
 function splHeaders(part) {
-  const series = { CH32V005: 'ch32v00Xx', CH32V006: 'ch32v00Xx', CH32X035: 'ch32x035' }[part];
-  const evtPart = { CH32V005: 'V006', CH32V006: 'V006', CH32X035: 'X035' }[part];
+  // EVERY part with a fixture must be in both maps. A part that is missing from them
+  // falls out of the two loops below through `if (!spl) continue;` — no failure, no skip,
+  // no line in the run summary, and `checked` stays non-zero because the OTHER parts
+  // carried it. CH32H417 and CH32L103 sat in that hole from the day they got fixtures:
+  // the run said ok while the header-case check and the GPIO-enum check had never once
+  // looked at either of them. The directory names are the ones on disk and the case is
+  // load-bearing — `H417` and `l103` resolve on NTFS whatever you type, and on the CI
+  // image they do not. `partsWithoutSpl()` below turns a future omission into a failure
+  // instead of a silence.
+  const series = {
+    CH32V005: 'ch32v00Xx', CH32V006: 'ch32v00Xx', CH32X035: 'ch32x035',
+    CH32H417: 'ch32h417', CH32L103: 'ch32l10x', CH32V003: 'ch32v00x',
+  }[part];
+  const evtPart = {
+    CH32V005: 'V006', CH32V006: 'V006', CH32X035: 'X035',
+    CH32H417: 'H417', CH32L103: 'l103', CH32V003: 'V003',
+  }[part];
   const places = [];
   if (evtPart) places.push(path.join(ROOT, 'data', 'sources', evtPart, 'Evt', 'EXAM', 'SRC', 'Peripheral', 'inc'));
   if (series) places.push(path.join(SDK, 'Peripheral', series, 'inc'));
@@ -302,6 +317,34 @@ function splHeaders(part) {
   }
   return null;
 }
+
+/**
+ * The fixture parts `splHeaders()` cannot resolve, with the reason for each.
+ *
+ * This exists because `if (!spl) continue;` is the quietest failure in the suite: it
+ * removes a part from a check without removing the check, so the run prints `ok` over a
+ * part nobody looked at. That is the exact shape of the defect this repository keeps
+ * re-finding — a green tick standing in front of nothing.
+ */
+function partsWithoutSpl() {
+  const out = [];
+  for (const part of [...new Set(FIXTURES.map(f => f.mcu))].sort()) {
+    if (splHeaders(part)) continue;
+    out.push(`${part}: neither data/sources/<dir>/Evt/EXAM/SRC/Peripheral/inc nor ${SDK}/Peripheral/<series>/inc `
+      + 'resolved — add this part to BOTH maps in splHeaders(), or say here why it has no SPL');
+  }
+  return out;
+}
+
+test('every fixture part resolves to an SPL header set, so no part drops silently out of the checks below', () => {
+  // Not a skip and not a warning. The two checks under this one are written as
+  // `if (!spl) continue;`, which means the ONLY thing standing between an unmapped part
+  // and a silent pass is this test. CH32H417 and CH32L103 were unmapped until
+  // 2026-09-12; the suite was green the whole time.
+  const missing = partsWithoutSpl();
+  const parts = [...new Set(FIXTURES.map(f => f.mcu))];
+  assert.empty(missing, `fixture parts that would drop out of the SPL checks (of ${parts.length}: ${parts.join(', ')})`);
+});
 
 test('the header the generated C includes is a file that exists in the SPL for that part', () => {
   const bad = [], saved = saveDropZone();

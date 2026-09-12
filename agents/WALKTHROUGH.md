@@ -70,12 +70,80 @@ Prerequisites: `python build.py` has been run. `pio` is installed. A real browse
 14. `tasks=` no `[~]` left in `TASKS.md` that the round was supposed to close.
 15. `python tools/validate_mcu.py` → exit 0, and `python tools/verify_sdk_names.py` → exit 0 with
     no part reported NOT CHECKED for a reason that no longer applies.
-16. `node tools/wchcube_cli.js --list` names **four real parts** — CH32V003, CH32V005, CH32V006,
-    CH32X035. No synthetic fixture may appear; `tests/data.test.js` guards this. (This step said
-    "three" until a fourth part landed mid-round; the check is that the list and
-    `data/mcus/*.yaml` agree, not that the number is any particular value —
-    `tests/sdk_names.test.js` asserts exactly that.)
+16. `node tools/wchcube_cli.js --list` names the **six real parts** — CH32V003, CH32V005,
+    CH32V006, CH32X035, CH32L103, CH32H417. No synthetic fixture may appear;
+    `tests/data.test.js` guards this. (This step said "three", then "four"; the check is that
+    the list and `data/mcus/*.yaml` agree, not that the number is any particular value —
+    `tests/sdk_names.test.js` asserts exactly that. If you are reading a number here that
+    disagrees with the tree, the number is the bug.)
 17. `grep -ri "x035\|ch32v006\|ch32v005\|x033" app/engine/ app/template.html` → comments only.
+
+## §4b — CH32H417, the part this push is about
+
+The claim being accepted is one sentence: *every pin the datasheet gives this part is claimable
+in the app, every peripheral it names is configurable, and the C that comes out is right for the
+pad it configures.* These steps are the human half of it — the machine half is
+`tests/h417_packages.test.js`, `tests/h417_ltdc.test.js` and the compile gate. Do them in order;
+each one is a thing you SEE, not a thing you are told.
+
+H1. **New project → CH32H417 → QFN128.** The pin diagram draws 116 bonded pads. Zero console
+    errors or warnings — open DevTools BEFORE this step, not after.
+H2. **Claim a signal on each of ports A..F.** One per port, six in all; port F is the one that
+    matters, because every pin regex in this repository once assumed A..D and this part goes to
+    F. A workable set that needs no hunting: `USART2` Asynchronous (PA2/PA3), `USART1`
+    Asynchronous (PB14/PB15), `TIM3` PWM CH1 (→ PA6, so move it to **PC6** from the pin's menu),
+    `SPI1` Full-Duplex Master (PF7/PF8/PF9), then manual GPIO output on **PD0** and **PE0**.
+    Every one of those must appear on the pin diagram in the same instant you pick it.
+H3. **Check the pin menu on a pad you did NOT claim.** Click any unclaimed bonded pad. It must
+    offer something — a peripheral signal or plain GPIO. A pad whose menu is empty is a dead
+    pad, which is the defect that shipped 207 times on this part; report it rather than
+    shrugging.
+H4. **Parameter settings.** With `USART1` selected, the Parameter Settings panel must show real
+    rows (baud, word length, parity, stop bits) and changing one must mark the project dirty.
+    **Expected to be INCOMPLETE:** many of this part's peripherals still have no `params:` block
+    — that is `TASKS.md` "CH32H417: `params:` for the peripherals that have none", owned by
+    AGENT-1 and held in `tests/completeness.test.js`'s `IN_EXTRACTION`. An empty panel on, say,
+    `DFSDM` is the recorded gap; an empty panel on `USART1` is a regression.
+H5. **The clock tab.** This is the richest clock tree in the repository and the step most worth
+    doing by hand. The SYSCLK mux offers HSI/HSE/PLLCLK; the PLL source mux offers **32**
+    entries, which are (source, divider) PAIRS — "HSI /1" through "HSE /64" — and the
+    multiplier list has **32** entries including the half steps (8.5, 9.5, 10.5 …). Pick
+    `HSE /2` × `32` and watch the numbers move. Then read the HPRE list: it is
+    1/2/4/8/16/**64**/128/256/512 — **there is no /32**, and a list that shows one is the
+    silent bus-halving defect `data/mcus/CH32H417.notes.md` warns about.
+H6. **What the clock tab does NOT offer, and must not pretend to.** Four secondary PLLs (USBHS,
+    ETH, USBSS, SerDes) and the eight peripheral clock muxes of RM 3.4.13 are **absent by
+    declaration**, because the schema holds one PLL and one source per tap. `sysclk.sources` is
+    therefore three entries and not the seven SYSPLL_SEL allows. If you see a 48 MHz USB clock or
+    an LTDC pixel clock quoted anywhere, that is a computed number with nothing behind it — a
+    wrong clock number is worse than a missing one, and this step is where you catch it.
+H7. **Save, reopen.** Save the project, reload the app, open it again. Every pin, every setting
+    and every clock choice comes back — and the package comes back as QFN128, not as the
+    default. Zero console output on load.
+H8. **Generate, then build it.**
+    ```
+    node tools/wchcube_cli.js --project <your>.wchproj --new-project <tmp>/H417
+    cd <tmp>/H417 && pio run
+    ```
+    `pio run` reports **SUCCESS**. Then open `lib/wchcube_generated/src/wchcube_init.c` and read
+    the `GPIO_PinAFConfig` block: there is one line per claimed pad, each naming a port, a pin
+    source and an AF code, and each carrying the pad and signal in its comment. No `TODO`, no
+    `#error`.
+H9. **The package is not cosmetic — prove it.** Repeat H1/H2 on **QFN68** with the same four
+    peripheral calls, generate, and diff the `GPIO_PinAFConfig` block against H8's. It must be
+    DIFFERENT: `USART1_RX` moves from `GPIOB/PinSource15/AF4` to `GPIOD/PinSource12/AF14`, and
+    SPI1's three signals move off port F onto PA5/PF3/PD7. If the two blocks are identical, the
+    generator is ignoring the package and everything above it is decoration. The recorded
+    listings to compare against are in
+    `tests/evidence/round5/2026-09-12-h417-package-pads.md`.
+H10. **Switch on a display and count the pads.** `LTDC` → Colour depth `RGB888` + Sync and clock
+    `Enabled` claims **28** pads (24 colour + 4 timing), each on its own. Switch to `RGB565`:
+    eight colour lines are RELEASED and can immediately be claimed as GPIO. No two LTDC signals
+    may land on one pad, and none may land on **PB9** (SWIO) or **PB8** (SWCLK) — enabling a
+    display must not cost you the debug port. **Known open at the time of writing:** this is the
+    defect `TASKS.md` "CH32H417: default pins collide" tracks, with the counts ratcheted in
+    `tests/h417_packages.test.js`; if this step fails, check that file's numbers before
+    reporting it as new.
 
 ## §5 — the browser, properly
 

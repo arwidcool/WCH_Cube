@@ -54,7 +54,11 @@ const INVENTED = [
   'USART8_RTS PF9 AF11',
 ];
 const GAPS = [
-  'I2S2_MCK PC6 AF5',
+  // 'I2S2_MCK PC6 AF5' was here until 2026-09-12. It was a GAP - the peripheral-first
+  // reading had the pair and the pin-first one did not - and AGENT-1 closed it: the file
+  // now routes I2S2_MCK to PC6 with af: 5, verified against the data rather than against
+  // this list. A line leaving GAPS is the good direction and it has to be recorded, because
+  // the alternative is the audit staying red until somebody assumes it is noise.
   'LPTIM2_CH2 PB12 AF13',
   'LTDC_CLK PE14 AF14',
   'QSPI2_SIOX2 PB13 AF11',

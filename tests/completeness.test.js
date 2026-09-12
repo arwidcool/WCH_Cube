@@ -292,7 +292,13 @@ const IN_EXTRACTION = {
   // with an owner rather than failing a shared gate for a job nobody has done yet - and
   // so the day the TASKS.md line is ticked they all become hard failures with no edit
   // here, which is what stops this table outliving its excuse.
-  CH32H417: ['AGENT-3', 'CH32H417: `params:` for the peripherals that have none'],
+  // OWNER CORRECTED 2026-09-12 (AGENT-3 -> AGENT-1). This entry excuses `params:` cells,
+  // and `params:` lives in data/mcus/CH32H417.yaml, which the ownership table in
+  // agents/README.md gives to AGENT-1. AGENT-3 may not write those cells even in
+  // principle, so an exemption owned by AGENT-3 named somebody who could never retire
+  // it - an exemption with no route to being closed, which is the failure mode the
+  // owner field exists to prevent. The TASKS.md line was corrected in the same commit.
+  CH32H417: ['AGENT-1', 'CH32H417: `params:` for the peripherals that have none'],
 };
 const SOFT_CELLS = new Set(['params', 'clock']);
 

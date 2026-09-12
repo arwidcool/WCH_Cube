@@ -1,9 +1,9 @@
 wchproj: 1
-name: compile-gate CH32H417 QFN128
+name: compile-gate CH32H417 QFN68
 saved: fixture
 mcu: CH32H417
-variant: null
-package: QFN128
+variant: CH32H417WEU6
+package: QFN68
 peripherals:
   SYS:
     settings:
@@ -14,8 +14,6 @@ peripherals:
       Mode: Asynchronous
       Hardware Flow Control: Disable
     remap: 0
-    af_pins:
-      TX: PD13
     params:
       baud: 115200
       word: 8 bits
@@ -46,8 +44,6 @@ peripherals:
       Mode: Full-Duplex Master
       Hardware NSS Signal: Disable (software NSS)
     remap: 0
-    af_pins:
-      SCK: PA5
     params:
       prescaler: Mode 3
       cpol: Low
@@ -67,10 +63,8 @@ peripherals:
       firstbit: MSB First
   I2C1:
     settings:
-      Mode: I2C
+      Mode: Disable
     remap: 0
-    af_pins:
-      SCL: PB8
     params:
       speed: 100000
       duty: '2:1'
@@ -94,7 +88,7 @@ peripherals:
       wait_time: State 0
   TIM1:
     settings:
-      Channel1: PWM Generation CH1 CH1N
+      Channel1: Disable
       Channel2: Disable
       Channel3: Disable
       Channel4: Disable
@@ -125,7 +119,7 @@ peripherals:
       arpe: false
   TIM3:
     settings:
-      Channel1: Disable
+      Channel1: PWM Generation CH1
       Channel2: Disable
       Channel3: Disable
       Channel4: Disable
@@ -464,10 +458,8 @@ peripherals:
     remap: 0
   USBFS:
     settings:
-      Mode: Dual-role (OTG FS)
-      OTG pins:
-        - VBUS (bus voltage sense)
-        - ID (role detect)
+      Mode: Disable
+      OTG pins: []
     remap: 0
   USBHS:
     settings:
@@ -479,7 +471,7 @@ peripherals:
     remap: 0
   USBSS:
     settings:
-      Mode: Device (SS)
+      Mode: Disable
     remap: 0
   WWDG:
     settings:

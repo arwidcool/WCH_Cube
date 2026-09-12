@@ -31,11 +31,26 @@ async function onClockTab(page, mcu) {
   return page;
 }
 
-// Real parts only — and deliberately two different clock SHAPES: the V00x pair have HSE
-// and a PLL, CH32X035 has neither (one 48 MHz RC, SYSCLK divided down). That is what
-// keeps this a data-drivenness check rather than a CH32V006 check, and it is what the
-// synthetic fixture used to stand in for before it moved out of `data/mcus/`.
-const MCUS = ['CH32V006', 'CH32V005', 'CH32X035'];
+// Real parts only — and deliberately FOUR different clock SHAPES, because this sweep is
+// the only thing that proves the clock tab is data-driven rather than CH32V006-driven:
+//
+//   CH32V006 / CH32V005  HSE plus a PLL. The original pair.
+//   CH32X035             neither. One 48 MHz RC, SYSCLK divided down — the shape that
+//                        catches code assuming `M.clock.pll` exists.
+//   CH32L103             HSI/HSE/LSI/LSE with a PLL, the second family.
+//   CH32H417             the richest clock tree in the repo and the opposite failure
+//                        mode from CH32X035: FOUR oscillators, a six-source SYS PLL whose
+//                        `inputs:` spell out 32 (source, divider) PAIRS, 32 multipliers
+//                        including half steps (8.5, 9.5 …), a 400 MHz ceiling and a
+//                        prescaler run with a HOLE in it (HPRE has no /32). Nothing swept
+//                        this part until 2026-09-12; a tab that renders the three small
+//                        parts correctly proves nothing about the one whose muxes are
+//                        long enough to lay out wrongly.
+//
+// Adding a part here is the cheap half of QA and it is where the dead-control defects have
+// come from every round. If one of these goes red, the defect is in `app/` and belongs to
+// AGENT-2 on the board — it is not fixed by shrinking this list.
+const MCUS = ['CH32V006', 'CH32V005', 'CH32X035', 'CH32L103', 'CH32H417'];
 
 for (const mcu of MCUS) {
   test(`${mcu}: the SYSCLK mux offers every source in the data, none disabled`, async () => {
@@ -252,3 +267,76 @@ test('the clock tab is silent: no console errors or warnings while configuring i
     assert.empty(page.problems(), 'the clock tab wrote to the console');
   });
 });
+
+// =============================================================================
+//  THE PLANTED BREAK — the sweep above is green, and green is a claim about the app
+//  that is worth exactly as much as the proof that it could have been red.
+//
+//  CH32H417 is why this is not ceremony. Its `#ck-pllin` carries 32 (source, divider)
+//  pairs and its `#ck-sys` three sources; a renderer that quietly truncated either would
+//  look completely normal on CH32V006 (2 PLL inputs, 3 sysclk sources) and on CH32X035
+//  (no PLL at all). The two mutations below are that defect, applied to a COPY of
+//  dist/index.html so nothing in the tree is touched, and each must be caught ON THE PART
+//  WITH THE LONG LISTS. If a mutation ever stops being caught, the sweep has gone blind
+//  and adding another part to MCUS will not bring it back.
+//
+//  This is the same shape as tools/coverage_selftest.py and tests/source_order.test.js:
+//  mutate, watch it go red, restore. Here "restore" is free — the mutant is a temp file.
+// =============================================================================
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DIST } from './lib/browser.js';
+
+/** Write a one-string mutation of dist/index.html to a temp file and return its path. */
+function mutantOf(find, replace) {
+  const src = fs.readFileSync(DIST, 'utf8');
+  const n = src.split(find).length - 1;
+  if (n !== 1) return { error: `the anchor ${JSON.stringify(find)} appears ${n} times in dist/index.html, expected 1 — the app moved and this planted break no longer plants anything` };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-clockbreak-'));
+  const file = path.join(dir, 'index.html');
+  fs.writeFileSync(file, src.replace(find, replace));
+  return { file };
+}
+
+// [anchor in dist/index.html, the truncation, which mux it cripples, what the sweep says]
+const BREAKS = [
+  ['sel.pllIn.map(i2 =>', 'sel.pllIn.slice(0, 8).map(i2 =>', 'ck-pllin',
+   'the PLL source mux offers 8 of the 32 (source, divider) pairs CH32H417 has'],
+  ['sel.sys.map(s =>', 'sel.sys.slice(0, 1).map(s =>', 'ck-sys',
+   'the SYSCLK mux offers 1 of the 3 sources CH32H417 has'],
+];
+
+for (const [find, replace, id, what] of BREAKS) {
+  test(`planted break: a truncated #${id} is caught on CH32H417 (${what})`, async () => {
+    if (!browserAvailable()) return assert.ok(true, NO_BROWSER);
+    const m = mutantOf(find, replace);
+    assert.notOk(m.error, m.error || '');
+    await withPage(async page => {
+      await onClockTab(page, 'CH32H417');
+      // Exactly the comparison the sweep makes, run against the crippled app.
+      const r = await page.eval(`
+        const sys = document.getElementById('ck-sys'), pll = document.getElementById('ck-pllin');
+        return {
+          sysData: M.clock.sysclk.sources.length,
+          sysOffered: sys ? sys.options.length : -1,
+          pllData: M.clock.pll.inputs.length,
+          pllOffered: pll ? pll.options.length : -1,
+        };`);
+      const short = id === 'ck-sys'
+        ? { data: r.sysData, offered: r.sysOffered }
+        : { data: r.pllData, offered: r.pllOffered };
+      assert.ok(short.offered < short.data,
+        `the mutation did not take: #${id} still offers ${short.offered} of ${short.data} — `
+        + `the anchor ${JSON.stringify(find)} is no longer the code that builds this mux, `
+        + 'so the sweep above is no longer known to be able to fail');
+      // ...and the OTHER mux is untouched, so a break that blanks the whole tab does not
+      // read as a pass here.
+      const other = id === 'ck-sys'
+        ? { data: r.pllData, offered: r.pllOffered, name: 'ck-pllin' }
+        : { data: r.sysData, offered: r.sysOffered, name: 'ck-sys' };
+      assert.equal(other.offered, other.data,
+        `#${other.name} should be unaffected by this mutation, but offers ${other.offered} of ${other.data}`);
+    }, { url: m.file });
+  });
+}

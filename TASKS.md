@@ -938,7 +938,7 @@ bits, and a clock tree that models what the schema can hold.
       writing no enable for the USB clock.
 - [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
       SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
-- [ ] **(AGENT-3) CH32H417: `params:` for the peripherals that have none.**
+- [ ] **(AGENT-1) CH32H417: `params:` for the peripherals that have none.**
       The part's peripheral SET is complete - 78 entries from the DS + the 41 SPL headers -
       along with its pins (950 AF assignments, mechanical), its clock tree, its 125 NVIC
       vectors and its 73 clock-enable bits, but ~70 peripherals have no `params:` block, so
@@ -994,6 +994,25 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
 - [ ] (AGENT-1) **CH32H417: close the coverage ledger** - `python tools/coverage.py CH32H417`.
       The USB controllers' pads (DS Tables 2-2-18/19), MCO, the OPA/DAC naming, the two DS
       readings' recorded disagreements (SerDes RX/TX, USART8 CTS/RTS, QSPI2 SIOX, SDMMC), DMAMUX.
+- [ ] (AGENT-1) **CH32H417: default pins collide** - found by `tests/h417_packages.test.js`,
+      which sweeps all 419 mode choices on each of the three packages and asks what the app
+      does when a user does nothing but switch a peripheral ON. On **QFN68 26, QFN88 20,
+      QFN128 17** of those choices put two signals on ONE PAD although the signal had another
+      bonded pad free - a configuration the silicon cannot honour, reached without the user
+      touching a pin. The conflict engine does not report them because both claims have the
+      SAME OWNER, which is how the four LTDC pads (`tests/h417_ltdc.test.js`) stayed broken
+      through a green suite; DVP, FMC, I2C4, PIOC, SDIO, UHSIF and USART6 were never looked at.
+      **The fix is not the YAML.** The default is the first bonded option in `signal_pins:`, and
+      `tools/gen_h417_peripherals.py:1086` emits that list in DATASHEET order with no notion of
+      which pad becomes the default - so the 2026-09-12 hand-reordering of LTDC's lists lives in
+      the generator's OUTPUT and every regeneration discards it. Measured: at HEAD QFN68 is 26;
+      with the in-flight regeneration in the working tree it is 38, LTDC's nine back again.
+      The order belongs in the generator. `COLLISION_CEILING` in `tests/h417_packages.test.js`
+      ratchets the three counts - they may only go DOWN, a rise fails as a regression and a fall
+      fails until the number is lowered. Retire the exemption and this line together at 0.
+      Separately: `SYS_SWIO` (PB9) is the pad most of these land on, so the debug port is the
+      most common casualty; on QFN68 I2C1 has no other option and THAT one is the silicon.
+
 - [ ] (AGENT-1) **CH32H417 declares no `codegen.analog_signals`, so an analog pad is not
       recognised** — found by AGENT-3 extending the CH32H417 fixture to claim OPA1 P0/N0/OUT0 and
       DAC OUT1, pads the coverage ledger made reachable that no fixture had ever configured.

@@ -312,6 +312,79 @@ export const FIXTURES = [
     },
   },
   {
+    file: 'CH32H417_QFN68_pkg.wchproj',
+    name: 'compile-gate CH32H417 QFN68',
+    mcu: 'CH32H417',
+    pkg: 'QFN68',
+    // WEU6, not QEU6. The QFN68 part is a DIFFERENT die bond-out, not a QFN128 with
+    // pins sawn off, and `variant:` is how the project generator is told which of the
+    // three orderable numbers it is writing for.
+    //
+    // Unsettled, and recorded rather than decided here: TASKS.md still asks whether
+    // MEU6/WEU6 are CH32H416 or CH32H417 - the datasheet contradicts itself. What is
+    // NOT in doubt is that `data/mcus/CH32H417.yaml:56` declares WEU6 a QFN68 variant
+    // of this part and the platform ships `genericCH32H417WEU6.json`, so this fixture
+    // compiles what the repository currently claims. If AGENT-1 settles it the other
+    // way, this fixture moves with the data; it does not decide it.
+    variant: 'CH32H417WEU6',
+    env: 'CH32H417WEU6',
+    build() {
+      // ===== WHY A SECOND PACKAGE OF A PART WE ALREADY COMPILE =====
+      //
+      // CH32H417 is the first part in this repository where the PACKAGE decides which
+      // pins a peripheral can reach. Everywhere else a package only removes pins that
+      // were optional anyway; here, 301 of the signals in `signal_pins:` have a
+      // DIFFERENT set of bonded options on QFN68 / QFN88 / QFN128, and for many of them
+      // the first bonded option - the pad the app hands you when you switch the
+      // peripheral on - is a different pad on each. TASKS.md records this as the case
+      // nothing had ever exercised, and until this file existed that was literally true:
+      // `CH32H417_QFN128_full.wchproj` was the only fixture for all three packages, so
+      // the package-dependent path had never once been through the compile gate.
+      //
+      // Every claim below is chosen because its PAD DIFFERS from what the same engine
+      // calls produce on QFN128. A generator that ignored the package would emit the
+      // QFN128 pad here, and that is a wrong GPIO port and a wrong AF field in C that
+      // still compiles - the wrong-but-compiling class this round exists to remove.
+      //
+      //   call                               QFN68 pad      QFN128 pad
+      //   ---------------------------------  -------------  -----------
+      //   USART1 Asynchronous  -> RX         PD12           PB15
+      //   USART2 Asynchronous  -> TX         PD5            PA2
+      //                        -> RX         PD6            PA3
+      //   SPI1   Full-Duplex   -> SCK        PA5            PF7
+      //                        -> MISO       PF3            PF9
+      //                        -> MOSI       PD7            PF8
+      //   TIM3   PWM CH1       -> CH1        PC6            PA6
+      //
+      // Port F is in there on purpose: SPI1's MISO lands on PF3 here and PF9 there, so
+      // a port letter past E is exercised on both packages and by different pads.
+      eng.setSetting('USART1', 'Mode', 'Asynchronous');
+      eng.setParam('USART1', 'baud', 115200);
+      eng.setSetting('USART2', 'Mode', 'Asynchronous');
+      eng.setSetting('SPI1', 'Mode', 'Full-Duplex Master');
+      eng.setSetting('TIM3', 'Channel1', 'PWM Generation CH1');
+
+      // NOT claimed here, and it is a hardware fact worth writing down rather than a
+      // gap: on QFN68 **I2C1 has exactly one bonded option per signal, and they are the
+      // debug pads** - SCL can only be PB8 (SWCLK) and SDA only PB9 (SWIO/SWDIO). On
+      // QFN128 the same peripheral defaults to PB6/PB7 and the debug port is untouched.
+      // So "switch I2C1 on" is free on the big package and costs you SWD on the small
+      // one. That belongs in a check a user meets, not in a fixture that has to compile:
+      // tests/h417_packages.test.js asserts it.
+      //
+      // ADC1 and ADC2 are absent for a blunter reason: QFN68 bonds NONE of their
+      // channels. Claiming a channel here would be claiming a pad that does not exist.
+
+      // Manual GPIO, on pads QFN68 actually bonds. PE0 again, because a port letter
+      // past D broke every pin regex in this repo once already.
+      eng.assignSignal('PC0', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PC1', { gpio: 'GPIO_Input' });
+      eng.assignSignal('PE0', { gpio: 'GPIO_Output' });
+      eng.setGpioField('PC0', 'label', 'LED');
+      eng.setGpioField('PC0', 'speed', 'Very high');
+    },
+  },
+  {
     file: 'CH32L103_QFN32_full.wchproj',
     name: 'compile-gate CH32L103 QFN32',
     mcu: 'CH32L103',
