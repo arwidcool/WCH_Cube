@@ -40,6 +40,18 @@ export const mcuFiles = () => MCU_DIRS.flatMap(d => {
   return fs.readdirSync(dir).filter(f => f.endsWith('.yaml')).map(f => path.join(d, f));
 });
 
+/**
+ * The name of every part these tests can load, from the FILES rather than from the
+ * engine's registry.
+ *
+ * `eng.MCU_FILES` is process-wide and `registerMcuFile()` only ever adds to it, so a
+ * test that registers a synthetic part (every `withFile`-style helper here does) leaves
+ * it there for every later test. A loop over `Object.keys(eng.MCU_FILES)` therefore
+ * depends on which tests ran before it, and `fresh('CH32V006-TWOSTRUCTS')` throws ENOENT
+ * on a part that was never a file - measured, in this suite, on 2026-09-12. Use this.
+ */
+export const mcuNames = () => mcuFiles().map(f => path.basename(f, '.yaml'));
+
 let packagesLoaded = false;
 // Fresh engine state: real package library, real MCU file, optional package.
 // MCU_FILES is a process-wide registry, so clear it first — otherwise a test

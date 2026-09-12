@@ -56,6 +56,19 @@ that should fail were run and both failed** (`signalPinDefs` falling back to `P.
 the byte-comparison test cannot catch either leak, because those three peripherals route nothing
 and `afPlan()` skips them before it asks. A byte-comparison that cannot move is not evidence.
 
+**P3: DONE.** `app/engine/codegen.js` read end to end for an assumption that only holds for the
+parts that exist today. Seven findings in `agents/BACKLOG.md` under APP; the first is fixed:
+**`rccWord()` went silent about a PLL input it had no encoding for**, so on CH32H417 a
+configuration asking for `HSE /8 x 8` printed `SYSCLK 25 MHz from PLLCLK (HSE /8 x 8)` in the
+header comment and then wrote the SW and HPRE fields and nothing else. It now carries a `PLL input`
+note naming the missing key and the chosen input, and `app/tests/codegen.test.js` asserts the
+missing/covered split by part name. The other six are one line each and none is a guess about
+silicon: `isFixture()` sniffs the part's name and vendor; `gpioPlan()` silently drops an `io` pin
+that is not spelled `P<letter><digits>`; `structVar()` assumes `*TypeDef`; `GPIO_Pin_<n>` is the
+one SPL macro written without the data; the RCC word reports its gaps as comments where everywhere
+else a gap is a TODO; and `codegen.rcc.pllsrc` is keyed on the PLL input's *source*, which cannot
+express H417's source-and-divider field.
+
 Also this cycle: repaired one duplicated YAML key in `data/mcus/CH32L103.yaml` (`BKP` had
 `settings:` twice, so the file did not parse at all and every `fresh()` threw) — declared on the
 board, behaviour-preserving, AGENT-1's file.

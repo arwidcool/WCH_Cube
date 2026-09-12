@@ -1,5 +1,5 @@
 // model.js — parsing, derived maps, shorted pins, package switching.
-import { test, assert, fresh, eng } from './_harness.js';
+import { test, assert, fresh, mcuNames } from './_harness.js';
 
 test('loads CH32V006 and defaults to its TSSOP20 package', () => {
   const e = fresh();
@@ -115,7 +115,7 @@ test('openPadPeripherals lists the coverage ledger queue, with the owner from th
 });
 
 test('unclaimableSignals is empty for every shipped part, and catches a dead row', () => {
-  for (const name of Object.keys(eng.MCU_FILES)) {
+  for (const name of mcuNames()) {
     const e = fresh(name);
     assert.deepEqual(e.unclaimableSignals(), [],
       `${name}: a routed signal no setting names cannot be assigned, and validate_mcu makes it an ERROR`);

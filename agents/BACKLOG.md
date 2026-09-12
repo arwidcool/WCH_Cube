@@ -32,6 +32,43 @@ can see is the same as no entry.
 - `app/engine/codegen.js` read end to end looking for an assumption that only holds for the parts
   that exist today. Both round-3 and round-4 defects were found that way — `ch32v00x.h` and
   `GPIO_Speed_50MHz` — and neither was visible from any test that passed.
+  **Read end to end 2026-09-12 (AGENT-2, round 6). What it turned up, in the order I would take
+  them. The first one is fixed; the rest are recorded rather than guessed at.**
+  1. **`rccWord()` went SILENT about a PLL input it had no encoding for.** `if (c.pllsrc && …)`
+     meant a part with a PLL and no `pllsrc:` produced a word covering SW and the prescalers and
+     nothing at all about the input, while the header comment named the input the configuration
+     had asked for. On CH32H417 that is 32 asked-for clock rates and no bit written to choose
+     between them, in a file that reads as complete. **FIXED** — it now names the missing key and
+     the chosen input, in the C. See the board FINDING for the data side.
+  2. **`isFixture()` decides by sniffing the part's NAME and VENDOR** (`/dummy/i` on both), and its
+     own comment says so. The clean flag is `mcu.fixture: true`, which `data/FORMAT.md` would have
+     to bless and `tests/fixtures/mcus/WCH-DUMMY32-C8.yaml` would have to carry — a `tests/` file,
+     so it is a REQUEST. Until then a synthetic part not called "dummy" gets an `#error` it should
+     not, and a real part whose name or vendor contains "dummy" is excused from one it should get.
+     Two-sided: the flag must land before the sniffing can go.
+  3. **`gpioPlan()` drops an `io` pin whose name is not `P<letter><digits>`** — `if (!m ||
+     pinType(pin) !== 'io') continue;` — with no TODO and no note. Unreachable on all six parts,
+     because every WCH pad is spelled that way. A part that was not would generate a
+     `WCHCube_GPIO_Init` that quietly omits the pin, which is the round-5 defect class one field
+     over. The fix is a named TODO, not a wider regex.
+  4. **`structVar()` assumes every struct typedef ends in `TypeDef`** (`replace(/TypeDef$/, …)`).
+     A struct not so named becomes its own variable name — `Foo Foo = {0};`, which compiles but is
+     not the SPL's convention, and two such structs on one peripheral would collide inside the
+     block. Every name in every header read so far ends in `TypeDef`.
+  5. **`GPIO_Pin_<n>` is the ONE SPL macro the generator writes without the data's permission.**
+     Every other macro in the file comes from the MCU file; this one is spelled at the point of
+     use in `gpioSection()`. It is right on all six parts (CH32X035's PC16/PC17 → `GPIO_Pin_16` /
+     `GPIO_Pin_17`), and it is the kind of thing that is right until the first part that is not.
+  6. **The RCC word's gaps are comments, everywhere else in this file a gap is a TODO.** `put()`
+     writes `/* ADC prescaler: no encoding for 1 */` and the PLL-input note above joins it. That is
+     consistent inside one function and inconsistent with the rest of the generator, and it means
+     `--strict` cannot see a clock the configuration asked for and the C does not produce. Worth a
+     decision rather than a change: the alternative is a red shared tree for every part with an
+     unencoded divider, which is a different trade.
+  7. **`pllsrc` is keyed on the PLL input's SOURCE**, which is the whole register field on the
+     parts that have one (HSI or HSE). CH32H417's input is a source AND a divider
+     (`RCC_PLLCFGR` PLL_SRC_DIV), so it is not a value to fill in but a shape `codegen.rcc` cannot
+     express. A FORMAT question for whoever owns that read.
 
 ## QA / RELEASE
 - `tests/perf.test.js`: `compute()` under 5 ms and a full render under 100 ms on the largest real

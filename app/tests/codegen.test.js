@@ -4,7 +4,7 @@
 // (RCC_CFGR0 in 3.4.2, AFIO_PCFR1 in 7.3.2.2) and carried here on a child MCU
 // file, so these tests prove the full path without editing AGENT-1's data file.
 // Once the same block lands in CH32V006.yaml the generator needs no change.
-import { test, assert, fresh, eng } from './_harness.js';
+import { test, assert, fresh, eng, mcuNames } from './_harness.js';
 
 // AFIO_PCFR1: SPI1_RM[2:0] at 0, I2C1_RM[2:0] at 3, USART1_RM[3:0] at 6,
 // TIM1_RM[3:0] at 10, TIM2_RM[1:0] at 14 with TIM2_RM[2] away at bit 16,
@@ -1279,4 +1279,61 @@ test('a prose-shaped or mis-targeted when: is reported rather than obeyed', () =
   const [t] = todosOf(param);
   assert.match(t, /is a parameter of USART9, not a setting/);
   assert.match(t, /depends_on/);
+});
+
+// =============================================================================
+//  Round-6 P3 — the clock word must not go quiet about a field it does not write
+// =============================================================================
+//  Every part with a PLL but no `codegen.rcc.pllsrc` used to emit a word covering SW
+//  and the prescalers and NOTHING about the input, while the header comment named the
+//  input the configuration had asked for. On the one part that is true of today that is
+//  32 different asked-for clock rates, in a file that reads as complete.
+
+test('a PLL input the clock word cannot write is named, on every part with a PLL', () => {
+  for (const name of mcuNames()) {
+    const e = fresh(name);
+    const pll = (e.M.clock || {}).pll;
+    if (!pll || !pll.inputs || !pll.inputs.length) continue;
+    const idx = pll.inputs.length > 1 ? 1 : 0;
+    e.setClock({ sys: 'PLLCLK', pllIn: idx, pllMul: pll.multipliers[0] });
+    e.compute();
+    const part = (e.rccWord().parts || []).find(p => p.what === 'PLL input');
+    assert.ok(part, `${name}: the word must account for the PLL input, one way or the other`);
+    if (part.field !== undefined) continue;            // it states the encoding and writes it
+    assert.match(part.note, /pllsrc/, `${name}: and say which key is missing`);
+    assert.ok(part.note.includes(pll.inputs[idx].name),
+      `${name}: the note names the input the user actually chose`);
+    assert.ok(e.cSource().includes(part.note), `${name}: and it reaches the generated C`);
+  }
+});
+
+// The plant, and it is the test that matters: whether a part states `pllsrc` is DATA, so a
+// list of part names here would go red the moment somebody fixes the data - which is
+// exactly what a test must not do. This asks the mechanism directly instead, on a part
+// that states it, by taking it away.
+test('the PLL input note is absent when the part can write the field, and appears when it cannot', () => {
+  const e = fresh('CH32V006');
+  const pll = e.M.clock.pll;
+  e.setClock({ sys: 'PLLCLK', pllIn: 1, pllMul: pll.multipliers[0] });
+  e.compute();
+  assert.ok(e.cSource().includes('/* PLL input = '), 'the field is written');
+  assert.equal(/PLL input: no codegen/.test(e.cSource()), false, 'and nothing is said about a note');
+  assert.equal((e.rccWord().parts.find(p => p.what === 'PLL input') || {}).field !== undefined, true);
+
+  // take the encoding away, exactly as a part without one has it
+  const saved = e.M.codegen.rcc.pllsrc;
+  delete e.M.codegen.rcc.pllsrc;
+  e.compute();
+  const part = (e.rccWord().parts || []).find(p => p.what === 'PLL input');
+  assert.ok(part && part.field === undefined, 'now there is nothing to write');
+  assert.match(part.note, /pllsrc/);
+  assert.ok(part.note.includes(pll.inputs[1].name), 'the note names the chosen input');
+  assert.ok(e.cSource().includes(part.note), 'and it reaches the generated C, beside the write');
+
+  // and it is conditional on the PLL being asked for: a configuration that does not use
+  // the PLL must not be lectured about a field it does not care about
+  e.setClock({ sys: 'HSI' });
+  e.compute();
+  assert.equal(e.cSource().includes('PLL input'), false, 'no PLL, no note');
+  e.M.codegen.rcc.pllsrc = saved;
 });

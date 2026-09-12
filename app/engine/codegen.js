@@ -316,6 +316,29 @@ export function rccWord() {
   };
   put(c.sw, k.sys, 'SYSCLK source');
   if (c.pllsrc && M.clock.pll) put(c.pllsrc, M.clock.pll.inputs[k.pllIn].source, 'PLL input');
+  else if (!c.pllsrc && M.clock.pll && k.sys === 'PLLCLK') {
+    // A part with a PLL and no `pllsrc:` encoding used to land here SILENTLY: the word
+    // covered SW and the prescalers and said nothing about the input, while the header
+    // comment above named the input the configuration asked for. On CH32H417 that is up
+    // to 32 different asked-for clock rates and not one bit written for the field that
+    // selects between them, in a file that reads as complete.
+    //
+    // It is NOT simply a missing value to fill in: `pllsrc` is keyed on the PLL input's
+    // SOURCE, which is the whole register field on the parts that have one (HSI or HSE).
+    // A part whose input is a source AND a divider - H417's PLL_SRC_DIV - needs more than
+    // that shape can say, so this is a question for the data rather than a gap to guess at.
+    //
+    // Reported as a note rather than a TODO because that is what `put()` already does for
+    // a prescaler it cannot encode: the RCC word's gaps are comments here, and making this
+    // one a TODO would be a second rule inside one function.
+    const inp = M.clock.pll.inputs[k.pllIn] || {};
+    parts.push({
+      what: 'PLL input',
+      note: `no codegen.rcc.pllsrc in the MCU file, so the input this configuration selects `
+        + `("${inp.name || k.pllIn}") is NOT written. That field is not derivable here, and on a `
+        + `part whose input carries a divider it is more than a source`,
+    });
+  }
   for (const [name, spec] of Object.entries(c.prescalers || {})) put(spec, k.pre[name], `${name} prescaler`);
   return { register: c.register || 'RCC->CFGR0', value: value >>> 0, mask: mask >>> 0, parts };
 }
