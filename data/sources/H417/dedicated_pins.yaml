@@ -26,6 +26,28 @@
 # A `None` AF means the DS gives no AF code: the pad function is dedicated.
 
 dedicated_pins:
+  # ETH's four media-dependent pads. They are their OWN pins, not GPIO alternates - DS
+  # Table 2-1-1 rows at CH32H417DS0.md:3919-3930 read `8 7 12 MDIRN (6) ETH - MDIRN`, a
+  # pad whose NAME is the function and which carries no (AFn) code, so the AF parser
+  # cannot see them and ETH read as holding no pin.
+  #
+  # WHY THEY ARE HERE AND NOT IN THE MCU FILE, which is the whole point of this file:
+  # they were hand-added into the GENERATED block of data/mcus/CH32H417.yaml on
+  # 2026-09-12 (commit 9a502ae), where `--splice --refresh` deletes them. The generator's
+  # own loss guard caught it on the next run - "ETH.MDIRN: no longer routed to MDIRN" and
+  # three more - which is the guard doing exactly the job it was written for. Moved here
+  # so the generator puts them back every time instead of losing them once.
+  #
+  # The internal PHY needs no MAC-to-PHY interface on pins at all: these four go straight
+  # to the magnetics as two differential pairs, receive (MDIRN/MDIRP) and transmit
+  # (MDITN/MDITP). DS 1.4.31: "MAC and 100M PHY are fully integrated, and the periphery
+  # only needs capacitance."
+  ETH:
+    MDIRN: [{ pin: MDIRN }]
+    MDIRP: [{ pin: MDIRP }]
+    MDITN: [{ pin: MDITN }]
+    MDITP: [{ pin: MDITP }]
+
   DAC:
     OUT1: [{ pin: PA4 }]
     OUT2: [{ pin: PA5 }]

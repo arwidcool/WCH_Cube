@@ -38,23 +38,6 @@
 #
 # `_params` is not `extras:`, so tools/gen_h417_peripherals.py never reads this section -
 # it reads `doc["extras"]` only. YAML resolves the aliases before the generator sees them.
-# A `const:` PARAM ALSO CARRIES A `default:` THAT REPEATS IT, and that is a workaround for
-# an engine defect rather than a modelling idea - it is here so it can be deleted in one
-# commit once the defect is fixed. `paramReachWarnings()` in app/engine/resources.js:480-494
-# lists the params of a SWITCHED-OFF peripheral that differ from their default, and warns
-# that the user set something the generated code will never see. It skips `readonly:` but
-# not `const:`, and `paramValue()` (app/engine/params.js) returns `d.const` for a const
-# param while `d.default` is undefined - so every const member of a disabled peripheral
-# reads as "changed" although a const param is never drawn and cannot be changed. It also
-# never consults `paramApplies()`, so the inapplicable half of a pair counts too. The
-# measured effect on the shipped fixtures, all four with the peripheral at `Mode: Disable`:
-# "ADC1 has Dual-ADC mode set", "ADC2 has Dual-ADC mode set", "DVP has 3 settings changed
-# (Data width, Data width, Data width)", "SWPMI has 2 settings changed (Loopback,
-# Loopback)" - four issues, and `--strict` exits 2 on any of them. Mirroring the constant
-# into `default:` makes the comparison equal and the warning correct again. It changes
-# nothing else: `paramDefaults()` skips const params so no .wchproj gains a key, the UI
-# never draws them, and `paramLiteral()` reads `const:` first. Posted to AGENT-2 as a
-# FINDING with this file:line.
 _params:
 
   usart: &usart_params |
@@ -540,7 +523,6 @@ _params:
         struct: ADC_InitTypeDef
         sdk_field: ADC_Mode
         const: ADC_Mode_Independent
-        default: ADC_Mode_Independent
         depends_on: { setting: Mode, equals: Independent }
         help: "ADCx_CTLR1 DUALMOD[19:16] = 0000 (RM 11.3.2). Fixed by the Mode row: an independent ADC has no dual mode to choose."
       - key: mode_dual
@@ -672,7 +654,6 @@ _params:
         struct: DVP_InitTypeDef
         sdk_field: DVP_DataSize
         const: DVP_DataSize_8b
-        default: DVP_DataSize_8b
         depends_on: { setting: Mode, equals: 8-bit }
         help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:72). Fixed by the Mode row, which is what claims D8-D11."
       - key: datasize_10
@@ -680,7 +661,6 @@ _params:
         struct: DVP_InitTypeDef
         sdk_field: DVP_DataSize
         const: DVP_DataSize_10b
-        default: DVP_DataSize_10b
         depends_on: { setting: Mode, equals: 10-bit }
         help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:73). Fixed by the Mode row."
       - key: datasize_12
@@ -688,7 +668,6 @@ _params:
         struct: DVP_InitTypeDef
         sdk_field: DVP_DataSize
         const: DVP_DataSize_12b
-        default: DVP_DataSize_12b
         depends_on: { setting: Mode, equals: 12-bit }
         help: "DVP_CR0 DATA_SIZE (ch32h417_dvp.h:74). Fixed by the Mode row."
       - key: hclk_pol
@@ -944,7 +923,6 @@ _params:
         struct: SWPMI_InitTypeDef
         sdk_field: LoopBackMode
         const: DISABLE
-        default: DISABLE
         depends_on: { setting: Mode, ne: Loopback }
         help: "ch32h417_swpmi.h:34. Fixed by the Mode row: a live single-wire link is not in loopback."
       - key: loopback_on
@@ -952,7 +930,6 @@ _params:
         struct: SWPMI_InitTypeDef
         sdk_field: LoopBackMode
         const: ENABLE
-        default: ENABLE
         depends_on: { setting: Mode, equals: Loopback }
         help: "ch32h417_swpmi.h:34. Fixed by the Mode row: the transceiver is looped back for self-test and the pad carries nothing."
 
@@ -986,6 +963,30 @@ extras:
   IPC:   { yaml: *ipc_params }
   SWPMI: { yaml: *swpmi_params }
 
+  # ETH's `notes:` were hand-added to the GENERATED block on 2026-09-12 (commit 9a502ae,
+  # AGENT-4), where `--splice --refresh` deletes them - the generator's loss guard reported
+  # "ETH.notes: dropped" on the next run. Moved here, with the four MDI pads moved to
+  # dedicated_pins.yaml, so a refresh reproduces both instead of losing them once. The
+  # reasoning below is that commit's, kept word for word because it is cited work.
+  ETH:
+    yaml: |
+      notes: >
+        MAC plus a BUILT-IN 10/100M PHY: "Single chip can realize Ethernet communication",
+        and "MAC and 100M PHY are fully integrated, and the periphery only needs
+        capacitance" (CH32H417DS0.md 1.4.31, 1.2). So the ordinary configuration is the
+        internal PHY - four media-dependent pads straight to the magnetics, with no
+        MAC-to-PHY interface on pins at all, and nothing to select. RGMII is the OTHER
+        supported configuration and the only interface the DS names: it is how an external
+        1Gbps PHY is attached, which the DS calls "Optional Ethernet controller MAC +
+        external 1Gbps PHY". MII and RMII are deliberately NOT offered. Neither word
+        appears anywhere in this part's datasheet - its Ethernet section lists only RGMII -
+        and a choice the silicon does not have is the defect class this project exists to
+        remove. (Before this change the file offered MII and RMII, both invented.)
+        The four pads are MDIRN/MDIRP (receive pair) and MDITN/MDITP (transmit pair), DS
+        Table 2-1-1 at CH32H417DS0.md:3919-3930. They are dedicated pins rather than GPIO
+        alternates, which is why they live in data/sources/H417/dedicated_pins.yaml where
+        the generator can see them.
+
   LTDC:
     comment: |
       THE OUTPUT WIDTH IS A WIRING CHOICE, NOT A REGISTER, and that is the whole reason
@@ -1008,87 +1009,350 @@ extras:
       offers L8, AL44 and AL88 - eight bits per pixel - but those describe the LAYER'S
       FRAME BUFFER IN MEMORY. The pixel format converter expands every one of them to
       ARGB8888 before the blender, so an 8-bit format saves RAM and frees no pin at all.
-      It IS selectable, as `params:` below: `Layer 1 pixel format` and `Layer 2 pixel
-      format`, all eight formats. The two axes sit on one peripheral on purpose - the
-      panel wiring and the buffer format are the same planning decision - and neither
-      one moves a pin the other owns.
+      It IS selectable and it IS applied: `Pixel format` is a member of the per-layer
+      init below, written by `LTDC_LayerInit()` into `PFCR` beside the window geometry.
+      The two axes sit on one peripheral on purpose - the panel wiring and the buffer
+      format are the same planning decision - and neither one moves a pin the other owns.
     yaml: |
+      # THE PANEL TIMING, and it is peripheral-level where the layer block above is
+      # per-layer. `LTDC_Init(&s)` (ch32h417_ltdc.h:224) takes the struct alone - the
+      # controller is a singleton, so `no_handle: true` - and every member below is one of
+      # its fifteen. The four polarities are what a panel datasheet states; the eight
+      # counters are its blanking diagram.
+      #
+      # THE COUNTERS ARE ACCUMULATED, NOT WIDTHS, and getting that wrong is the classic way
+      # an LTDC brings up a blank panel. The header says so member by member
+      # (ch32h417_ltdc.h:36-57): AccumulatedHBP ranges "from LTDC_HorizontalSync to 0xFFF",
+      # AccumulatedActiveW "from LTDC_AccumulatedHBP", TotalWidth "from
+      # LTDC_AccumulatedActiveW". So each is the running total from the start of the line,
+      # minus one, and NOT the porch's own width:
+      #
+      #     HorizontalSync      = HSW - 1
+      #     AccumulatedHBP      = HSW + HBP - 1
+      #     AccumulatedActiveW  = HSW + HBP + ActiveWidth - 1
+      #     TotalWidth          = HSW + HBP + ActiveWidth + HFP - 1
+      #
+      # and the same four vertically. The defaults are 0 because a timing this tool cannot
+      # know is better left at the register's reset value than guessed: there is no
+      # `LTDC_StructInit()` default worth copying here (it zeroes them too), and a plausible
+      # 800x480 set would be a made-up panel presented as fact.
       params:
-        # THE LAYER PIXEL FORMAT, SELECTABLE - for PLANNING, and emitting no register write.
-        #
-        # `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18, RM:65146) picks the format of the layer's FRAME
-        # BUFFER IN MEMORY. It is the question people mean by "does this thing do 8-bit", and
-        # it is a different axis from `Colour depth` above: the pixel format converter expands
-        # every one of these to ARGB8888 before the blender, so the format decides how much RAM
-        # a frame costs and frees NO pin. Both live on this peripheral on purpose - you plan the
-        # panel wiring and the buffer format in one place.
-        #
-        # WHY `sdk_none:` RATHER THAN A CALL, and this is the whole design decision. The SDK
-        # does have `LTDC_LayerPixelFormat(LTDC_Layerx, fmt)`, and `sdk_args:` would happily
-        # pass `LTDC_Layer1` through literally, so emitting it LOOKS easy. Read it first
-        # (`ch32h417_ltdc.c:622-672`): it is a RECONFIGURE call, not an init one. It reads the
-        # CURRENT `PFCR` to work out the old bytes-per-pixel, divides `CFBLR >> 16` - the frame
-        # buffer line length, which `LTDC_LayerInit()` computes from the layer WIDTH - by it to
-        # recover a pixel count, then re-multiplies by the new bytes-per-pixel. At reset
-        # `CFBLR` is 0 (RM:64570, R32_LTDC_L1PFCR and the L1CFBLR beside it reset 0x00000000),
-        # so calling it from a generated init would compute 0/n and write a line length of 3
-        # bytes with a pitch of 0. That is wrong-but-compiling code - a broken display the
-        # configurator gives you no way to see - and the SDK's own doc comment adds that a
-        # shadow-register reload must follow it anyway (`:619-620`).
-        #
-        # So the row is a PLANNING row: it records the choice, states the cost in the generated
-        # C as a comment, and leaves the register to the layer init that owns the geometry. No
-        # TODO, no `#error`, and `--strict` stays clean, because nothing here is unfinished -
-        # this is the correct amount of code to emit for a value whose register write depends
-        # on a number this tool does not own.
-        - key: layer1_format
-          name: Layer 1 pixel format
+        - key: hs_polarity
+          name: HSYNC polarity
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_HSPolarity
           type: enum
-          default: ARGB8888
-          sdk_none: true
-          sdk_note: >-
-            no init-time setter. LTDC_LayerPixelFormat() is a RECONFIGURE call - it rescales
-            CFBLR from the layer width, which is still 0 before LTDC_LayerInit() has run
-            (ch32h417_ltdc.c:622-672) - so calling it here would write a bogus frame-buffer
-            line length. This row records the format; your layer init applies it.
-          help: >
-            Frame-buffer format for layer 1 (LTDC_L1PFCR.PF, RM 43.4.18). Decides bytes per
-            pixel in MEMORY, not lines at the pad - every format is expanded to ARGB8888
-            before the output stage, so this frees no pin. Use Colour depth above for the
-            wiring. L8 is 8-bit indexed through the 256-entry CLUT; AL44 and AL88 are
-            alpha+luminance. Reset value is ARGB8888.
+          default: Active low
           options:
-            - { name: ARGB8888, value: 0, sdk: LTDC_Pixelformat_ARGB8888 }
-            - { name: RGB888,   value: 1, sdk: LTDC_Pixelformat_RGB888 }
-            - { name: RGB565,   value: 2, sdk: LTDC_Pixelformat_RGB565 }
-            - { name: ARGB1555, value: 3, sdk: LTDC_Pixelformat_ARGB1555 }
-            - { name: ARGB4444, value: 4, sdk: LTDC_Pixelformat_ARGB4444 }
-            - { name: L8,       value: 5, sdk: LTDC_Pixelformat_L8 }
-            - { name: AL44,     value: 6, sdk: LTDC_Pixelformat_AL44 }
-            - { name: AL88,     value: 7, sdk: LTDC_Pixelformat_AL88 }
-        - key: layer2_format
-          name: Layer 2 pixel format
+            - { name: Active low , value: 0, sdk: LTDC_HSPolarity_AL }
+            - { name: Active high, value: 1, sdk: LTDC_HSPolarity_AH }
+          help: "LTDC_GCR.HSPOL (ch32h417_ltdc.h:159-160). Most parallel RGB panels are active low."
+        - key: vs_polarity
+          name: VSYNC polarity
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_VSPolarity
           type: enum
-          default: ARGB8888
-          sdk_none: true
-          sdk_note: >-
-            no init-time setter, same as layer 1 - LTDC_LayerPixelFormat() rescales CFBLR from
-            a layer width that is 0 until LTDC_LayerInit() has run (ch32h417_ltdc.c:622-672).
-            This row records the format; your layer init applies it.
-          help: >
-            Frame-buffer format for layer 2 (LTDC_L2PFCR.PF, RM 43.4.18). This controller has
-            exactly two layers - LTDC_Layer1 and LTDC_Layer2 (ch32h417.h:1770-1771) - blended
-            by alpha (RM:64248). Same rule as layer 1: it decides bytes per pixel in memory and
-            frees no pin. Leave it at the reset value if you only use one layer.
+          default: Active low
           options:
-            - { name: ARGB8888, value: 0, sdk: LTDC_Pixelformat_ARGB8888 }
-            - { name: RGB888,   value: 1, sdk: LTDC_Pixelformat_RGB888 }
-            - { name: RGB565,   value: 2, sdk: LTDC_Pixelformat_RGB565 }
-            - { name: ARGB1555, value: 3, sdk: LTDC_Pixelformat_ARGB1555 }
-            - { name: ARGB4444, value: 4, sdk: LTDC_Pixelformat_ARGB4444 }
-            - { name: L8,       value: 5, sdk: LTDC_Pixelformat_L8 }
-            - { name: AL44,     value: 6, sdk: LTDC_Pixelformat_AL44 }
-            - { name: AL88,     value: 7, sdk: LTDC_Pixelformat_AL88 }
+            - { name: Active low , value: 0, sdk: LTDC_VSPolarity_AL }
+            - { name: Active high, value: 1, sdk: LTDC_VSPolarity_AH }
+          help: "LTDC_GCR.VSPOL (ch32h417_ltdc.h:163-164)."
+        - key: de_polarity
+          name: Data-enable polarity
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_DEPolarity
+          type: enum
+          default: Active low
+          options:
+            - { name: Active low , value: 0, sdk: LTDC_DEPolarity_AL }
+            - { name: Active high, value: 1, sdk: LTDC_DEPolarity_AH }
+          help: "LTDC_GCR.DEPOL (ch32h417_ltdc.h:167-168). The DE pad is claimed by the `Sync and clock` row."
+        - key: pc_polarity
+          name: Pixel-clock polarity
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_PCPolarity
+          type: enum
+          default: Not inverted
+          options:
+            - { name: Not inverted, value: 0, sdk: LTDC_PCPolarity_IPC }
+            - { name: Inverted    , value: 1, sdk: LTDC_PCPolarity_IIPC }
+          help: "LTDC_GCR.PCPOL (ch32h417_ltdc.h:171-172). The SDK spells these IPC and IIPC - input pixel clock, and inverted input pixel clock."
+        - key: hsync
+          name: HSYNC width - 1
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_HorizontalSync
+          type: int
+          default: 0
+          min: 0
+          max: 4095
+          help: "LTDC_SSCR.HSW, 0x000-0xFFF. The panel's horizontal sync pulse width MINUS ONE - every counter in this block is a zero-based end position."
+        - key: vsync
+          name: VSYNC height - 1
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_VerticalSync
+          type: int
+          default: 0
+          min: 0
+          max: 2047
+          help: "LTDC_SSCR.VSH, 0x000-0x7FF. Vertical sync pulse height minus one. Note the vertical counters are 11 bits where the horizontal ones are 12."
+        - key: hbp
+          name: Accumulated HBP
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_AccumulatedHBP
+          type: int
+          default: 0
+          min: 0
+          max: 4095
+          help: "LTDC_BPCR.AHBP. HSYNC width + horizontal back porch - 1. The header requires it to be at least HSYNC width - 1 (ch32h417_ltdc.h:42-43), because it is a running total and not the porch on its own."
+        - key: vbp
+          name: Accumulated VBP
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_AccumulatedVBP
+          type: int
+          default: 0
+          min: 0
+          max: 2047
+          help: "LTDC_BPCR.AVBP. VSYNC height + vertical back porch - 1."
+        - key: active_w
+          name: Accumulated active width
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_AccumulatedActiveW
+          type: int
+          default: 0
+          min: 0
+          max: 4095
+          help: "LTDC_AWCR.AAW. HSYNC + HBP + the panel's pixel width - 1. Must be at least the accumulated HBP."
+        - key: active_h
+          name: Accumulated active height
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_AccumulatedActiveH
+          type: int
+          default: 0
+          min: 0
+          max: 2047
+          help: "LTDC_AWCR.AAH. VSYNC + VBP + the panel's line count - 1."
+        - key: total_w
+          name: Total width
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_TotalWidth
+          type: int
+          default: 0
+          min: 0
+          max: 4095
+          help: "LTDC_TWCR.TOTALW. The whole line including the front porch, minus one - so HSYNC + HBP + width + HFP - 1. This is what the pixel clock divides into to give the line rate."
+        - key: total_h
+          name: Total height
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_TotalHeigh
+          type: int
+          default: 0
+          min: 0
+          max: 2047
+          help: "LTDC_TWCR.TOTALH, the whole frame including the vertical front porch, minus one. The SDK spells the member TotalHeigh, without the final t (ch32h417_ltdc.h:56)."
+        - key: bg_red
+          name: Background red
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_BackgroundRedValue
+          type: int
+          default: 0
+          min: 0
+          max: 255
+          help: "LTDC_BCCR.BCRED. What the panel shows where no layer covers it - the colour behind both layers, not a layer's own default colour."
+        - key: bg_green
+          name: Background green
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_BackgroundGreenValue
+          type: int
+          default: 0
+          min: 0
+          max: 255
+          help: "LTDC_BCCR.BCGREEN."
+        - key: bg_blue
+          name: Background blue
+          struct: LTDC_InitTypeDef
+          sdk_field: LTDC_BackgroundBlueValue
+          type: int
+          default: 0
+          min: 0
+          max: 255
+          help: "LTDC_BCCR.BCBLUE."
+      # THE LAYER INIT, ONE STRUCT FILLED ONCE PER LAYER - deliverable E's mechanism, and
+      # this peripheral is why it was built. `LTDC_LayerInit(LTDC_Layerx, &s)`
+      # (ch32h417_ltdc.h:225) keeps the FUNCTION and varies the HANDLE: `LTDC_Layer1` and
+      # `LTDC_Layer2` are two register blocks (ch32h417.h:1770-1771), where a timer's four
+      # channels vary the function and keep the handle. `instances:` names both per layer,
+      # and `setting:` is what decides whether a layer is live at all - the `Layer 1` and
+      # `Layer 2` rows above, which claim no pad because a layer is memory, not wiring.
+      #
+      # THE PIXEL FORMAT MOVED HERE, AND THAT IS THE POINT OF THE CHANGE. It shipped in
+      # round 5 as two peripheral-level rows with `sdk_none:` and a long note explaining
+      # that the SDK's only setter, `LTDC_LayerPixelFormat()`, is a RECONFIGURE call that
+      # rescales `CFBLR` from a layer width that is still 0 before `LTDC_LayerInit()` has
+      # run (ch32h417_ltdc.c:622-672) - so calling it from a generated init would write a
+      # bogus frame-buffer line length. All of that was true, and the conclusion drawn from
+      # it - record the choice, write no register - is now obsolete: `LTDC_PixelFormat` is
+      # an ORDINARY MEMBER of the struct this block fills (ch32h417_ltdc.h:88), written by
+      # `LTDC_LayerInit()` straight into `PFCR` beside the geometry it belongs with. One
+      # row per layer, applied rather than commented, and the two planning-only rows are
+      # deleted rather than left beside it saying something different.
+      #
+      # Every default below is the EVT drop's own `LTDC_LayerStructInit()`
+      # (ch32h417_ltdc.c), not a guess: geometry and frame buffer 0, constant alpha 0xFF,
+      # format ARGB8888, both blending factors PAxCA.
+      channel_params:
+        struct: LTDC_Layer_InitTypeDef
+        applies_per: layer
+        instances:
+          1: { sdk_call: LTDC_LayerInit, handle: LTDC_Layer1, setting: "Layer 1", active_choices: [Enabled] }
+          2: { sdk_call: LTDC_LayerInit, handle: LTDC_Layer2, setting: "Layer 2", active_choices: [Enabled] }
+        params:
+          - key: pixel_format
+            name: Pixel format
+            sdk_field: LTDC_PixelFormat
+            type: enum
+            default: ARGB8888
+            options:
+              - { name: ARGB8888, value: 0, sdk: LTDC_Pixelformat_ARGB8888 }
+              - { name: RGB888,   value: 1, sdk: LTDC_Pixelformat_RGB888 }
+              - { name: RGB565,   value: 2, sdk: LTDC_Pixelformat_RGB565 }
+              - { name: ARGB1555, value: 3, sdk: LTDC_Pixelformat_ARGB1555 }
+              - { name: ARGB4444, value: 4, sdk: LTDC_Pixelformat_ARGB4444 }
+              - { name: L8,       value: 5, sdk: LTDC_Pixelformat_L8 }
+              - { name: AL44,     value: 6, sdk: LTDC_Pixelformat_AL44 }
+              - { name: AL88,     value: 7, sdk: LTDC_Pixelformat_AL88 }
+            help: >
+              LTDC_LxPFCR.PF[2:0] (RM 43.4.18) - the format of THIS LAYER's FRAME BUFFER IN
+              MEMORY, which is a different axis from `Colour depth` above: the pixel format
+              converter expands every one of these to ARGB8888 before the blender, so the
+              format decides how much RAM a frame costs and frees NO pin. L8 is 8-bit
+              indexed through the 256-entry CLUT; AL44 and AL88 are alpha+luminance.
+          - key: h_start
+            name: Window left edge
+            sdk_field: LTDC_HorizontalStart
+            type: int
+            default: 0
+            min: 0
+            max: 4095
+            help: "LTDC_LxWHPCR.WHSTPOS, 0x000-0xFFF. Counted in pixel clocks from the end of the horizontal back porch, not from the panel edge - the SDK writes the value through unchanged."
+          - key: h_stop
+            name: Window right edge
+            sdk_field: LTDC_HorizontalStop
+            type: int
+            default: 0
+            min: 0
+            max: 65535
+            help: "LTDC_LxWHPCR.WHSPPOS. LTDC_LayerInit() shifts it left by 16 into the same register as the left edge (ch32h417_ltdc.c), so give it the POSITION, not a width."
+          - key: v_start
+            name: Window top edge
+            sdk_field: LTDC_VerticalStart
+            type: int
+            default: 0
+            min: 0
+            max: 4095
+            help: "LTDC_LxWVPCR.WVSTPOS, 0x000-0xFFF, in lines from the end of the vertical back porch."
+          - key: v_stop
+            name: Window bottom edge
+            sdk_field: LTDC_VerticalStop
+            type: int
+            default: 0
+            min: 0
+            max: 65535
+            help: "LTDC_LxWVPCR.WVSPPOS, shifted left by 16 beside the top edge. A position, not a height."
+          - key: alpha
+            name: Constant alpha
+            sdk_field: LTDC_ConstantAlpha
+            type: int
+            default: 255
+            min: 0
+            max: 255
+            help: "LTDC_LxCACR.CONSTA. 255 is opaque and is LTDC_LayerStructInit()'s value. Used directly when the blending factors are CA, and multiplied by the pixel's own alpha when they are PAxCA."
+          - key: bf1
+            name: Blending factor 1
+            sdk_field: LTDC_BlendingFactor_1
+            type: enum
+            default: Pixel alpha x constant alpha
+            options:
+              - { name: Constant alpha, value: 4, sdk: LTDC_BlendingFactor1_CA }
+              - { name: Pixel alpha x constant alpha, value: 6, sdk: LTDC_BlendingFactor1_PAxCA }
+            help: "LTDC_LxBFCR.BF1 (ch32h417_ltdc.h:211-212). How THIS layer is weighted in the blend. The `value:` figures are the macros' encodings in that field, 100b and 110b."
+          - key: bf2
+            name: Blending factor 2
+            sdk_field: LTDC_BlendingFactor_2
+            type: enum
+            default: Pixel alpha x constant alpha
+            options:
+              - { name: Constant alpha, value: 5, sdk: LTDC_BlendingFactor2_CA }
+              - { name: Pixel alpha x constant alpha, value: 7, sdk: LTDC_BlendingFactor2_PAxCA }
+            help: "LTDC_LxBFCR.BF2 (ch32h417_ltdc.h:215-216). How what is UNDERNEATH is weighted. Both factors sit in one register and LTDC_LayerInit() ORs them together, which is why they are two rows and not one."
+          - key: dc_red
+            name: Default colour red
+            sdk_field: LTDC_DefaultColorRed
+            type: int
+            default: 0
+            min: 0
+            max: 255
+            help: "LTDC_LxDCCR.DCRED. What the layer shows OUTSIDE its window, where there is no frame-buffer pixel to fetch."
+          - key: dc_green
+            name: Default colour green
+            sdk_field: LTDC_DefaultColorGreen
+            type: int
+            default: 0
+            min: 0
+            max: 255
+            help: "LTDC_LxDCCR.DCGREEN."
+          - key: dc_blue
+            name: Default colour blue
+            sdk_field: LTDC_DefaultColorBlue
+            type: int
+            default: 0
+            min: 0
+            max: 255
+            help: "LTDC_LxDCCR.DCBLUE."
+          - key: dc_alpha
+            name: Default colour alpha
+            sdk_field: LTDC_DefaultColorAlpha
+            type: int
+            default: 0
+            min: 0
+            max: 255
+            help: "LTDC_LxDCCR.DCALPHA. 0 is the EVT drop's value and means the area outside the window is transparent, so the layer below shows through."
+          - key: cfb_address
+            name: Frame buffer address
+            sdk_field: LTDC_CFBStartAdress
+            type: int
+            default: 0
+            min: 0
+            max: 4294967295
+            help: >
+              LTDC_LxCFBAR.CFBADD, the address the layer scans out of. 0 is what the
+              vendor's own LTDC_LayerStructInit() sets, and it means "not decided here":
+              the buffer is usually a symbol in your program, so assign
+              LTDC_Layerx->CFBAR in the USER CODE block - or give the address here if it
+              is a fixed external SDRAM base.
+          - key: cfb_line_length
+            name: Frame buffer line length
+            sdk_field: LTDC_CFBLineLength
+            type: int
+            default: 0
+            min: 0
+            max: 8191
+            help: "LTDC_LxCFBLR.CFBLL, 0x0000-0x1FFF, in BYTES: window width in pixels x bytes per pixel, plus 3 for the fetch overhead. The SDK does not add the 3 for you."
+          - key: cfb_pitch
+            name: Frame buffer pitch
+            sdk_field: LTDC_CFBPitch
+            type: int
+            default: 0
+            min: 0
+            max: 8191
+            help: "LTDC_LxCFBLR.CFBP, in BYTES from one line of the buffer to the next. Equal to the line length for a tightly packed buffer, larger when the buffer is wider than the window. LTDC_LayerInit() shifts it left by 16 into the same register."
+          - key: cfb_line_number
+            name: Frame buffer lines
+            sdk_field: LTDC_CFBLineNumber
+            type: int
+            default: 0
+            min: 0
+            max: 2047
+            help: "LTDC_LxCFBLNR.CFBLNBR, 0x000-0x7FF: how many lines the layer fetches per frame."
       notes: >
         Parallel RGB output, always 24 bits wide at the pad - the width you pick here is
         how many lines you WIRED, not a mode the silicon has (RM 43.4.5 gives the global
@@ -1099,12 +1363,19 @@ extras:
         An "8-bit mode" is a different thing and does not free pins: L8, AL44 and AL88
         (RM 43.4.18) are eight-bit-per-pixel FRAME BUFFER formats, and the pixel format
         converter expands them to ARGB8888 before the output stage. Choosing one saves
-        memory and changes no pin - and you CAN choose one: Parameter Settings carries
-        `Layer 1 pixel format` and `Layer 2 pixel format`, all eight formats, so a buffer
-        plan and a pin plan are made in the same place. What the generator deliberately does
-        NOT emit is the register write: `LTDC_LayerPixelFormat()` rescales the frame-buffer
-        line length from a layer width it does not know yet, so the choice is recorded as a
-        comment in the generated C and your own layer init applies it.
+        memory and changes no pin - and you CAN choose one, per layer, in the Layer 1 and
+        Layer 2 blocks of Parameter Settings, so a buffer plan and a pin plan are made in
+        the same place.
+        TWO LAYERS, EACH WITH ITS OWN INIT. Switch a layer on with the `Layer 1` / `Layer 2`
+        rows - they claim no pad, because a layer is a rectangle of memory composited onto
+        the same RGB port the colour depth already wired - and its sixteen members are
+        filled and applied by `LTDC_LayerInit(LTDC_Layerx, &s)`, once per layer that is on.
+        The window edges are POSITIONS rather than sizes, counted from the end of the back
+        porch, and the frame buffer's line length is in bytes with the RM's +3 fetch
+        overhead included by you rather than by the SDK. The frame buffer ADDRESS defaults
+        to 0, which is what the vendor's own `LTDC_LayerStructInit()` sets: the buffer is
+        usually a symbol in your program, so assign `LTDC_Layerx->CFBAR` in the USER CODE
+        block unless it is a fixed external SDRAM base you can type here.
 
   FMC:
     comment: |

@@ -556,13 +556,42 @@ SETTINGS: dict[str, list[dict]] = {
         ],
     }],
     "ETH": [{
+        # THE BUILT-IN PHY IS THE ORDINARY OPTION, AND MII/RMII WERE INVENTED. This row is
+        # AGENT-4's, commit 9a502ae, and it is HERE rather than in the MCU file because it
+        # was written straight into the generated block, where the next `--splice
+        # --refresh` reverted it - which is what happened on 2026-09-13 before it was moved.
+        # The generator's loss guard caught the notes and the four pads that came with it
+        # but not the settings, because `_losses()` does not compare choice lists.
+        #
+        # The reasoning, kept from that commit: CH32H417DS0.md 1.4.31 - "MAC and 100M PHY
+        # are fully integrated, and the periphery only needs capacitance" - so the ordinary
+        # configuration needs no MAC-to-PHY interface on pins at all, just the four
+        # media-dependent pads to the magnetics. Section 1.2 gives "Optional Ethernet
+        # controller MAC + external 1Gbps PHY" as the alternative, reached over RGMII.
+        # `RMII` appears ZERO times in this datasheet and `MII` only inside `RGMII`, so the
+        # two removed choices were a mode the silicon has not got.
+        #
+        # The four MDI* pads are dedicated pins with no AF code; they reach this generator
+        # through data/sources/H417/dedicated_pins.yaml, and they must be CLAIMED here or
+        # `validate_mcu.py` calls them dead pads.
         "name": "Interface",
         "choices": [
             {"name": "Disable"},
-            {"name": "MII", "signals": ["MDC", "MDIO"]},
-            {"name": "RMII", "signals": ["MDC", "MDIO"]},
-            {"name": "RGMII", "signals": ["MDC", "MDIO", "GTXC", "RXC", "RXD0", "RXD1", "RXD2", "RXD3",
-                                            "RXDV", "TXD0", "TXD1", "TXD2", "TXD3", "TXEN"]},
+            {"name": "Internal PHY (built-in 10/100M)",
+             "signals": ["MDIRN", "MDIRP", "MDITN", "MDITP"]},
+            {"name": "RGMII (external 1Gbps PHY)",
+             "signals": ["GTXC", "RXC", "RXD0", "RXD1", "RXD2", "RXD3",
+                         "RXDV", "TXD0", "TXD1", "TXD2", "TXD3", "TXEN"]},
+        ],
+    }, {
+        # SMI - MDC and MDIO - is how the controller reaches a PHY's registers, and the DS
+        # describes it as the interface used "to configure and manage the external PHYs".
+        # So it is a choice of its own rather than bundled into Interface: the internal PHY
+        # runs without it, and an external one generally needs it.
+        "name": "SMI (serial management interface)",
+        "choices": [
+            {"name": "Disable"},
+            {"name": "MDC + MDIO", "signals": ["MDC", "MDIO"]},
         ],
     }, {
         # DS Table 2-2-24 lists these OUTSIDE the RGMII group: `ETH_PHY_LED0..4` and
@@ -598,6 +627,24 @@ SETTINGS: dict[str, list[dict]] = {
             {"name": "Disable"},
             {"name": "Enabled", "signals": ["CLK", "HSYNC", "VSYNC", "DE"]},
         ],
+    }, {
+        # THE TWO LAYERS, AND THEY CLAIM NO SIGNAL ON PURPOSE. `LTDC_Layer1` and
+        # `LTDC_Layer2` (ch32h417.h:1770-1771) are register blocks, not pads: a layer is a
+        # rectangle of memory the blender composites onto the SAME parallel RGB port the
+        # `Colour depth` row above already wired. So neither choice carries `signals:` -
+        # and `emit_peripheral()`'s own guard means a choice naming a signal LTDC does not
+        # route would fail the generator rather than reach the file.
+        #
+        # The rows exist because `channel_params.instances` needs a SETTING to decide
+        # whether each instance is live (deliverable E): without them the layer init would
+        # be emitted for both layers always, or for neither. One row per layer rather than
+        # a single "how many layers" count, because the two are independent - a design may
+        # use layer 2 alone, and the blender does not require layer 1.
+        "name": "Layer 1",
+        "choices": [{"name": "Disable"}, {"name": "Enabled"}],
+    }, {
+        "name": "Layer 2",
+        "choices": [{"name": "Disable"}, {"name": "Enabled"}],
     }],
     "DVP": [{
         "name": "Mode",
@@ -1446,8 +1493,26 @@ def _losses(before: str, after: str) -> list[str]:
     the datasheet gives all three of them pads. 200 lines of cited fact, silently.
 
     So the splice reads its own output back and refuses a write that loses a peripheral,
-    a key of one, or a (signal, pin) the file routed. Additions and CHANGES pass: a
-    changed AF code is the generator correcting itself, which is the point of a refresh.
+    a key of one, a (signal, pin) the file routed, a remap, or a SETTING CHOICE.
+
+    Additions and CHANGES pass: a changed AF code is the generator correcting itself,
+    which is the point of a refresh.
+
+    THE CHOICE CHECK WAS ADDED AFTER IT WAS NEEDED, and the near-miss is worth recording
+    because the guard read as working the whole time. On 2026-09-12 AGENT-4's `9a502ae`
+    rewrote ETH's `Interface` row in the generated block: out went `MII` and `RMII`, two
+    choices the commit demonstrated were INVENTED (`RMII` appears zero times in this
+    part's datasheet), in came `Internal PHY (built-in 10/100M)`. The next refresh put the
+    invented pair back and took the real one out. The guard did NOT stay silent - it
+    refused the write over the `notes:` and the four MDI pads that came with the same
+    commit - so it looked like it was doing its job, and the choice row rode along
+    underneath. It surfaced only because `validate_mcu.py` then called the four MDI pads
+    dead, one gate catching what another had let through.
+
+    A guard that catches four facts out of five reads exactly like one that catches all
+    five. Choices are compared by NAME per setting row, because that is what a user picks
+    and what `.wchproj` stores; a choice whose `signals:` changed is the generator
+    correcting itself and passes, like any other change.
     """
     import yaml as _yaml
 
@@ -1474,6 +1539,20 @@ def _losses(before: str, after: str) -> list[str]:
         for rm in x.get("remaps") or []:
             if rm not in (y.get("remaps") or []):
                 out.append(f"{pid}.remaps: `{(rm or {}).get('name', '?')}` is gone")
+        # Setting rows, and the choices in them, by name. A row that disappears takes
+        # every pad its choices claimed with it; a choice that disappears is a mode the
+        # user could pick yesterday and cannot today.
+        def rows(p: dict) -> dict:
+            return {str(s.get("name")): [str(c.get("name")) for c in (s.get("choices") or [])]
+                    for s in (p.get("settings") or []) if isinstance(s, dict)}
+        ra, rb = rows(x), rows(y)
+        for name in sorted(set(ra) - set(rb)):
+            out.append(f"{pid}.settings: the row `{name}` is gone")
+        for name in sorted(set(ra) & set(rb)):
+            lost = [c for c in ra[name] if c not in rb[name]]
+            if lost:
+                out.append(f"{pid}.settings.`{name}`: choice(s) gone - "
+                           + ", ".join(f"`{c}`" for c in lost))
     return out
 
 

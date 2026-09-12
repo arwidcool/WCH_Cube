@@ -342,10 +342,25 @@ peripherals:
     settings:
       Colour depth: Disable
       Sync and clock: Disable
+      Layer 1: Disable
+      Layer 2: Disable
     remap: 0
     params:
-      layer1_format: ARGB8888
-      layer2_format: ARGB8888
+      hs_polarity: Active low
+      vs_polarity: Active low
+      de_polarity: Active low
+      pc_polarity: Not inverted
+      hsync: 0
+      vsync: 0
+      hbp: 0
+      vbp: 0
+      active_w: 0
+      active_h: 0
+      total_w: 0
+      total_h: 0
+      bg_red: 0
+      bg_green: 0
+      bg_blue: 0
   OPA:
     settings:
       OPA1 positive input: Disable

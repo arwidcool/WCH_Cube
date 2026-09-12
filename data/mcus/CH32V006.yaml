@@ -962,6 +962,24 @@ peripherals:
       struct: TIM_OCInitTypeDef
       applies_per: channel
       sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+      # WHICH SETTING DECIDES EACH CHANNEL, so the generator emits an init for the
+      # channels that are ON and for no others. Without this map `channel_params` had the
+      # struct and the call table and no way to know when to use them, so a PWM channel
+      # generated a note instead of `TIM_OC1Init(TIM1, &s)` - deliverable E, AGENT-2, and
+      # this is its data half.
+      #
+      # `output_choices:` are exactly this instance's own `PWM*` choices, read off the
+      # `ChannelN` rows above rather than pasted from a sibling: the four parts spell them
+      # differently (CH32X035 has no `CHnN only` and calls capture `Input Capture direct
+      # mode`), and TIM2's channels have one PWM choice each where TIM1's have three.
+      # INPUT CAPTURE IS DELIBERATELY EXCLUDED: `TIM_OCxInit` is the output-compare
+      # initialiser and a captured channel is set up by `TIM_ICInit`, so listing it here
+      # would fill an output-compare struct for an input.
+      channels:
+        1: { setting: Channel1, output_choices: ["PWM Generation CH1", "PWM Generation CH1 CH1N", "PWM Generation CH1N only"] }
+        2: { setting: Channel2, output_choices: ["PWM Generation CH2", "PWM Generation CH2 CH2N", "PWM Generation CH2N only"] }
+        3: { setting: Channel3, output_choices: ["PWM Generation CH3", "PWM Generation CH3 CH3N", "PWM Generation CH3N only"] }
+        4: { setting: Channel4, output_choices: ["PWM Generation CH4"] }
       params:
         - key: ocmode
           name: Output compare mode
@@ -1200,6 +1218,13 @@ peripherals:
       struct: TIM_OCInitTypeDef
       applies_per: channel
       sdk_calls: { 1: TIM_OC1Init, 2: TIM_OC2Init, 3: TIM_OC3Init, 4: TIM_OC4Init }
+      # This instance's own PWM choices, same rule as TIM1 above - one per channel here,
+      # because a general-purpose timer has no complementary output to pair with.
+      channels:
+        1: { setting: Channel1, output_choices: ["PWM Generation CH1"] }
+        2: { setting: Channel2, output_choices: ["PWM Generation CH2"] }
+        3: { setting: Channel3, output_choices: ["PWM Generation CH3"] }
+        4: { setting: Channel4, output_choices: ["PWM Generation CH4"] }
       params:
         - key: ocmode
           name: Output compare mode

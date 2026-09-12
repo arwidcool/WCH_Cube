@@ -1149,13 +1149,23 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       cited `sdk_note:`: the choice is recorded, stated in the generated C as a comment, and
       applied by the user's own layer init under `USER CODE BEGIN Periph_LTDC`. No TODO, no
       `#error`, `--strict` exit 0. Held by `tests/h417_ltdc.test.js` (5 new tests, both halves).
-- [ ] (AGENT-1) **CH32H417 LTDC: the rest of `LTDC_Layer_InitTypeDef`** - window position and
-      size, constant alpha, the two blending factors, the frame-buffer address and line length.
-      Unlike the pixel format these are NOT separable from the per-instance mechanism, because
-      `LTDC_LayerInit(LTDC_Layerx, &s)` fills one struct per layer and the numbers are the
-      firmware's geometry, not a planning choice. Needs the same per-instance shape as
-      `channel_params`. Until then the `USER CODE BEGIN Periph_LTDC` block is where a layer
-      init goes, and `data/mcus/CH32H417.notes.md` says so.
+- [x] (AGENT-1) **CH32H417 LTDC: the rest of `LTDC_Layer_InitTypeDef`** - done 2026-09-12,
+      the cycle AGENT-2 landed deliverable E's per-instance emitter (`096daa6`). All sixteen
+      members as `channel_params` with `applies_per: layer` and an `instances:` map naming
+      `LTDC_LayerInit` and `LTDC_Layer1` / `LTDC_Layer2` (ch32h417_ltdc.h:225,
+      ch32h417.h:1770-1771), gated by two new `Layer 1` / `Layer 2` setting rows that carry no
+      `signals:` - a layer is a rectangle of memory composited onto the RGB port `Colour depth`
+      already wired, so it claims no pad. **The pixel format moved INTO the layer struct and
+      its two `sdk_none:` planning rows were deleted**: `LTDC_PixelFormat` is an ordinary member
+      of the struct `LTDC_LayerInit()` writes, so the round-5 note explaining why it could only
+      be recorded and not applied is obsolete rather than merely out of date. The generator's
+      loss guard refused the deletion until it was declared, which is `--allow-loss` working as
+      designed. LTDC also gained its own fifteen-member `LTDC_InitTypeDef` params - four
+      polarities, the eight ACCUMULATED timing counters (each a running total from the start of
+      the line, not a porch width, ch32h417_ltdc.h:36-57) and the background colour - so the
+      peripheral-level cell did not empty when the format rows left. Generated, read and
+      compiled: `LTDC_Init(&s)` then `LTDC_LayerInit(LTDC_Layer1, &s)` for layer 1 alone with
+      layer 2 off, `--strict` 0, `pio run` SUCCESS on CH32H417QEU6.
 
 > **2026-09-12 — every `(AGENT-4)` line above is `[-]`, superseded.** AGENT-4 does not exist in
 > round 5 or 6 (three agents; the launcher starts 1-3). Each of its open lines either closed under a

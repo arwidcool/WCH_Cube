@@ -216,7 +216,47 @@ cycle it is committed, and the board says so.
 Numbers: ledger **0 / 0 / 0 / 0 / 0 / 0 - all six complete**.
 H417 `params:` **43 of 78 remain**. Collisions QFN68 **4** / QFN88 0 / QFN128 0.
 
-Next: back to P0. LPTIM1/2 (one struct, but an anonymous union - `LPTIM_ClockPolarity` and
-`LPTIM_EncoderMode` share storage, so at most one may be written), QSPI1/2, I2S2/3, SDIO,
-SDMMC, GPHA, HSADC. Then strip the `default:` mirrors. FMC/ETH/ECDC/FMC_NAND/FMC_SDRAM stay
-blocked on the nested-struct shape (REQUEST 19:33Z) - five peripherals behind one change.
+**Cycle 4 - 2026-09-12T21:35Z. Deliverable E's data half, and a near-miss that is the most
+useful thing in this cycle.**
+
+- **The `default:` mirrors are stripped**, the cycle AGENT-2 committed the
+  `paramReachWarnings()` fix (`6645e38`), as promised on the board. Both fixtures report
+  `issues: {}` with no mirror in sight.
+- **E consumer 1 - TIM PWM on four parts, six `channel_params.channels` maps.** Each derived
+  from THAT PART'S OWN `ChannelN` rows and then asserted back against them, because the four
+  parts spell the choices differently. `tests/fixtures/CH32V006_QFN32_full.wchproj` has had
+  `Channel2: PWM Generation CH2` since it was written and now emits
+  `TIM_OC2Init(TIM2, &TIM_OCInitStructure)` - the compile gate builds it.
+- **E consumer 2 - CH32H417 LTDC layers**, sixteen members, two instances, gated by new
+  `Layer 1` / `Layer 2` rows that claim no pad. The pixel format moved INTO the layer struct
+  and its two `sdk_none:` planning rows are deleted - the round-5 note explaining why it
+  could only be recorded is obsolete, not just stale. LTDC gained its own fifteen-member
+  `LTDC_InitTypeDef` params so the peripheral cell did not empty. TASKS.md line ticked.
+
+**THE NEAR-MISS, and it is mine to own.** `--splice --refresh` silently reverted AGENT-4's
+ETH commit (`9a502ae`): they had written `Interface` / `SMI` / `notes:` / four MDI pads into
+the GENERATED block, so the regeneration put MII and RMII back - two choices that commit
+removed as INVENTED - and took `Internal PHY (built-in 10/100M)` out. The loss guard caught
+the notes and the pads and REFUSED to write; it said nothing about the choice row, because
+`_losses()` compares peripherals, signals, routed pairs and remaps and **not choice lists**.
+I noticed only because `validate_mcu` then failed on four dead MDI pads. All three pieces are
+now where the generator can see them - pads in `dedicated_pins.yaml`, notes in
+`peripheral_extras.yaml`, the two rows in `MODES["ETH"]` with their citations kept word for
+word - and a clean refresh reproduces every one. **A guard that catches four facts out of
+five reads exactly like one that catches all five**, which is this round's rule pointed at my
+own tool.
+
+Red, and who owns it: nothing known; the full suite is still running as this is written and
+the result goes on the board either way. `validate_mcu` 0, `verify_sdk_names` 0,
+`coverage --gate` 6 of 6. Compiled: `pio run` SUCCESS on CH32H417QEU6 with LTDC RGB565 +
+layer 1, and the V006 PWM fixture through the compile gate.
+
+Numbers: ledger **0 / 0 / 0 / 0 / 0 / 0**. H417 `params:` **43 of 78 remain** (LTDC swapped
+two planning rows for fifteen real ones, so the count held while the content improved).
+Collisions QFN68 **4** / QFN88 0 / QFN128 0.
+
+Next: teach `_losses()` to compare choice lists, so the next hand-edit in a generated block
+refuses instead of reverting. Then LPTIM1/2 (one struct, but an anonymous union -
+`LPTIM_ClockPolarity` and `LPTIM_EncoderMode` share storage, so at most one may be written),
+QSPI1/2, I2S2/3, SDIO, SDMMC, GPHA, HSADC. FMC/ETH/ECDC/FMC_NAND/FMC_SDRAM stay blocked on
+the nested-struct shape (REQUEST 19:33Z) - five peripherals behind one change.

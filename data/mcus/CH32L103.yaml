@@ -2116,7 +2116,6 @@ peripherals:
         struct: CMP_InitTypeDef
         sdk_field: CMP_NUM
         const: CMP1
-        default: CMP1
         help: "CMP_Num_TypeDef (ch32l103_opa.h:154-159). Which of the three comparators this struct configures; OPA_CMP_Init() branches on it, so it is fixed per instance and not a choice."
       - key: mode
         name: Output routing
@@ -2220,7 +2219,6 @@ peripherals:
         struct: CMP_InitTypeDef
         sdk_field: CMP_NUM
         const: CMP2
-        default: CMP2
         help: "CMP_Num_TypeDef (ch32l103_opa.h:154-159). OPA_CMP_Init() shifts this instance's fields by 9 in OPA_CTLR2; without this member the struct would configure CMP1."
       - key: mode
         name: Output routing
@@ -2298,7 +2296,6 @@ peripherals:
         struct: CMP_InitTypeDef
         sdk_field: CMP_NUM
         const: CMP3
-        default: CMP3
         help: "CMP_Num_TypeDef (ch32l103_opa.h:154-159). OPA_CMP_Init() shifts this instance's fields by 17 in OPA_CTLR2; without this member the struct would configure CMP1."
       - key: mode
         name: Output routing
