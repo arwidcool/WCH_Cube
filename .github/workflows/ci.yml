@@ -154,7 +154,17 @@ jobs:
           rc=${PIPESTATUS[0]}
           set -e
           if [ "$rc" -ne 0 ]; then
-            grep -E '^  x ' run.log | sed 's/^  x /::error title=test failed::/' || true
+            # The NAME of a failing test is not enough to act on from outside - the assertion
+            # message is the finding. The runner prints `  FAIL  <suite> > <test>` followed by
+            # indented message lines, so fold each block into ONE annotation (%0A is a newline
+            # in the annotation protocol). Without this, a Linux-only failure is a name and a
+            # shrug, and the log body needs a token nobody watching the repo has.
+            awk '
+              /^  FAIL / { if (f) print "::error title=test failed::" buf; f=1; buf=substr($0,9); next }
+              f && /^        / { buf = buf "%0A" substr($0,9); next }
+              f { print "::error title=test failed::" buf; f=0 }
+              END { if (f) print "::error title=test failed::" buf }
+            ' run.log || true
             grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true
             grep -E '^[0-9]+ FAILED' run.log | sed 's/^/::error title=verdict::/' || true
           fi
@@ -274,7 +284,17 @@ jobs:
           rc=${PIPESTATUS[0]}
           set -e
           if [ "$rc" -ne 0 ]; then
-            grep -E '^  x ' run.log | sed 's/^  x /::error title=test failed::/' || true
+            # The NAME of a failing test is not enough to act on from outside - the assertion
+            # message is the finding. The runner prints `  FAIL  <suite> > <test>` followed by
+            # indented message lines, so fold each block into ONE annotation (%0A is a newline
+            # in the annotation protocol). Without this, a Linux-only failure is a name and a
+            # shrug, and the log body needs a token nobody watching the repo has.
+            awk '
+              /^  FAIL / { if (f) print "::error title=test failed::" buf; f=1; buf=substr($0,9); next }
+              f && /^        / { buf = buf "%0A" substr($0,9); next }
+              f { print "::error title=test failed::" buf; f=0 }
+              END { if (f) print "::error title=test failed::" buf }
+            ' run.log || true
             grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true
             grep -E '^[0-9]+ FAILED' run.log | sed 's/^/::error title=verdict::/' || true
           fi

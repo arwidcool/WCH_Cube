@@ -607,8 +607,14 @@ CH32V003 3 open; suite 721 green; CI never executed.
 - [x] `ci.yml` has completed at least one run on `main`, and the run URL is in `PROGRESS.md`
       → 31 runs, and the pack's "never run" was false. `tests/evidence/round6/2026-09-12-ci-30-failures.md`;
         run 34714307941 is the first with a green `firmware` job.
-- [ ] The `firmware` job's log shows the compile-gate suite reporting **ok**, not a skip, for
-      every fixture — PlatformIO installed on the runner and used
+- [x] The `firmware` job's log shows the compile-gate suite reporting **ok**, not a skip, for
+      every fixture - PlatformIO installed on the runner and used
+      -> run 34714307941: the whole `firmware` job GREEN on windows-latest with PlatformIO,
+         which is only possible with the compile gates passing. Run 34721092664 counts them
+         explicitly: `::notice compile gates that ran: 16`. The `test` job on ubuntu prints
+         `20 test(s) SKIPPED` for the same suites, which is the contrast this line exists for.
+         CAVEAT, not rounded up: the firmware job is currently RED again on four app/tests/
+         failures that have nothing to do with compiling (AGENT-2's stale TIM guards).
 - [ ] The `Coverage ledger` step prints `6 of 6` **on the runner**
 - [x] `desktop` (Tauri, Linux) green
       → success on every run that was not cancelled, including 34714307941 and 34718743245.
