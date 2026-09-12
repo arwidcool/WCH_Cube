@@ -1,6 +1,6 @@
 // project.js — .wchproj must round-trip 100% of the state, or a saved project
 // silently loses work.
-import { test, assert, fresh, snapshot, jsyaml } from './_harness.js';
+import { test, assert, fresh, snapshot, jsyaml, mcuNames } from './_harness.js';
 
 // A project with something switched on in every part of the state.
 function configure(e) {
@@ -191,4 +191,90 @@ test('an unmigratable old file says so instead of loading wrong', () => {
   const e = fresh('CH32V006', 'TSSOP20');
   const obj = { ...e.projectObject(), wchproj: 0 };
   assert.throws(() => e.migrateProject(obj), /Not a WCHCube project file/);
+});
+
+// Round 3 made this a DONE line and it stayed open for two rounds: **regenerating after
+// save -> close -> open is byte-identical, INCLUDING DMA and NVIC**. The test above
+// compares `S` on one part with a hand-written configuration; that cannot see a value
+// that survives the store and changes the generated C, and it cannot see DMA or NVIC at
+// all. This is the sweep: every part x every package, every peripheral switched on, every
+// DMA request the part offers added, every request moved to another legal channel, every
+// DMA_InitTypeDef enum driven to a different option, and twenty NVIC vectors enabled at
+// four priorities - then saved, opened in a FRESH engine, and compared four ways.
+//
+// The `saved:` line is excluded and nothing else is: it records when the file was
+// written, so it is supposed to differ. Measured on 2026-09-12: 33 part x package
+// combinations, up to 38 DMA requests on 8 channels with 304 parameter edits, in 3.6 s.
+test('save -> close -> open -> regenerate is byte-identical, including DMA and NVIC', () => {
+  const strip = t => t.split('\n').filter(l => !/^saved:/.test(l)).join('\n');
+  let moved = 0, withDma = 0, combos = 0, choosable = 0, movedChannels = 0;
+  for (const name of mcuNames()) {
+    for (const pkg of Object.keys(fresh(name).M.packages)) {
+      const e = fresh(name, pkg);
+      for (const pid of Object.keys(e.M.peripherals)) {
+        for (const st of (e.M.peripherals[pid].settings || [])) {
+          const live = (st.choices || []).find(c => (c.signals || []).length);
+          if (live) { try { e.setSetting(pid, st.name, live.name); } catch { /* a checkbox */ } }
+        }
+      }
+      // DMA, and it has to MOVE: a byte-comparison that cannot move is not evidence.
+      // `dmaAddableRequests()` returns objects, not names - passing the object silently
+      // adds nothing, which is exactly how this check was vacuous when it was written.
+      for (const r of e.dmaAddableRequests()) { try { e.addDmaRequest(r.request); } catch { /* full */ } }
+      const reqs = e.dmaRequests();
+      for (const r of reqs) {
+        const legal = e.dmaLegalChannels(r.request);
+        if (legal.length > 1) {
+          choosable++;
+          if (String(legal[legal.length - 1]) !== String(r.channel)) {
+            try { e.setDmaRequest(r.id, { channel: String(legal[legal.length - 1]) }); moved++; movedChannels++; } catch { /* taken */ }
+          }
+        }
+        for (const d of e.dmaParamDefs()) {
+          if (!d.options || d.options.length < 2) continue;
+          const alt = d.options[d.options.length - 1];
+          try { e.setDmaParam(r.id, d.key, String(alt.name !== undefined ? alt.name : alt)); moved++; } catch { /* not settable */ }
+        }
+      }
+      const vectors = e.nvicVectors().slice(0, 20);
+      vectors.forEach((v, i) => { try { e.setNvicVector(v.name, { enabled: true, priority: i % 4 }); } catch { /* fixed */ } });
+      e.compute();
+
+      const saved = e.projectSerialize();
+      const c = e.cSource();
+      const dma = JSON.stringify(e.dmaRequests());
+      const nvic = JSON.stringify(e.nvicVectors().filter(v => v.enabled));
+
+      const g = fresh(name, pkg);                      // a genuinely fresh engine
+      g.projectApply(saved);
+      g.compute();
+      const where = `${name}/${pkg}`;
+      assert.equal(strip(g.projectSerialize()), strip(saved), `${where}: the project file`);
+      assert.equal(g.cSource(), c, `${where}: the generated C`);
+      assert.equal(JSON.stringify(g.dmaRequests()), dma, `${where}: the DMA requests`);
+      assert.equal(JSON.stringify(g.nvicVectors().filter(v => v.enabled)), nvic, `${where}: the NVIC vectors`);
+      if (reqs.length) withDma++;
+      combos++;
+    }
+  }
+  // The sweep has to have swept something. Without these three the whole test passes on
+  // an empty configuration and proves nothing - which is how it read before `.request`.
+  assert.ok(combos >= 20, `the sweep must cover every part x package (covered ${combos})`);
+  assert.ok(withDma >= 4, `several parts must actually have configured DMA (had ${withDma})`);
+  assert.ok(moved > 500, `DMA channels and parameters must have been CHANGED (${moved} edits)`);
+
+  // ONE HALF OF THIS TEST CANNOT FAIL TODAY, AND SAYING SO IS THE POINT. Deleting
+  // `channel:` from `dmaObject()` leaves this test green - run as a plant on 2026-09-12 -
+  // because NOT ONE DMA request on ANY shipped part has more than one legal channel:
+  // every request is hard-wired to its channel in the silicon, so reopening re-derives
+  // the same number whether the file carried it or not. That is a fact about the data,
+  // not a hole in the serialiser, and template.html's DMA tab says the same thing where
+  // it declines to draw a channel selector.
+  //
+  // So the assertion is on the CONDITION rather than on the outcome: while no request has
+  // a choice, nothing is required; the day a part ships one, this test starts demanding
+  // that the choice was exercised, and the comment above becomes provably stale.
+  assert.equal(choosable > 0, movedChannels > 0,
+    `${choosable} request(s) have a channel CHOICE but ${movedChannels} were moved - `
+    + 'a part with a selectable DMA channel now exists, so this sweep must exercise it');
 });
