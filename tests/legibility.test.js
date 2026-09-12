@@ -94,7 +94,13 @@ const FONT_PROBE = `
 `;
 
 test('the font these measurements actually used is recorded on every run', async () => {
-  if (!browserAvailable()) return assert.ok(true, NO_BROWSER);
+  // `skip(why)`, like every other check in this file - not `assert.ok(true, …)`. The runner
+  // COUNTS a skip and prints its reason above the verdict; a truthy assertion is a pass over
+  // something that never ran, which is the exact thing this round exists to stop. (The first
+  // version of this line was `assert.ok(true, NO_BROWSER)`, and `NO_BROWSER` is not even
+  // defined in this file - on a machine without a browser it would have thrown ReferenceError
+  // rather than skipped. It read green here because this box has Edge.)
+  if (!browserAvailable()) skip(why);
   const r = await withPage(async page => { await page.goto(); return page.eval(FONT_PROBE); });
   // A width of 0 would mean the probe never measured anything, and every check below would be
   // comparing nothing to nothing while reading green.
@@ -144,7 +150,22 @@ const CLIPPED = `
       + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/)[0] : '');
     const text = (el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 45);
     // Only 'hidden'/'clip' cut text off. 'auto'/'scroll' give the user a way to see it.
-    if ((cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 1) {
+    //
+    // And so does an ELLIPSIS WITH THE FULL TEXT IN title=. That pair is a deliberate
+    // abbreviation with an escape hatch, which is the same bargain 'auto'/'scroll' make: the
+    // value is still reachable. … on its own is NOT enough - text silently shortened with no
+    // way to read it is exactly what this check is for - so BOTH are required, and the title
+    // must actually contain the text that was cut.
+    //
+    // Found by CI: #mcu-meta is 'flex:0 1 auto; min-width:0; text-overflow:ellipsis' by design
+    // (its comment in app/template.html says "Only #mcu-meta may shrink, and it ellipsises
+    // rather than wrapping") and carries title="<core> · <flash/sram>". On Windows the string
+    // fits and this never fired; on Linux the wider font pushed "960 KB flash · 896 KB SRAM" to
+    // 181px in a 168px box and it read as a regression. The design is right and the check was
+    // too blunt.
+    const ellipsised = cs.textOverflow === 'ellipsis'
+      && (el.getAttribute('title') || '').replace(/\s+/g, ' ').includes((el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 20));
+    if (!ellipsised && (cs.overflowX === 'hidden' || cs.overflowX === 'clip') && el.scrollWidth > el.clientWidth + 1) {
       bad.push(name + ': ' + el.scrollWidth + 'px of text in ' + el.clientWidth + 'px — "' + text + '"');
     }
     if ((cs.overflowY === 'hidden' || cs.overflowY === 'clip') && el.scrollHeight > el.clientHeight + 1) {
@@ -161,7 +182,18 @@ const OVERFLOWING = `
     if (cs.display === 'none' || cs.visibility === 'hidden') continue;
     const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;
-    if (r.right > vw + 1) {
+    // An element whose ancestor CLIPS it is not painted past the edge - the ancestor's
+    // overflow:hidden is what the user sees. Measuring the box rather than the paint reported
+    // #mcu-meta's inner <span> at 1028px on a 1024px viewport while the menubar (overflow:hidden)
+    // had already cut it off at the bar's edge. Nothing was over the edge; the rectangle was.
+    let clipped = false;
+    for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+      const acs = getComputedStyle(a);
+      if (acs.overflowX === 'hidden' || acs.overflowX === 'clip') {
+        if (a.getBoundingClientRect().right <= vw + 1) { clipped = true; break; }
+      }
+    }
+    if (!clipped && r.right > vw + 1) {
       const name = el.id ? '#' + el.id : el.tagName.toLowerCase()
         + (el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/)[0] : '');
       bad.push(name + ': right edge at ' + Math.round(r.right) + 'px, viewport is ' + vw + 'px');
