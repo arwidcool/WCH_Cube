@@ -82,25 +82,46 @@ test('generateAll names its files after the part and package', () => {
   // A LIST of { name, language, text }, so the Project Manager can list and preview
   // without knowing what codegen produces. The C comes first: it is what people came for.
   assert.ok(Array.isArray(out));
+  // `BoardPins.h` joined this list when the pin map landed: it is a C file with a FIXED
+  // include name, because a project includes it by name, and it therefore sits with the
+  // other two rather than with the reports. The rule the list is here for - reports carry
+  // the part and the package, C files do not - is asserted below rather than left to the
+  // reader of a literal.
   assert.deepEqual(out.map(f => f.name), [
-    'wchcube_init.h', 'wchcube_init.c',
+    'wchcube_init.h', 'wchcube_init.c', 'BoardPins.h',
     'CH32V006_QFN32_pinout.md', 'CH32V006_QFN32_pinout.csv', 'CH32V006_QFN32_clocks.md',
   ], 'the reports are named after the part; the C files keep fixed include names');
-  assert.deepEqual(out.map(f => f.language), ['c', 'c', 'markdown', 'csv', 'markdown']);
+  assert.deepEqual(out.map(f => f.language), ['c', 'c', 'c', 'markdown', 'csv', 'markdown']);
   for (const f of out) assert.ok(f.text.length > 100, `${f.name} has content`);
+  for (const f of out) {
+    const named = f.name.includes('CH32V006_QFN32');
+    assert.equal(named, f.language !== 'c',
+      `${f.name}: a report carries the part and the package, a C file keeps its include name`);
+  }
 });
 
 test('generateAll obeys the generator options, and only the ones that exist', () => {
   const e = fresh('CH32V006', 'QFN32');
-  assert.deepEqual(e.generatorOptions().map(o => o.key), ['split_peripherals', 'reports', 'user_code'],
+  assert.deepEqual(e.generatorOptions().map(o => o.key),
+    ['split_peripherals', 'reports', 'user_code', 'pin_map', 'pin_map_only'],
     'an option the engine cannot honour is not offered at all');
   assert.equal(e.generatorOption('reports'), true, 'the default comes from the definition');
+  assert.equal(e.generatorOption('pin_map'), true);
+  assert.equal(e.generatorOption('pin_map_only'), false);
 
   e.setGeneratorOption('reports', false);
-  assert.deepEqual(e.generateAll().map(f => f.name), ['wchcube_init.h', 'wchcube_init.c'],
+  assert.deepEqual(e.generateAll().map(f => f.name), ['wchcube_init.h', 'wchcube_init.c', 'BoardPins.h'],
     'turning the reports off really stops generating them');
+  // Each option is checked on its own, or a list that changed for TWO reasons would still
+  // look right: the pin map is a separate switch and turning it off leaves the init pair.
+  e.setGeneratorOption('pin_map', false);
+  assert.deepEqual(e.generateAll().map(f => f.name), ['wchcube_init.h', 'wchcube_init.c'],
+    'and so does turning the pin map off');
   e.undo();
-  assert.equal(e.generateAll().length, 5, 'and it is one undo step like everything else');
+  assert.deepEqual(e.generateAll().map(f => f.name), ['wchcube_init.h', 'wchcube_init.c', 'BoardPins.h'],
+    'one undo brings the pin map back and leaves the reports off');
+  e.undo();
+  assert.equal(e.generateAll().length, 6, 'and each is one undo step like everything else');
 
   assert.throws(() => e.setGeneratorOption('no_such_option', true),
     /No generator option "no_such_option"/);
