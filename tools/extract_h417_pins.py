@@ -81,6 +81,70 @@ NOISE = re.compile(r'Datasheet|wch-ic\.com|^## V1\.8|^## Pin|^Pin name|^## H417|
 AF = re.compile(r'([A-Z][A-Za-z0-9_]*)\((AF\d+)\)')
 IO_PIN = re.compile(r'P[A-F]\d+$')
 
+# ---------------------------------------------------------------------------
+#  A signal name SPLIT ACROSS A LINE BREAK.
+#
+#  The PDF conversion wraps a long pin row, and the break sometimes lands INSIDE a signal
+#  name. Rows are accumulated with a space between continuation lines, so the damage looks
+#  like this (PD11, Table 2-1-1):
+#
+#      ## LPTIM1_ETR(AF1)/LPTIM2_CH2(AF3)/I2
+#      ## C4_SMBA(AF4)/TIM5_ETR(AF6)/
+#
+#  which accumulates to `... /I2 C4_SMBA(AF4)/ ...`. `AF` then matches `C4_SMBA(AF4)` -
+#  a signal name that does not exist - and the real assignment `I2C4_SMBA(AF4)` is lost.
+#  Found by `tools/audit_h417_af.py`, which compares this table against the DS's own
+#  peripheral-first tables 2-2-x and reported I2C4_SMBA, DVP_D0/D4/D5, DVP_VSYNC, LTDC_G5
+#  and SDIO_D0 as present there and absent here. All six read correctly once rejoined.
+#
+#  The repair is done against a DICTIONARY of signal names rather than by guessing where the
+#  break fell: `I2 C4_SMBA` is only joined because `I2C4_SMBA` is a name the datasheet uses
+#  elsewhere (tables 2-2-x, plus every name already parsed intact here). That keeps the
+#  repair from inventing a name, which is the failure mode a naive "join all fragments"
+#  rule would have - and `--audit` still reports any disagreement it cannot repair.
+SPLIT_NAME = re.compile(r'([A-Z][A-Za-z0-9_]*) ([A-Z][A-Za-z0-9_]*)\((AF\d+)\)')
+
+
+def known_signal_names(text: str) -> set:
+    """Every signal name the DS uses, from its own peripheral-first tables 2-2-x.
+
+    These tables put the signal name at the START of its row, where a wrap cannot land
+    inside it, so they are a reliable dictionary for repairing table 2-1-1.
+
+    Read as the leading identifier of a line, NOT with `AF`. A 2-2 row is
+    `QSPI1_SCK PB2(AF9)`, and `AF` matches `PB2(AF9)` - a PIN, not the signal - so using
+    it here collected 95 pin names instead of the signal names and the repair silently
+    matched nothing. That is why the repair prints what it did.
+    """
+    names = set()
+    m2 = re.search(r'^Table 2-2-\d+\s', text, re.M)
+    if not m2:
+        return names
+    lead = re.compile(r'^[#\s*]*([A-Z][A-Za-z0-9]*_[A-Za-z0-9_]+)\b')
+    for line in text[m2.start():].splitlines():
+        m = lead.match(line)
+        if m:
+            names.add(m.group(1))
+    return names
+
+
+def repair_split_names(rows, dictionary: set) -> list:
+    """Rejoin `A B(AFn)` -> `AB(AFn)` when `AB` is a signal name the DS uses.
+
+    Returns the list of repairs so `main()` can print them: a silent repair is how a
+    parser bug becomes invisible data.
+    """
+    fixed = []
+    for r in rows:
+        def sub(m):
+            joined = m.group(1) + m.group(2)
+            if joined in dictionary:
+                fixed.append((r["name"], joined, m.group(3)))
+                return joined + "(" + m.group(3) + ")"
+            return m.group(0)
+        r["text"] = SPLIT_NAME.sub(sub, r["text"])
+    return fixed
+
 
 def parse(ds_path):
     """-> (rows, package tables, signal map). Every row is reported, never dropped."""
@@ -129,6 +193,15 @@ def parse(ds_path):
                 continue
             cur["text"] += " " + body
             carry = None
+
+    # Rejoin signal names the page break split (`I2` + `C4_SMBA` -> `I2C4_SMBA`). Done
+    # BEFORE anything reads the text, so every consumer downstream sees whole names.
+    all_text = ds_path.read_text(encoding="utf-8", errors="replace")
+    repairs = repair_split_names(rows, known_signal_names(all_text))
+    if repairs:
+        print(f"  rejoined {len(repairs)} signal name(s) split by a line break:", file=sys.stderr)
+        for pin, name, af in repairs:
+            print(f"    {pin:5} {name}({af})", file=sys.stderr)
 
     tables = {p: collections.defaultdict(list) for p in PACKAGES}
     signals = collections.defaultdict(list)

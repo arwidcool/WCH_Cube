@@ -3899,27 +3899,32 @@ codegen:
   #
   # Three buses, three registers, three SPL functions (RM 3.4.7-3.4.9).
   #
-  # NOTE the two keys that are NOT peripheral ids: `OTG_FS` (the USBFS bit) and `OPCM`
-  # (the OPA/CMP bit). Those are the SPL's macro spellings - `RCC_HBPeriph_OTG_FS` and
-  # `RCC_HB2Periph_OPCM` - and they have to stay, because codegen emits `prefix + key`
-  # and renaming the key would produce a macro that does not exist. The cost is that
-  # `clockBitOf('USBFS')` finds nothing, so codegen writes its documented "no clock
-  # enable bit" comment for those two instead of guessing. That is the right failure
-  # direction, and the schema gap it exposes is on TASKS.md.
+  # NOTE the two peripherals whose bit is spelled differently in the SPL. The bit's key
+  # is the PERIPHERAL name, because that is what codegen looks up (`clockBitOf('USBFS')`)
+  # and what `validate_mcu.py` checks the key against. The macro is built from the key by
+  # default, which is wrong for exactly two of them: the USB full-speed controller is the
+  # peripheral `USBFS` but its bit is `RCC_HBPeriph_OTG_FS`, and `OPA` and `CMP` share the
+  # `RCC_HB2Periph_OPCM` gate (RM ch.35 covers both in one block). So the domain carries
+  # `sdk:` mapping the peripheral to the suffix the SPL actually defines. Keying these two
+  # by their SPL spelling instead - which is what this file did first - left
+  # `clockBitOf('USBFS')` finding nothing, so the generated C never enabled the USB clock
+  # and said so only in a comment.
   periph_clock:
     HB: { register: RCC_HBPCENR, fn: RCC_HBPeriphClockCmd, prefix: RCC_HBPeriph_,
+           sdk: { USBFS: OTG_FS },
            bits: { DMA1: 0, DMA2: 1, CRC: 6, FMC: 8, RNG: 9, SDMMC: 10, USBHS: 11, USBSS: 12, DVP: 13,
-                   ETH: 14, OTG_FS: 17, UHSIF: 18, USBPD: 19, SERDES: 20, PIOC: 22 } }
+                   ETH: 14, USBFS: 17, UHSIF: 18, USBPD: 19, SERDES: 20, PIOC: 22 } }
     HB1: { register: RCC_HB1PCENR, fn: RCC_HB1PeriphClockCmd, prefix: RCC_HB1Periph_,
            bits: { TIM2: 0, TIM3: 1, TIM4: 2, TIM5: 3, TIM6: 4, TIM7: 5, USART6: 6, USART7: 7, USART8: 8,
                    LPTIM1: 9, LPTIM2: 10, WWDG: 11, QSPI1: 12, QSPI2: 13, SPI2: 14, SPI3: 15, SPI4: 16,
                    USART2: 17, USART3: 18, USART4: 19, USART5: 20, I2C1: 21, I2C2: 22, CAN3: 24, CAN1: 25,
                    CAN2: 26, BKP: 27, PWR: 28, DAC: 29, I2C3: 30, SWPMI: 31 } }
     HB2: { register: RCC_HB2PCENR, fn: RCC_HB2PeriphClockCmd, prefix: RCC_HB2Periph_,
+           sdk: { OPA: OPCM, CMP: OPCM },
            bits: { AFIO: 0, HSADC: 1, GPIOA: 2, GPIOB: 3, GPIOC: 4, GPIOD: 5, GPIOE: 6, GPIOF: 7, ADC1: 9,
                    ADC2: 10, TIM1: 11, SPI1: 12, TIM8: 13, USART1: 14, I2C4: 15, SAI: 16, SDIO: 18,
-                   TIM9: 19, TIM10: 20, TIM11: 21, TIM12: 22, OPCM: 23, DFSDM: 25, ECDC: 26, GPHA: 27,
-                   LTDC: 30, I3C: 31 } }
+                   TIM9: 19, TIM10: 20, TIM11: 21, TIM12: 22, OPA: 23, CMP: 23, DFSDM: 25, ECDC: 26,
+                   GPHA: 27, LTDC: 30, I3C: 31 } }
 
 # -----------------------------------------------------------------------------
 # Clock tree. HSI and HSE are both 25 MHz on this part (ch32h417.h:23 and :29,
@@ -14990,7 +14995,16 @@ function clockBitOf(pid) {
   for (const [bus, spec] of Object.entries(cfg().periph_clock || {})) {
     if (!spec || typeof spec !== 'object' || !spec.bits) continue;
     if (spec.bits[pid] === undefined) continue;
-    return { bus, fn: spec.fn, macro: `${spec.prefix || ''}${pid}`, register: spec.register };
+    // The bit's key names the peripheral, and the macro is built from it. Those two are
+    // usually the same word and sometimes are not: on CH32H417 the USB full-speed
+    // controller is the peripheral `USBFS`, but its clock bit is `RCC_HBPeriph_OTG_FS`,
+    // and `OPA`/`CMP` share `RCC_HB2Periph_OPCM`. Without `sdk` the lookup is still by
+    // peripheral name but the macro would be `RCC_HBPeriph_USBFS`, which the SPL does not
+    // define — so there is no way to write the bit that is right in both roles. A domain
+    // may therefore carry `sdk: { <peripheral>: <macro suffix> }`; a peripheral not named
+    // there keeps using its own name, so data files that predate this are unaffected.
+    const suffix = (spec.sdk || {})[pid] || pid;
+    return { bus, fn: spec.fn, macro: `${spec.prefix || ''}${suffix}`, register: spec.register };
   }
   return null;
 }

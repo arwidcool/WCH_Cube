@@ -931,7 +931,11 @@ bits, and a clock tree that models what the schema can hold.
 - [x] 78 peripherals (from 13), every one with `signal_pins:` where it holds a pin.
 - [x] `nvic:` - 125 vectors, PFIC scheme with **4 priority bits at [7:4]** (where CH32V00x has
       two and CH32X035 three), four nesting groups, DMA channels, EXTI line ranges.
-- [x] `codegen.periph_clock` - all 73 `RCC_HB*Periph_*` bits across the three buses.
+- [x] `codegen.periph_clock` - all 73 `RCC_HB*Periph_*` bits across the three buses. Two of them
+      are spelled differently from their peripheral in the SPL (`USBFS` -> `RCC_HBPeriph_OTG_FS`,
+      and `OPA`/`CMP` -> `RCC_HB2Periph_OPCM`); the bit keys are peripheral names and the domain
+      carries `sdk:` for the SPL spelling, so `clockBitOf('USBFS')` resolves instead of silently
+      writing no enable for the USB clock.
 - [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
       SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
 - [ ] **(AGENT-3) CH32H417: `params:` for the peripherals that have none.**

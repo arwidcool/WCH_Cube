@@ -576,6 +576,11 @@ codegen:
   speeds: { "50 MHz": GPIO_Speed_50MHz }
 
   # Which clock-enable register and bit a peripheral sits in, grouped by domain.
+  # The bit's KEY is the peripheral name - that is what the generator looks up and what
+  # `validate_mcu.py` checks. The macro written is `prefix + key` unless the domain's
+  # `sdk:` renames it, which is needed only where the SPL spells the bit differently from
+  # the peripheral: CH32H417's `USBFS` bit is `RCC_HBPeriph_OTG_FS`, and its `OPA` and
+  # `CMP` share `RCC_HB2Periph_OPCM`.
   periph_clock:
     AHB:
       register: RCC_AHBPCENR
@@ -586,6 +591,7 @@ codegen:
       register: RCC_APB2PCENR
       fn: RCC_APB2PeriphClockCmd
       prefix: RCC_APB2Periph_
+      sdk: { USBFS: OTG_FS }        # omit unless the macro differs from the name
       bits: { AFIO: 0, GPIOA: 2, ADC1: 9, TIM1: 11, SPI1: 12, USART1: 14 }
 ```
 
@@ -601,6 +607,14 @@ Several of these carry a fact worth understanding rather than copying:
 - **`periph_clock` is grouped by domain**, because it is not only the bit that differs per
   domain — the register and the *function name* do. This is where CH32V00x's
   `RCC_PB2PeriphClockCmd` and CH32X035's `RCC_APB2PeriphClockCmd` come from.
+- **`periph_clock.<domain>.sdk` exists because a bit's name is asked two questions at once.**
+  The key is looked up by *peripheral* — `clockBitOf('USBFS')` — while the macro is built as
+  `prefix + key`, so the key has to be both the peripheral name and the SPL's spelling. On
+  CH32H417 they disagree for two bits, and keying on the SPL spelling there cost the USB
+  full-speed controller its clock enable in every generated project, silently: the lookup
+  missed, and all that showed for it was a comment. Prefer the peripheral name and add `sdk:`
+  only where the SPL really spells it differently — `verify_sdk_names.py` reads it too, so an
+  entry that is wrong fails rather than passing.
 - **`periph_handle` can be genuinely ambiguous.** CH32X035's USBFS has **two** handles at the same
   base address — `USBFSD` for device and `USBFSH` for host — and which one a call takes depends
   on the mode the user selected. A single entry cannot be right for both, so the file names the

@@ -839,7 +839,16 @@ export function clockBitOf(pid) {
   for (const [bus, spec] of Object.entries(cfg().periph_clock || {})) {
     if (!spec || typeof spec !== 'object' || !spec.bits) continue;
     if (spec.bits[pid] === undefined) continue;
-    return { bus, fn: spec.fn, macro: `${spec.prefix || ''}${pid}`, register: spec.register };
+    // The bit's key names the peripheral, and the macro is built from it. Those two are
+    // usually the same word and sometimes are not: on CH32H417 the USB full-speed
+    // controller is the peripheral `USBFS`, but its clock bit is `RCC_HBPeriph_OTG_FS`,
+    // and `OPA`/`CMP` share `RCC_HB2Periph_OPCM`. Without `sdk` the lookup is still by
+    // peripheral name but the macro would be `RCC_HBPeriph_USBFS`, which the SPL does not
+    // define — so there is no way to write the bit that is right in both roles. A domain
+    // may therefore carry `sdk: { <peripheral>: <macro suffix> }`; a peripheral not named
+    // there keeps using its own name, so data files that predate this are unaffected.
+    const suffix = (spec.sdk || {})[pid] || pid;
+    return { bus, fn: spec.fn, macro: `${spec.prefix || ''}${suffix}`, register: spec.register };
   }
   return null;
 }

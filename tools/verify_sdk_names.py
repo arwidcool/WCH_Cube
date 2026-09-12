@@ -429,9 +429,15 @@ def check_periph_clock(doc: dict, idx: Index, r: Report) -> None:
         prefix = spec.get("prefix")
         if not prefix:
             continue
+        # The macro is `prefix + key` unless the domain maps the key to a different SPL
+        # spelling in `sdk:`. CH32H417 needs that for exactly two: the peripheral `USBFS`
+        # has the bit `RCC_HBPeriph_OTG_FS`, and `OPA`/`CMP` share `RCC_HB2Periph_OPCM`.
+        # Checking the raw key there would demand `RCC_HBPeriph_USBFS`, which the SPL does
+        # not define - so the check would fail on correct data and pass on wrong data.
+        sdk = spec.get("sdk") if isinstance(spec.get("sdk"), dict) else {}
         for bit in (spec.get("bits") or {}):
             want(r, idx, f"codegen.periph_clock.{dom}.bits.{bit}",
-                 f"{prefix}{bit}", idx.macros, "a defined macro")
+                 f"{prefix}{sdk.get(bit, bit)}", idx.macros, "a defined macro")
 
 
 def check_params(doc: dict, idx: Index, r: Report) -> None:
