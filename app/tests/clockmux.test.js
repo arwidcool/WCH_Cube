@@ -7,7 +7,7 @@
 // fixed-output 480 MHz PLL, a multiplied one, and a USBFS tap that picks between a
 // secondary PLL and the SYS PLL. The arithmetic checked is the reference manual's
 // own worked example: **USBHS_PLL 480 MHz / 10 = 48 MHz** for USBFS
-// (CH32H417RM.md:4048 USBFSSRC=1, :4056 USBFSDIV=0111 "Divided by 10").
+// (CH32H417RM.md:4048 USBFSSRC=1, :4055-4067 USBFSDIV=0111 "Divided by 10").
 //
 // Every test here also has its planted-break half: a value the file does not offer
 // must be REFUSED, not rounded or accepted, because a computed number that is wrong

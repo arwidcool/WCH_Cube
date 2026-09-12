@@ -85,7 +85,7 @@ test('the clock tab draws a box per PLL, and the USBFS tap reads 48 MHz from the
     assert.ok(r.pll && r.usbhs && r.serdes, 'every PLL in the data has a box');
     assert.equal(r.title, 'USB HS PLL', 'a PLL is titled by its `label:`');
     assert.match(r.usbhsVal, /^480/, 'a fixed-output PLL shows its output');
-    assert.match(r.usbfsVal, /^48/, '480 / 10 = 48 MHz — CH32H417RM USBFSSRC=1, USBFSDIV=0111');
+    assert.match(r.usbfsVal, /^48/, '480 / 10 = 48 MHz — CH32H417RM:4048 USBFSSRC=1, :4055-4067 USBFSDIV=0111');
     assert.equal(r.engineUsbfs, 48, 'and the box is not painting a different number from the engine');
     assert.ok(r.mux, 'a tap whose source: is a list gets a <select>');
     assert.deepEqual(r.muxOptions, ['USBHS_PLL_CLK', 'PLLCLK'], 'the whole list, in the file’s order');
