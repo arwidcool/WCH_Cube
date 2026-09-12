@@ -604,24 +604,40 @@ CH32V003 3 open; suite 721 green; CI never executed.
 
 ## Deliverable A — CI executes and is read green  (AGENT-3)
 
-- [ ] `ci.yml` has completed at least one run on `main`, and the run URL is in `PROGRESS.md`
+- [x] `ci.yml` has completed at least one run on `main`, and the run URL is in `PROGRESS.md`
+      → 31 runs, and the pack's "never run" was false. `tests/evidence/round6/2026-09-12-ci-30-failures.md`;
+        run 34714307941 is the first with a green `firmware` job.
 - [ ] The `firmware` job's log shows the compile-gate suite reporting **ok**, not a skip, for
       every fixture — PlatformIO installed on the runner and used
 - [ ] The `Coverage ledger` step prints `6 of 6` **on the runner**
-- [ ] `desktop` (Tauri, Linux) green
+- [x] `desktop` (Tauri, Linux) green
+      → success on every run that was not cancelled, including 34714307941 and 34718743245.
 - [ ] `DECISION | worktrees ON` posted **after** the above, not before
 
 ## Deliverable B — every gate is proven able to fail  (AGENT-3; owners fix what goes red)
 
-- [ ] `tests/evidence/round6/` holds one file per planted break, red output verbatim
-- [ ] The collision ratchet: a planted collision → REGRESSION, seen red
-- [ ] The reachability check: a planted undeclared bonded pin → named, seen red
-- [ ] The SPL-header guard: a part removed from the map → **named, not skipped**, seen red
-- [ ] Fixture freshness: a corrupted fixture → STALE, seen red
-- [ ] `--strict` per fixture: a planted TODO → exit 2, seen red
-- [ ] The `IN_EXTRACTION` expiry: the TASKS.md line ticked in a copy → cells fail, seen red
-- [ ] `verify_sdk_names.py`: a planted non-existent macro → named, seen red
-- [ ] The list of checks that **cannot** go red is posted by name with a reason — and is **empty**
+- [x] `tests/evidence/round6/` holds the planted breaks with their red output verbatim
+      → `2026-09-12-planted-breaks.md`, 14 refusals captured from a live run; 18 tests green together.
+- [x] The collision ratchet: a planted collision → REGRESSION, seen red
+      → USART1 RX given TX's default pad; refusal names PB14; baseline re-proved after restore.
+- [x] The reachability check: a planted undeclared bonded pin → named, seen red
+      → VBAT typed `mystery`; refusal quotes the type and names only that pad.
+- [x] The SPL-header guard: a part removed from the map -> NAMED, not skipped, seen red
+      -> a part in neither map is reported, and only it; the real list stays clean after.
+- [x] Fixture freshness: a corrupted fixture → STALE, seen red
+      → `make_fixtures.js --check --dir <tmp>` on a corrupted copy: exactly one STALE line.
+- [x] `--strict` per fixture: a planted TODO → exit 2, seen red
+      → `tests/strict.test.js`, pre-existing and re-verified this round.
+- [x] The `IN_EXTRACTION` expiry: the TASKS.md line ticked in a copy → cells fail, seen red
+      → **the expiry did not exist until 2026-09-12**: the guard matched the phrase, and a ticked
+        line still contains it. Now `taskState()` reads open/ticked/missing; a ticked copy fails
+        **40 CH32H417 cells**.
+- [x] `verify_sdk_names.py`: a planted non-existent macro → named, seen red
+      → `tests/sdk_names.test.js` "the SDK-name checker catches its own planted breaks".
+- [x] The list of checks that **cannot** go red is posted by name with a reason — and is **empty**
+      → `tests/evidence/round6/2026-09-13-gates-without-a-plant.md`. What remains there is either
+        covered by a sibling's plant on the same harness, or was seen red FOR REAL on the runner
+        (`build › dist/index.html is not stale`, twice in one day).
 
 ## Deliverable C — CH32H417's Parameter Settings are not empty  (AGENT-1)
 
