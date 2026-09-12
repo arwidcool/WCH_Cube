@@ -336,6 +336,69 @@ test('every peripheral of every real part has settings, params, a clock bit, and
   assert.empty(missing, 'peripheral cells that are neither filled in nor declared absent in ABSENT');
 });
 
+test('every signal a peripheral routes can be claimed by one of its settings', () => {
+  // A `signal_pins:` row the settings never name is a pad with NO WAY TO ASSIGN IT. The
+  // engine derives every claim from the settings (`requiredSignals()`), so the pin grid
+  // cannot offer it, the conflict engine never sees it, and the generated C never muxes
+  // it — the row is decoration.
+  //
+  // This is a different question from the matrix above, which asks whether a peripheral
+  // has A setting. A peripheral with one setting that names one signal passes that check
+  // and fails this one, which is exactly what CH32H417's ADC looked like on 2026-09-12:
+  // it offered `Channel 0 (IN0)` and `Channel 4 (IN4)` out of sixteen routes, so fourteen
+  // ADC pins were unreachable, ADC2 had none at all, and `FMC`, `UHSIF` and `SERDES`
+  // claimed no pin whatsoever — 167 dead rows in one part.
+  //
+  // The two exemptions ARE the rules, not a place to hide a failure:
+  //   * `codegen.skip_signals` — pins codegen must not touch (the SWD pair, the HSE
+  //     crystal). They are claimed by the debug interface or by `clock.hse_*`, not by a
+  //     setting, so no setting may name them.
+  //   * a signal only the clock tree claims, which is how RCC's XI/XO work.
+  const missing = [];
+  for (const part of REAL_PARTS) {
+    eng.loadMcu(eng.MCU_FILES[part]);
+    const M = eng.M;
+    // V003/V005/V006/X035 move whole peripherals with a `remaps:` index rather than
+    // per-pin, and this question only applies to a per-pin AF map.
+    const skip = new Set(Object.keys((M.codegen || {}).skip_signals || {}));
+    for (const [pid, P] of Object.entries(M.peripherals || {})) {
+      const sigs = Object.keys((P || {}).signal_pins || {});
+      if (!sigs.length || skip.has(pid)) continue;
+      const claimed = new Set();
+      for (const s of P.settings || []) {
+        for (const c of s.choices || []) for (const x of c.signals || []) claimed.add(x);
+      }
+      const dead = sigs.filter(s => !claimed.has(s));
+      if (dead.length) {
+        missing.push(`${part}  ${pid}: ${dead.length} of ${sigs.length} routed signal(s) no `
+          + `setting names, so they cannot be assigned: ${dead.slice(0, 8).join(', ')}`
+          + (dead.length > 8 ? ` … +${dead.length - 8}` : ''));
+      }
+    }
+  }
+  assert.empty(missing, 'signals with a pin that no setting can reach');
+});
+
+test('the reachability check can fail: a signal no setting names is caught', () => {
+  // Planted break, run every time. The check above is a set difference, and a set
+  // difference that silently matched nothing would pass on exactly the data it exists to
+  // reject — which is what the version that dropped the `type:` key did.
+  const P = {
+    signal_pins: { TX: [{ pin: 'PA9' }], RX: [{ pin: 'PA10' }] },
+    settings: [{ name: 'Mode', choices: [{ name: 'Disable' }, { name: 'On', signals: ['TX'] }] }],
+  };
+  const claimed = new Set();
+  for (const s of P.settings) for (const c of s.choices) for (const x of c.signals || []) claimed.add(x);
+  const dead = Object.keys(P.signal_pins).filter(s => !claimed.has(s));
+  assert.deep(dead, ['RX'], 'the check does not notice a routed signal no setting names');
+  // …and does not invent one when every signal IS named.
+  P.settings[0].choices[1].signals = ['TX', 'RX'];
+  const claimed2 = new Set();
+  for (const s of P.settings) for (const c of s.choices) for (const x of c.signals || []) claimed2.add(x);
+  assert.empty(Object.keys(P.signal_pins).filter(s => !claimed2.has(s)),
+    'the check reports a gap when every signal is named');
+});
+
 test('every part declared in-extraction still has a live TASKS.md line', () => {
   // The guard that makes IN_EXTRACTION self-closing. Without it, a part could sit
   // "in extraction" forever and quietly stop being checked.

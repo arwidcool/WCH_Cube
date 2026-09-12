@@ -29,16 +29,30 @@ OUT = ROOT / 'data/sources/H417/dedicated_pins.yaml'
 # Peripheral -> the DS prefix its signals carry, and how to shorten the signal name.
 # `keep_unit` keeps the unit digit where two units of one peripheral sit on different
 # pins (OPA1_N0 and OPA2_N0 are different pads; DAC1_OUT and DAC2_OUT likewise).
+#
+# `CMP` was missing from this map, and that is why the comparator offered an output and
+# no inputs: `CMP_OUT` carries an AF code so the AF parser found it, but CMP_P0/P1 and
+# CMP_N0/N1 are analog pad functions with no `(AFn)` marker, so nothing collected them.
+# DS Table 2-2-22 is the citation - PB0/CMP_P0, PB2/CMP_P1, PB1/CMP_N0, PC4/CMP_N1.
 SPEC = {
     'DAC':    ('DAC', True),
     'ADC1':   ('ADC', False),
     'ADC2':   ('ADC', False),
     'HSADC':  ('HSADC', False),
     'OPA':    ('OPA', True),
+    'CMP':    ('CMP', False),
     'SDMMC':  ('SDMMC', False),
     'SERDES': ('SERDES', False),
     'UHSIF':  ('UHSIF', False),
 }
+
+# Signals whose DS name is shared by two peripherals, so BOTH must collect them.
+# ADC1 and ADC2 sample the SAME sixteen pads: the datasheet's own resource table carries
+# one `ADC_IN0~IN15` row with a tick under each ADC, Table 2-2-1 is a single "ADC Pin
+# functions" table with no ADC1/ADC2 split (unlike Table 2-2-3, which does split DAC1 and
+# DAC2), and RM ch.11 says "The conversion channels of ADC1 and ADC2 should not overlap at
+# the same moment" - which only means something if they draw on one channel space.
+SHARED = {'ADC2': 'ADC1'}
 import re
 
 # SDMMC and UHSIF are read from the DS's PERIPHERAL-first tables instead of Table 2-1-1.
@@ -146,7 +160,14 @@ def main():
                     rec = (pin, entries[sig] if name == 'af' else None)
                     if rec not in table[pid][key]:
                         table[pid][key].append(rec)
-                    break
+                    # NO `break`. It used to stop at the first peripheral whose prefix
+                    # matched, which is right for every name except the shared ones - and
+                    # for those it meant ADC1 collected all sixteen channels and ADC2 was
+                    # left with none at all.
+
+    for child, parent in SHARED.items():
+        table[child] = {k: list(v) for k, v in table[parent].items()}
+        print('%-8s shares %s: %d signals' % (child, parent, len(table[child])))
 
     # SDMMC and UHSIF come from the DS's signal-first tables instead - see PERIPHERAL_FIRST.
     for pid, (no, prefix) in PERIPHERAL_FIRST.items():
@@ -166,9 +187,10 @@ def main():
          '# "holds no pin on any package" while the datasheet gives them pins.',
          '#',
          '# SOURCE: data/sources/H417/Datasheets/CH32H417DS0.md.',
-         '#   DAC, ADC1, ADC2, HSADC, OPA, SERDES - Table 2-1-1 (pin-first), read by',
+         '#   DAC, ADC1, ADC2, HSADC, OPA, CMP, SERDES - Table 2-1-1 (pin-first), read by',
          '#     tools/gen_h417_dedicated_pins.py via tools/audit_h417_all_pins.py, whose parse',
          '#     agrees with the datasheet on all 95 pins (the QFN128 I/O count).',
+         '#     ADC2 is a COPY of ADC1 - the two ADCs sample the same sixteen pads.',
          '#   SDMMC, UHSIF - Table 2-2-12 and Table 2-2-16 (signal-first). Table 2-1-1 writes',
          '#     the AFIO_PCFR1 remap value into the name (`UHSIF_CLK_1`, DS Note 3), which read',
          '#     literally turns one signal into up to four, and its wrapped lines lose the digit',

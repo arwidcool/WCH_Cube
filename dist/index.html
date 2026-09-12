@@ -2316,6 +2316,7 @@ peripherals:
           - { name: Independent }
           - { name: "Dual (with the other ADC)" }
       - name: Channels
+        type: checkboxes
         choices:
           - { name: IN0, signals: [IN0] }
           - { name: IN1, signals: [IN1] }
@@ -2361,6 +2362,7 @@ peripherals:
           - { name: Independent }
           - { name: "Dual (with the other ADC)" }
       - name: Channels
+        type: checkboxes
         choices:
           - { name: IN0, signals: [IN0] }
           - { name: IN1, signals: [IN1] }
@@ -2578,6 +2580,7 @@ peripherals:
           - { name: RMII, signals: [MDC, MDIO] }
           - { name: RGMII, signals: [MDC, MDIO, GTXC, RXC, RXD0, RXD1, RXD2, RXD3, RXDV, TXD0, TXD1, TXD2, TXD3, TXEN] }
       - name: "Status outputs"
+        type: checkboxes
         choices:
           - { name: PHY_LED0, signals: [PHY_LED0] }
           - { name: PHY_LED1, signals: [PHY_LED1] }
@@ -2760,6 +2763,7 @@ peripherals:
           - { name: Disable }
           - { name: Enabled }
       - name: Channels
+        type: checkboxes
         choices:
           - { name: IN0, signals: [IN0] }
           - { name: IN1, signals: [IN1] }
@@ -3052,6 +3056,7 @@ peripherals:
           - { name: "Dual-SPI", signals: [SCK, SCSN, SIO0, SIO1] }
           - { name: "Quad-SPI", signals: [SCK, SCSN, SIO0, SIO1, SIO2, SIO3] }
       - name: "Extended signals"
+        type: checkboxes
         choices:
           - { name: "SCSXN (active-low chip select)", signals: [SCSXN] }
           - { name: SIOX0, signals: [SIOX0] }
@@ -3080,6 +3085,7 @@ peripherals:
           - { name: "Dual-SPI", signals: [SCK, SCSN, SIO0, SIO1] }
           - { name: "Quad-SPI", signals: [SCK, SCSN, SIO0, SIO1, SIO2, SIO3] }
       - name: "Extended signals"
+        type: checkboxes
         choices:
           - { name: "SCSXN (active-low chip select)", signals: [SCSXN] }
           - { name: SIOX0, signals: [SIOX0] }
@@ -3190,6 +3196,7 @@ peripherals:
           - { name: "SD 4-bit", signals: [SDCK, CMD, D0, D1, D2, D3] }
           - { name: "SD 8-bit", signals: [SDCK, CMD, D0, D1, D2, D3, D4, D5, D6, D7] }
       - name: "Strobe and status"
+        type: checkboxes
         choices:
           - { name: "STR (strobe)", signals: [STR] }
           - { name: "SLVCK (slave clock)", signals: [SLVCK] }

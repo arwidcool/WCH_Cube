@@ -157,12 +157,12 @@ peripherals:
   ADC1:
     settings:
       Mode: Disable
-      Channels: Disable
+      Channels: []
     remap: 0
   ADC2:
     settings:
       Mode: Disable
-      Channels: Disable
+      Channels: []
     remap: 0
   CAN1:
     settings:
@@ -178,7 +178,9 @@ peripherals:
     remap: 0
   CMP:
     settings:
-      Mode: Disable
+      Positive input: Disable
+      Negative input: Disable
+      Output: Disable
     remap: 0
   CRC:
     settings:
@@ -218,6 +220,7 @@ peripherals:
   ETH:
     settings:
       Interface: Disable
+      Status outputs: []
     remap: 0
   EXTI:
     settings:
@@ -231,9 +234,11 @@ peripherals:
     remap: 0
   FMC:
     settings:
-      NOR/PSRAM: Disable
-      NAND: Disable
-      SDRAM: Disable
+      Address bus A0-A25: Disable
+      Data bus D0-D31: Disable
+      Clock: Disable
+      NOR/PSRAM and NAND control (FSMC): Disable
+      SDRAM control: Disable
     remap: 0
   GPHA:
     settings:
@@ -242,6 +247,7 @@ peripherals:
   HSADC:
     settings:
       Mode: Disable
+      Channels: []
     remap: 0
   HSEM:
     settings:
@@ -275,12 +281,14 @@ peripherals:
     settings:
       Channel1: Disable
       Channel2: Disable
+      Output compare: Disable
       ETR: Disable
     remap: 0
   LPTIM2:
     settings:
       Channel1: Disable
       Channel2: Disable
+      Output compare: Disable
       ETR: Disable
     remap: 0
   LTDC:
@@ -290,9 +298,15 @@ peripherals:
     remap: 0
   OPA:
     settings:
-      OPA1: Disable
-      OPA2: Disable
-      OPA3: Disable
+      OPA1 positive input: Disable
+      OPA1 negative input: Disable
+      OPA1 output: Disable
+      OPA2 positive input: Disable
+      OPA2 negative input: Disable
+      OPA2 output: Disable
+      OPA3 positive input: Disable
+      OPA3 negative input: Disable
+      OPA3 output: Disable
     remap: 0
   PIOC:
     settings:
@@ -306,10 +320,12 @@ peripherals:
   QSPI1:
     settings:
       Mode: Disable
+      Extended signals: []
     remap: 0
   QSPI2:
     settings:
       Mode: Disable
+      Extended signals: []
     remap: 0
   RCC:
     settings:
@@ -336,6 +352,7 @@ peripherals:
   SDMMC:
     settings:
       Mode: Disable
+      Strobe and status: []
     remap: 0
   SERDES:
     settings:

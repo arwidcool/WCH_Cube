@@ -1484,10 +1484,26 @@ peripherals:
           - { name: Independent }
           - { name: "Dual (with the other ADC)" }
       - name: Channels
+        type: checkboxes
         choices:
-          - { name: Disable }
-          - { name: "Channel 0 (IN0)", signals: [IN0] }
-          - { name: "Channel 4 (IN4)", signals: [IN4] }
+          - { name: IN0, signals: [IN0] }
+          - { name: IN1, signals: [IN1] }
+          - { name: IN2, signals: [IN2] }
+          - { name: IN3, signals: [IN3] }
+          - { name: IN4, signals: [IN4] }
+          - { name: IN5, signals: [IN5] }
+          - { name: IN6, signals: [IN6] }
+          - { name: IN7, signals: [IN7] }
+          - { name: IN8, signals: [IN8] }
+          - { name: IN9, signals: [IN9] }
+          - { name: IN10, signals: [IN10] }
+          - { name: IN11, signals: [IN11] }
+          - { name: IN12, signals: [IN12] }
+          - { name: IN13, signals: [IN13] }
+          - { name: IN14, signals: [IN14] }
+          - { name: IN15, signals: [IN15] }
+          - { name: "IN16 (temperature sensor, internal)" }
+          - { name: "IN17 (internal reference voltage, internal)" }
     signal_pins:
       IN0: [{ pin: PA0 }]
       IN1: [{ pin: PA1 }]
@@ -1514,12 +1530,43 @@ peripherals:
           - { name: Independent }
           - { name: "Dual (with the other ADC)" }
       - name: Channels
+        type: checkboxes
         choices:
-          - { name: Disable }
-          - { name: "Channel 0 (IN0)", signals: [IN0] }
-          - { name: "Channel 4 (IN4)", signals: [IN4] }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+          - { name: IN0, signals: [IN0] }
+          - { name: IN1, signals: [IN1] }
+          - { name: IN2, signals: [IN2] }
+          - { name: IN3, signals: [IN3] }
+          - { name: IN4, signals: [IN4] }
+          - { name: IN5, signals: [IN5] }
+          - { name: IN6, signals: [IN6] }
+          - { name: IN7, signals: [IN7] }
+          - { name: IN8, signals: [IN8] }
+          - { name: IN9, signals: [IN9] }
+          - { name: IN10, signals: [IN10] }
+          - { name: IN11, signals: [IN11] }
+          - { name: IN12, signals: [IN12] }
+          - { name: IN13, signals: [IN13] }
+          - { name: IN14, signals: [IN14] }
+          - { name: IN15, signals: [IN15] }
+          - { name: "IN16 (temperature sensor, internal)" }
+          - { name: "IN17 (internal reference voltage, internal)" }
+    signal_pins:
+      IN0: [{ pin: PA0 }]
+      IN1: [{ pin: PA1 }]
+      IN10: [{ pin: PC0 }]
+      IN11: [{ pin: PC1 }]
+      IN12: [{ pin: PC2 }]
+      IN13: [{ pin: PC3 }]
+      IN14: [{ pin: PC4 }]
+      IN15: [{ pin: PC5 }]
+      IN2: [{ pin: PA2 }]
+      IN3: [{ pin: PA3 }]
+      IN4: [{ pin: PA4 }]
+      IN5: [{ pin: PA5 }]
+      IN6: [{ pin: PA6 }]
+      IN7: [{ pin: PA7 }]
+      IN8: [{ pin: PB0 }]
+      IN9: [{ pin: PB1 }]
   CAN1:
     category: Connectivity
     settings:
@@ -1562,12 +1609,28 @@ peripherals:
   CMP:
     category: Analog
     settings:
-      - name: Mode
+      - name: "Positive input"
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: P0, signals: [P0] }
+          - { name: P1, signals: [P1] }
+          - { name: "P2 (OPA1 output, internal - claims no pin)" }
+      - name: "Negative input"
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N0] }
+          - { name: N1, signals: [N1] }
+          - { name: "N2 (DAC1 output, internal - claims no pin)" }
+      - name: Output
+        choices:
+          - { name: Disable }
+          - { name: OUT, signals: [OUT] }
     signal_pins:
+      N0: [{ pin: PB1 }]
+      N1: [{ pin: PC4 }]
       OUT: [{ pin: PA6, af: 10 }, { pin: PA8, af: 12 }, { pin: PB12, af: 13 }, { pin: PC5, af: 13 }, { pin: PE12, af: 13 }, { pin: PE15, af: 13 }, { pin: PE6, af: 11 }]
+      P0: [{ pin: PB0 }]
+      P1: [{ pin: PB2 }]
   CRC:
     category: System Core
     settings:
@@ -1649,6 +1712,7 @@ peripherals:
           - { name: Disable }
           - { name: "8-bit", signals: [D0, D1, D2, D3, D4, D5, D6, D7, HSYNC, VSYNC, PCLK] }
           - { name: "10-bit", signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, HSYNC, VSYNC, PCLK] }
+          - { name: "12-bit", signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, HSYNC, VSYNC, PCLK] }
     signal_pins:
       D0: [{ pin: PA9, af: 13 }, { pin: PC6, af: 13 }, { pin: PE0, af: 11 }]
       D1: [{ pin: PA10, af: 13 }, { pin: PC7, af: 13 }, { pin: PE1, af: 11 }]
@@ -1683,6 +1747,15 @@ peripherals:
           - { name: MII, signals: [MDC, MDIO] }
           - { name: RMII, signals: [MDC, MDIO] }
           - { name: RGMII, signals: [MDC, MDIO, GTXC, RXC, RXD0, RXD1, RXD2, RXD3, RXDV, TXD0, TXD1, TXD2, TXD3, TXEN] }
+      - name: "Status outputs"
+        type: checkboxes
+        choices:
+          - { name: PHY_LED0, signals: [PHY_LED0] }
+          - { name: PHY_LED1, signals: [PHY_LED1] }
+          - { name: PHY_LED2, signals: [PHY_LED2] }
+          - { name: PHY_LED3, signals: [PHY_LED3] }
+          - { name: PHY_LED4, signals: [PHY_LED4] }
+          - { name: "PPS (pulse per second)", signals: [PPS] }
     signal_pins:
       GTXC: [{ pin: PD15, af: 10 }]
       MDC: [{ pin: PC0, af: 1 }]
@@ -1734,18 +1807,26 @@ peripherals:
   FMC:
     category: Memory
     settings:
-      - name: "NOR/PSRAM"
+      - name: "Address bus A0-A25"
         choices:
           - { name: Disable }
-          - { name: Enabled }
-      - name: NAND
+          - { name: Enabled, signals: [A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, A14, A15, A16, A17, A18, A19, A20, A21, A22, A23, A24, A25] }
+      - name: "Data bus D0-D31"
         choices:
           - { name: Disable }
-          - { name: Enabled }
-      - name: SDRAM
+          - { name: Enabled, signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26, D27, D28, D29, D30, D31] }
+      - name: Clock
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: Enabled, signals: [CLK] }
+      - name: "NOR/PSRAM and NAND control (FSMC)"
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [NE1, NE2, NE3, NE4, NADV, NBL0, NBL1, NBL2, NBL3, NOE, NWE, NWAIT, NCE2, INT2] }
+      - name: "SDRAM control"
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [BA0, BA1, CAS_N, RAS_N, WE_N, CKE0, CKE1, CS_N0, CS_N1, DQM0, DQM1, DQM2, DQM3] }
     signal_pins:
       A0: [{ pin: PA14, af: 3 }, { pin: PE11, af: 15 }, { pin: PF5, af: 12 }]
       A1: [{ pin: PA15, af: 12 }, { pin: PB3, af: 12 }, { pin: PE12, af: 15 }]
@@ -1779,9 +1860,8 @@ peripherals:
       CKE0: [{ pin: PC3, af: 12 }, { pin: PC5, af: 12 }, { pin: PE5, af: 9 }, { pin: PF3, af: 4 }]
       CKE1: [{ pin: PB5, af: 12 }, { pin: PC14, af: 9 }, { pin: PE6, af: 7 }, { pin: PF4, af: 4 }]
       CLK: [{ pin: PD3, af: 12 }, { pin: PE2, af: 9 }, { pin: PF14, af: 1 }, { pin: PF2, af: 12 }]
-      CS_N0: [{ pin: PC4, af: 12 }, { pin: PD6, af: 3 }, { pin: PE3, af: 9 }]
+      CS_N0: [{ pin: PC2, af: 12 }, { pin: PC4, af: 12 }, { pin: PD6, af: 3 }, { pin: PE3, af: 9 }]
       CS_N1: [{ pin: PB6, af: 12 }, { pin: PD7, af: 3 }, { pin: PE4, af: 9 }, { pin: PF0, af: 4 }]
-      CS_NO: [{ pin: PC2, af: 12 }]
       D0: [{ pin: PD13, af: 0 }, { pin: PD14, af: 12 }]
       D1: [{ pin: PD14, af: 0 }, { pin: PD15, af: 12 }]
       D10: [{ pin: PA9, af: 0 }, { pin: PD0, af: 1 }, { pin: PE13, af: 12 }]
@@ -1850,6 +1930,16 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled }
+      - name: Channels
+        type: checkboxes
+        choices:
+          - { name: IN0, signals: [IN0] }
+          - { name: IN1, signals: [IN1] }
+          - { name: IN2, signals: [IN2] }
+          - { name: IN3, signals: [IN3] }
+          - { name: IN4, signals: [IN4] }
+          - { name: IN5, signals: [IN5] }
+          - { name: IN6, signals: [IN6] }
     signal_pins:
       IN0: [{ pin: PC0 }]
       IN1: [{ pin: PC1 }]
@@ -1874,6 +1964,7 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: I2C, signals: [SCL, SDA] }
+          - { name: SMBus, signals: [SCL, SDA, SMBA] }
     signal_pins:
       SCL: [{ pin: PA14, af: 7 }, { pin: PA8, af: 4 }]
       SDA: [{ pin: PA13, af: 7 }, { pin: PC9, af: 4 }]
@@ -1885,6 +1976,7 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: I2C, signals: [SCL, SDA] }
+          - { name: SMBus, signals: [SCL, SDA, SMBA] }
     signal_pins:
       SCL: [{ pin: PB6, af: 6 }, { pin: PB8, af: 6 }, { pin: PD12, af: 4 }, { pin: PF12, af: 2 }]
       SDA: [{ pin: PB7, af: 6 }, { pin: PB9, af: 6 }, { pin: PD13, af: 4 }, { pin: PF13, af: 2 }]
@@ -1950,6 +2042,10 @@ peripherals:
           - { name: Disable }
           - { name: "PWM Generation CH2", signals: [CH2] }
           - { name: "Input Capture CH2", signals: [CH2] }
+      - name: "Output compare"
+        choices:
+          - { name: Disable }
+          - { name: OC, signals: [OC] }
       - name: ETR
         choices:
           - { name: Disable }
@@ -1972,6 +2068,10 @@ peripherals:
           - { name: Disable }
           - { name: "PWM Generation CH2", signals: [CH2] }
           - { name: "Input Capture CH2", signals: [CH2] }
+      - name: "Output compare"
+        choices:
+          - { name: Disable }
+          - { name: OC, signals: [OC] }
       - name: ETR
         choices:
           - { name: Disable }
@@ -2025,18 +2125,51 @@ peripherals:
   OPA:
     category: Analog
     settings:
-      - name: OPA1
+      - name: "OPA1 positive input"
         choices:
           - { name: Disable }
-          - { name: Enabled }
-      - name: OPA2
+          - { name: P0, signals: [P01] }
+          - { name: P1, signals: [P11] }
+      - name: "OPA1 negative input"
         choices:
           - { name: Disable }
-          - { name: Enabled }
-      - name: OPA3
+          - { name: N0, signals: [N01] }
+          - { name: N1, signals: [N11] }
+      - name: "OPA1 output"
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: OUT0, signals: [OUT01] }
+          - { name: OUT1, signals: [OUT11] }
+      - name: "OPA2 positive input"
+        choices:
+          - { name: Disable }
+          - { name: P0, signals: [P02] }
+          - { name: P1, signals: [P12] }
+      - name: "OPA2 negative input"
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N02] }
+          - { name: N1, signals: [N12] }
+      - name: "OPA2 output"
+        choices:
+          - { name: Disable }
+          - { name: OUT0, signals: [OUT02] }
+          - { name: OUT1, signals: [OUT12] }
+      - name: "OPA3 positive input"
+        choices:
+          - { name: Disable }
+          - { name: P0, signals: [P03] }
+          - { name: P1, signals: [P13] }
+      - name: "OPA3 negative input"
+        choices:
+          - { name: Disable }
+          - { name: N0, signals: [N03] }
+          - { name: N1, signals: [N13] }
+      - name: "OPA3 output"
+        choices:
+          - { name: Disable }
+          - { name: OUT0, signals: [OUT03] }
+          - { name: OUT1, signals: [OUT13] }
     signal_pins:
       N01: [{ pin: PB1 }]
       N02: [{ pin: PE8 }]
@@ -2090,6 +2223,14 @@ peripherals:
           - { name: "Single-SPI", signals: [SCK, SCSN, SIO0, SIO1] }
           - { name: "Dual-SPI", signals: [SCK, SCSN, SIO0, SIO1] }
           - { name: "Quad-SPI", signals: [SCK, SCSN, SIO0, SIO1, SIO2, SIO3] }
+      - name: "Extended signals"
+        type: checkboxes
+        choices:
+          - { name: "SCSXN (active-low chip select)", signals: [SCSXN] }
+          - { name: SIOX0, signals: [SIOX0] }
+          - { name: SIOX1, signals: [SIOX1] }
+          - { name: SIOX2, signals: [SIOX2] }
+          - { name: SIOX3, signals: [SIOX3] }
     signal_pins:
       SCK: [{ pin: PB2, af: 9 }]
       SCSN: [{ pin: PB6, af: 10 }]
@@ -2111,6 +2252,14 @@ peripherals:
           - { name: "Single-SPI", signals: [SCK, SCSN, SIO0, SIO1] }
           - { name: "Dual-SPI", signals: [SCK, SCSN, SIO0, SIO1] }
           - { name: "Quad-SPI", signals: [SCK, SCSN, SIO0, SIO1, SIO2, SIO3] }
+      - name: "Extended signals"
+        type: checkboxes
+        choices:
+          - { name: "SCSXN (active-low chip select)", signals: [SCSXN] }
+          - { name: SIOX0, signals: [SIOX0] }
+          - { name: SIOX1, signals: [SIOX1] }
+          - { name: SIOX2, signals: [SIOX2] }
+          - { name: SIOX3, signals: [SIOX3] }
     signal_pins:
       SCK: [{ pin: PE10, af: 7 }, { pin: PF0, af: 5 }, { pin: PF6, af: 4 }]
       SCSN: [{ pin: PE11, af: 7 }, { pin: PF1, af: 5 }, { pin: PF7, af: 4 }]
@@ -2160,7 +2309,7 @@ peripherals:
       - name: Wakeup
         choices:
           - { name: Disable }
-          - { name: "Output on RTC pin" }
+          - { name: "Output on RTC pin", signals: [RTC] }
     signal_pins:
       RTC: [{ pin: PC13, af: 1 }]
   SAI:
@@ -2214,6 +2363,12 @@ peripherals:
           - { name: "SD 1-bit", signals: [SDCK, CMD, D0] }
           - { name: "SD 4-bit", signals: [SDCK, CMD, D0, D1, D2, D3] }
           - { name: "SD 8-bit", signals: [SDCK, CMD, D0, D1, D2, D3, D4, D5, D6, D7] }
+      - name: "Strobe and status"
+        type: checkboxes
+        choices:
+          - { name: "STR (strobe)", signals: [STR] }
+          - { name: "SLVCK (slave clock)", signals: [SLVCK] }
+          - { name: "STS (status)", signals: [STS] }
     signal_pins:
       CMD: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
       D0: [{ pin: PB13 }, { pin: PC8 }, { pin: PD0 }]
@@ -2234,7 +2389,7 @@ peripherals:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: Enabled, signals: [TXP, TXN, RXP, RXN] }
     signal_pins:
       RXN: [{ pin: PE6 }]
       RXP: [{ pin: PE5 }]
@@ -2498,6 +2653,8 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: "Break Input enabled", signals: [BKIN] }
+          - { name: "Break Input 2 enabled", signals: [BKIN2] }
+          - { name: "Break Input + Break Input 2", signals: [BKIN, BKIN2] }
       - name: ETR
         choices:
           - { name: Disable }
@@ -2565,7 +2722,7 @@ peripherals:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled }
+          - { name: Enabled, signals: [CLK, PORT0, PORT1, PORT2, PORT3, PORT4, PORT5, PORT6, PORT7, PORT8, PORT9, PORT10, PORT11, PORT12, PORT13, PORT14, PORT15, PORT16, PORT17, PORT18, PORT19, PORT20, PORT21, PORT22, PORT23, PORT24, PORT25, PORT26, PORT27, PORT28, PORT29, PORT30, PORT31, PORT32, PORT33, PORT34, PORT35, PORT36, PORT37, PORT38, PORT39, PORT40, PORT41, PORT42, PORT43, PORT44, PORT45, PORT46, PORT47] }
     signal_pins:
       CLK: [{ pin: PC0 }, { pin: PD9 }, { pin: PF11 }, { pin: PF14 }]
       PORT0: [{ pin: PC1 }, { pin: PF12 }]

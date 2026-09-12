@@ -8,9 +8,10 @@
 # "holds no pin on any package" while the datasheet gives them pins.
 #
 # SOURCE: data/sources/H417/Datasheets/CH32H417DS0.md.
-#   DAC, ADC1, ADC2, HSADC, OPA, SERDES - Table 2-1-1 (pin-first), read by
+#   DAC, ADC1, ADC2, HSADC, OPA, CMP, SERDES - Table 2-1-1 (pin-first), read by
 #     tools/gen_h417_dedicated_pins.py via tools/audit_h417_all_pins.py, whose parse
 #     agrees with the datasheet on all 95 pins (the QFN128 I/O count).
+#     ADC2 is a COPY of ADC1 - the two ADCs sample the same sixteen pads.
 #   SDMMC, UHSIF - Table 2-2-12 and Table 2-2-16 (signal-first). Table 2-1-1 writes
 #     the AFIO_PCFR1 remap value into the name (`UHSIF_CLK_1`, DS Note 3), which read
 #     literally turns one signal into up to four, and its wrapped lines lose the digit
@@ -22,6 +23,23 @@ dedicated_pins:
     OUT1: [{ pin: PA4 }]
     OUT2: [{ pin: PA5 }]
   ADC1:
+    IN0: [{ pin: PA0 }]
+    IN1: [{ pin: PA1 }]
+    IN2: [{ pin: PA2 }]
+    IN3: [{ pin: PA3 }]
+    IN4: [{ pin: PA4 }]
+    IN5: [{ pin: PA5 }]
+    IN6: [{ pin: PA6 }]
+    IN7: [{ pin: PA7 }]
+    IN8: [{ pin: PB0 }]
+    IN9: [{ pin: PB1 }]
+    IN10: [{ pin: PC0 }]
+    IN11: [{ pin: PC1 }]
+    IN12: [{ pin: PC2 }]
+    IN13: [{ pin: PC3 }]
+    IN14: [{ pin: PC4 }]
+    IN15: [{ pin: PC5 }]
+  ADC2:
     IN0: [{ pin: PA0 }]
     IN1: [{ pin: PA1 }]
     IN2: [{ pin: PA2 }]
@@ -65,6 +83,12 @@ dedicated_pins:
     OUT11: [{ pin: PA5 }]
     OUT12: [{ pin: PB1 }]
     OUT13: [{ pin: PA4 }]
+  CMP:
+    N0: [{ pin: PB1 }]
+    N1: [{ pin: PC4 }]
+    P0: [{ pin: PB0 }]
+    P1: [{ pin: PB2 }]
+    OUT: [{ pin: PA6, af: 10 }, { pin: PA8, af: 12 }, { pin: PB12, af: 13 }, { pin: PC5, af: 13 }, { pin: PE12, af: 13 }, { pin: PE15, af: 13 }, { pin: PE6, af: 11 }]
   SDMMC:
     D0: [{ pin: PB13 }, { pin: PC8 }, { pin: PD0 }]
     D1: [{ pin: PC9 }, { pin: PD1 }]

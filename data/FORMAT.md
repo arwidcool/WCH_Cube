@@ -537,6 +537,24 @@ peripherals:
 - **The same pin may not be listed twice for one signal.** The user's choice is keyed by
   pin name, so the second entry is unreachable.
 - **Every signal a setting can request needs an entry**, exactly as it needs a remap.
+- **…and every entry needs a setting that can request it.** This is the other direction, and
+  it is checked too: `requiredSignals()` derives every pin claim from the settings, so a
+  `signal_pins:` row no `choices[].signals` names is **decoration** — the pin grid cannot
+  offer it, the conflict engine never sees it, and the generated C never muxes it. The pin
+  is unusable and nothing says so. `tests/completeness.test.js` asserts this for every
+  peripheral of every real part, with `codegen.skip_signals` exempt (those pads are claimed
+  by the debug interface or by `clock.hse_*`, and no setting may name them).
+
+  It is worth knowing how this looks in practice, because it is not obvious in a diff: on
+  2026-09-12 CH32H417 had **167** such rows and the peripheral tree still rendered them as
+  working peripherals. `ADC1` offered two of its sixteen channels, `ADC2` had no
+  `signal_pins:` at all, `FMC` claimed none of its 87 pins, and `UHSIF` and `SERDES` claimed
+  nothing — every one of them an empty shell that validated and compiled.
+
+  A related trap, an engine fact rather than a data rule: a `checkboxes` row defaults to
+  **nothing ticked**, but any other row defaults to `choices[0]`. So a channel list written
+  as plain choices silently selects its FIRST channel on a freshly created project, which is
+  a real pin. A row offering a set of things wants `type: checkboxes`.
 
 ### What it means for the three consumers
 
