@@ -38,6 +38,13 @@ prose-shaped gate and a missing gate on CH32X035, the last two in a part `covera
 `complete`. All three are on the board as FINDINGs with `file:line` and the repair; I have not
 edited `data/` to fix them.
 
+**P1: DONE and committed.** Two rows in the Tools tab's Peripherals table, both read by the engine
+rather than computed in the page — `model.js` gained `openPadPeripherals()` and
+`unclaimableSignals()`. The first renders the coverage ledger's queue with the owner named in the
+data; the second reads `none` on every part that ships and exists to keep saying so. Verified in a
+real browser at 1280/1920 × light/dark × 100 %/125 %, both rows present and none empty, zero
+overflow, console silent.
+
 Also this cycle: repaired one duplicated YAML key in `data/mcus/CH32L103.yaml` (`BKP` had
 `settings:` twice, so the file did not parse at all and every `fresh()` threw) — declared on the
 board, behaviour-preserving, AGENT-1's file.

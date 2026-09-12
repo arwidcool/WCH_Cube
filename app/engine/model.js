@@ -319,6 +319,60 @@ export function requiredSignals(pid) {
   }
   return out;
 }
+// ---- what the FILE does not say ----------------------------------------------
+// Two queries the Tools tab prints and nothing else derives, because both are facts
+// about the MCU file rather than about the silicon.
+
+/**
+ * The peripherals whose pads this file has not extracted yet, each with the owner and
+ * the backlog line its `pins:` block names.
+ *
+ * A peripheral with no routing must carry one of two declarations: `pins: { none,
+ * source }` - the silicon gives it no pad, cited to a table - or `pins: { open, owner,
+ * task }`, which is the only form that says "nobody has written this down yet". So this
+ * list is the coverage ledger's queue, and it is the one place the app can report that a
+ * part's file is unfinished without any code here knowing which part that is.
+ */
+export function openPadPeripherals() {
+  return Object.keys(M.peripherals || {})
+    .filter(pid => ((M.peripherals[pid].pins || {}).open) === true)
+    .map(pid => {
+      const p = M.peripherals[pid].pins || {};
+      return { pid, owner: p.owner || null, task: p.task || null };
+    })
+    .sort((a, b) => a.pid.localeCompare(b.pid));
+}
+
+/**
+ * Every signal a peripheral routes on a per-pin AF map that NO setting's choice names,
+ * as `{ pid, signal }`.
+ *
+ * Such a row is a pad with NO WAY TO ASSIGN IT: `requiredSignals()` derives every claim
+ * from the settings, so the pin grid cannot offer it, the conflict engine never sees it
+ * and the generated C never muxes it - the row is decoration. `validate_mcu.py` makes it
+ * an ERROR and `tests/completeness.test.js` asserts it per part, so this reads empty on
+ * every part that ships; the Tools tab prints the count so it stays that way.
+ *
+ * The two exemptions are rules, not a hole. `codegen.skip_signals` names the pins codegen
+ * must not drive from GPIO_Init (the debug pair, the reset pin) - SYS and the `clock:`
+ * tree claim those, not a setting, so no setting may name them. And a part that moves
+ * whole peripherals with a `remaps:` index has no per-pin map to check in the first
+ * place, which is why `signal_pins` being empty is not a failure here.
+ */
+export function unclaimableSignals() {
+  const skip = new Set(Object.keys((M.codegen || {}).skip_signals || {}));
+  const out = [];
+  for (const [pid, P] of Object.entries(M.peripherals || {})) {
+    const sigs = Object.keys(P.signal_pins || {});
+    if (!sigs.length || skip.has(pid)) continue;
+    const claimed = new Set();
+    for (const s of P.settings || []) {
+      for (const c of s.choices || []) for (const x of c.signals || []) claimed.add(x);
+    }
+    for (const s of sigs) if (!claimed.has(s)) out.push({ pid, signal: s });
+  }
+  return out;
+}
 // The choice that means "off": the first one that needs no pins. Usually
 // choices[0] ("Disable"), but not always — CH32V006's external reset pin is
 // ENABLED at the factory, so its off switch is the RST_MODE=11 choice at the end.

@@ -91,6 +91,51 @@ test('requiredSignals follows the current settings, including checkbox sets', ()
   assert.deepEqual([...e.requiredSignals('ADC1')].sort(), ['IN2', 'IN3']);
 });
 
+// ---- what the FILE does not say ----------------------------------------------
+// The Tools tab prints these two and nothing else derives them. Both are facts about the
+// MCU file rather than about the silicon, so they are read from the model and unit-tested
+// here rather than worked out in the page.
+
+test('openPadPeripherals lists the coverage ledger queue, with the owner from the file', () => {
+  const e = fresh('CH32V006');
+  // every shipped part declares this: routing, or `none` with a source, or `open`
+  const found = e.openPadPeripherals();
+  assert.ok(Array.isArray(found));
+  for (const o of found) {
+    assert.equal(o.pid in e.M.peripherals, true, `${o.pid} is a real peripheral`);
+    assert.equal(e.M.peripherals[o.pid].pins.open, true);
+    assert.ok(o.owner, 'an open declaration names its owner - the row is printed with it');
+    assert.ok(o.task, 'and the TASKS.md line');
+  }
+  // it is a READER of the declaration, not a second opinion about it: a peripheral with
+  // `none` (the silicon gives it no pad) is NOT in the list, however pinless it looks
+  const none = Object.entries(e.M.peripherals).filter(([, P]) => (P.pins || {}).none).map(([p]) => p);
+  assert.ok(none.length, 'setup: this part has pinless peripherals');
+  for (const pid of none) assert.equal(found.some(o => o.pid === pid), false);
+});
+
+test('unclaimableSignals is empty for every shipped part, and catches a dead row', () => {
+  for (const name of Object.keys(eng.MCU_FILES)) {
+    const e = fresh(name);
+    assert.deepEqual(e.unclaimableSignals(), [],
+      `${name}: a routed signal no setting names cannot be assigned, and validate_mcu makes it an ERROR`);
+  }
+  // Planted break, run every time: the check is a set difference, and a set difference
+  // that silently matched nothing would pass on exactly the data it exists to reject.
+  // CH32V006 moves whole peripherals with a `remaps:` index, so the per-pin map this
+  // question is about has to be written here - which is also why the shipped-part loop
+  // above reads empty for it.
+  const e = fresh('CH32V006');
+  e.M.peripherals.USART1.signal_pins = {
+    TX: [{ pin: 'PD5' }], RX: [{ pin: 'PD6' }], GHOST: [{ pin: 'PA11' }],
+  };
+  assert.deepEqual(e.unclaimableSignals(), [{ pid: 'USART1', signal: 'GHOST' }],
+    'a routed signal no choice names is reported, and the claimed ones are not');
+  // and the exemption is a rule: a peripheral codegen must keep away from is not asked
+  e.M.codegen.skip_signals = { ...(e.M.codegen.skip_signals || {}), USART1: true };
+  assert.deepEqual(e.unclaimableSignals(), [], 'skip_signals is exempt, by design');
+});
+
 test('every bundled MCU file loads on every one of its packages', () => {
   const e = fresh();
   for (const name of Object.keys(e.MCU_FILES)) {

@@ -3024,6 +3024,23 @@ function renderTools() {
       `${noParams.join(', ')} — their Parameter Settings tab does not appear`);
   }
 
+  // Two facts the coverage ledger put in the file, and they are the only two rows on this
+  // tab that report the STATE OF THE FILE rather than the state of the silicon. Both are
+  // read by the engine (`openPadPeripherals` / `unclaimableSignals`) rather than worked
+  // out here, so the same question has one answer and a unit test can ask it.
+  //
+  // The first is the ledger's queue - `pins: { open: true, owner:, task: }` is the one
+  // form that says "nobody has written this down yet", as opposed to `pins: { none: true,
+  // source: }`, which says the silicon has no pad and cites the table. The owner's name
+  // comes out of the file, so no part is named in this app.
+  //
+  // The second is a `signal_pins:` row no setting names: a pad the pin grid cannot
+  // offer and the generated C never muxes. `validate_mcu.py` makes that an ERROR, so it
+  // reads "none" on every part that ships and the row exists to keep saying so.
+  const openPads = openPadPeripherals();
+  const openOwners = [...new Set(openPads.map(o => o.owner).filter(Boolean))];
+  const unreachable = unclaimableSignals();
+
   // --- interrupts
   const vectors = (M.nvic || {}).vectors || [];
   const noHandler = vectors.filter(v => !v.handler).map(v => v.name);
@@ -3068,6 +3085,13 @@ function renderTools() {
     + `</table></section>`
     + `<section><h4>Peripherals <span class="ro">${periphs.length}</span></h4><table class="toolstab">`
     + Object.entries(cat).map(([c, ps]) => row(c, `${ps.length} — ${list(ps)}`)).join('')
+    + row('Pads not extracted yet', openPads.length
+      ? `${openPads.length} — ${list(openPads.map(o => o.pid))}`
+        + (openOwners.length ? ` <span class="ro">(owner: ${esc(openOwners.join(', '))})</span>` : '')
+      : '<span class="ro">none</span>')
+    + row('Routed, no setting claims it', unreachable.length
+      ? `${unreachable.length} — ${list(unreachable.map(u => `${u.pid} ${u.signal}`))}`
+      : '<span class="ro">none</span>')
     + `</table></section>`
     + `<section><h4>Interrupts and DMA</h4><table class="toolstab">`
     + row('Vectors', vectors.length ? String(vectors.length) : '<span class="ro">none</span>')
