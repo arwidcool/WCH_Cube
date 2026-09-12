@@ -247,6 +247,7 @@ peripherals:
   ETH:
     settings:
       Interface: Disable
+      SMI (serial management interface): Disable
       Status outputs: []
     remap: 0
   EXTI:

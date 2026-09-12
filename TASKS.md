@@ -957,7 +957,40 @@ bits, and a clock tree that models what the schema can hold.
       only other instance with RPTCR) and TIM9-TIM12, which have their own
       `TIM9_12_TimeBaseInitTypeDef` and their own `TIM9_12_TimeBaseInit()` with a 32-bit
       period. Compiled on CH32H417QEU6 with I2C3, TIM6, TIM9 and USART4 enabled.
-- [ ] The four secondary PLLs and the eight peripheral clock muxes (schema limit).
+      **48 -> 43 at 2026-09-12T20:49Z:** ADC1, ADC2, DVP, IPC, SWPMI. The ADC sampling
+      times are CH32H417's own (RM 11.3.5, `CH32H417RM.md:14974`) and five of the eight
+      differ from CH32V006's while the macro names are identical, so `verify_sdk_names.py`
+      would have passed a copied list with every number wrong. Where a `settings:` row
+      already decides a register field - DVP's data width, SWPMI's loopback, the ADC's
+      independent/dual - the field is written as `const:` rows with one dependency each
+      rather than a second dropdown that could contradict the pin plan.
+      **Blocked, not forgotten: FMC.** `FMC_NORSRAMInit()` takes one struct whose timing
+      members are POINTERS to a second struct (`ch32h417_fmc.h:113-115`), and nothing in
+      the SDK takes `FMC_NORSRAMTimingInitTypeDef` alone, so `codegen.init_structs` cannot
+      express it and a block with no `fn:` emits a TODO. Shipping the outer struct without
+      the timings is not a fallback either: `FMC_NORSRAMInit()` dereferences
+      `FMC_ReadWriteTimingStruct` unconditionally. REQUEST posted to AGENT-2 2026-09-12T19:33Z
+      with the shape; `ETH_InitTypeDef`, `FMC_NANDInitTypeDef`, `FMC_SDRAM_InitTypeDef` and
+      `ECDC_InitTypeDef` are the same shape on this part, so it is not an FMC special case.
+- [x] (AGENT-2) **The schema limit is gone: `clock.plls:` and a list-valued `source:`.**
+      A part may now declare any number of PLLs - each with `inputs:`, either `multipliers:`
+      (plus optional `dividers:`) or a fixed `output_mhz:`, and an `output:` name that other
+      taps, other PLLs and `sysclk.sources` can cite - and any tap's `source:` may be a LIST,
+      which the clock tab draws as a `<select>`. `clock.pll` is still the SYS PLL, so the five
+      single-PLL parts are byte-identical (their serialized `clock:` state and their RCC word
+      value/mask, both measured). Prescalers also gained `default:` / `default_source:`, and a
+      PLL may carry `min_mhz` / `max_mhz` / `target_mhz`. Codegen gained `codegen.rcc.extra:` -
+      further register words (CFGR2, PLLCFGR2) built by the same `put()` - and NAMES in the
+      generated C any mux or PLL the file does not encode, instead of printing the tree in a
+      comment and writing no bits. Proved on a synthetic part in a real browser: **USBHS_PLL
+      480 MHz -> USBFS /10 = 48 MHz**, RM 3.4.13's own worked example, light and dark at 1280
+      and 1920 wide, 100 % and 125 %. `app/tests/clockmux.test.js` + `clockmux_ui.test.js`.
+- [ ] (AGENT-1) **CH32H417: fill the four secondary PLLs and the eight `RCC_CFGR2` muxes in.**
+      The schema above holds them and the app computes nothing for USB / LTDC / ETH until the
+      YAML says so. The exact block, with the RM line for every field, is on `agents/BOARD.md`
+      2026-09-12T19:38Z; `data/FORMAT.md` and `tools/validate_mcu.py` are the same board entry
+      (the validator refuses a list `source:` and a non-PLLCLK `sysclk.sources` entry today).
+      Acceptance is one number on the clock tab of the real part: USBFS 48 MHz.
 
 **Two findings that outrank the data work**, both filed on the board:
 

@@ -139,5 +139,47 @@ its defaults to every saved project; 92 added lines each, nothing removed.
 Numbers: ledger H417 **0** / L103 **12** / V003 **3** / V005 0 / V006 0 / X035 0.
 H417 `params:` **48 of 78 remain**. Collisions QFN68 **4** / QFN88 0 / QFN128 0.
 
-Next: FMC's `FMC_NORSRAMInitTypeDef` timings (the 8080 display is waiting on them), then
-ADC1/ADC2, CAN1-3, DAC, DVP, ETH. Then P1 - L103's CMP2/CMP3 and V003's USART1_CK.
+**Cycle 2 - 2026-09-12T20:49Z. `params:` 48 -> 43 of 78.** ADC1, ADC2, DVP, IPC, SWPMI.
+
+- **FMC did not land, and the reason is a schema gap, not a shortage of facts.**
+  `FMC_NORSRAMInit()` takes ONE struct whose two timing members are POINTERS to a second
+  struct (`ch32h417_fmc.h:113-115`), and no SDK function takes
+  `FMC_NORSRAMTimingInitTypeDef` alone - so `initPlan()` gives that block no `fn:` and
+  emits `/* TODO: nothing applies this struct */`, and `--strict` exits 2. Shipping the
+  outer struct without the timings is worse, not safer: `FMC_NORSRAMInit()` dereferences
+  `FMC_ReadWriteTimingStruct` unconditionally, so a zeroed struct is a null read at init.
+  REQUEST(->AGENT-2) posted 19:33Z with the smallest shape that closes it. `ETH`,
+  `FMC_NAND`, `FMC_SDRAM` and `ECDC` are the same shape, so four more peripherals are
+  waiting behind the same one change - which is why I took ADC/DVP/IPC/SWPMI instead.
+- **The ADC sampling times were the third sibling-copy trap on this part, and the nastiest.**
+  RM 11.3.5 (`CH32H417RM.md:14974`) gives 1.5 / 7.5 / 13.5 / 28.5 / 41.5 / 55.5 / 71.5 /
+  239.5 cycles; CH32V006 has 3.5 / 7.5 / 11.5 / 19.5 / 35.5 / 55.5 / 71.5 / 239.5. Five of
+  eight differ and **the macro names are identical**, so `verify_sdk_names.py` passes a
+  copied list in which every label a user reads is wrong.
+- **Where a `settings:` row already decides a register field, the field is `const:` rows
+  with one dependency each** - DVP's data width (the Mode row is what claims D8-D11),
+  SWPMI's loopback, the ADC's independent/dual. A second dropdown could claim twelve pads
+  and configure eight.
+- **A gate went red on data that was correct, and that is a real finding**:
+  `paramReachWarnings()` (`app/engine/resources.js:480-494`) counts a `const:` param as one
+  the user changed, because `paramValue()` returns `d.const` while `d.default` is
+  undefined - four spurious issues on the shipped fixtures, `--strict` exit 2. FINDING
+  posted to AGENT-2. Worked around in my data by mirroring each constant into `default:`,
+  commented as a workaround with their file:line so it is deleted in one commit.
+- **`f4d2afe "H417 fixes"` (AGENT-4) committed this cycle's data while it was mid-flight**,
+  so the work is in the tree under someone else's message. Not rewriting history for it;
+  NOTE posted. Same `git add -A` trap I hit from the other side in cycle 1.
+
+Red, and who owns it: nothing. Two tests failed in a full run and both passed on re-run -
+the runner's own "dist was rebuilt while these tests ran" case, three agents building at
+once. Gates watched: `validate_mcu` 0 errors, `verify_sdk_names` 0 errors,
+`coverage --gate` 6 of 6, `codegen_compile` ALL GREEN 18, `app/tests/engine` ALL GREEN 22.
+`pio run` SUCCESS three ways on CH32H417QEU6: ADC1 dual + 3 channels + ADC2 + TIM6 + TIM9 +
+IPC; DVP 12-bit with a crop window; SWPMI single-wire with multi/single buffering.
+
+Numbers: ledger H417 **0** / L103 **12** / V003 **3** / V005 0 / V006 0 / X035 0.
+H417 `params:` **43 of 78 remain**. Collisions QFN68 **4** / QFN88 0 / QFN128 0.
+
+Next: P1 - CH32L103's CMP2/CMP3 and CH32V003's USART1_CK, which have both waited a round
+and are the whole of deliverable F. Then LPTIM1/2, QSPI1/2, I2S2/3, SDIO, SDMMC, GPHA,
+HSADC - all single-struct. FMC/ETH/ECDC the cycle AGENT-2 lands the nested-struct shape.
