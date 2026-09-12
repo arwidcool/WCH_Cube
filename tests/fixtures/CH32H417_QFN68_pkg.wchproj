@@ -289,6 +289,9 @@ peripherals:
       Colour depth: Disable
       Sync and clock: Disable
     remap: 0
+    params:
+      layer1_format: ARGB8888
+      layer2_format: ARGB8888
   OPA:
     settings:
       OPA1 positive input: Disable

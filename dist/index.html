@@ -2999,7 +2999,10 @@ peripherals:
     # offers L8, AL44 and AL88 - eight bits per pixel - but those describe the LAYER'S
     # FRAME BUFFER IN MEMORY. The pixel format converter expands every one of them to
     # ARGB8888 before the blender, so an 8-bit format saves RAM and frees no pin at all.
-    # It is not selectable here yet; see `notes:` below and TASKS.md.
+    # It IS selectable, as `params:` below: `Layer 1 pixel format` and `Layer 2 pixel
+    # format`, all eight formats. The two axes sit on one peripheral on purpose - the
+    # panel wiring and the buffer format are the same planning decision - and neither
+    # one moves a pin the other owns.
     settings:
       - name: "Colour depth"
         choices:
@@ -3040,6 +3043,82 @@ peripherals:
       R6: [{ pin: PA8, af: 14 }, { pin: PE2, af: 14 }, { pin: PC12, af: 14 }, { pin: PB1, af: 9 }, { pin: PD3, af: 15 }]
       R7: [{ pin: PD4, af: 15 }, { pin: PE15, af: 14 }, { pin: PC4, af: 14 }, { pin: PF0, af: 14 }]
       VSYNC: [{ pin: PB12, af: 10 }, { pin: PC11, af: 15 }, { pin: PA4, af: 14 }, { pin: PA7, af: 14 }]
+    params:
+      # THE LAYER PIXEL FORMAT, SELECTABLE - for PLANNING, and emitting no register write.
+      #
+      # `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18, RM:65146) picks the format of the layer's FRAME
+      # BUFFER IN MEMORY. It is the question people mean by "does this thing do 8-bit", and
+      # it is a different axis from `Colour depth` above: the pixel format converter expands
+      # every one of these to ARGB8888 before the blender, so the format decides how much RAM
+      # a frame costs and frees NO pin. Both live on this peripheral on purpose - you plan the
+      # panel wiring and the buffer format in one place.
+      #
+      # WHY `sdk_none:` RATHER THAN A CALL, and this is the whole design decision. The SDK
+      # does have `LTDC_LayerPixelFormat(LTDC_Layerx, fmt)`, and `sdk_args:` would happily
+      # pass `LTDC_Layer1` through literally, so emitting it LOOKS easy. Read it first
+      # (`ch32h417_ltdc.c:622-672`): it is a RECONFIGURE call, not an init one. It reads the
+      # CURRENT `PFCR` to work out the old bytes-per-pixel, divides `CFBLR >> 16` - the frame
+      # buffer line length, which `LTDC_LayerInit()` computes from the layer WIDTH - by it to
+      # recover a pixel count, then re-multiplies by the new bytes-per-pixel. At reset
+      # `CFBLR` is 0 (RM:64570, R32_LTDC_L1PFCR and the L1CFBLR beside it reset 0x00000000),
+      # so calling it from a generated init would compute 0/n and write a line length of 3
+      # bytes with a pitch of 0. That is wrong-but-compiling code - a broken display the
+      # configurator gives you no way to see - and the SDK's own doc comment adds that a
+      # shadow-register reload must follow it anyway (`:619-620`).
+      #
+      # So the row is a PLANNING row: it records the choice, states the cost in the generated
+      # C as a comment, and leaves the register to the layer init that owns the geometry. No
+      # TODO, no `#error`, and `--strict` stays clean, because nothing here is unfinished -
+      # this is the correct amount of code to emit for a value whose register write depends
+      # on a number this tool does not own.
+      - key: layer1_format
+        name: Layer 1 pixel format
+        type: enum
+        default: ARGB8888
+        sdk_none: true
+        sdk_note: >-
+          no init-time setter. LTDC_LayerPixelFormat() is a RECONFIGURE call - it rescales
+          CFBLR from the layer width, which is still 0 before LTDC_LayerInit() has run
+          (ch32h417_ltdc.c:622-672) - so calling it here would write a bogus frame-buffer
+          line length. This row records the format; your layer init applies it.
+        help: >
+          Frame-buffer format for layer 1 (LTDC_L1PFCR.PF, RM 43.4.18). Decides bytes per
+          pixel in MEMORY, not lines at the pad - every format is expanded to ARGB8888
+          before the output stage, so this frees no pin. Use Colour depth above for the
+          wiring. L8 is 8-bit indexed through the 256-entry CLUT; AL44 and AL88 are
+          alpha+luminance. Reset value is ARGB8888.
+        options:
+          - { name: ARGB8888, value: 0, sdk: LTDC_Pixelformat_ARGB8888 }
+          - { name: RGB888,   value: 1, sdk: LTDC_Pixelformat_RGB888 }
+          - { name: RGB565,   value: 2, sdk: LTDC_Pixelformat_RGB565 }
+          - { name: ARGB1555, value: 3, sdk: LTDC_Pixelformat_ARGB1555 }
+          - { name: ARGB4444, value: 4, sdk: LTDC_Pixelformat_ARGB4444 }
+          - { name: L8,       value: 5, sdk: LTDC_Pixelformat_L8 }
+          - { name: AL44,     value: 6, sdk: LTDC_Pixelformat_AL44 }
+          - { name: AL88,     value: 7, sdk: LTDC_Pixelformat_AL88 }
+      - key: layer2_format
+        name: Layer 2 pixel format
+        type: enum
+        default: ARGB8888
+        sdk_none: true
+        sdk_note: >-
+          no init-time setter, same as layer 1 - LTDC_LayerPixelFormat() rescales CFBLR from
+          a layer width that is 0 until LTDC_LayerInit() has run (ch32h417_ltdc.c:622-672).
+          This row records the format; your layer init applies it.
+        help: >
+          Frame-buffer format for layer 2 (LTDC_L2PFCR.PF, RM 43.4.18). This controller has
+          exactly two layers - LTDC_Layer1 and LTDC_Layer2 (ch32h417.h:1770-1771) - blended
+          by alpha (RM:64248). Same rule as layer 1: it decides bytes per pixel in memory and
+          frees no pin. Leave it at the reset value if you only use one layer.
+        options:
+          - { name: ARGB8888, value: 0, sdk: LTDC_Pixelformat_ARGB8888 }
+          - { name: RGB888,   value: 1, sdk: LTDC_Pixelformat_RGB888 }
+          - { name: RGB565,   value: 2, sdk: LTDC_Pixelformat_RGB565 }
+          - { name: ARGB1555, value: 3, sdk: LTDC_Pixelformat_ARGB1555 }
+          - { name: ARGB4444, value: 4, sdk: LTDC_Pixelformat_ARGB4444 }
+          - { name: L8,       value: 5, sdk: LTDC_Pixelformat_L8 }
+          - { name: AL44,     value: 6, sdk: LTDC_Pixelformat_AL44 }
+          - { name: AL88,     value: 7, sdk: LTDC_Pixelformat_AL88 }
     notes: >
       Parallel RGB output, always 24 bits wide at the pad - the width you pick here is
       how many lines you WIRED, not a mode the silicon has (RM 43.4.5 gives the global
@@ -3050,8 +3129,12 @@ peripherals:
       An "8-bit mode" is a different thing and does not free pins: L8, AL44 and AL88
       (RM 43.4.18) are eight-bit-per-pixel FRAME BUFFER formats, and the pixel format
       converter expands them to ARGB8888 before the output stage. Choosing one saves
-      memory and changes no pin. Selecting it is not modelled yet - the generator has no
-      way to fill the per-layer init struct - so it is an open item rather than a gap.
+      memory and changes no pin - and you CAN choose one: Parameter Settings carries
+      `Layer 1 pixel format` and `Layer 2 pixel format`, all eight formats, so a buffer
+      plan and a pin plan are made in the same place. What the generator deliberately does
+      NOT emit is the register write: `LTDC_LayerPixelFormat()` rescales the frame-buffer
+      line length from a layer width it does not know yet, so the choice is recorded as a
+      comment in the generated C and your own layer init applies it.
   OPA:
     category: Analog
     settings:

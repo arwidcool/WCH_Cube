@@ -167,3 +167,150 @@ test('the file says the output width is wiring, not a register', () => {
   assert.match(notes, /frame buffer|memory/i,
     'LTDC notes should say that an 8-bit format is a frame-buffer format, not a pin count');
 });
+
+
+// =============================================================================
+//  THE LAYER PIXEL FORMAT — selectable for PLANNING, and emitting no register write.
+//
+//  The question this answers is the one people actually ask of this controller: *can it do
+//  8-bit, and can I pick that here?* Until 2026-09-12 the answer to the second half was no,
+//  and the recorded reason was that `LTDC_Layer_InitTypeDef` is filled once per LAYER while
+//  `codegen.init_structs` maps a struct to one function. The reason was right that a struct
+//  cannot be emitted; it was wrong about the cheap path, because the SDK also has a plain
+//  two-argument setter, `LTDC_LayerPixelFormat(LTDC_Layerx, fmt)`, and `sdk_args:` passes a
+//  non-placeholder like `LTDC_Layer1` through literally.
+//
+//  READING THAT SETTER IS WHY THE ROW EMITS NOTHING. `ch32h417_ltdc.c:622-672` is a
+//  RECONFIGURE call, not an init one: it reads the current `PFCR` for the old bytes-per-pixel,
+//  divides `CFBLR >> 16` — the frame-buffer line length, which `LTDC_LayerInit()` computes
+//  from the layer WIDTH — to recover a pixel count, and re-multiplies by the new
+//  bytes-per-pixel. At reset `CFBLR` is 0, so a generated init calling it would write a line
+//  length of 3 bytes and a pitch of 0: a broken display, compiling perfectly, with nothing in
+//  the configurator to show it. The SDK's own doc comment (`:619-620`) adds that a
+//  shadow-register reload must follow it.
+//
+//  So the row records the choice and states it in the generated C as a comment, and the layer
+//  init that owns the geometry applies it. These tests hold BOTH halves: that the choice is
+//  really offered and reaches the C, and that no register write, TODO or `#error` appears
+//  because of it. The second half is the one that would rot quietly.
+// =============================================================================
+
+const FORMATS = ['ARGB8888', 'RGB888', 'RGB565', 'ARGB1555', 'ARGB4444', 'L8', 'AL44', 'AL88'];
+const EIGHT_BIT = ['L8', 'AL44', 'AL88'];
+
+/** The two layer-format params, by key. */
+const formatParams = () => (eng.M.peripherals.LTDC.params || []).filter(p => /^layer\d_format$/.test(p.key));
+
+test('both layers offer all eight pixel formats, and the 8-bit ones are among them', () => {
+  eng.loadMcu(eng.MCU_FILES[PART]);
+  const ps = formatParams();
+  assert.equal(ps.length, 2,
+    'LTDC should carry one pixel-format parameter per layer; this controller has exactly two '
+    + '(LTDC_Layer1 / LTDC_Layer2, ch32h417.h:1770-1771)');
+  for (const p of ps) {
+    const names = (p.options || []).map(o => o.name);
+    assert.deep(names, FORMATS, `${p.key} does not offer exactly the eight formats of LTDC_LxPFCR.PF[2:0]`);
+    // PF[2:0] is a 3-bit field and the option values ARE the encoding, so an off-by-one here
+    // is a wrong register value rather than a cosmetic slip.
+    assert.deep((p.options || []).map(o => o.value), [0, 1, 2, 3, 4, 5, 6, 7],
+      `${p.key} option values must be the PF[2:0] encoding from RM 43.4.18`);
+    assert.equal(p.default, 'ARGB8888', `${p.key} should default to the reset value (PFCR resets to 0x00000000)`);
+    for (const f of EIGHT_BIT) {
+      assert.includes(names, f, `${p.key} must offer ${f} — the eight-bit-per-pixel formats are the point`);
+    }
+  }
+});
+
+test('every pixel format names a macro that exists in this part\'s own SPL header', () => {
+  // verify_sdk_names.py checks this too, as a gate. It is repeated here because this file is
+  // where someone adds a ninth format, and a macro that does not exist should fail next to
+  // the change rather than in a different tool.
+  const inc = path.join(ROOT, 'data', 'sources', 'H417', 'Evt', 'EXAM', 'SRC', 'Peripheral', 'inc', 'ch32h417_ltdc.h');
+  if (!fs.existsSync(inc)) return assert.ok(true, 'no EVT drop on this machine — verify_sdk_names.py covers it');
+  const h = fs.readFileSync(inc, 'utf8');
+  eng.loadMcu(eng.MCU_FILES[PART]);
+  const bad = [];
+  for (const p of formatParams()) {
+    for (const o of p.options || []) {
+      if (!o.sdk) { bad.push(`${p.key}/${o.name}: no sdk: macro`); continue; }
+      if (!new RegExp('#define\\s+' + o.sdk + '\\b').test(h)) {
+        bad.push(`${p.key}/${o.name}: ${o.sdk} is not #defined in ch32h417_ltdc.h`);
+      }
+    }
+  }
+  assert.empty(bad, 'pixel-format macros the SPL header does not define');
+});
+
+test('choosing an 8-bit format claims no pin and releases none', () => {
+  // The whole reason the two axes are separate. `Colour depth` is the WIRING and moves pins;
+  // the pixel format is the FRAME BUFFER and must move none. If this ever fails, one of the
+  // two has been wired into the other and the notes are lying to the user.
+  for (const pkg of PACKAGES) {
+    load(pkg);
+    display('RGB565');
+    const before = ltdcPads();
+    for (const f of FORMATS) {
+      load(pkg);
+      display('RGB565');
+      eng.setParam('LTDC', 'layer1_format', f);
+      eng.setParam('LTDC', 'layer2_format', f);
+      const after = ltdcPads();
+      assert.deep([...after].sort(), [...before].sort(),
+        `${pkg}: pixel format ${f} changed which pads LTDC holds — it is a memory format, not a wiring one`);
+    }
+  }
+});
+
+test('the chosen format reaches the generated C, and brings no TODO or register write with it', () => {
+  // BOTH halves in one test on purpose: "it is recorded" and "it costs nothing" are the two
+  // things a user is promised, and a change that breaks either should not be able to pass by
+  // satisfying the other.
+  load('QFN128');
+  display('RGB565');
+  eng.setParam('LTDC', 'layer1_format', 'L8');
+  eng.setParam('LTDC', 'layer2_format', 'AL88');
+  const E = eng.compute();
+  assert.equal(E.conflictList.length, 0, 'picking a pixel format must not create a pin conflict');
+
+  const c = eng.cFiles()['wchcube_init.c'] || '';
+  assert.match(c, /Layer 1 pixel format = L8/, 'the generated C does not record the layer 1 format');
+  assert.match(c, /Layer 2 pixel format = AL88/, 'the generated C does not record the layer 2 format');
+  assert.notOk(/TODO/.test(c), 'choosing a pixel format must not emit a TODO — nothing here is unfinished');
+  assert.notOk(/#error/.test(c), 'choosing a pixel format must not emit an #error');
+
+  // ...and specifically NOT the reconfigure call, which would be wrong-but-compiling code.
+  // Comments are stripped first: the note this row emits NAMES `LTDC_LayerPixelFormat` in
+  // order to explain why it is not called, so a bare substring search would fail on its own
+  // explanation. What is forbidden is the CALL, and that is what is checked.
+  const code = c.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  assert.notOk(/LTDC_LayerPixelFormat\s*\(/.test(code),
+    'the generated init must NOT call LTDC_LayerPixelFormat(): it rescales CFBLR from a layer '
+    + 'width that is still 0 before LTDC_LayerInit() has run (ch32h417_ltdc.c:622-672), so at '
+    + 'init it would write a frame-buffer line length of 3 bytes and a pitch of 0');
+  assert.notOk(/LTDC_LayerInit\s*\(/.test(code),
+    'the generated init must not call LTDC_LayerInit() either — the layer geometry is the '
+    + 'firmware\'s, and a struct filled with guesses is the defect this row avoids');
+  // The explanation must still be THERE, though. Dropping the note would turn a deliberate
+  // omission back into a silent one, which is the thing this whole row is arguing against.
+  assert.match(c, /LTDC_LayerPixelFormat/,
+    'the generated C should still NAME the call it is deliberately not making, and say why — '
+    + 'an unexplained omission reads exactly like a forgotten one');
+
+  // The user needs somewhere to put their own layer init, and it has to survive regeneration.
+  assert.match(c, /USER CODE BEGIN Periph_LTDC/, 'LTDC should carry a USER CODE block for the layer init');
+});
+
+test('the format is remembered across save and reload', () => {
+  // A planning choice that does not survive the project file is not a planning choice.
+  load('QFN128');
+  display('RGB565');
+  eng.setParam('LTDC', 'layer1_format', 'AL44');
+  const text = eng.projectSerialize();
+  assert.includes(text, 'AL44', 'the chosen pixel format is not written into the .wchproj');
+
+  load('QFN128');
+  assert.notEqual(eng.paramValue('LTDC', 'layer1_format'), 'AL44', 'the probe did not actually reset');
+  eng.projectApply(text);
+  eng.compute();
+  assert.equal(eng.paramValue('LTDC', 'layer1_format'), 'AL44', 'the pixel format did not survive a reload');
+});

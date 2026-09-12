@@ -1067,14 +1067,27 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       repo-wide count went 166 -> 99; what is left on this part is UHSIF 62 and SDMMC 32,
       digital pads that genuinely want an AF code read off the DS.
 
-- [ ] (AGENT-3) **CH32H417 LTDC: make the layer pixel format selectable, including the 8-bit
-      ones.** `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18) offers ARGB8888, RGB888, RGB565, ARGB1555,
-      ARGB4444 and the three eight-bit-per-pixel formats `L8`, `AL44`, `AL88`; the macros are
-      `ch32h417_ltdc.h:200-208`. It is a FRAME BUFFER format - it frees no pin, which
-      `data/mcus/CH32H417.notes.md` explains - but people do run an 8-bit indexed buffer and
-      cannot ask for one today. Blocked on a mechanism, not on the data: the format lives in
-      `LTDC_Layer_InitTypeDef`, applied by `LTDC_LayerInit(LTDC_Layerx, &s)` once PER LAYER
-      with the layer handle as an argument, and `codegen.init_structs` maps a struct to one
-      function while `codegen.periph_handle` maps a peripheral to one handle. Needs the same
-      per-instance shape as `channel_params`. A `params:` entry written before that emits a
-      TODO and fails `--strict`.
+- [x] (AGENT-3) **CH32H417 LTDC: the layer pixel format is selectable, including the 8-bit
+      ones.** Done 2026-09-12, on a direct human request ("be able to select it as an option to
+      do pin planning and not get warnings"). `Layer 1 pixel format` and `Layer 2 pixel format`
+      in Parameter Settings, all eight values of `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18, RM:65146)
+      including `L8`, `AL44`, `AL88`, defaulting to the reset value ARGB8888 (RM:64570). The
+      option macros (`ch32h417_ltdc.h:200-208`) are verified by `verify_sdk_names.py`.
+      **The blocker recorded here was half right and the half that was wrong is the useful
+      part.** The format does live in `LTDC_Layer_InitTypeDef`, which `codegen.init_structs`
+      cannot express per layer - but the SDK also has a plain two-argument setter,
+      `LTDC_LayerPixelFormat(LTDC_Layerx, fmt)`, and `sdk_args:` passes a non-placeholder
+      through literally, so a call looked easy. Reading it is why none is emitted:
+      `ch32h417_ltdc.c:622-672` is a RECONFIGURE call that rescales `CFBLR` from the layer
+      WIDTH, which is 0 until `LTDC_LayerInit()` has run, so an init-time call would write a
+      3-byte line length and a pitch of 0 - wrong-but-compiling. The row is `sdk_none:` with a
+      cited `sdk_note:`: the choice is recorded, stated in the generated C as a comment, and
+      applied by the user's own layer init under `USER CODE BEGIN Periph_LTDC`. No TODO, no
+      `#error`, `--strict` exit 0. Held by `tests/h417_ltdc.test.js` (5 new tests, both halves).
+- [ ] (AGENT-1) **CH32H417 LTDC: the rest of `LTDC_Layer_InitTypeDef`** - window position and
+      size, constant alpha, the two blending factors, the frame-buffer address and line length.
+      Unlike the pixel format these are NOT separable from the per-instance mechanism, because
+      `LTDC_LayerInit(LTDC_Layerx, &s)` fills one struct per layer and the numbers are the
+      firmware's geometry, not a planning choice. Needs the same per-instance shape as
+      `channel_params`. Until then the `USER CODE BEGIN Periph_LTDC` block is where a layer
+      init goes, and `data/mcus/CH32H417.notes.md` says so.
