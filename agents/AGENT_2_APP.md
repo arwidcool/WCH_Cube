@@ -15,6 +15,43 @@ handoffs. The obligation that comes with it: **the engine must not gain a DOM de
 page must not contain engine logic.** The two remaining invariants are `tests/no_part_names`
 (no part named in `app/`) and the fact that Node imports the same modules the browser bundles.
 
+## Current — round 6 (brief: `PROMPT_AGENT_2_COVERAGE.txt`)
+
+**P0a: DONE and committed.** The conditional second init struct needed no new engine feature — it
+works today through param-level `when:` — so the deliverable became the thing that was actually
+missing: making a MIS-WRITTEN gate loud. `depProblems(pid, def)` in `app/engine/params.js` reports
+a `when:` whose setting name does not exist, whose value is not one of the target's choices, whose
+key names a parameter (the repair there is `depends_on:`, not `when:`), or that uses the prose
+shape `{ setting: X, is: Y }`; `initPlan()` collects it over EVERY param and `periphBlock()` emits
+a named TODO, so `--strict` exits 2 rather than shipping plausible wrong code. The `when:` on only
+SOME of a struct's params is a data-discipline rule and is deliberately not reported (a struct may
+legitimately mix gated and ungated fields). The shape DATA writes is on `BOARD.md` at 14:55Z.
+
+Evidence: 8 new tests (6 in `app/tests/params.test.js`, 4 in `app/tests/codegen.test.js` feeding a
+two-struct peripheral both ways and then with each hazard planted); **35 generated files across all
+7 fixtures SHA-256 identical before/after** (HEAD engine mirrored into `%TEMP%`, same frozen data,
+only the engine differing); compile `CH32V006_QFN32_full` → CH32V006K8U6 `pio run` SUCCESS,
+Flash 9 032 B / RAM 712 B; `python build.py && node tests/run.js` 598 passed.
+
+**It found three real defects in shipped data on the first run** — one dead gate on CH32L103, a
+prose-shaped gate and a missing gate on CH32X035, the last two in a part `coverage.py` calls
+`complete`. All three are on the board as FINDINGs with `file:line` and the repair; I have not
+edited `data/` to fix them.
+
+Also this cycle: repaired one duplicated YAML key in `data/mcus/CH32L103.yaml` (`BKP` had
+`settings:` twice, so the file did not parse at all and every `fresh()` threw) — declared on the
+board, behaviour-preserving, AGENT-1's file.
+
+## P0a — one request from the coverage ledger (docs/COVERAGE.md)
+
+CH32V003 is held at 3 open ledger rows for one reason that is yours: DS Table 2-1 and RM Table
+7-10 give USART1 a synchronous clock pin (`UCK` on PD4 / PD7 / PC5) and the SPL drives it with a
+**second** init struct, `USART_ClockInitTypeDef` + `USART_ClockInit` (`ch32v00x_usart.h:51-66,156`),
+which the generator cannot emit or gate off today. DATA will not model the pin until it can be
+configured — claiming a pad the generated C never drives is the round's defect class. A
+`codegen.init_structs` entry that can be conditional on a setting's choice is the shape; post it
+on the board and DATA closes the three rows the same cycle.
+
 ## P0 — Deliverable A: consume the constraint mechanism
 
 DATA posts the schema on the board before filling it. Do not wait for the whole file — build

@@ -301,6 +301,82 @@ test('paramApplies answers the dependency question on its own', () => {
   assert.equal(e.paramApplies('USART1', baud), true);
 });
 
+// A `when:` is a lookup keyed by a setting's NAME with one of its CHOICES as the value,
+// and both halves are free text the data author types. `paramApplies()` deliberately
+// treats an unresolvable dependency as applicable, so a typo cannot hide a field - which
+// leaves the typo silent in the other direction: the field appears when it must not, or
+// never appears at all. `depProblems()` is the check with no failure mode of its own, and
+// it is fed through the real file so the parse and the check are tested together.
+const WHEN = when => `
+mcu:
+  name: CH32V006-WHEN
+  inherits: CH32V006
+peripherals:
+  USART1:
+    params:
+      - { key: baud, name: Baud rate, type: int, default: 115200, when: ${when} }
+`;
+const withWhen = when => {
+  const e = fresh();
+  e.registerMcuFile(WHEN(when));
+  e.loadMcu('CH32V006-WHEN');
+  e.compute();
+  return e;
+};
+const probsOf = e => e.depProblems('USART1', e.paramDefs('USART1')[0]);
+
+test('depProblems is silent for a when: that resolves', () => {
+  assert.deepEqual(probsOf(withWhen('{ Mode: Asynchronous }')), []);
+  // and for the parameter form, which is spelled with depends_on rather than when
+  const e = withWhen('{ Mode: Asynchronous }');
+  const d = e.paramDefs('USART1')[0];
+  assert.deepEqual(e.depProblems('USART1', { ...d, when: undefined, deps: [{ kind: 'param', name: 'baud', op: 'equals', value: 115200 }] }), []);
+});
+
+test('depProblems names a when: that points at a setting that does not exist', () => {
+  // This is the one that emits a struct the user's choices do not ask for: the gate
+  // never closes, so the field is always applicable.
+  const [p] = probsOf(withWhen('{ Modee: Asynchronous }'));
+  assert.match(p, /Modee/);
+  assert.match(p, /neither a setting nor a parameter/);
+});
+
+test('depProblems names a when: whose value is not one of the choices', () => {
+  // This is the one that emits nothing when something was required.
+  const [p] = probsOf(withWhen('{ Mode: Asynchrnous }'));
+  assert.match(p, /Asynchrnous/);
+  assert.match(p, /not one of its choices/);
+  assert.match(p, /Asynchronous/, 'and it lists the choices that do exist');
+});
+
+// The prose-shaped `when: { setting: X, is: Y }` reads correctly and is not the schema.
+// It shipped once, so it is pinned: both keys are reported, by name.
+test('depProblems catches a when: written as prose', () => {
+  const found = probsOf(withWhen('{ setting: Mode, is: Asynchronous }'));
+  assert.equal(found.length, 2);
+  assert.ok(found.some(p => /"setting"/.test(p)));
+  assert.ok(found.some(p => /"is"/.test(p)));
+});
+
+// A `when:` key that names a parameter looks like it gates the field and does not: the
+// lookup is against the settings store, so the field is applicable for ever. The two
+// repairs differ, so the message has to say which case it is.
+test('depProblems points a parameter-shaped when: at depends_on', () => {
+  const [p] = probsOf(withWhen('{ baud: 115200 }'));
+  assert.match(p, /"baud"/);
+  assert.match(p, /is a parameter of USART1, not a setting/);
+  assert.match(p, /depends_on: \{ param: baud \}/);
+});
+
+test('depProblems does not guess at an equality against something unenumerated', () => {
+  // A numeric parameter has no list of choices to be a member of, so a value that is
+  // out of range is a job for validateParam, not for this check.
+  const e = withWhen('{ Mode: Asynchronous }');
+  const d = e.paramDefs('USART1')[0];
+  const dep = { kind: 'param', name: 'baud', op: 'equals', value: 999999 };
+  assert.deepEqual(e.depProblems('USART1', { ...d, when: undefined, deps: [dep] }), []);
+});
+
 test('paramRegisterValue hands codegen the encoding behind the choice', () => {
   const e = fresh('CH32V006', 'TSSOP20');
   const sample = e.getParams('ADC1').find(p => p.type === 'enum');

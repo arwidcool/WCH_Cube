@@ -173,6 +173,9 @@ function compare(have, op, want) {
  * Does this parameter apply right now? A dependency may name a setting or another
  * parameter. A dependency on something that does not exist is ignored rather than
  * treated as false: a typo in the data must not silently hide a field.
+ *
+ * That last choice is right for a FIELD and wrong for a whole init STRUCT, which is
+ * why `depProblems()` exists beside it - read that before changing this.
  */
 export function paramApplies(pid, def) {
   const deps = def.deps || [];
@@ -187,6 +190,72 @@ export function paramApplies(pid, def) {
     if (have === undefined) return true;
     return compare(have, dep.op || 'equals', dep.value !== undefined ? dep.value : dep.equals);
   });
+}
+
+/**
+ * The dependencies of one parameter that cannot be resolved against the MCU file, one
+ * sentence each. Empty when every `when:` / `depends_on:` names something real.
+ *
+ * **Why this exists, and it is a measured defect rather than a precaution.** An init
+ * struct is emitted when at least ONE of its params applies, and `paramApplies()`
+ * treats an unresolvable dependency as applicable so a typo cannot hide a field. Put
+ * those together and a typo does not hide a second struct - it makes it
+ * UNCONDITIONAL. All three of these were reproduced on the synthetic fixture with a
+ * `USART_ClockInitTypeDef` gated on `when: { Mode: Synchronous }`:
+ *
+ *   A. `when: { Modee: Synchronous }` - a typo'd SETTING name - emits
+ *      `USART_ClockInit(USARTx, &s)` in ASYNCHRONOUS mode.
+ *   B. `when:` on only one of the struct's params makes the struct unconditional
+ *      again, because one ungated param is enough to emit it. (Data discipline: every
+ *      param of a conditional struct needs the same `when:`. Not detectable here,
+ *      because a struct legitimately may mix gated and ungated fields.)
+ *   C. `when: { Mode: Synchrounous }` - a typo'd CHOICE name - compares unequal, so
+ *      the struct is never emitted: the user picks Synchronous, the setting claims the
+ *      CK pad, and nothing ever drives it.
+ *
+ * C is the round's defect class - a claimed pad the generated C never drives - and it
+ * is silent. A and C are reported here and turned into a generated TODO by codegen, so
+ * `--strict` fails on the data instead of emitting a plausible wrong file. The
+ * semantics of `paramApplies()` are deliberately NOT changed: this reports, it does
+ * not re-decide.
+ */
+export function depProblems(pid, def) {
+  const P = M.peripherals[pid] || {};
+  const settings = P.settings || [];
+  const defs = paramDefs(pid);
+  const out = [];
+  for (const dep of def.deps || []) {
+    const bySetting = settings.find(x => x.name === dep.name);
+    const byParam = defs.find(x => x.key === dep.name || x.name === dep.name);
+    const target = dep.kind === 'setting' ? bySetting : dep.kind === 'param' ? byParam : (bySetting || byParam);
+    if (!target) {
+      // A `when:` key naming a parameter reads as if it would work and does not: the
+      // dependency is matched against the settings store, so the gate never closes and
+      // the field is applicable for ever. `depends_on: { param: ..., equals: ... }` is
+      // the form that reaches a parameter, so say which one rather than only that the
+      // name is unknown - the two need different repairs.
+      out.push(byParam
+        ? `${def.name}: when: names "${dep.name}", which is a parameter of ${pid}, not a `
+          + `setting - a dependency on a parameter is written depends_on: { param: ${dep.name} }`
+        : `${def.name}: when: names "${dep.name}", which is neither a setting nor a `
+          + `parameter of ${pid}`);
+      continue;
+    }
+    // Only an equality against an enumerated target is checkable. gt/lt/in are
+    // arithmetic or set comparisons against a numeric parameter, and a plain bool or
+    // number target has no list to be a member of.
+    if ((dep.op || 'equals') !== 'equals') continue;
+    const isSetting = target === bySetting;
+    const names = (isSetting ? (target.choices || []).map(c => c.name)
+      : (target.options || []).map(o => o.name)).map(String);
+    if (!names.length) continue;
+    for (const v of (Array.isArray(dep.value) ? dep.value : [dep.value])) {
+      if (names.includes(String(v))) continue;
+      out.push(`${def.name}: when: expects "${dep.name}" = "${v}", which is not one of its `
+        + `${isSetting ? 'choices' : 'options'} (${names.join(', ')})`);
+    }
+  }
+  return out;
 }
 
 /** Everything the UI needs to draw the Parameter Settings tab for one peripheral. */

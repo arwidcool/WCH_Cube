@@ -34,7 +34,7 @@ import {
   M, S, pinType, requiredSignals, sigName, gpioSpeeds, gpioSpeedFor, gpioModes,
   gpioInputModes, isEnabled, pinExists, signalPins, signalAf,
 } from './model.js';
-import { paramDefs, paramValue, paramApplies } from './params.js';
+import { paramDefs, paramValue, paramApplies, depProblems } from './params.js';
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
 import { E, compute } from './engine.js';
 import { generatorOption, userSection } from './export.js';
@@ -749,7 +749,14 @@ export function initPlan(pid) {
     if (lit.missing) block.missing.push(lit.missing);
     else block.fields.push({ member: d.sdk_field, text: lit.text, name: d.name, value: paramValue(pid, d.key), unit: d.unit });
   }
-  return { pid, structs, calls, notes, handle: handle || null };
+  // A `when:` that cannot be resolved against this MCU file is a data defect with a
+  // silent failure mode, so it becomes a TODO - see `depProblems()` in params.js for the
+  // three ways it was measured to go wrong. Checked over EVERY param, not only the
+  // applicable ones: a broken dependency is exactly the case that is applicable for the
+  // wrong reason.
+  const problems = [];
+  for (const d of paramDefs(pid)) problems.push(...depProblems(pid, d));
+  return { pid, structs, calls, notes, handle: handle || null, problems };
 }
 
 /**
@@ -897,6 +904,7 @@ function periphBlock(pid) {
     L.push(`       and ${c.missing}. */`);
     if (c.note) L.push(`    /* ${c.note} */`);
   }
+  for (const p of plan.problems) L.push(`    /* TODO: ${p}. */`);
   for (const n of plan.notes) L.push(`    /* ${n} */`);
   if (L.length === 1) L.push(`    /* nothing to configure */`);
   L.push('');

@@ -1140,10 +1140,143 @@ test('a user action is not a generator complaint, so DMA does not fail --strict 
   assert.deepEqual(e.cComplaints().filter(x => /BaseAddr|BufferSize/.test(x.text)), [],
     'and cComplaints does not count it');
 
-  // it is still impossible to miss, which is the point of putting it there
   // it is still impossible to miss, which is the point of putting it there.
   // `DMA_Init(` also matches inside `WCHCube_DMA_Init(`, so anchor on the real call.
   const call = c.indexOf('        DMA_Init(');
   assert.ok(call > 0, 'setup: the DMA_Init call is generated');
   assert.ok(c.indexOf('USER ACTION') < call, 'it sits above the call that uses those fields');
+});
+
+// =============================================================================
+//  Round-6 P0 — a second init struct that only some of the settings ask for
+// =============================================================================
+//  The mechanism already worked: a struct whose params are ALL gated by a `when:`
+//  is emitted when the gate opens and not emitted when it closes. What had no test
+//  is the failure mode, because `paramApplies()` treats an unresolvable dependency
+//  as applicable so that a typo cannot hide a FIELD - and that same choice makes a
+//  typo turn a conditional STRUCT into an unconditional one, or into no struct at
+//  all, with nothing said either way. The shape below is the CH32V003 USART's, cut
+//  down to the two structs that matter and carried on a derived part so the test
+//  reads the same whichever MCU files ship.
+const TWO_STRUCTS = when => `
+mcu:
+  name: CH32V006-TWOSTRUCTS
+  inherits: CH32V006
+codegen:
+  init_structs:
+    USART_ClockInitTypeDef: { fn: USART_ClockInit }
+  periph_handle:
+    USART9: USART9
+peripherals:
+  USART9:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX9, RX9] }
+          - { name: Synchronous,  signals: [TX9, RX9] }
+    remaps:
+      - name: Default
+        pins: { TX9: PA9, RX9: PA10 }
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+      - key: clock
+        name: Clock output
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_Clock
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: USART_Clock_Disable }
+          - { name: Enable,  value: 1, sdk: USART_Clock_Enable }
+        when: ${when}
+`;
+
+// The gate is on EVERY param of the second struct. On one of them it would not close:
+// a single ungated field is enough to emit the block, which is a rule about the data
+// rather than about this generator, so it is not asserted here.
+const twoStructs = (when = '{ Mode: Synchronous }') => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.registerMcuFile(TWO_STRUCTS(when));
+  e.loadMcu('CH32V006-TWOSTRUCTS');
+  e.compute();
+  return e;
+};
+const structsOf = e => e.initPlan('USART9').structs.map(b => b.struct);
+const todosOf = e => e.cSource().split('\n').filter(l => l.includes('TODO')).map(l => l.trim());
+
+test('a second init struct is emitted for one choice and not for another', () => {
+  const e = twoStructs();
+  e.setSetting('USART9', 'Mode', 'Asynchronous');
+  e.compute();
+  assert.deepEqual(structsOf(e), ['USART_InitTypeDef'],
+    'the clock struct is not needed in asynchronous mode');
+  const async = e.cSource();
+  assert.equal(async.includes('USART_ClockInitTypeDef'), false);
+  assert.equal(async.includes('USART_ClockInit('), false,
+    'nor is the call that would apply it');
+  assert.deepEqual(todosOf(e), [],
+    'and its absence is silence, not a TODO: a struct the choices do not ask for is not a defect');
+
+  e.setSetting('USART9', 'Mode', 'Synchronous');
+  e.compute();
+  assert.deepEqual(structsOf(e), ['USART_InitTypeDef', 'USART_ClockInitTypeDef']);
+  const sync = e.cSource();
+  assert.ok(sync.includes('USART_ClockInitTypeDef USART_ClockInitStructure = {0};'));
+  assert.ok(sync.includes('USART_ClockInitStructure.USART_Clock = USART_Clock_Disable;'),
+    "the field carries the option's own sdk: macro, and the data's default");
+  assert.ok(sync.includes('USART_ClockInit(USART9, &USART_ClockInitStructure);'),
+    'the handle comes from codegen.periph_handle, so this struct takes one');
+  assert.deepEqual(todosOf(e), [], 'and with the gate read correctly there is nothing to say');
+});
+
+// A. the setting NAME is a typo. The gate can never close, so the struct that only
+//    synchronous mode needs is emitted in asynchronous mode - and it used to be emitted
+//    with no comment of any kind, which is the defect class this round is about.
+test('a gate that names a setting that does not exist is loud, not silently open', () => {
+  const e = twoStructs('{ Modee: Synchronous }');
+  e.setSetting('USART9', 'Mode', 'Asynchronous');
+  e.compute();
+  assert.ok(structsOf(e).includes('USART_ClockInitTypeDef'),
+    'setup: the typo opens the gate, which is why it needs saying');
+  const todos = todosOf(e);
+  assert.equal(todos.length, 1);
+  assert.match(todos[0], /Modee/);
+  assert.match(todos[0], /neither a setting nor a parameter/);
+  assert.equal(e.cComplaints().length > 0, true, 'and --strict sees it too');
+});
+
+// C. the choice VALUE is a typo. The gate can never open, so synchronous mode gets no
+//    clock struct at all while the user has asked for one - also previously silent.
+test('a gate that names a choice that does not exist is loud, not silently shut', () => {
+  const e = twoStructs('{ Mode: Synchrounous }');
+  e.setSetting('USART9', 'Mode', 'Synchronous');
+  e.compute();
+  assert.deepEqual(structsOf(e), ['USART_InitTypeDef'],
+    'setup: the typo shuts the gate for good');
+  const todos = todosOf(e);
+  assert.equal(todos.length, 1);
+  assert.match(todos[0], /Synchrounous/);
+  assert.match(todos[0], /Asynchronous/, 'and the message lists the choices that do exist');
+});
+
+// The spellings in the shipped MCU files, pinned here so the shape cannot drift back.
+test('a prose-shaped or mis-targeted when: is reported rather than obeyed', () => {
+  const prose = twoStructs('{ setting: Mode, is: Synchronous }');
+  prose.setSetting('USART9', 'Mode', 'Synchronous');
+  prose.compute();
+  assert.equal(todosOf(prose).length, 2, 'both keys of {setting, is} are named');
+
+  const param = twoStructs('{ baud: 115200 }');
+  param.setSetting('USART9', 'Mode', 'Synchronous');
+  param.compute();
+  const [t] = todosOf(param);
+  assert.match(t, /is a parameter of USART9, not a setting/);
+  assert.match(t, /depends_on/);
 });
