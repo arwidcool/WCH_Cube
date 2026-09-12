@@ -337,7 +337,17 @@ test('platformio.ini takes every per-part value from the MCU file', () => {
   const ini = e.projectFiles().find(f => f.path === 'platformio.ini').text;
   const v = e.M.mcu.variants.CH32V006F8P7;
   assert.ok(ini.includes(`board     = ${v.pio_board}`), 'the board is the one the MCU file names');
-  assert.match(ini, /platform {2}= ch32v/);
+  // The platform is pinned by GIT URL, and this assertion is the guard for it. The
+  // Community-PIO-CH32V platform is not published in the PlatformIO registry - `pio pkg
+  // search ch32v` finds nothing and the registry API answers 404 - so `platform = ch32v`
+  // only ever resolved on a machine where it had been installed by hand. Emitting that
+  // spelling sent every user a project that cannot build on a clean machine, and it is
+  // the same defect that made the CI firmware job fail in two seconds.
+  assert.match(ini, /platform {2}= https:\/\/github\.com\/Community-PIO-CH32V\/platform-ch32v\.git/,
+    'the generated project must pin the platform by URL: the registry has no `ch32v`');
+  assert.ok(!/^platform\s*=\s*ch32v\s*$/m.test(ini),
+    '`platform = ch32v` does not resolve from the registry — a generated project saying it '
+    + 'cannot build on a clean machine');
   assert.match(ini, /framework = noneos-sdk/);
   assert.match(ini, /-D SDI_PRINT=1/);
   assert.match(ini, /upload_protocol = wch-link/);

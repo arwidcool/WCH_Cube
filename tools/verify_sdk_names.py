@@ -551,7 +551,16 @@ def check_pio(doc: dict, idx: Index, r: Report) -> None:
     if not claims_board and not claims_env:
         return
 
-    boards_dir = pathlib.Path.home() / ".platformio" / "platforms" / "ch32v" / "boards"
+    # The platform is pinned by git URL in the ini, and a git install can land in either
+    # `platforms/ch32v` or `platforms/ch32v@src-<hash>` depending on how PlatformIO names
+    # it. Globbing both means this check reports NOT CHECKED with a reason instead of
+    # silently skipping because it looked in exactly one of them.
+    plat_root = pathlib.Path.home() / ".platformio" / "platforms"
+    boards_dir = plat_root / "ch32v" / "boards"
+    if not boards_dir.is_dir():
+        cands = sorted(plat_root.glob("ch32v@*/boards"))
+        if cands:
+            boards_dir = cands[0]
     if claims_board:
         if not boards_dir.is_dir():
             r.warn("mcu.variants[*].pio_board",

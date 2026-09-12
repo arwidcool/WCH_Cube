@@ -183,7 +183,22 @@ test('platformio.ini names the board from the MCU file, not from the part number
       problems.push(`${fixture.mcu}: platformio.ini says board = ${named[1]}, which is not any variant's `
         + `pio_board (${boards.join(', ') || 'none'}) — it must come from the data, not from the part number`);
     }
-    if (!/^\s*platform\s*=\s*ch32v\s*$/m.test(ini.text)) problems.push(`${fixture.mcu}: platform is not ch32v`);
+    // The platform is pinned by GIT URL, and this is the guard for it. The registry has no
+    // `ch32v` platform at all - `pio pkg search ch32v` finds nothing and the registry API
+    // answers 404 - so `platform = ch32v` only ever resolved on a machine where it had
+    // been installed by hand. A generated project saying that cannot build on a clean
+    // machine, which is the same defect that made the CI firmware job fail in two
+    // seconds. Asserted as the exact URL so a half-fix (a name that still resolves
+    // nowhere) fails here rather than in a user's terminal.
+    if (!/^\s*platform\s*=\s*https:\/\/github\.com\/Community-PIO-CH32V\/platform-ch32v\.git\s*$/m
+        .test(ini.text)) {
+      problems.push(`${fixture.mcu}: platform is not the Community-PIO-CH32V git URL — `
+        + '`platform = ch32v` does not resolve from the registry');
+    }
+    if (/^\s*platform\s*=\s*ch32v\s*$/m.test(ini.text)) {
+      problems.push(`${fixture.mcu}: platform is the bare registry name ch32v, which resolves `
+        + 'nowhere — this project cannot build on a clean machine');
+    }
     if (!/^\s*framework\s*=\s*noneos-sdk\s*$/m.test(ini.text)) problems.push(`${fixture.mcu}: framework is not noneos-sdk`);
   }
   assert.empty(problems, 'a generated platformio.ini does not come from the MCU data');

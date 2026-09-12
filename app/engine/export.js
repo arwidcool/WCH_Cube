@@ -411,7 +411,12 @@ function iniFile(t) {
     `default_envs = ${t.env}`,
     '',
     `[env:${t.env}]`,
-    'platform  = ch32v',
+    // Pinned by GIT URL on purpose. The Community-PIO-CH32V platform is NOT in the
+    // PlatformIO registry - `pio pkg search ch32v` finds nothing and the registry API
+    // answers 404 - so `platform = ch32v` only ever worked on a machine where it had
+    // been installed by hand. A reader who pastes the ini on a clean machine would get
+    // "unknown platform" instead of a build, which is the worst way for this to fail.
+    'platform  = https://github.com/Community-PIO-CH32V/platform-ch32v.git',
     'framework = noneos-sdk',
     `board     = ${t.board}`,
     '',

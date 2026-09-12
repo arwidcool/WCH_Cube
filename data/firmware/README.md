@@ -33,6 +33,12 @@ pio run -t clean
 pio check                            # cppcheck over src/, lib/ and include/
 ```
 
+Nothing to install first: `platformio.ini` pins the platform by **git URL**
+(`Community-PIO-CH32V/platform-ch32v`), so PlatformIO fetches it on the first build. It is
+pinned that way because the platform is **not in the PlatformIO registry** — `platform = ch32v`
+only ever resolved on a machine where it had been installed by hand, which meant a generated
+project could not build on a clean one.
+
 ### Environments
 
 | Environment    | Board file            | Part            | Notes |
