@@ -129,6 +129,17 @@
   .afrow select{width:100%}
   .mode .issue{grid-column:1/-1;color:var(--bad);background:var(--warn-bg);border-left:3px solid var(--pin-conflict);padding:4px 8px}
   .mode .hint{grid-column:1/-1;color:var(--muted)}
+  /* Anything in this panel that is NOT a label/control pair has to span both columns.
+     The grid is `max-content 1fr` and it fills cells IN ORDER, so a block that spans one
+     cell does not just sit in the wrong place - it shifts every pair after it by one,
+     which puts each label in the control column and each control in the label column.
+     Measured on CH32H417 (1600 px, panel 563 px): with the intro unspanned, `cols` came
+     back `746px 69px` for USART1 and `1e+06px 99px` for PWR - the second because column 1
+     is `max-content` and a paragraph of prose has no intrinsic width limit, so the column
+     took a million pixels and pushed every label off the panel. The four blocks below are
+     the ones that must span; `.afrow` was ALREADY wrong before the intro existed, and
+     alternating signal rows between the two columns is what that looks like. */
+  .mode .periphintro,.mode .paramhead,.mode table.rail,.mode .afrow{grid-column:1/-1}
   /* a shared resource is contended, not a pin clash: dashed edge, own colour */
   .mode .issue.res{color:var(--res);background:var(--res-bg);border-left:3px dashed var(--res)}
   .mode .issue.res b{font-weight:600}
@@ -450,7 +461,7 @@
      it is reference text, not a control, so it must not look like one of the labels below
      it. `overflow-wrap` because the descriptions are sentences and the panel is narrow at
      125 % zoom. */
-  .periphintro{margin:0 0 10px;padding:8px 10px;border-left:3px solid var(--line);
+  .periphintro{margin:0;padding:8px 10px;border-left:3px solid var(--line);
     background:var(--blue-pale);border-radius:0 4px 4px 0}
   .periphintro .pi-name{font-weight:600;font-size:12.5px}
   .periphintro .pi-cat{color:var(--muted);font-size:10.5px;text-transform:uppercase;
