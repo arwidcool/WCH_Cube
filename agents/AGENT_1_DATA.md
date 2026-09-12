@@ -102,5 +102,42 @@ average neither. Never delete a data file. Never raise `open_rows:` or `COLLISIO
 *(Rewrite this section every cycle: what you did, what is red and who owns it, the numbers —
 ledger count per part, `params:` remaining, collisions per package.)*
 
-Round 6 opened 2026-09-12. Nothing done yet. Baseline: H417 0 open / 66 params missing /
-collisions 4-0-0; L103 12 open / 7 params missing; V003 3 open.
+**Cycle 1 - 2026-09-12T19:24Z.** Baseline at the open was H417 0 open / 65 peripherals with no
+`params:` (the brief said 66; LTDC's landed in round 5's last commit) / collisions 4-0-0;
+L103 12 open / 7 params missing; V003 3 open.
+
+Done this cycle:
+
+- **Deliverable C: `params:` 65 -> 48 missing of 78.** USART4-8, SPI3-4, I2C3-4 and all eight
+  remaining timers, every one through `data/sources/H417/peripheral_extras.yaml` and never into
+  the generated block. The nine serial instances are one struct each, aliased from a single
+  template so a correction has one place to land. **The timers are FOUR time bases, not one**,
+  and `ch32h417_tim.c` is the citation for each split: `TIM_TimeBaseInit()` writes CTLR1 only for
+  TIM1/2/3/4/5/8 and RPTCR only for TIM1/8, and TIM9-TIM12 have their own
+  `TIM9_12_TimeBaseInitTypeDef` + `TIM9_12_TimeBaseInit()` with a 32-bit period written to
+  `ATRLR_32`. So TIM6/TIM7 carry no counter-mode and no clock-division row - absent by RM 16.4.1's
+  bit table (`CH32H417RM.md:20474`: CTLR1 [6:4] and [15:8] Reserved), not by omission - and TIM8 is
+  the only instance besides TIM1 with a repetition counter.
+- **A disagreement recorded rather than averaged:** the RM states the TIM9-12 ATRLR reset value
+  twice and differently (register map `0x0000FFFF` at `:18992`/`:19062`, field description
+  `0xFFFFFFFF` at `:20209`). The default follows EVT - `TIM9_12_TimeBaseStructInit()` sets
+  `0xFFFFFFFF` - and both readings are in `peripheral_extras.yaml`.
+- **`codegen.init_structs.TIM9_12_TimeBaseInitTypeDef` and 21 new `codegen.periph_handle` rows.**
+  A `params:` block without a handle emits `/* TODO: nothing applies this struct */` beside a
+  filled-in struct, which is worse than having no rows at all.
+- **`gen_h417_peripherals.py:1425`, AGENT-3's FINDING of 19:02Z:** `write_text(..., newline="
+")`.
+  A refresh that changes four lines no longer rewrites all 3855 to CRLF.
+
+Red, and who owns it: nothing. Gates watched, not assumed - `validate_mcu` 0 errors,
+`verify_sdk_names` 0 errors, `coverage --gate` 6 of 6, `node tests/run.js` ALL GREEN 721,
+and `pio run` **SUCCESS** on CH32H417QEU6 with I2C3 + TIM6 + TIM9 + USART4 enabled. One
+decision posted to AGENT-3: the two CH32H417 `tests/fixtures/*.wchproj` are in my commit
+because `make_fixtures.js` regenerates them from the MCU data and a new `params:` block adds
+its defaults to every saved project; 92 added lines each, nothing removed.
+
+Numbers: ledger H417 **0** / L103 **12** / V003 **3** / V005 0 / V006 0 / X035 0.
+H417 `params:` **48 of 78 remain**. Collisions QFN68 **4** / QFN88 0 / QFN128 0.
+
+Next: FMC's `FMC_NORSRAMInitTypeDef` timings (the 8080 display is waiting on them), then
+ADC1/ADC2, CAN1-3, DAC, DVP, ETH. Then P1 - L103's CMP2/CMP3 and V003's USART1_CK.

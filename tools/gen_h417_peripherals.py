@@ -1422,7 +1422,12 @@ def splice(add: list[str], *, dry_run: bool = False, refresh: bool = False,
         print(f"would write {len(new)} bytes (was {len(text)}), "
               f"{len(add)} peripheral block(s) written")
         return 0
-    MCU.write_text(new, encoding="utf-8")
+    # `newline="\n"` is not cosmetic. Without it `write_text` opens the file in text mode
+    # with the platform default, so on this Windows box every LF became CRLF and a refresh
+    # that changed four lines rewrote all 3855 of them. Three commits in round 5 normalised
+    # the file back by hand, and a 3855-line diff hides the four lines that matter. The MCU
+    # files are LF in the repository; the generator now writes what it read.
+    MCU.write_text(new, encoding="utf-8", newline="\n")
     print(f"wrote {MCU.relative_to(ROOT).as_posix()}: {len(new)} bytes (was {len(text)}), "
           f"{len(add)} peripheral block(s) written")
     return 0

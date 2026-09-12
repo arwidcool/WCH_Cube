@@ -948,6 +948,15 @@ bits, and a clock tree that models what the schema can hold.
       compiled into `data/`. Held in `tests/completeness.test.js`'s `IN_EXTRACTION`, so those
       cells print with this line as their owner and become hard failures the day it is
       ticked - which is what stops the exemption outliving the job.
+      **Round 6 progress, counted by `python tools/coverage.py`'s companion count (a peripheral
+      with a non-empty `params:` list): 65 missing -> 48 missing.** Landed 2026-09-12T19:24Z:
+      USART4-8, SPI3-4, I2C3-4 (one struct each, aliased from a single template in
+      `data/sources/H417/peripheral_extras.yaml`), and the four DIFFERENT timer time bases -
+      TIM5 (16-bit GP), TIM6/TIM7 (basic: no counter mode, no clock division, no repetition
+      counter, each absent by an RM bit table rather than by omission), TIM8 (advanced, the
+      only other instance with RPTCR) and TIM9-TIM12, which have their own
+      `TIM9_12_TimeBaseInitTypeDef` and their own `TIM9_12_TimeBaseInit()` with a 32-bit
+      period. Compiled on CH32H417QEU6 with I2C3, TIM6, TIM9 and USART4 enabled.
 - [ ] The four secondary PLLs and the eight peripheral clock muxes (schema limit).
 
 **Two findings that outrank the data work**, both filed on the board:

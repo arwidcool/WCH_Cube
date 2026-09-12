@@ -2079,6 +2079,51 @@ peripherals:
       SCL: [{ pin: PA14, af: 7 }, { pin: PA8, af: 4 }]
       SDA: [{ pin: PA13, af: 7 }, { pin: PC9, af: 4 }]
       SMBA: [{ pin: PA15, af: 7 }, { pin: PA9, af: 4 }]
+    # Same block as I2C1/I2C2: ch32h417.h:1742 and :1767 cast I2C3 and I2C4 to
+    # `I2C_TypeDef *`, and I2C_Init() (ch32h417_i2c.h:302) takes either. The SPL's own
+    # Init reads only the standard/fast split at 100 kHz (ch32h417_i2c.c:160) - there is no
+    # register field above that - so the ceiling below is the documented peripheral maximum
+    # and not a computed one, the same bound I2C1 and I2C2 carry.
+    params:
+      - key: speed
+        name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
+        type: int
+        default: 100000
+        min: 1000
+        max: 1000000
+        unit: Hz
+        help: "I2C_CKCFGR CCR together with F/S. Above 100 kHz the peripheral must be in fast mode (ch32h417_i2c.c:160)."
+      - key: duty
+        name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
+        type: enum
+        default: "2:1"
+        options:
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
+        help: "I2C_CKCFGR DUTY, bit 14 (ch32h417_i2c.h:51-52). Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
+        type: enum
+        default: 7-bit
+        options:
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
+        help: "I2C_OAR1 ADDMODE, bit 15 (ch32h417_i2c.h:62-63)."
+      - key: addr
+        name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0] (ch32h417_i2c.h:34). Only the low 7 bits are used in 7-bit addressing mode."
   I2C4:
     category: Connectivity
     settings:
@@ -2091,6 +2136,51 @@ peripherals:
       SCL: [{ pin: PD12, af: 4 }, { pin: PB6, af: 6 }, { pin: PF12, af: 2 }, { pin: PB8, af: 6 }]
       SDA: [{ pin: PD13, af: 4 }, { pin: PB7, af: 6 }, { pin: PF13, af: 2 }, { pin: PB9, af: 6 }]
       SMBA: [{ pin: PD11, af: 4 }, { pin: PB5, af: 6 }, { pin: PF11, af: 2 }, { pin: PB9, af: 11 }]
+    # Same block as I2C1/I2C2: ch32h417.h:1742 and :1767 cast I2C3 and I2C4 to
+    # `I2C_TypeDef *`, and I2C_Init() (ch32h417_i2c.h:302) takes either. The SPL's own
+    # Init reads only the standard/fast split at 100 kHz (ch32h417_i2c.c:160) - there is no
+    # register field above that - so the ceiling below is the documented peripheral maximum
+    # and not a computed one, the same bound I2C1 and I2C2 carry.
+    params:
+      - key: speed
+        name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
+        type: int
+        default: 100000
+        min: 1000
+        max: 1000000
+        unit: Hz
+        help: "I2C_CKCFGR CCR together with F/S. Above 100 kHz the peripheral must be in fast mode (ch32h417_i2c.c:160)."
+      - key: duty
+        name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
+        type: enum
+        default: "2:1"
+        options:
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
+        help: "I2C_CKCFGR DUTY, bit 14 (ch32h417_i2c.h:51-52). Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
+        type: enum
+        default: 7-bit
+        options:
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
+        help: "I2C_OAR1 ADDMODE, bit 15 (ch32h417_i2c.h:62-63)."
+      - key: addr
+        name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0] (ch32h417_i2c.h:34). Only the low 7 bits are used in 7-bit addressing mode."
   I2S2:
     category: Connectivity
     settings:
@@ -2741,6 +2831,70 @@ peripherals:
       MOSI: [{ pin: PA13, af: 1 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }]
       NSS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
       SCK: [{ pin: PA14, af: 1 }, { pin: PC10, af: 6 }, { pin: PB3, af: 6 }]
+    # THE PRESCALER MACROS ARE NOT THE CH32V00x SET EITHER. ch32h417_spi.h:106-113 names
+    # them SPI_BaudRatePrescaler_Mode0..Mode7, not _2 / _4 / ... / _256. Which divider each
+    # Mode selects depends on the SPI clock tree, which is not modelled here, so the options
+    # carry the header's own names rather than a division this file cannot yet prove.
+    # Copying CH32V006's list would fail verify_sdk_names.py. Same block as SPI1/SPI2:
+    # ch32h417.h:1734-1735 casts SPI3 and SPI4 to `SPI_TypeDef *`, and SPI_Init()
+    # (ch32h417_spi.h:198) takes either.
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
+        type: enum
+        default: Mode 3
+        options:
+          - { name: Mode 0, value: 0, sdk: SPI_BaudRatePrescaler_Mode0 }
+          - { name: Mode 1, value: 1, sdk: SPI_BaudRatePrescaler_Mode1 }
+          - { name: Mode 2, value: 2, sdk: SPI_BaudRatePrescaler_Mode2 }
+          - { name: Mode 3, value: 3, sdk: SPI_BaudRatePrescaler_Mode3 }
+          - { name: Mode 4, value: 4, sdk: SPI_BaudRatePrescaler_Mode4 }
+          - { name: Mode 5, value: 5, sdk: SPI_BaudRatePrescaler_Mode5 }
+          - { name: Mode 6, value: 6, sdk: SPI_BaudRatePrescaler_Mode6 }
+          - { name: Mode 7, value: 7, sdk: SPI_BaudRatePrescaler_Mode7 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111. The header names these Mode0..Mode7 rather than by divider (ch32h417_spi.h:106-113)."
+      - key: cpol
+        name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
+        help: "SPI_CTLR1 CPOL, bit 1 (ch32h417_spi.h:94-95)."
+      - key: cpha
+        name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
+        type: enum
+        default: 1 Edge
+        options:
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
+        help: "SPI_CTLR1 CPHA, bit 0 (ch32h417_spi.h:98-99)."
+      - key: datasize
+        name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
+        help: "SPI_CTLR1 DFF, bit 11 (ch32h417_spi.h:91-92)."
+      - key: firstbit
+        name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
+        type: enum
+        default: MSB First
+        options:
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
+        help: "SPI_CTLR1 LSBFIRST, bit 7 (ch32h417_spi.h:116-117)."
   SPI4:
     category: Connectivity
     settings:
@@ -2763,6 +2917,70 @@ peripherals:
       MOSI: [{ pin: PE14, af: 5 }, { pin: PE6, af: 5 }]
       NSS: [{ pin: PE11, af: 5 }, { pin: PE4, af: 5 }]
       SCK: [{ pin: PE12, af: 5 }, { pin: PE2, af: 5 }]
+    # THE PRESCALER MACROS ARE NOT THE CH32V00x SET EITHER. ch32h417_spi.h:106-113 names
+    # them SPI_BaudRatePrescaler_Mode0..Mode7, not _2 / _4 / ... / _256. Which divider each
+    # Mode selects depends on the SPI clock tree, which is not modelled here, so the options
+    # carry the header's own names rather than a division this file cannot yet prove.
+    # Copying CH32V006's list would fail verify_sdk_names.py. Same block as SPI1/SPI2:
+    # ch32h417.h:1734-1735 casts SPI3 and SPI4 to `SPI_TypeDef *`, and SPI_Init()
+    # (ch32h417_spi.h:198) takes either.
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
+        type: enum
+        default: Mode 3
+        options:
+          - { name: Mode 0, value: 0, sdk: SPI_BaudRatePrescaler_Mode0 }
+          - { name: Mode 1, value: 1, sdk: SPI_BaudRatePrescaler_Mode1 }
+          - { name: Mode 2, value: 2, sdk: SPI_BaudRatePrescaler_Mode2 }
+          - { name: Mode 3, value: 3, sdk: SPI_BaudRatePrescaler_Mode3 }
+          - { name: Mode 4, value: 4, sdk: SPI_BaudRatePrescaler_Mode4 }
+          - { name: Mode 5, value: 5, sdk: SPI_BaudRatePrescaler_Mode5 }
+          - { name: Mode 6, value: 6, sdk: SPI_BaudRatePrescaler_Mode6 }
+          - { name: Mode 7, value: 7, sdk: SPI_BaudRatePrescaler_Mode7 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111. The header names these Mode0..Mode7 rather than by divider (ch32h417_spi.h:106-113)."
+      - key: cpol
+        name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
+        help: "SPI_CTLR1 CPOL, bit 1 (ch32h417_spi.h:94-95)."
+      - key: cpha
+        name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
+        type: enum
+        default: 1 Edge
+        options:
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
+        help: "SPI_CTLR1 CPHA, bit 0 (ch32h417_spi.h:98-99)."
+      - key: datasize
+        name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
+        help: "SPI_CTLR1 DFF, bit 11 (ch32h417_spi.h:91-92)."
+      - key: firstbit
+        name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
+        type: enum
+        default: MSB First
+        options:
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
+        help: "SPI_CTLR1 LSBFIRST, bit 7 (ch32h417_spi.h:116-117)."
   SWPMI:
     category: Connectivity
     settings:
@@ -2814,6 +3032,71 @@ peripherals:
       CH3: [{ pin: PA3, af: 8 }, { pin: PF6, af: 9 }, { pin: PB8, af: 1 }]
       CH4: [{ pin: PA4, af: 9 }, { pin: PF7, af: 9 }, { pin: PB9, af: 1 }]
       ETR: [{ pin: PA5, af: 9 }, { pin: PB5, af: 0 }, { pin: PF10, af: 8 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM11:
     category: Timers
     settings:
@@ -2851,6 +3134,71 @@ peripherals:
       CH3: [{ pin: PD7, af: 13 }, { pin: PF8, af: 13 }, { pin: PD5, af: 2 }]
       CH4: [{ pin: PD6, af: 2 }, { pin: PF9, af: 13 }]
       ETR: [{ pin: PD5, af: 13 }, { pin: PB2, af: 13 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM12:
     category: Timers
     settings:
@@ -2888,6 +3236,71 @@ peripherals:
       CH3: [{ pin: PE14, af: 2 }, { pin: PE5, af: 3 }, { pin: PF12, af: 13 }]
       CH4: [{ pin: PE15, af: 2 }, { pin: PE6, af: 3 }, { pin: PF13, af: 13 }]
       ETR: [{ pin: PB0, af: 13 }, { pin: PB3, af: 14 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM5:
     category: Timers
     settings:
@@ -2925,6 +3338,63 @@ peripherals:
       CH3: [{ pin: PC3, af: 2 }, { pin: PD14, af: 6 }, { pin: PA2, af: 2 }]
       CH4: [{ pin: PB0, af: 4 }, { pin: PD15, af: 6 }, { pin: PA3, af: 2 }]
       ETR: [{ pin: PD11, af: 6 }, { pin: PA4, af: 2 }]
+    # 16-bit general-purpose time base, the same one TIM2/TIM3/TIM4 carry. Counter mode and
+    # clock division ARE applied for this instance: TIM_TimeBaseInit()'s CTLR1 guard names
+    # TIM5 (ch32h417_tim.c). No repetition counter - RPTCR is written for TIM1 and TIM8
+    # only - so that row is ABSENT here rather than offered and ignored.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks. 16 bits on this instance (RM 15.4.13)."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TIM6:
     category: Timers
     settings:
@@ -2935,6 +3405,44 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    # BASIC TIMER - A PRESCALER, AN AUTO-RELOAD AND NOTHING ELSE, and the three rows the
+    # general-purpose timers have are ABSENT by citation rather than by omission:
+    #   counter mode / clock division - RM 16.4.1 (CH32H417RM.md:20474) makes CTLR1 bits
+    #     [6:4] and [15:8] Reserved on TIMx (x=6/7): there is no DIR, no CMS, no CKD field.
+    #     TIM_TimeBaseInit() agrees by not naming TIM6 or TIM7 in its CTLR1 guard, so a
+    #     dropdown here would write to nothing.
+    #   repetition counter - RPTCR is written for TIM1 and TIM8 only (same function).
+    # ARPE (bit 7) IS present in that same bit table, so the preload row stays and is
+    # applied by TIM_ARRPreloadConfig(), which writes CTLR1 unconditionally.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's HB bus clock / (Prescaler + 1). RM 16.2.1."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value 0xFFFF (RM 16.4, register map). Up-counting only on a basic timer, so one period is (Counter period + 1) ticks."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7 (RM 16.4.1, CH32H417RM.md:20474)."
   TIM7:
     category: Timers
     settings:
@@ -2945,6 +3453,44 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    # BASIC TIMER - A PRESCALER, AN AUTO-RELOAD AND NOTHING ELSE, and the three rows the
+    # general-purpose timers have are ABSENT by citation rather than by omission:
+    #   counter mode / clock division - RM 16.4.1 (CH32H417RM.md:20474) makes CTLR1 bits
+    #     [6:4] and [15:8] Reserved on TIMx (x=6/7): there is no DIR, no CMS, no CKD field.
+    #     TIM_TimeBaseInit() agrees by not naming TIM6 or TIM7 in its CTLR1 guard, so a
+    #     dropdown here would write to nothing.
+    #   repetition counter - RPTCR is written for TIM1 and TIM8 only (same function).
+    # ARPE (bit 7) IS present in that same bit table, so the preload row stays and is
+    # applied by TIM_ARRPreloadConfig(), which writes CTLR1 unconditionally.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's HB bus clock / (Prescaler + 1). RM 16.2.1."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value 0xFFFF (RM 16.4, register map). Up-counting only on a basic timer, so one period is (Counter period + 1) ticks."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7 (RM 16.4.1, CH32H417RM.md:20474)."
   TIM8:
     category: Timers
     settings:
@@ -2996,6 +3542,72 @@ peripherals:
       CH3N: [{ pin: PB1, af: 3 }, { pin: PC3, af: 0 }, { pin: PB15, af: 3 }]
       CH4: [{ pin: PC9, af: 3 }, { pin: PE6, af: 0 }]
       ETR: [{ pin: PF2, af: 3 }, { pin: PA0, af: 3 }]
+    # Advanced-control time base, identical to TIM1's. TIM8 is the other instance
+    # TIM_TimeBaseInit() writes RPTCR for (`if((TIMx == TIM1) || (TIMx == TIM8))`,
+    # ch32h417_tim.c), so the repetition counter is a real row here and nowhere else
+    # on this part except TIM1.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
+      - key: rcr
+        name: Repetition counter (RPTCR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_RepetitionCounter
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: "TIM8_RPTCR. An update event happens every (value + 1) counter cycles. Advanced timer only: TIM_TimeBaseInit() writes RPTCR for TIM1 and TIM8 and no other instance, so it is ABSENT from TIM2-TIM12 rather than offered and ignored."
   TIM9:
     category: Timers
     settings:
@@ -3033,6 +3645,71 @@ peripherals:
       CH3: [{ pin: PB12, af: 8 }, { pin: PC12, af: 2 }, { pin: PE5, af: 4 }, { pin: PA2, af: 4 }]
       CH4: [{ pin: PB11, af: 9 }, { pin: PC11, af: 2 }, { pin: PE6, af: 4 }, { pin: PA3, af: 4 }]
       ETR: [{ pin: PB13, af: 4 }, { pin: PC8, af: 6 }, { pin: PA4, af: 4 }]
+    # 32-BIT GENERAL-PURPOSE TIME BASE, WITH ITS OWN STRUCT AND ITS OWN INIT CALL.
+    # TIM9..TIM12 are not TIM2 with a wider counter as far as the software is concerned:
+    # ch32h417_tim.h:125-141 defines `TIM9_12_TimeBaseInitTypeDef` - 32-bit `TIM_Period`,
+    # no `TIM_RepetitionCounter` - and :556 declares `TIM9_12_TimeBaseInit()`, which writes
+    # `ATRLR_32` where `TIM_TimeBaseInit()` writes the 16-bit `ATRLR`. Filling a
+    # `TIM_TimeBaseInitTypeDef` here and passing it to `TIM_TimeBaseInit()` would compile,
+    # write no CTLR1 at all (its guard names TIM1/2/3/4/5/8 only) and truncate the period.
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Still 16 bits on these instances - RM 15.1 says a 32-bit counter with a 16-bit prescaler - so the division factor is 1..65536."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 4294967295
+        min: 0
+        max: 4294967295
+        help: >-
+          TIMx_ATRLR, 32 bits wide on x=9/10/11/12 (RM 15.4.14, CH32H417RM.md:20209, ARR[31:0]).
+          The default is the EVT drop's own reset value, TIM9_12_TimeBaseStructInit() setting
+          TIM_Period = 0xFFFFFFFF; note that the RM states this reset twice and differently - the
+          register map at CH32H417RM.md:18992 says 0x0000FFFF, the field description at :20209 says
+          0xFFFFFFFF - and EVT outranks the RM.
+      - key: counter
+        name: Counter mode
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5), RM 15.4.1 which covers x=2/3/4/5/9/10/11/12. Applied here by TIM9_12_TimeBaseInit(), which writes CTLR1 for every instance it is given."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM9_12_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "Neither time-base struct has an auto-reload-preload member; it is a call after the init. TIM_ARRPreloadConfig() takes any TIM_TypeDef* and writes CTLR1.ARPE unconditionally (ch32h417_tim.h:502)."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
   TKEY:
     category: Analog
     # TKEY HAS NO PAD OF ITS OWN, and this is the citation rather than an assumption from
@@ -3142,6 +3819,57 @@ peripherals:
       RTS: [{ pin: PE0, af: 7 }, { pin: PF2, af: 7 }]
       RX: [{ pin: PC7, af: 7 }, { pin: PF3, af: 7 }]
       TX: [{ pin: PC6, af: 7 }, { pin: PF4, af: 7 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART5:
     category: Connectivity
     settings:
@@ -3166,6 +3894,57 @@ peripherals:
       RTS: [{ pin: PD7, af: 4 }]
       RX: [{ pin: PF5, af: 4 }, { pin: PE2, af: 4 }]
       TX: [{ pin: PE0, af: 4 }, { pin: PE3, af: 11 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART6:
     category: Connectivity
     settings:
@@ -3190,6 +3969,57 @@ peripherals:
       RTS: [{ pin: PA15, af: 8 }, { pin: PB14, af: 8 }]
       RX: [{ pin: PC11, af: 8 }, { pin: PD0, af: 8 }, { pin: PA11, af: 6 }, { pin: PA1, af: 8 }, { pin: PB8, af: 8 }]
       TX: [{ pin: PC10, af: 8 }, { pin: PD1, af: 8 }, { pin: PA0, af: 8 }, { pin: PA12, af: 6 }, { pin: PB9, af: 8 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART7:
     category: Connectivity
     settings:
@@ -3214,6 +4044,57 @@ peripherals:
       RTS: [{ pin: PC8, af: 8 }]
       RX: [{ pin: PB12, af: 14 }, { pin: PD2, af: 8 }, { pin: PB5, af: 14 }]
       TX: [{ pin: PB13, af: 14 }, { pin: PC12, af: 8 }, { pin: PB6, af: 14 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USART8:
     category: Connectivity
     settings:
@@ -3238,6 +4119,57 @@ peripherals:
       RTS: [{ pin: PF8, af: 7 }, { pin: PF9, af: 11 }]
       RX: [{ pin: PB3, af: 11 }, { pin: PA8, af: 11 }, { pin: PE7, af: 7 }, { pin: PF6, af: 7 }]
       TX: [{ pin: PA15, af: 11 }, { pin: PB4, af: 11 }, { pin: PE8, af: 7 }, { pin: PF7, af: 7 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two. Same block
+    # as USART1-3: ch32h417.h:1724-1726 and :1738-1739 cast every one of USART4..USART8
+    # to `USART_TypeDef *`, and USART_Init() (ch32h417_usart.h:184) takes any of them.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part (ch32h417_usart.h:71-75); CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS (ch32h417_usart.h:84-86). With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5 (ch32h417_usart.h:78-81)."
   USBFS:
     category: Connectivity
     settings:
@@ -3616,21 +4548,56 @@ codegen:
     SPI_InitTypeDef:         { fn: SPI_Init }           # ch32h417_spi.h:198
     I2C_InitTypeDef:         { fn: I2C_Init }           # ch32h417_i2c.h:302
     TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }   # ch32h417_tim.h:465
+    # TIM9-TIM12 have their OWN time-base struct and their own init function, and this is
+    # the line that keeps the two apart. ch32h417_tim.h:125-141 defines
+    # TIM9_12_TimeBaseInitTypeDef with a 32-bit TIM_Period and no TIM_RepetitionCounter;
+    # :556 declares TIM9_12_TimeBaseInit(), which writes ATRLR_32 where TIM_TimeBaseInit()
+    # writes the 16-bit ATRLR - and whose CTLR1 guard names TIM1/2/3/4/5/8 only, so
+    # passing a TIM9 through it would set no counter mode at all.
+    TIM9_12_TimeBaseInitTypeDef: { fn: TIM9_12_TimeBaseInit }   # ch32h417_tim.h:556
     I3C_Ctrl_BusTypeDef:     { fn: I3C_Ctrl_Init, no_handle: true }   # ch32h417_i3c.h:400
 
   periph_handle:
     USART1: USART1
     USART2: USART2
     USART3: USART3
+    # USART4-8, SPI3-4 and I2C3-4 got their `params:` this cycle, and a `params:` block
+    # without a handle here is not half a feature - the generator emits
+    # `/* TODO: nothing applies this struct */` beside a filled-in struct, which is
+    # worse than no rows at all. Every name below is a define in ch32h417.h:
+    # USART4/5 at :1738-1739, USART6/7/8 at :1724-1726, SPI3/4 at :1734-1735,
+    # I2C3 at :1742 and I2C4 at :1767 - all `(USART_TypeDef *)` / `(SPI_TypeDef *)` /
+    # `(I2C_TypeDef *)`, so USART_Init / SPI_Init / I2C_Init take them unchanged.
+    USART4: USART4
+    USART5: USART5
+    USART6: USART6
+    USART7: USART7
+    USART8: USART8
     SPI1:   SPI1
     SPI2:   SPI2
+    SPI3:   SPI3
+    SPI4:   SPI4
     I2C1:   I2C1
     I2C2:   I2C2
+    I2C3:   I2C3
+    I2C4:   I2C4
     I3C:    I3C
     TIM1:   TIM1
     TIM2:   TIM2
     TIM3:   TIM3
     TIM4:   TIM4
+    # ch32h417.h:1718-1723 (TIM2-TIM7), :1762/:1764/:1766 (TIM1, TIM8, TIM12) and
+    # :1772-1774 (TIM9-TIM11): every one is a `(TIM_TypeDef *)`, including TIM9-TIM12,
+    # whose SEPARATE init function TIM9_12_TimeBaseInit() also takes a TIM_TypeDef*. One
+    # handle name per instance; which struct goes with it is init_structs' business.
+    TIM5:   TIM5
+    TIM6:   TIM6
+    TIM7:   TIM7
+    TIM8:   TIM8
+    TIM9:   TIM9
+    TIM10:  TIM10
+    TIM11:  TIM11
+    TIM12:  TIM12
 
   # Which enable register each peripheral's clock bit lives in. Generated from
   # ch32h417_rcc.h: every RCC_HB*Periph_* macro, with the bit taken as log2 of its

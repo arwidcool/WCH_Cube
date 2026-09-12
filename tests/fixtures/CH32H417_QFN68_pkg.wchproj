@@ -252,10 +252,20 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      speed: 100000
+      duty: '2:1'
+      addrmode: 7-bit
+      addr: 0
   I2C4:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      speed: 100000
+      duty: '2:1'
+      addrmode: 7-bit
+      addr: 0
   I2S2:
     settings:
       Mode: Disable
@@ -362,11 +372,23 @@ peripherals:
       Mode: Disable
       Hardware NSS Signal: Disable (software NSS)
     remap: 0
+    params:
+      prescaler: Mode 3
+      cpol: Low
+      cpha: 1 Edge
+      datasize: 8 bits
+      firstbit: MSB First
   SPI4:
     settings:
       Mode: Disable
       Hardware NSS Signal: Disable (software NSS)
     remap: 0
+    params:
+      prescaler: Mode 3
+      cpol: Low
+      cpha: 1 Edge
+      datasize: 8 bits
+      firstbit: MSB First
   SWPMI:
     settings:
       Mode: Disable
@@ -379,6 +401,12 @@ peripherals:
       Channel4: Disable
       ETR: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 4294967295
+      counter: Up
+      ckd: '1'
+      arpe: false
   TIM11:
     settings:
       Channel1: Disable
@@ -387,6 +415,12 @@ peripherals:
       Channel4: Disable
       ETR: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 4294967295
+      counter: Up
+      ckd: '1'
+      arpe: false
   TIM12:
     settings:
       Channel1: Disable
@@ -395,6 +429,12 @@ peripherals:
       Channel4: Disable
       ETR: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 4294967295
+      counter: Up
+      ckd: '1'
+      arpe: false
   TIM5:
     settings:
       Channel1: Disable
@@ -403,14 +443,28 @@ peripherals:
       Channel4: Disable
       ETR: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
   TIM6:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      arpe: false
   TIM7:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      arpe: false
   TIM8:
     settings:
       Channel1: Disable
@@ -420,6 +474,13 @@ peripherals:
       Break Input: Disable
       ETR: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
+      rcr: 0
   TIM9:
     settings:
       Channel1: Disable
@@ -428,6 +489,12 @@ peripherals:
       Channel4: Disable
       ETR: Disable
     remap: 0
+    params:
+      prescaler: 0
+      period: 4294967295
+      counter: Up
+      ckd: '1'
+      arpe: false
   TKEY:
     settings:
       Mode: Disable
@@ -441,26 +508,51 @@ peripherals:
       Mode: Disable
       Hardware Flow Control: Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USART5:
     settings:
       Mode: Disable
       Hardware Flow Control: Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USART6:
     settings:
       Mode: Disable
       Hardware Flow Control: Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USART7:
     settings:
       Mode: Disable
       Hardware Flow Control: Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USART8:
     settings:
       Mode: Disable
       Hardware Flow Control: Disable
     remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
   USBFS:
     settings:
       Mode: Disable
