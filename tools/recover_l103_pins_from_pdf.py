@@ -373,7 +373,7 @@ def main():
     PDF = source_docs.pdf(PART, STEM)
     if PDF is None or not PDF.exists():
         sys.exit(f"recover_l103_pins_from_pdf: no PDF for {PART}/{STEM} in "
-                 "data/sources/l103/datasheets - nothing to fall back to")
+                 "data/sources/l103/Datasheets - nothing to fall back to")
     doc = pymupdf.open(PDF)
     pages = table_pages(doc)
     print(f"Table 2-1-1 on PDF page(s): {[p + 1 for p in pages]}")

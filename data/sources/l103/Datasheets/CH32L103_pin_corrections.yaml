@@ -1,0 +1,55 @@
+# CH32L103 Table 2-1-1 — cells the PDF-to-markdown conversion did not carry
+#
+# Same role as `CH32X035_pin_corrections.yaml`, and the same rule: nothing here is
+# a guess. Each entry states (a) which source says it, (b) what the datasheet states
+# ELSEWHERE that the correction has to reconcile with, and (c) the check that goes
+# red if the correction is wrong. `tools/recover_l103_pins_from_pdf.py` applies them
+# and refuses to finish while any check fails.
+#
+# WHY A FILE AND NOT A HARDCODED RULE. The recovery reads the PDF because the
+# markdown conversion dropped the `-` placeholder cells (see the tool's header). The
+# PDF answers pin NUMBERS completely and correctly. Two things it does not answer on
+# its own, both verified below, are listed here so they are read once, cited, and
+# reviewable - not buried in a parser.
+
+renames:
+  # The pin's NAME in Table 2-1-1 is its after-reset function, and the datasheet's
+  # own pinout figures write the GPIO name beside it. The RM agrees and is explicit:
+  # AFIO_PCFR1 bit 15 PD0PD1_RM - "Pin PD0 & PD1 remap bit ... 0: Pin is used as
+  # crystal pin; 1: Pin is used as GPIO port" (CH32L103RM.md:10.3.2.2).
+  #
+  # The rename is not cosmetic. `app/engine/codegen.js` derives the register bit from
+  # the pin name's digit (`/^P([A-Z])(\d+)$/`), so a pin called OSC_IN generates no
+  # GPIO code at all - the user could never configure PD0 as an output, which is a
+  # real capability of this part.
+  OSC_IN: PD0
+  OSC_OUT: PD1
+
+# Cells the pin table does not carry for a package, taken from that package's own
+# pinout figure in the same datasheet (ch.2.1).
+add:
+  - package: TSSOP20
+    pin: 1
+    name: PB8
+    source: "CH32L103DS0.md ch.2.1, CH32L103F8P6 pinout: pin 1 is printed `BOOT0/PB8`"
+    because: >
+      The pin table's PB8 row lists no TSSOP20 cell, so PB8 looked absent from that
+      package. The figure prints it on pin 1 beside BOOT0.
+
+checked_by:
+  # The reason this correction is trustworthy rather than convenient. The datasheet's
+  # model table states its own GPIO count per package ("GPIO port number"), and with
+  # the two renames above and this one addition, EVERY package reconciles exactly:
+  #
+  #   TSSOP20  13 GPIO names in the table + PD0 + PD1 + PB8      = 16   DS: 16
+  #   QFN20    19 GPIO names in the table, no OSC pins bonded    = 19   DS: 19
+  #   QSOP28   25 GPIO names + PD0 (no OSC_OUT on this package)  = 26   DS: 26
+  #   QFN32    29 GPIO names + PD0 + PD1                         = 31   DS: 31
+  #   LQFP48   35 GPIO names + PD0 + PD1                         = 37   DS: 37
+  #
+  # That is five independent agreements from a row of the document that has nothing
+  # to do with the pin table, and it is the whole argument that the correction is
+  # right. Remove either rename or the addition and the corresponding line stops
+  # balancing - which is what `check()` in the tool prints.
+  - source: "CH32L103DS0.md, Model/Resource table, `GPIO port number` row"
+    values: { TSSOP20: 16, QFN20: 19, QSOP28: 26, QFN32: 31, LQFP48: 37 }

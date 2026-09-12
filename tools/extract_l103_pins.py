@@ -43,7 +43,7 @@ of the row before it and two pins are lost at once.
 CH32X035 hit the identical corruption, and the fix there was to recover the lost
 cells **from the original PDF by word position** (`data/sources/X035/Datasheets/
 CH32X035_pin_corrections.yaml`). **This drop's PDF is now in the repo too** -
-`data/sources/l103/datasheets/CH32L103DS0.PDF` - and it is the LAST resort of the
+`data/sources/l103/Datasheets/CH32L103DS0.PDF` - and it is the LAST resort of the
 rule in `data/sources/README.md` ("Read the markdown first. The PDF is the last
 resort."), read by `tools/recover_l103_pins_from_pdf.py`, which prints why the
 markdown cannot answer and will refuse to open the PDF if it ever can. This file
