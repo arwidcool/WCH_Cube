@@ -8,6 +8,7 @@
  *      genericCH32V005F6P6 -> -DCH32V005 -DCH32V00X -DCH32V00x -DCH32V00Xx
  *      genericCH32V003F4P6 -> -DCH32V003 -DCH32V00X -DCH32V00x   (NO capital-Xx)
  *      genericCH32X035G8U6 -> -DCH32X035 -DCH32X03X -DCH32X03x
+ *      genericCH32L103K8U6 -> -DCH32L103K8 -DCH32L10X -DCH32L10x -DCH32L103
  *
  *  The V003 board deliberately does not define CH32V00Xx, and that is the whole
  *  reason this file exists: <ch32v00x.h> (small x) is CH32V003 and <ch32v00X.h>
@@ -50,6 +51,17 @@ extern "C" {
  * anything this header can see. */
 #  include <ch32h417.h>
 #  define WCH_HAL_SERIES_CH32H417 1
+#elif defined(CH32L103) || defined(CH32L10x) || defined(CH32L10X)
+/* CH32L103 — SPL series "ch32l10x", header <ch32l103.h>. The board file sets
+ * -DCH32L103K8 -DCH32L10X -DCH32L10x -DCH32L103, and the framework ships the
+ * headers under `Peripheral/ch32l10x/inc/`.
+ *
+ * NOTE the family does NOT live in `Peripheral/ch32v10x/` despite the similar
+ * name: ch32v10x is the CH32V103, a different part with a different register map,
+ * and picking it compiles a binary for a chip you are not holding. This is the
+ * same trap the small-x/capital-X CH32V003-vs-V00Xx split sets, one family over. */
+#  include <ch32l103.h>
+#  define WCH_HAL_SERIES_CH32L103 1
 #else
 #  error "wch_hal: unsupported series. Add the SPL header for this part here, \
 after checking the name in framework-wch-noneos-sdk/Peripheral/<series>/inc/."
@@ -65,9 +77,14 @@ after checking the name in framework-wch-noneos-sdk/Peripheral/<series>/inc/."
  * pin, which is why the firmware prefers it. **CH32H417's debug.h declares only
  * `USART_Printf_Init(uint32_t)`** — there is no SDI_Printf_Enable to call, and
  * calling it anyway compiles with an implicit declaration and fails at LINK.
- * Stated here, beside the series switch, because "what this family has" is what
- * this header is for. */
-#if defined(WCH_HAL_SERIES_CH32H417)
+ * Stated here beside the series switch, because "what this family has" is what
+ * this header is for.
+ *
+ * **CH32L103 is in the same position, and it was checked rather than assumed**:
+ * `Debug/ch32l10x/debug.h` declares exactly Delay_Init, Delay_Us, Delay_Ms and
+ * USART_Printf_Init - no SDI_Printf_Enable. So the L103 firmware prints over a
+ * USART, which means it CLAIMS A PIN, and `wch_hal` must say so. */
+#if defined(WCH_HAL_SERIES_CH32H417) || defined(WCH_HAL_SERIES_CH32L103)
 #  define WCH_HAL_HAS_SDI_PRINTF 0
 #else
 #  define WCH_HAL_HAS_SDI_PRINTF 1

@@ -124,6 +124,32 @@ const ABSENT = {
   'CH32X035.CMP3.nvic': 'shares OPA_IRQn = 48; there is no CMP vector in ch32x035.h',
   'CH32X035.OPA2.nvic': 'shares OPA_IRQn = 48 with OPA1; the enum has one OPA vector, not two',
 
+  // --- CH32L103: three absences, each checked against the part's own headers
+  //
+  // The RTC and the OPA/CMP block have no clock GATE of their own, and the CRC has
+  // no vector. All three were checked by reading the header rather than by analogy
+  // with a sibling: `grep`ping ch32l103_rcc.h for RTC|OPA|CMP finds only
+  // `RCC_RTCCLKSource_*` (which SELECTS the RTC's source, a different thing from
+  // gating it) and no gate macro for any of the three, and ch32l103.h's 58-entry
+  // `IRQn_Type` contains no CRC entry.
+  'CH32L103.RTC.clock': 'RM 2.5: "Set the PWREN bit and BKPEN bit of the register '
+    + 'RCC_PB1PCENR to turn on the operating clock of the [RTC]". There is no '
+    + 'RCC_PB1Periph_RTC macro - ch32l103_rcc.h names the bit for the BACKUP DOMAIN - so '
+    + 'the gate is carried by `BKP: 27` in codegen.periph_clock, and RTC rightly has no '
+    + 'entry of its own',
+  'CH32L103.CMP1.clock': 'the OPA/CMP block has no clock gate: ch32l103_rcc.h defines no '
+    + 'RCC_*Periph_OPA and no RCC_*Periph_CMP (checked, not assumed). Same shape as '
+    + 'CH32V006 OPA1.clock and the bare OPA1.clock entry above',
+  'CH32L103.CRC.nvic': 'the CRC raises no interrupt: `IRQn_Type` in ch32l103.h lists 58 '
+    + 'vectors and contains no CRC entry of any kind. The unit is polled - the SPL\'s own '
+    + 'API is CRC_ResetDR / CRC_CalcCRC / CRC_GetCRC',
+  'CH32L103.USBFS.params': 'ch32l103_usb.h is MACROS ONLY - 513 lines with no typedef, no '
+    + 'struct and no function - so there is no init struct to fill and no `*_Init()` to '
+    + 'call. The EVT drives USB by writing its registers from its own driver stack. A '
+    + '`params:` block here would be invented, which is what this repo bans',
+  'CH32L103.USBPD.params': 'same as USBFS: ch32l103_usbpd.h exposes no typed surface at '
+    + 'all - no struct, no function. Recorded rather than modelled',
+
   // --- CH32V003: an absence that is the OPPOSITE of its sibling's, on the same
   //     peripheral name. CH32V006 gives the OPA/comparator block OPCM_IRQn = 40;
   //     CH32V003 has no OPA vector at all. This is why the key is per-part: "the

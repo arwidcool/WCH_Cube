@@ -1,0 +1,308 @@
+wchproj: 1
+name: compile-gate CH32L103 QFN32
+saved: fixture
+mcu: CH32L103
+variant: CH32L103K8U6
+package: QFN32
+peripherals:
+  SYS:
+    settings:
+      Debug (SDI): 2-wire SDI (SWDIO/SWCLK)
+      External reset pin: Reset pin disabled - pin is GPIO
+    remap: 0
+  RCC:
+    settings:
+      High Speed Clock (HSE): Crystal / ceramic resonator
+      Master Clock Output (MCO): Disable
+    remap: 0
+  USART1:
+    settings:
+      Mode: Asynchronous
+      Hardware Flow Control: Disable
+    remap: 0
+    params:
+      baud: 115200
+      word_length: 8 bits
+      stop_bits: '1'
+      parity: None
+      mode: TX and RX
+      flow: None
+  USART2:
+    settings:
+      Mode: Asynchronous
+      Hardware Flow Control: Disable
+    remap: 1
+    params:
+      baud: 115200
+      word_length: 8 bits
+      stop_bits: '1'
+      parity: None
+      mode: TX and RX
+      flow: None
+  USART3:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+    params:
+      baud: 115200
+      word_length: 8 bits
+      stop_bits: '1'
+      parity: None
+      mode: TX and RX
+      flow: None
+  USART4:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+    params:
+      baud: 115200
+      word_length: 8 bits
+      stop_bits: '1'
+      parity: None
+      mode: TX and RX
+      flow: None
+  SPI1:
+    settings:
+      Mode: Full-Duplex Master
+    remap: 1
+    params:
+      direction: Full-duplex
+      mode: Master
+      data_size: 8 bits
+      cpol: Low
+      cpha: 1 Edge
+      nss: Software
+      prescaler: '2'
+      first_bit: MSB
+      crc: 7
+  I2C1:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      clock_speed: 100000
+      mode: I2C
+      duty_cycle: '2:1'
+      own_address: 0
+      ack: Enable
+      ack_address: 7-bit
+  TIM1:
+    settings:
+      Channel1: PWM Generation CH1
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Break Input: Disable
+    remap: 0
+    params:
+      prescaler: 47
+      period: 999
+      counter_mode: Up
+      clock_division: tDTS = tCK_INT
+      repetition: 0
+  TIM2:
+    settings:
+      Channel1: PWM Generation CH1
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+    remap: 0
+    params:
+      prescaler: 47
+      period: 999
+      counter_mode: Up
+      clock_division: tDTS = tCK_INT
+  TIM3:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+    remap: 0
+    params:
+      prescaler: 47
+      period: 999
+      counter_mode: Up
+      clock_division: tDTS = tCK_INT
+  TIM4:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+    remap: 0
+    params:
+      prescaler: 47
+      period: 999
+      counter_mode: Up
+      clock_division: tDTS = tCK_INT
+  LPTIM:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Clock Source: Internal Clock
+      Output Compare: Disable
+    remap: 0
+    params:
+      clock_prescaler: '1'
+      period: 65535
+      pulse: 32767
+  CAN1:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      prescaler: 4
+      mode: Normal
+      sjw: 1 tq
+      bs1: 1 tq
+      bs2: 1 tq
+  ADC1:
+    settings:
+      Mode: Independent
+    remap: 0
+    params:
+      mode: Independent
+      trigger: None
+      data_align: Right
+      nbr_of_channel: 1
+      output_buffer: Disable
+      pga: x1
+  IWDG:
+    settings:
+      Mode: Independent watchdog
+    remap: 0
+    params:
+      prescaler: '64'
+      reload: 4095
+  WWDG:
+    settings:
+      Mode: Window watchdog
+    remap: 0
+    params:
+      prescaler: '8'
+      window: 127
+      counter: 127
+  PWR:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      pvd_level: 2.14 V rising / 2.08 V falling
+  FLASH:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      latency: 2 wait states
+  EXTI:
+    settings:
+      Mode: Disable
+    remap: 0
+  DMA1:
+    settings:
+      Mode: Disable
+    remap: 0
+  SPI2:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      direction: Full-duplex
+      mode: Master
+      data_size: 8 bits
+      cpol: Low
+      cpha: 1 Edge
+      nss: Software
+      prescaler: '2'
+      first_bit: MSB
+      crc: 7
+  I2C2:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      clock_speed: 100000
+      mode: I2C
+      duty_cycle: '2:1'
+      own_address: 0
+      ack: Enable
+      ack_address: 7-bit
+  RTC:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      prescaler: 32767
+      alarm: 0
+  BKP:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      tamper_level: High
+      rtc_calibration: 0
+  CRC:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      id: 0
+  USBFS:
+    settings:
+      Mode: Disable
+    remap: 0
+  USBPD:
+    settings:
+      Mode: Disable
+    remap: 0
+  OPA1:
+    settings:
+      Mode: Disable
+      Non-inverting input (P): []
+      Inverting input (N): []
+      Output (O): []
+    remap: 0
+  CMP1:
+    settings:
+      Mode: Disable
+      Inputs: []
+    remap: 0
+    params:
+      mode: Comparator output only (OUT_IO0)
+      psel: CHP0 (PA2)
+      nsel: CHN0 (PB1)
+      hyen: Disabled
+gpio_manual:
+  PA5: GPIO_Output
+  PB7: GPIO_Input
+  PC14: GPIO_Output
+gpio_settings:
+  PA5:
+    mode: Output Push Pull
+    pull: No pull
+    speed: 2 MHz
+    label: LED
+  PB7:
+    mode: Input
+    pull: Pull-up
+    speed: 10 MHz
+    label: ''
+  PC14:
+    mode: Output Push Pull
+    pull: No pull
+    speed: 10 MHz
+    label: ''
+clock:
+  hse: 8
+  pllIn: 0
+  pllMul: 6
+  sys: HSI
+  pre:
+    HB: 1
+    PB2: 1
+    PB1: 1
+    ADC: 2

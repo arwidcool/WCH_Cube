@@ -267,13 +267,73 @@ export const FIXTURES = [
       eng.setGpioField('PC0', 'speed', 'Very high');  // four speeds on this part, not one
     },
   },
+  {
+    file: 'CH32L103_QFN32_full.wchproj',
+    name: 'compile-gate CH32L103 QFN32',
+    mcu: 'CH32L103',
+    pkg: 'QFN32',
+    // K8U6, not K8U7: QFN32 carries TWO orderable part numbers that differ in
+    // temperature grade, and the project generator refuses the package without
+    // being told which - "they are not interchangeable" is its own wording. The
+    // env below is the K8U6 board, so the fixture names the same part.
+    variant: 'CH32L103K8U6',
+    env: 'CH32L103K8U6',
+    build() {
+      // The FIFTH family. What makes this one different from the four above:
+      //
+      //   * THREE GPIO output speeds, so `gpio.speeds` is a real choice rather than a
+      //     fixed value - the first part here where that column is a selector. The
+      //     speed below is deliberately NOT the default, so a generator that quietly
+      //     writes the first entry fails visibly.
+      //   * Remaps by NAMED MACRO (GPIO_PinRemapConfig), like CH32X035 - so one
+      //     peripheral is moved off its default mapping to prove the macro reaches
+      //     the C, and another is left alone to prove "no remap" stays silent.
+      //   * Clock domains are HB / PB2 / PB1 and the enable function is
+      //     RCC_PB2PeriphClockCmd - NOT RCC_APB2PeriphClockCmd, which is the field
+      //     this repo has already had wrong once.
+      //
+      // Signals are spread over ports A, B, C and D, and the ADC channel comes from
+      // `codegen.analog_signals`, so the analog path is exercised too.
+      eng.setSetting('USART1', 'Mode', 'Asynchronous');   // remap index 0: no macro emitted
+      eng.setSetting('USART2', 'Mode', 'Asynchronous');
+      eng.setRemap('USART2', 1);                          // GPIO_PartialRemap2_USART2
+
+      eng.setSetting('SPI1', 'Mode', 'Full-Duplex Master');
+      eng.setRemap('SPI1', 1);                            // GPIO_PartialRemap1_SPI1
+
+      // CH1 WITHOUT CH1N, and the reset pin OFF, because QFN32 bonds neither PB13
+      // nor NRST - the DS pin table gives NRST only on TSSOP20 and LQFP48. Both
+      // were tried the other way and the conflict engine refused them, which is the
+      // behaviour this fixture is here to keep honest: a configuration the package
+      // cannot honour is reported rather than generated.
+      eng.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+      eng.setSetting('TIM2', 'Channel1', 'PWM Generation CH1');
+      eng.setSetting('SYS', 'External reset pin', 'Reset pin disabled - pin is GPIO');
+
+      eng.setSetting('ADC1', 'Mode', 'Independent');
+
+      eng.setSetting('IWDG', 'Mode', 'Independent watchdog');
+      eng.setSetting('WWDG', 'Mode', 'Window watchdog');;
+
+      // Manual GPIO with a non-default speed on one of them. The pins are chosen
+      // from what the configuration ABOVE leaves free, which the fixture builder
+      // checks: PD0 is the HSE crystal and PA8 is TIM1_CH1 here, and using either
+      // is a conflict rather than a fixture - both were tried and refused.
+      eng.assignSignal('PA5', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PB7', { gpio: 'GPIO_Input' });
+      eng.assignSignal('PC14', { gpio: 'GPIO_Output' });
+      eng.setGpioField('PA5', 'label', 'LED');
+      eng.setGpioField('PA5', 'speed', '2 MHz');          // not the first of three
+      eng.setGpioField('PB7', 'pull', 'Pull-up');
+    },
+  },
 ];
 
 /** Build one fixture and return its serialised .wchproj text. */
 export function render(f) {
   eng.loadMcu(eng.MCU_FILES[f.mcu]);
   eng.setPackage(f.pkg);
-  eng.setProject({ name: f.name, variant: null });
+  eng.setProject({ name: f.name, variant: f.variant || null });
   f.build();
   const E = eng.compute();
   if (E.conflictList.length) {

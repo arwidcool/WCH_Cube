@@ -39,6 +39,13 @@ extern "C" {
  * GPIO_Speed_Very_High }. Low/Medium/High are the very spellings that were invented
  * for CH32V006 and deleted for not existing — here they are real. */
 #  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_Very_High
+#elif defined(WCH_HAL_SERIES_CH32L103)
+/* THREE speeds, and the FIRST part in this repo where the speed is a real choice
+ * rather than a fixed value: GPIOSpeed_TypeDef in ch32l103_gpio.h:25-27 is
+ * { GPIO_Speed_10MHz = 1, GPIO_Speed_2MHz, GPIO_Speed_50MHz }. So this macro is
+ * genuinely a MAXIMUM here rather than "the only speed there is", and the note
+ * above this block does not apply to this series. */
+#  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_50MHz
 #endif
 
 /* Enable the port's peripheral clock. Returns 0 on success, -1 if the port is

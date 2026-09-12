@@ -52,6 +52,20 @@ static int port_clock(const GPIO_TypeDef *port, FunctionalState state)
     else return -1;
     RCC_HB2PeriphClockCmd(bit, state);
     return 0;
+#elif defined(WCH_HAL_SERIES_CH32L103)
+    /* Ports A, B, C and D, enabled with RCC_PB2PeriphClockCmd and the
+     * RCC_PB2Periph_GPIOx macros - ch32l103_rcc.h:120-124 and :201. NOT APB2: this
+     * part's domains are HB / PB2 / PB1, and RCC_APB2PeriphClockCmd is the CH32X035
+     * spelling. Read from the header rather than carried over from a sibling, which
+     * is exactly the mistake this project has already shipped once. */
+    uint32_t bit;
+    if      (port == GPIOA) bit = RCC_PB2Periph_GPIOA;
+    else if (port == GPIOB) bit = RCC_PB2Periph_GPIOB;
+    else if (port == GPIOC) bit = RCC_PB2Periph_GPIOC;
+    else if (port == GPIOD) bit = RCC_PB2Periph_GPIOD;
+    else return -1;
+    RCC_PB2PeriphClockCmd(bit, state);
+    return 0;
 #else
     /* No branch matched. Previously this fell off the end of a non-void function,
      * which is a warning and undefined behaviour rather than a build failure - so

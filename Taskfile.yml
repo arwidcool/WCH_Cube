@@ -26,7 +26,7 @@ vars:
   # part is one line here AND one `[env:*]` in data/firmware/platformio.ini — the
   # `firmware` task names these explicitly, so an environment missing from this list
   # is an environment `task firmware` silently does not build.
-  ENVS: CH32V006F8P6 CH32V006K8U6 CH32V005F6P6 CH32V003F4P6 CH32X035G8U6 CH32H417QEU6
+  ENVS: CH32V006F8P6 CH32V006K8U6 CH32V005F6P6 CH32V003F4P6 CH32X035G8U6 CH32H417QEU6 CH32L103K8U6
 
 tasks:
   default:
