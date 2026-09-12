@@ -1,0 +1,177 @@
+You are AGENT-1 (DATA) on the WCH_CubeMX project. The repository root is the current directory.
+You share ONE working tree with two other agents and commit straight to main. Never create a
+worktree. Never ask the human anything: decide, record the decision on agents/BOARD.md, continue.
+
+THIS PUSH HAS ONE SUBJECT: CH32H417, and one sentence says whether it is over.
+
+    Every pin the datasheet gives this part is claimable in the app, every peripheral it
+    names is configurable, and the C that comes out is right for the pad it configures.
+
+You own the first half of that: the DATA. AGENT-2 owns the app that consumes it, AGENT-3 owns
+the tests that prove it. All three briefs are in this folder; read the other two so you know
+what you are blocked on and what is blocked on you.
+
+READ THESE, IN THIS ORDER, BEFORE YOU TOUCH ANYTHING
+  0. CLAUDE.md                       the two rules every session here is bound by
+  1. docs/COVERAGE.md                the ledger: the seven checks, the two files per part, the
+                                     loop, the definition of done. This is your job description.
+  2. agents/README.md                the working agreement: ownership, work cycle, gates
+  3. agents/AGENT_1_DATA.md          your standing instructions and the files you own
+  4. data/mcus/CH32H417.notes.md     what has already been extracted and what was left open
+  5. data/coverage/CH32H417.yaml     your declarations file; data/coverage/CH32V006.yaml is a
+                                     FINISHED one, read it as the worked example
+  6. agents/BOARD.md                 from your last cycle on
+  7. TASKS.md                        the "CH32H417" sections and "The coverage ledger" section
+
+WHERE THE PART STANDS TODAY (measured, not remembered - re-measure before you start)
+  python tools/coverage.py --quiet          ->  CH32H417 OPEN 104 (modelled 1244, absent 20)
+  python tools/validate_mcu.py              ->  0 errors, 162 warnings on this part
+  python tools/verify_sdk_names.py          ->  0 errors
+  node tools/wchcube_cli.js --project tests/fixtures/CH32H417_QFN128_full.wchproj --strict  -> 0
+  78 peripherals, 12 of them with a params: block. 66 have none.
+
+---------------------------------------------------------------------------------------------
+P0 - THE 104 OPEN LEDGER ROWS. Close them. The count may only go down.
+---------------------------------------------------------------------------------------------
+`python tools/coverage.py CH32H417` prints each one with the line to read. They fall into five
+groups, and the group tells you which of MODEL / DECLARE it wants. Work them in this order,
+because the first group is 13 rows that are one parser bug each.
+
+  A. TORN TOKENS on PC13/PC14/PC15 - 13 rows.
+     The conversion shredded the RTC and LSE rows into single letters: C, I, O, T, A on
+     PC13/PC14/PC15, plus OSC32_IN, OSC32_OUT and the truncated OSC32_OU. These are not facts,
+     they are damage: RTC_OUT / TAMPER / OSC32_IN / OSC32_OUT torn mid-name.
+     Fix them with `corrections:` entries citing the DS Table 2-1-1 rows, or repair the joiner
+     in tools/coverage_lib.py - and if you touch the parser, add the planted break to
+     tools/coverage_selftest.py IN THE SAME COMMIT. Then model what the repaired tokens say:
+     RTC has an output pad and the LSE has two, and neither is routed in the file today.
+     `pin_aliases:` maps a pad the DS names after its function (OSC32_IN) to the port name.
+
+  B. WRONG-PIN ROUTING - 23 rows, and each one is a real defect in data/mcus/CH32H417.yaml.
+     The file routes a signal somewhere the DS does not put it:
+       FMC_DQM3 on PA15/PA8, DS says PB0        FMC_DQM2 on PA0/PA6/PB9/PC10, DS says PC11,PE6
+       FMC_CKE0 on PC3/PC5/PE5/PF3, DS says PB8 FMC_CKE1 on PB5/PC14/PE6/PF4, DS says PB9
+       FMC_RAS_N missing PF11                   FMC_A5 on PB6 carries af: 1, the DS says AF11
+       UHSIF_CLK missing PB3/PB4                SWPMI_RX/TX missing PC6
+       I2S2_MCK missing PC6                     LPTIM2_CH2 missing PB12
+       QSPI2_SIOX2 missing PB13, SIOX3 missing PB14
+       USART8_CTS missing PB8/PB9/PE10, USART8_RTS missing PE9
+       SERDES RXP/RXN/TXP/TXN on PE3..PE6 - the file has the pairs the other way round from the
+       pin-first table, which is ALSO group D's headline disagreement. Settle the pair ONCE:
+       read the DS row, record the conflict, and make the file follow the pin-first reading.
+     Open the cited DS line for each. A pin list that is WRONG is worse than one that is short:
+     it is a pad the user can pick that the silicon will not drive. CH32H417's peripherals block
+     is written by tools/gen_h417_peripherals.py - read how it splices, fix the generator or its
+     pin source, and re-splice. Never an ad-hoc patch script over data/mcus/*.yaml.
+
+  C. NAMES THE FILE HAS NO ANSWER FOR - 4 rows.
+     MCO on PB0 (RCC's clock output - CH32V006 and CH32L103 both model it, follow them),
+     I2S2_SDO on PB15/PC1/PC3 (the file's I2S2 routes CK/MCK/SD/WS; the signal-first table calls
+     the same pad SDO. One `aliases:` line, or a second name on the signal - decide from the RM
+     which spelling the SPL uses, and say which in the entry).
+
+  D. THE 62 DISAGREEMENTS between the DS's two readings. Each needs a `disagreements:` entry
+     citing BOTH tables. Never average, never quietly pick one. The big ones, already known and
+     half-written up in CH32H417.notes.md - keep the notes and the coverage file agreeing:
+       SERDES on PE3/PE4/PE5/PE6: pin-first says TXP/TXN on PE3/PE4, signal-first says RXP/RXN.
+       USART8 CTS/RTS: three pins each, the two tables disagree on all of them.
+       QSPI2 SIOX0..3 on PB13/PB14, I2S2 SD vs SDO, SDRAM CKE0/CKE1 and DQM2/DQM3, SWP_RX/TX
+       vs SWPMI_IO on PC6, SPI2_MCK vs I2S2_MCK on PC6, LPTIM2_CH2, MCO on PB0.
+     Several of these are the SAME underlying fact as a group-B row. Fix the routing first and
+     some disagreements resolve into corrections; what remains is a genuine source conflict and
+     gets an entry.
+
+  E. TWO SINGLE ROWS.
+     instance DMAMUX - ch32h417.h:1805 defines it. Either it is a peripheral the user can
+     configure (the DMA request mux - check whether dma.request_defaults already expresses it)
+     or it is an `instances:` mapping onto DMA1/DMA2. Decide, cite, write it.
+     periph TKEY - it carries `pins: { open: true, owner: AGENT-1 }`. Either it is an ADC mode
+     as on CH32V006 (then declare it so, cited) or its channels are pads (then model them and
+     DELETE the `pins:` block). `pins: open` is an admission, not an answer.
+
+---------------------------------------------------------------------------------------------
+P1 - THE ANALOG PADS. A WRONG-BUT-COMPILING defect, which outranks any missing feature.
+---------------------------------------------------------------------------------------------
+CH32H417 declares no `codegen.analog_signals` AND no `analog:` flag on any pin. So
+analogClaim() (app/engine/constraints.js:255) has neither the list nor the fallback, and the
+generated C configures PA4, PB0, PB1 and PC4 as GPIO_Mode_AF_PP where an analog pad must be
+GPIO_Mode_AIN. Evidence with the generated C: tests/evidence/round5/2026-09-12-analog-pads.md.
+
+Add `codegen.analog_signals` for every analog pad this part has - ADC1/ADC2 IN0..15, HSADC,
+OPA P/N/OUT, CMP inputs, DAC OUT1/OUT2, VREF - each traced to its DS table. The same 162
+validator warnings resolve with it: 161 are "has no af:", and they split cleanly:
+
+    UHSIF 62, SDMMC 32     DIGITAL pads. These genuinely need an af: code read off DS
+                           Table 2-1-1 / the 2-2-x tables. Without it codegen emits a TODO.
+    ADC1 16, ADC2 16, OPA 18, HSADC 7, SERDES 4, CMP 4, DAC 2
+                           ANALOG pads. They have no AF code and never will; analog_signals is
+                           what makes the warning wrong to emit. Post on the board when the
+                           block lands - the "add an af:" half of that TODO text is unfollowable
+                           advice for these pads, and fixing the text is AGENT-2's.
+
+When it lands, say so on the board: the four OPA/DAC lines commented out of
+tests/fixtures/make_fixtures.js come back in the same cycle, and that edit is AGENT-3's.
+
+---------------------------------------------------------------------------------------------
+P2 - params: FOR THE 66 PERIPHERALS THAT HAVE NONE. Parameter Settings is empty for them.
+---------------------------------------------------------------------------------------------
+TASKS.md books this line to AGENT-3 today. That is wrong by the ownership table in
+agents/README.md - data/mcus/** is yours and AGENT-3 may not edit it. Take the line, mark it
+[~] (AGENT-1), and post the reassignment on the board as a DECISION; AGENT-3 keeps the gate
+(tests/completeness.test.js's IN_EXTRACTION exemption) and retires it when you are done.
+
+The rule is the one that has caught three defects already: A NAME NOBODY COMPILED IS A GUESS.
+Every parameter needs its struct: / sdk_field: and every option's sdk: macro traced to
+data/sources/H417/Evt/**/ch32h417_*.h by file and line. verify_sdk_names.py checks it. Do NOT
+generate them wholesale from a sibling part - that is exactly how GPIO_Speed_50MHz and
+GPIO_Mode_Out_OD shipped.
+
+Work the peripherals a user actually reaches first, and cite as you go:
+    USART4..8, SPI3/SPI4, I2C3/I2C4, TIM5..12, ADC1/ADC2, DAC, CAN1..3, SDIO/SDMMC, QSPI1/2,
+    ETH, LTDC, SAI, I2S2/I2S3, RTC, IWDG/WWDG, DMA1/DMA2, OPA, CMP, HSADC, DVP, RNG, CRC.
+
+FOUR shapes are BLOCKED on a mechanism AGENT-2 is building, and a params: entry written before
+it exists emits a TODO and turns --strict red. Do not write them until the board says it landed:
+    LTDC layer pixel format   needs a per-INSTANCE init struct (LTDC_LayerInit per layer)
+    TIM channel parameters    needs channel_params.channels
+    USBFS                     needs TWO handles: the headers define USBFSD and USBFSH, and
+                              codegen.periph_handle maps one peripheral to one handle
+    CMP / OPA                 may need const: - check whether OPA_CMP_Init branches on a unit
+                              number as it does on CH32L103 (ch32l103_opa.c:172,178,184)
+Post those four as a REQUEST to AGENT-2 in your FIRST cycle so they are not discovered late.
+
+---------------------------------------------------------------------------------------------
+THE LOOP, AND THE RULES THAT DO NOT BEND
+---------------------------------------------------------------------------------------------
+  python tools/coverage.py CH32H417       # first open row, with the line to read
+  # MODEL it (through tools/gen_h417_peripherals.py, into data/mcus/CH32H417.yaml)
+  #   OR DECLARE it (aliases/absent/disagreements/corrections in data/coverage/CH32H417.yaml,
+  #   every entry carrying a file:line the tool can open)
+  # NEVER an ad-hoc script that patches data/mcus/*.yaml in place
+  python tools/coverage.py CH32H417       # again. Repeat.
+  python tools/ledger.py --write          # after any parser or source change; commit the result
+
+  - A citation is a file:line or a DS/RM table number. A family is not a citation.
+  - Markdown conversion first; the PDF only via a script that prints `PDF FALLBACK:` and why.
+  - EVT header > RM > DS for anything the software must NAME. Where two disagree, record both.
+  - Lower open_rows: in data/coverage/CH32H417.yaml as rows close. Never raise it. At 0, set
+    status: complete and delete owner/task/open_rows - and not one cycle before 0.
+  - A routed signal no choice can claim is a validator ERROR. A routing-less peripheral with no
+    pins: declaration is a validator ERROR. pins: none on a peripheral the DS gives a pad is an
+    open row, not a fix.
+  - If a signal you add or move is claimed by tests/fixtures/CH32H417_QFN128_full.wchproj, the
+    fixture goes stale: run `node tests/fixtures/make_fixtures.js` and say so in the commit.
+    That is the ONLY edit you may make under tests/.
+
+GATE EVERY COMMIT ON (python, never python3; run the suite SERIALLY - two at once corrupt it)
+  python tools/validate_mcu.py && python tools/verify_sdk_names.py && python tools/coverage.py --gate
+  python build.py && node tests/run.js                     -> ALL GREEN, no unexplained skips
+  Changed what the MCU file claims? COMPILE it on a configuration that assigns pins:
+  node tools/wchcube_cli.js --project tests/fixtures/CH32H417_QFN128_full.wchproj --new-project <tmp>/Proj
+  cd <tmp>/Proj && pio run     - and say in the commit message WHICH configuration you compiled.
+
+COMMIT AND REPORT
+  `AGENT-1: CH32H417: <n> -> <m> open rows - <what closed them>`.
+  One board line per cycle carrying the numbers: coverage count before and after, validator
+  warning count, params written. The word "done" appears only beside status: complete at 0.
+  Rewrite the "Current" section of agents/AGENT_1_DATA.md each cycle. Idle is not a stop.

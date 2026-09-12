@@ -1006,3 +1006,15 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       defect class this round exists to remove. The TODO codegen emits beside it also tells the
       reader to add an `af:` to a pad that has none, which is unfollowable advice (that half is
       AGENT-2's). Evidence and the generated C: `tests/evidence/round5/2026-09-12-analog-pads.md`.
+
+- [ ] (AGENT-3) **CH32H417 LTDC: make the layer pixel format selectable, including the 8-bit
+      ones.** `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18) offers ARGB8888, RGB888, RGB565, ARGB1555,
+      ARGB4444 and the three eight-bit-per-pixel formats `L8`, `AL44`, `AL88`; the macros are
+      `ch32h417_ltdc.h:200-208`. It is a FRAME BUFFER format - it frees no pin, which
+      `data/mcus/CH32H417.notes.md` explains - but people do run an 8-bit indexed buffer and
+      cannot ask for one today. Blocked on a mechanism, not on the data: the format lives in
+      `LTDC_Layer_InitTypeDef`, applied by `LTDC_LayerInit(LTDC_Layerx, &s)` once PER LAYER
+      with the layer handle as an argument, and `codegen.init_structs` maps a struct to one
+      function while `codegen.periph_handle` maps a peripheral to one handle. Needs the same
+      per-instance shape as `channel_params`. A `params:` entry written before that emits a
+      TODO and fails `--strict`.

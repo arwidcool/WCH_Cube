@@ -1340,6 +1340,59 @@ test('a const: member is written into its struct as the literal the file names',
   assert.deepEqual(e.initPlan('OPA9').problems, [], 'and a const: param is not a dependency problem');
 });
 
+// `const:` has to reach the SDK through BOTH routes, and AGENT-1's OPA/CMP need both: the
+// unit number is a MEMBER of the init struct (`OPA_CMP_Init` branches on
+// `CMP_InitStruct->CMP_NUM` inside the function) AND an ARGUMENT to other functions in the
+// same driver (`OPA_CMP_Cmd(CMP1, ENABLE)` takes the enum directly). A `sdk_call` parameter
+// that cannot state a fixed value would have left the second one unreachable.
+test('a const: parameter reaches an sdk_call argument, not only a struct member', () => {
+  const e = fresh('CH32V006');
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-CONSTCALL
+  inherits: CH32V006
+codegen:
+  periph_handle:
+    CMP9: CMP9
+peripherals:
+  CMP9:
+    category: Analog
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [OUT9] }
+    remaps:
+      - name: Default
+        pins: { OUT9: PA1 }
+    params:
+      # the unit number, as a member of the struct the init call takes
+      - { key: num, name: Which comparator, const: CMP9, struct: CMP_InitTypeDef, sdk_field: CMP_NUM }
+      # the same value again, as an ARGUMENT to a different function in the driver
+      - { key: cmd, name: Comparator enable, const: CMP9, sdk_call: OPA_CMP_Cmd, sdk_args: [$VALUE, ENABLE] }
+      # and a settable one beside them, so the block is not a special case
+      - key: hyst
+        name: Hysteresis
+        struct: CMP_InitTypeDef
+        sdk_field: CMP_HYEN
+        type: enum
+        default: Off
+        options:
+          - { name: Off, value: 0, sdk: CMP_HYEN_OFF }
+`);
+  e.loadMcu('CH32V006-CONSTCALL');
+  e.setSetting('CMP9', 'Mode', 'Enabled');
+  e.compute();
+  const c = e.cSource();
+  assert.ok(c.includes('CMP_InitStructure.CMP_NUM = CMP9;'), 'the member route');
+  assert.ok(c.includes('OPA_CMP_Cmd(CMP9, ENABLE);'),
+    'AND the argument route - $VALUE is the const literal, not a stored value');
+  assert.ok(c.includes('CMP_InitStructure.CMP_HYEN = CMP_HYEN_OFF;'), 'the settable field is untouched');
+  assert.deepEqual(e.getParams('CMP9').map(p => p.key), ['hyst'],
+    'neither const: parameter is drawn as a control, whichever route it takes');
+  assert.deepEqual(e.initPlan('CMP9').problems, []);
+});
+
 test('a struct whose only param is a const: member is still emitted', () => {
   // The rule is "a struct is emitted when at least one of its params applies", and a
   // const: param has no `when:` to close it - so it is always applicable and the struct

@@ -2099,45 +2099,79 @@ peripherals:
       OC: [{ pin: PB13, af: 3 }]
   LTDC:
     category: Graphics
+    # THE OUTPUT WIDTH IS A WIRING CHOICE, NOT A REGISTER, and that is the whole reason
+    # this row exists. RM 43.4.5: the global control register `R32_LTDC_GCR` carries four
+    # polarity bits and an enable, and bits [27:1] are reserved - there is no field that
+    # narrows the bus. The controller always drives a 24-bit parallel RGB port; a 16- or
+    # 18-bit panel is wired to the HIGH bits of each channel and the low ones are simply
+    # not connected. So the choice below is "how many lines did you wire", and every line
+    # it does not claim stays an ordinary pin that any other peripheral may take.
+    #
+    # The subsets are the standard panel wiring (panel MSB to controller MSB), which is
+    # also how the datasheet numbers the pads: R7/G7/B7 are the most significant.
+    #
+    #   RGB888  24 lines  R0-R7  G0-G7  B0-B7      frees nothing
+    #   RGB666  18 lines  R2-R7  G2-G7  B2-B7      frees 6: R0-R1, G0-G1, B0-B1
+    #   RGB565  16 lines  R3-R7  G2-G7  B3-B7      frees 8: R0-R2, G0-G1, B0-B2
+    #
+    # NOT the same thing as an "8-bit mode", which is a question people ask of this
+    # controller and which has a different answer: `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18)
+    # offers L8, AL44 and AL88 - eight bits per pixel - but those describe the LAYER'S
+    # FRAME BUFFER IN MEMORY. The pixel format converter expands every one of them to
+    # ARGB8888 before the blender, so an 8-bit format saves RAM and frees no pin at all.
+    # It is not selectable here yet; see `notes:` below and TASKS.md.
     settings:
       - name: "Colour depth"
         choices:
           - { name: Disable }
           - { name: RGB888, signals: [R0, R1, R2, R3, R4, R5, R6, R7, G0, G1, G2, G3, G4, G5, G6, G7, B0, B1, B2, B3, B4, B5, B6, B7] }
+          - { name: RGB666, signals: [R2, R3, R4, R5, R6, R7, G2, G3, G4, G5, G6, G7, B2, B3, B4, B5, B6, B7] }
           - { name: RGB565, signals: [R3, R4, R5, R6, R7, G2, G3, G4, G5, G6, G7, B3, B4, B5, B6, B7] }
       - name: "Sync and clock"
         choices:
           - { name: Disable }
           - { name: Enabled, signals: [CLK, HSYNC, VSYNC, DE] }
+    notes: >
+      Parallel RGB output, always 24 bits wide at the pad - the width you pick here is
+      how many lines you WIRED, not a mode the silicon has (RM 43.4.5 gives the global
+      control register no width field). A 16-bit panel takes the top five red, top six
+      green and top five blue lines; an 18-bit panel the top six of each. Every line the
+      chosen depth does not claim is released and can be assigned to another peripheral
+      or used as GPIO - picking RGB565 hands back eight pins, RGB666 six.
+      An "8-bit mode" is a different thing and does not free pins: L8, AL44 and AL88
+      (RM 43.4.18) are eight-bit-per-pixel FRAME BUFFER formats, and the pixel format
+      converter expands them to ARGB8888 before the output stage. Choosing one saves
+      memory and changes no pin. Selecting it is not modelled yet - the generator has no
+      way to fill the per-layer init struct - so it is an open item rather than a gap.
     signal_pins:
-      B0: [{ pin: PE4, af: 14 }, { pin: PF1, af: 8 }, { pin: PF3, af: 14 }]
-      B1: [{ pin: PA10, af: 14 }, { pin: PC10, af: 10 }, { pin: PD0, af: 14 }, { pin: PD14, af: 8 }, { pin: PE0, af: 14 }]
+      B0: [{ pin: PF1, af: 8 }, { pin: PE4, af: 14 }, { pin: PF3, af: 14 }]
+      B1: [{ pin: PC10, af: 10 }, { pin: PA10, af: 14 }, { pin: PD0, af: 14 }, { pin: PD14, af: 8 }, { pin: PE0, af: 14 }]
       B2: [{ pin: PA13, af: 8 }, { pin: PA3, af: 9 }, { pin: PC9, af: 14 }, { pin: PD2, af: 14 }, { pin: PD6, af: 14 }, { pin: PF4, af: 14 }]
-      B3: [{ pin: PA8, af: 13 }, { pin: PD10, af: 14 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }]
-      B4: [{ pin: PA10, af: 12 }, { pin: PA15, af: 10 }, { pin: PC11, af: 14 }, { pin: PD4, af: 14 }, { pin: PE0, af: 9 }, { pin: PE1, af: 15 }, { pin: PE12, af: 14 }]
-      B5: [{ pin: PA3, af: 14 }, { pin: PB5, af: 3 }, { pin: PD5, af: 14 }, { pin: PF14, af: 15 }]
+      B3: [{ pin: PD10, af: 14 }, { pin: PA8, af: 13 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }]
+      B4: [{ pin: PA15, af: 10 }, { pin: PA10, af: 12 }, { pin: PC11, af: 14 }, { pin: PD4, af: 14 }, { pin: PE0, af: 9 }, { pin: PE1, af: 15 }, { pin: PE12, af: 14 }]
+      B5: [{ pin: PD5, af: 14 }, { pin: PA3, af: 14 }, { pin: PB5, af: 3 }, { pin: PF14, af: 15 }]
       B6: [{ pin: PA14, af: 14 }, { pin: PA15, af: 14 }, { pin: PB8, af: 14 }]
-      B7: [{ pin: PB9, af: 14 }, { pin: PD2, af: 9 }, { pin: PD8, af: 14 }]
-      CLK: [{ pin: PA15, af: 15 }, { pin: PB14, af: 14 }, { pin: PE14, af: 13 }, { pin: PF1, af: 14 }]
-      DE: [{ pin: PC12, af: 15 }, { pin: PC5, af: 14 }, { pin: PE13, af: 14 }, { pin: PF10, af: 14 }]
+      B7: [{ pin: PD2, af: 9 }, { pin: PB9, af: 14 }, { pin: PD8, af: 14 }]
+      CLK: [{ pin: PB14, af: 14 }, { pin: PA15, af: 15 }, { pin: PE14, af: 13 }, { pin: PF1, af: 14 }]
+      DE: [{ pin: PE13, af: 14 }, { pin: PC12, af: 15 }, { pin: PC5, af: 14 }, { pin: PF10, af: 14 }]
       G0: [{ pin: PB1, af: 14 }, { pin: PB14, af: 6 }, { pin: PE5, af: 14 }]
       G1: [{ pin: PB0, af: 14 }, { pin: PE6, af: 14 }]
-      G2: [{ pin: PA6, af: 14 }, { pin: PC0, af: 11 }, { pin: PD15, af: 7 }, { pin: PD5, af: 15 }]
+      G2: [{ pin: PD15, af: 7 }, { pin: PA6, af: 14 }, { pin: PC0, af: 11 }, { pin: PD5, af: 15 }]
       G3: [{ pin: PC9, af: 10 }, { pin: PD6, af: 15 }, { pin: PE11, af: 14 }, { pin: PF4, af: 9 }]
       G4: [{ pin: PB10, af: 14 }, { pin: PC8, af: 14 }, { pin: PD7, af: 15 }]
       G5: [{ pin: PB11, af: 14 }, { pin: PC1, af: 14 }, { pin: PF3, af: 15 }]
       G6: [{ pin: PC7, af: 14 }, { pin: PF4, af: 15 }]
-      G7: [{ pin: PB15, af: 14 }, { pin: PD3, af: 14 }, { pin: PF2, af: 14 }, { pin: PF5, af: 15 }]
-      HSYNC: [{ pin: PA6, af: 11 }, { pin: PC10, af: 15 }, { pin: PC6, af: 14 }]
-      R0: [{ pin: PA0, af: 14 }, { pin: PA14, af: 15 }, { pin: PE1, af: 14 }]
-      R1: [{ pin: PA2, af: 14 }, { pin: PF0, af: 11 }]
-      R2: [{ pin: PA1, af: 14 }, { pin: PC10, af: 14 }, { pin: PD13, af: 3 }]
-      R3: [{ pin: PA15, af: 9 }, { pin: PB0, af: 9 }, { pin: PD0, af: 15 }, { pin: PD12, af: 11 }]
-      R4: [{ pin: PA11, af: 14 }, { pin: PA5, af: 14 }, { pin: PD1, af: 15 }, { pin: PD11, af: 11 }]
-      R5: [{ pin: PA12, af: 14 }, { pin: PA9, af: 14 }, { pin: PC0, af: 14 }, { pin: PD2, af: 15 }]
-      R6: [{ pin: PA8, af: 14 }, { pin: PB1, af: 9 }, { pin: PC12, af: 14 }, { pin: PD3, af: 15 }, { pin: PE2, af: 14 }]
-      R7: [{ pin: PC4, af: 14 }, { pin: PD4, af: 15 }, { pin: PE15, af: 14 }, { pin: PF0, af: 14 }]
-      VSYNC: [{ pin: PA4, af: 14 }, { pin: PA7, af: 14 }, { pin: PB12, af: 10 }, { pin: PC11, af: 15 }]
+      G7: [{ pin: PD3, af: 14 }, { pin: PB15, af: 14 }, { pin: PF2, af: 14 }, { pin: PF5, af: 15 }]
+      HSYNC: [{ pin: PC6, af: 14 }, { pin: PA6, af: 11 }, { pin: PC10, af: 15 }]
+      R0: [{ pin: PE1, af: 14 }, { pin: PA0, af: 14 }, { pin: PA14, af: 15 }]
+      R1: [{ pin: PF0, af: 11 }, { pin: PA2, af: 14 }]
+      R2: [{ pin: PD13, af: 3 }, { pin: PA1, af: 14 }, { pin: PC10, af: 14 }]
+      R3: [{ pin: PD0, af: 15 }, { pin: PA15, af: 9 }, { pin: PB0, af: 9 }, { pin: PD12, af: 11 }]
+      R4: [{ pin: PA5, af: 14 }, { pin: PA11, af: 14 }, { pin: PD1, af: 15 }, { pin: PD11, af: 11 }]
+      R5: [{ pin: PC0, af: 14 }, { pin: PA12, af: 14 }, { pin: PA9, af: 14 }, { pin: PD2, af: 15 }]
+      R6: [{ pin: PC12, af: 14 }, { pin: PA8, af: 14 }, { pin: PB1, af: 9 }, { pin: PD3, af: 15 }, { pin: PE2, af: 14 }]
+      R7: [{ pin: PD4, af: 15 }, { pin: PC4, af: 14 }, { pin: PE15, af: 14 }, { pin: PF0, af: 14 }]
+      VSYNC: [{ pin: PB12, af: 10 }, { pin: PA4, af: 14 }, { pin: PA7, af: 14 }, { pin: PC11, af: 15 }]
   OPA:
     category: Analog
     settings:
