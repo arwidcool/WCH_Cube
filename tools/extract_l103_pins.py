@@ -42,10 +42,17 @@ of the row before it and two pins are lost at once.
 
 CH32X035 hit the identical corruption, and the fix there was to recover the lost
 cells **from the original PDF by word position** (`data/sources/X035/Datasheets/
-CH32X035_pin_corrections.yaml`). This drop has no PDF, so it needs a second
-independent source or a copy of the DS that kept its dashes. Until then the
-per-package tables CANNOT be trusted, and a YAML written from them would be
-guessed - which is the one thing the project's rules forbid outright.
+CH32X035_pin_corrections.yaml`). **This drop's PDF is now in the repo too** -
+`data/sources/l103/datasheets/CH32L103DS0.PDF` - and it is the LAST resort of the
+rule in `data/sources/README.md` ("Read the markdown first. The PDF is the last
+resort."), read by `tools/recover_l103_pins_from_pdf.py`, which prints why the
+markdown cannot answer and will refuse to open the PDF if it ever can. This file
+reads the MARKDOWN only and never opens a PDF: its job is the second opinion that
+keeps the recovery honest, so it must not share the recovery's source.
+
+Until the recovered cells are checked in, the per-package tables CANNOT be trusted,
+and a YAML written from them would be guessed - which is the one thing the project's
+rules forbid outright.
 
 What the tool is still good for: it reports the LQFP48 column's monotonic run,
 whose missing numbers (34, 45) name exactly which rows lost a dash, and it checks
@@ -63,8 +70,13 @@ import pathlib
 import re
 import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import source_docs  # sibling module: the markdown-first policy
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DS = ROOT / "data/sources/l103/datasheets/CH32L103DS0.md"
+# Markdown ONLY: `require_markdown` exits naming the fallback route rather than
+# handing back a PDF, because this file has no PDF path and must not grow one.
+DS = source_docs.require_markdown("l103", "CH32L103DS0")
 
 # The five package columns, in the order the DS header lists them. `K8U` is one
 # column for two orderable parts (K8U6 / K8U7) - the DS's own note says they
