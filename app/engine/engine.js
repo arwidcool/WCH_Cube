@@ -13,6 +13,8 @@
 //    conflictList: [ { pin, label, num, signals, owners, shorted, text } ]
 //    resources:    { exti, dma }  — see resources.js
 //    resourceIssues: [ { kind:'exti'|'dma', severity:'conflict'|'warning', text, owners } ]
+//    constraintIssues: [ { pin, field, value, id, sentence, reason, source } ]
+//    analogIssues: [ { pin, label, analog:[sig], af:[sig], sentence } ]
 //  }
 // =============================================================================
 import {
@@ -23,7 +25,7 @@ import {
 import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
 import { hseFeedsSysclk } from './clock.js';
-import { constraintFor, constraintSentence, gpioEffectiveMode, gpioModeForSignal, gpioFieldOptionNames } from './constraints.js';
+import { constraintFor, constraintSentence, gpioEffectiveMode, gpioModeForSignal, gpioFieldOptionNames, analogClaim, skippedClaim } from './constraints.js';
 
 export let E = null;
 
@@ -113,6 +115,38 @@ export function compute() {
     }
   }
 
+  // Analog against alternate function, on one pad, from ONE owner.
+  //
+  // `GPIO_Mode_AIN` and `GPIO_Mode_AF_PP` are two values of ONE field, so a pad is an
+  // analog input or it is a muxed alternate function and never both - and
+  // `gpioEffectiveMode()` resolves that by putting analog first, silently dropping the
+  // alternate function.
+  //
+  // TWO owners on one pad are already a conflict above, said loudly and by name, so this
+  // deliberately says nothing there: a second sentence on a pad the user must fix anyway
+  // is noise, and it fired on 2 pads of a fully-enabled CH32V006 when it did not have
+  // this guard. The gap is ONE owner claiming its own pad twice - ADC1_IN4 beside a muxed
+  // ADC1 signal - where `owners.length === 1`, nothing above looks, and the generated C
+  // configures the pad analog and never writes the AF field the other signal needs. A
+  // peripheral that looks configured and does not work is the round's defect class.
+  const analogIssues = [];
+  for (const [canonPin, info] of Object.entries(pins)) {
+    if (info.state === 'conflict') continue;              // already reported, by name, above
+    const live = info.claims.filter(c => !skippedClaim(c) && c.who !== 'GPIO' && M.peripherals[c.who]);
+    if (live.length < 2) continue;
+    const isAn = c => analogClaim(c, c.via || canonPin).analog;
+    const an = live.filter(isAn), af = live.filter(c => !isAn(c));
+    if (!an.length || !af.length) continue;
+    const label = pinLabel(canonPin);
+    const sentence = `${label}: ${an.map(c => c.signal).join(', ')} ${an.length > 1 ? 'are' : 'is'}`
+      + ` an analog function and ${af.map(c => c.signal).join(', ')} ${af.length > 1 ? 'are' : 'is'}`
+      + ' an alternate function. One pad is GPIO_Mode_AIN or it is muxed, never both, so'
+      + ` the generated C configures ${canonPin} analog and writes no alternate-function`
+      + ' field for the rest.';
+    analogIssues.push({ pin: canonPin, label, analog: an.map(c => c.signal), af: af.map(c => c.signal), sentence });
+    for (const owner of [...new Set(live.map(c => c.who))]) (issues[owner] ||= []).push(sentence);
+  }
+
   const status = {}, issueCount = {};
   for (const pid of Object.keys(M.peripherals)) {
     status[pid] = !isAvailable(pid) ? 'na' : issues[pid] ? 'warn' : isEnabled(pid) ? 'ok' : '';
@@ -122,7 +156,7 @@ export function compute() {
   E = {
     pins, issues, status, issueCount, conflictList, resources,
     resourceIssues: resources.issues,
-    constraintIssues,
+    constraintIssues, analogIssues,
     conflicts: conflictList.map(c => `${c.label}: ${c.signals.join(' / ')}`),
   };
   return E;

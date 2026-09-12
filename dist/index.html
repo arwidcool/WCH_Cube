@@ -1707,12 +1707,13 @@ peripherals:
           - { name: Disable (software NSS) }
           - { name: Hardware NSS Input, signals: [NSS] }
           - { name: Hardware NSS Output, signals: [NSS] }
-      - name: Master clock output
-        choices:
-          - { name: Disable }
-          - { name: MCK, signals: [MCK] }
+    # NO `Master clock output` ROW. The MCK pad on PC6 belongs to I2S2, not to SPI2: RM
+    # ch.23 gives the master clock to the I2S mode of the block, `I2S_MCLKOutput` is a
+    # member of `I2S_InitTypeDef` and not of `SPI_InitTypeDef` (ch32h417_spi.h:69), and DS
+    # Table 2-2-8 lists the pad as `I2S2_MCK PC6(AF5), PB5(AF8)`. Only Table 2-1-1 spells
+    # it `SPI2_MCK(AF5)`, which is the spelling `data/coverage/CH32H417.yaml` aliases onto
+    # I2S2_MCK. Routed here as well, PC6 was claimed by two peripherals at once.
     signal_pins:
-      MCK: [{ pin: PC6, af: 5 }]
       MISO: [{ pin: PC2, af: 5 }, { pin: PB14, af: 5 }]
       MOSI: [{ pin: PC1, af: 5 }, { pin: PC3, af: 5 }, { pin: PB15, af: 5 }]
       NSS: [{ pin: PB12, af: 5 }, { pin: PA11, af: 5 }, { pin: PB4, af: 7 }, { pin: PB9, af: 5 }]
@@ -2451,8 +2452,8 @@ peripherals:
           - { name: Silent, signals: [TX, RX] }
           - { name: "Loopback and Silent", signals: [TX, RX] }
     signal_pins:
-      RX: [{ pin: PA11, af: 9 }, { pin: PA13, af: 5 }, { pin: PB6, af: 3 }, { pin: PB8, af: 9 }, { pin: PD0, af: 9 }]
-      TX: [{ pin: PA12, af: 9 }, { pin: PA14, af: 5 }, { pin: PB7, af: 3 }, { pin: PB9, af: 9 }, { pin: PD1, af: 9 }]
+      RX: [{ pin: PA13, af: 5 }, { pin: PD0, af: 9 }, { pin: PA11, af: 9 }, { pin: PB6, af: 3 }, { pin: PB8, af: 9 }]
+      TX: [{ pin: PA14, af: 5 }, { pin: PD1, af: 9 }, { pin: PA12, af: 9 }, { pin: PB7, af: 3 }, { pin: PB9, af: 9 }]
   CAN2:
     category: Connectivity
     settings:
@@ -2477,8 +2478,8 @@ peripherals:
           - { name: Silent, signals: [TX, RX] }
           - { name: "Loopback and Silent", signals: [TX, RX] }
     signal_pins:
-      RX: [{ pin: PC4, af: 6 }, { pin: PD12, af: 5 }, { pin: PF4, af: 2 }, { pin: PF6, af: 2 }]
-      TX: [{ pin: PC5, af: 6 }, { pin: PD13, af: 5 }, { pin: PF3, af: 2 }, { pin: PF7, af: 2 }]
+      RX: [{ pin: PD12, af: 5 }, { pin: PF4, af: 2 }, { pin: PC4, af: 6 }, { pin: PF6, af: 2 }]
+      TX: [{ pin: PD13, af: 5 }, { pin: PF3, af: 2 }, { pin: PC5, af: 6 }, { pin: PF7, af: 2 }]
   CMP:
     category: Analog
     settings:
@@ -2501,17 +2502,17 @@ peripherals:
     signal_pins:
       N0: [{ pin: PB1 }]
       N1: [{ pin: PC4 }]
-      OUT: [{ pin: PA6, af: 10 }, { pin: PA8, af: 12 }, { pin: PB12, af: 13 }, { pin: PC5, af: 13 }, { pin: PE12, af: 13 }, { pin: PE15, af: 13 }, { pin: PE6, af: 11 }]
+      OUT: [{ pin: PB12, af: 13 }, { pin: PE15, af: 13 }, { pin: PE12, af: 13 }, { pin: PE6, af: 11 }, { pin: PA6, af: 10 }, { pin: PA8, af: 12 }, { pin: PC5, af: 13 }]
       P0: [{ pin: PB0 }]
       P1: [{ pin: PB2 }]
   CRC:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   DAC:
@@ -2530,12 +2531,12 @@ peripherals:
       OUT2: [{ pin: PA5 }]
   DBGMCU:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: "Debug in low power"
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   DFSDM:
@@ -2557,28 +2558,28 @@ peripherals:
           - { name: "CKOUT enabled", signals: [CKOUT] }
     signal_pins:
       CKIN0: [{ pin: PC0, af: 3 }]
-      CKIN1: [{ pin: PB13, af: 6 }, { pin: PB2, af: 4 }, { pin: PC2, af: 3 }, { pin: PD7, af: 6 }]
+      CKIN1: [{ pin: PB13, af: 6 }, { pin: PC2, af: 3 }, { pin: PD7, af: 6 }, { pin: PB2, af: 4 }]
       CKOUT: [{ pin: PB0, af: 6 }, { pin: PC2, af: 6 }, { pin: PD10, af: 3 }, { pin: PD3, af: 3 }, { pin: PE9, af: 3 }]
       DATIN0: [{ pin: PC1, af: 3 }]
       DATIN1: [{ pin: PB1, af: 6 }, { pin: PB12, af: 6 }, { pin: PC3, af: 3 }, { pin: PD6, af: 4 }]
   DMA1:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Activated }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   DMA2:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Activated }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   DVP:
@@ -2591,29 +2592,29 @@ peripherals:
           - { name: "10-bit", signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, HSYNC, VSYNC, PCLK] }
           - { name: "12-bit", signals: [D0, D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, HSYNC, VSYNC, PCLK] }
     signal_pins:
-      D0: [{ pin: PA9, af: 13 }, { pin: PC6, af: 13 }, { pin: PE0, af: 11 }]
-      D1: [{ pin: PA10, af: 13 }, { pin: PC7, af: 13 }, { pin: PE1, af: 11 }]
-      D10: [{ pin: PB5, af: 13 }, { pin: PD6, af: 13 }]
+      D0: [{ pin: PC6, af: 13 }, { pin: PE0, af: 11 }, { pin: PA9, af: 13 }]
+      D1: [{ pin: PC7, af: 13 }, { pin: PE1, af: 11 }, { pin: PA10, af: 13 }]
+      D10: [{ pin: PD6, af: 13 }, { pin: PB5, af: 13 }]
       D11: [{ pin: PD2, af: 13 }, { pin: PF0, af: 12 }, { pin: PF10, af: 13 }]
-      D2: [{ pin: PB13, af: 13 }, { pin: PC8, af: 13 }, { pin: PE2, af: 13 }, { pin: PF4, af: 13 }]
-      D3: [{ pin: PC9, af: 13 }, { pin: PE3, af: 13 }, { pin: PF5, af: 13 }]
+      D2: [{ pin: PC8, af: 13 }, { pin: PF4, af: 13 }, { pin: PE2, af: 13 }, { pin: PB13, af: 13 }]
+      D3: [{ pin: PC9, af: 13 }, { pin: PF5, af: 13 }, { pin: PE3, af: 13 }]
       D4: [{ pin: PC11, af: 13 }, { pin: PD12, af: 13 }, { pin: PE4, af: 13 }]
-      D5: [{ pin: PB3, af: 13 }, { pin: PB6, af: 13 }, { pin: PD13, af: 13 }, { pin: PD3, af: 13 }, { pin: PF14, af: 11 }]
-      D6: [{ pin: PB8, af: 13 }, { pin: PD14, af: 13 }, { pin: PE5, af: 13 }]
-      D7: [{ pin: PB9, af: 13 }, { pin: PD15, af: 13 }, { pin: PE6, af: 13 }]
+      D5: [{ pin: PD13, af: 13 }, { pin: PD3, af: 13 }, { pin: PF14, af: 11 }, { pin: PB3, af: 13 }, { pin: PB6, af: 13 }]
+      D6: [{ pin: PD14, af: 13 }, { pin: PE5, af: 13 }, { pin: PB8, af: 13 }]
+      D7: [{ pin: PD15, af: 13 }, { pin: PE6, af: 13 }, { pin: PB9, af: 13 }]
       D8: [{ pin: PC10, af: 13 }, { pin: PF4, af: 11 }]
       D9: [{ pin: PC12, af: 13 }, { pin: PF3, af: 11 }]
-      HSYNC: [{ pin: PA4, af: 13 }, { pin: PB13, af: 8 }]
-      PCLK: [{ pin: PA6, af: 13 }, { pin: PB12, af: 15 }, { pin: PF13, af: 11 }]
-      VSYNC: [{ pin: PA5, af: 11 }, { pin: PB14, af: 15 }, { pin: PB7, af: 13 }, { pin: PF3, af: 13 }]
+      HSYNC: [{ pin: PB13, af: 8 }, { pin: PA4, af: 13 }]
+      PCLK: [{ pin: PB12, af: 15 }, { pin: PA6, af: 13 }, { pin: PF13, af: 11 }]
+      VSYNC: [{ pin: PA5, af: 11 }, { pin: PB14, af: 15 }, { pin: PF3, af: 13 }, { pin: PB7, af: 13 }]
   ECDC:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   ETH:
@@ -2657,18 +2658,17 @@ peripherals:
       TXEN: [{ pin: PD14, af: 10 }]
   EXTI:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: "EXTI trigger edge"
         choices:
           - { name: "Rising edge" }
           - { name: "Falling edge" }
           - { name: "Both edges" }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   FLASH:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: "Independent watchdog start (IWDG_SW)"
         choices:
@@ -2682,6 +2682,7 @@ peripherals:
         choices:
           - { name: "No reset (factory default)" }
           - { name: Reset }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   FMC:
@@ -2708,9 +2709,9 @@ peripherals:
           - { name: Disable }
           - { name: Enabled, signals: [BA0, BA1, CAS_N, RAS_N, WE_N, CKE0, CKE1, CS_N0, CS_N1, DQM0, DQM1, DQM2, DQM3] }
     signal_pins:
-      A0: [{ pin: PA14, af: 3 }, { pin: PE11, af: 15 }, { pin: PF5, af: 12 }]
-      A1: [{ pin: PA15, af: 12 }, { pin: PB3, af: 12 }, { pin: PE12, af: 15 }]
-      A10: [{ pin: PB10, af: 12 }, { pin: PD10, af: 0 }]
+      A0: [{ pin: PA14, af: 3 }, { pin: PF5, af: 12 }, { pin: PE11, af: 15 }]
+      A1: [{ pin: PB3, af: 12 }, { pin: PE12, af: 15 }, { pin: PA15, af: 12 }]
+      A10: [{ pin: PD10, af: 0 }, { pin: PB10, af: 12 }]
       A11: [{ pin: PB11, af: 12 }, { pin: PD11, af: 0 }]
       A12: [{ pin: PB12, af: 12 }, { pin: PD12, af: 0 }]
       A13: [{ pin: PB13, af: 12 }]
@@ -2719,45 +2720,45 @@ peripherals:
       A16: [{ pin: PD11, af: 12 }]
       A17: [{ pin: PD12, af: 12 }]
       A18: [{ pin: PD13, af: 12 }]
-      A19: [{ pin: PB10, af: 6 }, { pin: PE3, af: 12 }]
+      A19: [{ pin: PE3, af: 12 }, { pin: PB10, af: 6 }]
       A2: [{ pin: PB4, af: 12 }, { pin: PE13, af: 15 }]
-      A20: [{ pin: PB11, af: 2 }, { pin: PE4, af: 12 }]
-      A21: [{ pin: PB12, af: 3 }, { pin: PE5, af: 12 }]
-      A22: [{ pin: PB13, af: 15 }, { pin: PE6, af: 12 }]
-      A23: [{ pin: PB14, af: 0 }, { pin: PE2, af: 12 }]
+      A20: [{ pin: PE4, af: 12 }, { pin: PB11, af: 2 }]
+      A21: [{ pin: PE5, af: 12 }, { pin: PB12, af: 3 }]
+      A22: [{ pin: PE6, af: 12 }, { pin: PB13, af: 15 }]
+      A23: [{ pin: PE2, af: 12 }, { pin: PB14, af: 0 }]
       A24: [{ pin: PE1, af: 12 }]
       A25: [{ pin: PD2, af: 11 }]
-      A3: [{ pin: PB8, af: 12 }, { pin: PE0, af: 0 }, { pin: PE14, af: 14 }]
-      A4: [{ pin: PB9, af: 12 }, { pin: PE1, af: 0 }, { pin: PE15, af: 15 }]
-      A5: [{ pin: PB10, af: 0 }, { pin: PB6, af: 1 }, { pin: PC13, af: 12 }]
+      A3: [{ pin: PE14, af: 14 }, { pin: PE0, af: 0 }, { pin: PB8, af: 12 }]
+      A4: [{ pin: PE15, af: 15 }, { pin: PB9, af: 12 }, { pin: PE1, af: 0 }]
+      A5: [{ pin: PB6, af: 1 }, { pin: PC13, af: 12 }, { pin: PB10, af: 0 }]
       A6: [{ pin: PA10, af: 10 }, { pin: PB11, af: 0 }]
       A7: [{ pin: PA11, af: 10 }, { pin: PB12, af: 0 }]
       A8: [{ pin: PA12, af: 10 }, { pin: PB13, af: 0 }]
-      A9: [{ pin: PA13, af: 10 }, { pin: PB14, af: 0 }, { pin: PD9, af: 0 }]
+      A9: [{ pin: PA13, af: 10 }, { pin: PD9, af: 0 }, { pin: PB14, af: 0 }]
       BA0: [{ pin: PB1, af: 7 }, { pin: PB14, af: 12 }]
-      BA1: [{ pin: PA13, af: 3 }, { pin: PB15, af: 12 }, { pin: PE10, af: 15 }]
+      BA1: [{ pin: PE10, af: 15 }, { pin: PB15, af: 12 }, { pin: PA13, af: 3 }]
       CAS_N: [{ pin: PC0, af: 15 }, { pin: PF12, af: 12 }]
-      CKE0: [{ pin: PC3, af: 12 }, { pin: PC5, af: 12 }, { pin: PE5, af: 9 }, { pin: PF3, af: 4 }]
-      CKE1: [{ pin: PB5, af: 12 }, { pin: PC14, af: 9 }, { pin: PE6, af: 7 }, { pin: PF4, af: 4 }]
-      CLK: [{ pin: PD3, af: 12 }, { pin: PE2, af: 9 }, { pin: PF14, af: 1 }, { pin: PF2, af: 12 }]
-      CS_N0: [{ pin: PC2, af: 12 }, { pin: PC4, af: 12 }, { pin: PD6, af: 3 }, { pin: PE3, af: 9 }]
-      CS_N1: [{ pin: PB6, af: 12 }, { pin: PD7, af: 3 }, { pin: PE4, af: 9 }, { pin: PF0, af: 4 }]
-      D0: [{ pin: PD13, af: 0 }, { pin: PD14, af: 12 }]
-      D1: [{ pin: PD14, af: 0 }, { pin: PD15, af: 12 }]
-      D10: [{ pin: PA9, af: 0 }, { pin: PD0, af: 1 }, { pin: PE13, af: 12 }]
-      D11: [{ pin: PA10, af: 0 }, { pin: PD1, af: 1 }, { pin: PE14, af: 12 }]
-      D12: [{ pin: PA11, af: 0 }, { pin: PD2, af: 1 }, { pin: PE15, af: 12 }]
-      D13: [{ pin: PA12, af: 0 }, { pin: PC8, af: 4 }, { pin: PD3, af: 1 }, { pin: PD8, af: 12 }]
-      D14: [{ pin: PA13, af: 0 }, { pin: PC9, af: 7 }, { pin: PD4, af: 1 }, { pin: PD9, af: 12 }]
-      D15: [{ pin: PA14, af: 0 }, { pin: PD10, af: 12 }, { pin: PD5, af: 1 }]
-      D16: [{ pin: PC14, af: 12 }, { pin: PC3, af: 11 }]
+      CKE0: [{ pin: PC5, af: 12 }, { pin: PE5, af: 9 }, { pin: PC3, af: 12 }, { pin: PF3, af: 4 }]
+      CKE1: [{ pin: PC14, af: 9 }, { pin: PB5, af: 12 }, { pin: PE6, af: 7 }, { pin: PF4, af: 4 }]
+      CLK: [{ pin: PF2, af: 12 }, { pin: PD3, af: 12 }, { pin: PE2, af: 9 }, { pin: PF14, af: 1 }]
+      CS_N0: [{ pin: PC4, af: 12 }, { pin: PD6, af: 3 }, { pin: PE3, af: 9 }, { pin: PC2, af: 12 }]
+      CS_N1: [{ pin: PF0, af: 4 }, { pin: PB6, af: 12 }, { pin: PE4, af: 9 }, { pin: PD7, af: 3 }]
+      D0: [{ pin: PD14, af: 12 }, { pin: PD13, af: 0 }]
+      D1: [{ pin: PD15, af: 12 }, { pin: PD14, af: 0 }]
+      D10: [{ pin: PE13, af: 12 }, { pin: PA9, af: 0 }, { pin: PD0, af: 1 }]
+      D11: [{ pin: PE14, af: 12 }, { pin: PA10, af: 0 }, { pin: PD1, af: 1 }]
+      D12: [{ pin: PD2, af: 1 }, { pin: PE15, af: 12 }, { pin: PA11, af: 0 }]
+      D13: [{ pin: PD3, af: 1 }, { pin: PD8, af: 12 }, { pin: PA12, af: 0 }, { pin: PC8, af: 4 }]
+      D14: [{ pin: PD9, af: 12 }, { pin: PA13, af: 0 }, { pin: PD4, af: 1 }, { pin: PC9, af: 7 }]
+      D15: [{ pin: PD10, af: 12 }, { pin: PA14, af: 0 }, { pin: PD5, af: 1 }]
+      D16: [{ pin: PC3, af: 11 }, { pin: PC14, af: 12 }]
       D17: [{ pin: PB5, af: 11 }, { pin: PC15, af: 12 }, { pin: PE10, af: 3 }]
       D18: [{ pin: PE11, af: 3 }, { pin: PF6, af: 12 }]
       D19: [{ pin: PE12, af: 3 }, { pin: PF7, af: 12 }]
       D2: [{ pin: PD0, af: 12 }, { pin: PD15, af: 0 }]
       D20: [{ pin: PA9, af: 8 }, { pin: PF8, af: 12 }]
-      D21: [{ pin: PA10, af: 8 }, { pin: PF9, af: 12 }]
-      D22: [{ pin: PA11, af: 8 }, { pin: PF10, af: 12 }]
+      D21: [{ pin: PF9, af: 12 }, { pin: PA10, af: 8 }]
+      D22: [{ pin: PF10, af: 12 }, { pin: PA11, af: 8 }]
       D23: [{ pin: PA0, af: 12 }, { pin: PA12, af: 8 }]
       D24: [{ pin: PA1, af: 12 }, { pin: PC10, af: 3 }]
       D25: [{ pin: PA2, af: 12 }, { pin: PC11, af: 3 }]
@@ -2768,18 +2769,18 @@ peripherals:
       D3: [{ pin: PD1, af: 12 }, { pin: PF0, af: 2 }]
       D30: [{ pin: PB1, af: 12 }, { pin: PE0, af: 3 }]
       D31: [{ pin: PB2, af: 12 }, { pin: PE1, af: 3 }]
-      D4: [{ pin: PC0, af: 4 }, { pin: PE7, af: 12 }, { pin: PF1, af: 2 }]
-      D5: [{ pin: PC1, af: 4 }, { pin: PE8, af: 12 }, { pin: PF2, af: 2 }]
-      D6: [{ pin: PC2, af: 4 }, { pin: PC6, af: 0 }, { pin: PE9, af: 12 }]
-      D7: [{ pin: PC3, af: 4 }, { pin: PC7, af: 0 }, { pin: PE10, af: 12 }]
-      D8: [{ pin: PC6, af: 4 }, { pin: PC8, af: 0 }, { pin: PE11, af: 12 }]
-      D9: [{ pin: PC7, af: 4 }, { pin: PC9, af: 0 }, { pin: PE12, af: 12 }]
-      DQM0: [{ pin: PC12, af: 0 }, { pin: PC2, af: 15 }]
-      DQM1: [{ pin: PC11, af: 0 }, { pin: PC3, af: 15 }, { pin: PE3, af: 1 }]
-      DQM2: [{ pin: PA0, af: 15 }, { pin: PA6, af: 6 }, { pin: PB9, af: 3 }, { pin: PC10, af: 0 }]
-      DQM3: [{ pin: PA15, af: 0 }, { pin: PA8, af: 6 }]
+      D4: [{ pin: PE7, af: 12 }, { pin: PC0, af: 4 }, { pin: PF1, af: 2 }]
+      D5: [{ pin: PC1, af: 4 }, { pin: PF2, af: 2 }, { pin: PE8, af: 12 }]
+      D6: [{ pin: PC6, af: 0 }, { pin: PE9, af: 12 }, { pin: PC2, af: 4 }]
+      D7: [{ pin: PC7, af: 0 }, { pin: PE10, af: 12 }, { pin: PC3, af: 4 }]
+      D8: [{ pin: PC8, af: 0 }, { pin: PE11, af: 12 }, { pin: PC6, af: 4 }]
+      D9: [{ pin: PC9, af: 0 }, { pin: PE12, af: 12 }, { pin: PC7, af: 4 }]
+      DQM0: [{ pin: PC2, af: 15 }, { pin: PC12, af: 0 }]
+      DQM1: [{ pin: PE3, af: 1 }, { pin: PC11, af: 0 }, { pin: PC3, af: 15 }]
+      DQM2: [{ pin: PA6, af: 6 }, { pin: PA0, af: 15 }, { pin: PC10, af: 0 }, { pin: PB9, af: 3 }]
+      DQM3: [{ pin: PA8, af: 6 }, { pin: PA15, af: 0 }, { pin: PB0, af: 7 }]
       INT2: [{ pin: PF1, af: 12 }]
-      NADV: [{ pin: PB7, af: 12 }, { pin: PF14, af: 12 }]
+      NADV: [{ pin: PF14, af: 12 }, { pin: PB7, af: 12 }]
       NBL0: [{ pin: PC12, af: 0 }]
       NBL1: [{ pin: PC11, af: 0 }]
       NBL2: [{ pin: PC10, af: 0 }]
@@ -2792,16 +2793,16 @@ peripherals:
       NOE: [{ pin: PD4, af: 12 }]
       NWAIT: [{ pin: PD6, af: 12 }]
       NWE: [{ pin: PD5, af: 12 }]
-      RAS_N: [{ pin: PC10, af: 1 }, { pin: PC15, af: 9 }, { pin: PE5, af: 9 }, { pin: PF3, af: 3 }]
-      WE_N: [{ pin: PA7, af: 12 }, { pin: PC0, af: 12 }, { pin: PC1, af: 15 }]
+      RAS_N: [{ pin: PC15, af: 9 }, { pin: PF3, af: 3 }, { pin: PE5, af: 9 }, { pin: PC10, af: 1 }]
+      WE_N: [{ pin: PA7, af: 12 }, { pin: PC1, af: 15 }, { pin: PC0, af: 12 }]
   GPHA:
     category: Graphics
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   HSADC:
@@ -2831,12 +2832,12 @@ peripherals:
       IN6: [{ pin: PF10 }]
   HSEM:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   I2C3:
@@ -2860,9 +2861,9 @@ peripherals:
           - { name: I2C, signals: [SCL, SDA] }
           - { name: SMBus, signals: [SCL, SDA, SMBA] }
     signal_pins:
-      SCL: [{ pin: PB6, af: 6 }, { pin: PB8, af: 6 }, { pin: PD12, af: 4 }, { pin: PF12, af: 2 }]
-      SDA: [{ pin: PB7, af: 6 }, { pin: PB9, af: 6 }, { pin: PD13, af: 4 }, { pin: PF13, af: 2 }]
-      SMBA: [{ pin: PB5, af: 6 }, { pin: PB9, af: 11 }, { pin: PD11, af: 4 }, { pin: PF11, af: 2 }]
+      SCL: [{ pin: PD12, af: 4 }, { pin: PB6, af: 6 }, { pin: PF12, af: 2 }, { pin: PB8, af: 6 }]
+      SDA: [{ pin: PD13, af: 4 }, { pin: PB7, af: 6 }, { pin: PF13, af: 2 }, { pin: PB9, af: 6 }]
+      SMBA: [{ pin: PD11, af: 4 }, { pin: PB5, af: 6 }, { pin: PF11, af: 2 }, { pin: PB9, af: 11 }]
   I2S2:
     category: Connectivity
     settings:
@@ -2874,10 +2875,10 @@ peripherals:
           - { name: "Slave Transmit", signals: [CK, WS, SD] }
           - { name: "Slave Receive", signals: [CK, WS, SD] }
     signal_pins:
-      CK: [{ pin: PA12, af: 5 }, { pin: PA9, af: 5 }, { pin: PB10, af: 5 }, { pin: PB13, af: 5 }, { pin: PD3, af: 5 }]
-      MCK: [{ pin: PB5, af: 8 }]
-      SD: [{ pin: PB15, af: 5 }, { pin: PC1, af: 5 }, { pin: PC3, af: 5 }]
-      WS: [{ pin: PA11, af: 5 }, { pin: PB12, af: 5 }, { pin: PB4, af: 7 }, { pin: PB9, af: 5 }]
+      CK: [{ pin: PB10, af: 5 }, { pin: PB13, af: 5 }, { pin: PD3, af: 5 }, { pin: PA12, af: 5 }, { pin: PA9, af: 5 }]
+      MCK: [{ pin: PC6, af: 5 }, { pin: PB5, af: 8 }]
+      SD: [{ pin: PC1, af: 5 }, { pin: PC3, af: 5 }, { pin: PB15, af: 5 }]
+      WS: [{ pin: PB12, af: 5 }, { pin: PA11, af: 5 }, { pin: PB4, af: 7 }, { pin: PB9, af: 5 }]
   I2S3:
     category: Connectivity
     settings:
@@ -2889,28 +2890,28 @@ peripherals:
           - { name: "Slave Transmit", signals: [CK, WS, SD] }
           - { name: "Slave Receive", signals: [CK, WS, SD] }
     signal_pins:
-      CK: [{ pin: PA14, af: 1 }, { pin: PB3, af: 6 }, { pin: PC10, af: 6 }]
-      MCK: [{ pin: PB6, af: 5 }, { pin: PC7, af: 6 }]
-      SD: [{ pin: PA13, af: 1 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }]
+      CK: [{ pin: PA14, af: 1 }, { pin: PC10, af: 6 }, { pin: PB3, af: 6 }]
+      MCK: [{ pin: PC7, af: 6 }, { pin: PB6, af: 5 }]
+      SD: [{ pin: PA13, af: 1 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }]
       WS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
   IPC:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   IWDG:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Activated }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   LPTIM1:
@@ -2999,6 +3000,35 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled, signals: [CLK, HSYNC, VSYNC, DE] }
+    signal_pins:
+      B0: [{ pin: PF1, af: 8 }, { pin: PF3, af: 14 }, { pin: PE4, af: 14 }]
+      B1: [{ pin: PD14, af: 8 }, { pin: PE0, af: 14 }, { pin: PA10, af: 14 }, { pin: PC10, af: 10 }, { pin: PD0, af: 14 }]
+      B2: [{ pin: PA13, af: 8 }, { pin: PD6, af: 14 }, { pin: PF4, af: 14 }, { pin: PA3, af: 9 }, { pin: PC9, af: 14 }, { pin: PD2, af: 14 }]
+      B3: [{ pin: PD10, af: 14 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }, { pin: PA8, af: 13 }]
+      B4: [{ pin: PC11, af: 14 }, { pin: PE0, af: 9 }, { pin: PA10, af: 12 }, { pin: PE12, af: 14 }, { pin: PA15, af: 10 }, { pin: PE1, af: 15 }, { pin: PD4, af: 14 }]
+      B5: [{ pin: PD5, af: 14 }, { pin: PF14, af: 15 }, { pin: PA3, af: 14 }, { pin: PB5, af: 3 }]
+      B6: [{ pin: PA14, af: 14 }, { pin: PA15, af: 14 }, { pin: PB8, af: 14 }]
+      B7: [{ pin: PD2, af: 9 }, { pin: PD8, af: 14 }, { pin: PB9, af: 14 }]
+      CLK: [{ pin: PA15, af: 15 }, { pin: PB14, af: 14 }, { pin: PE14, af: 13 }, { pin: PF1, af: 14 }]
+      DE: [{ pin: PE13, af: 14 }, { pin: PC12, af: 15 }, { pin: PC5, af: 14 }, { pin: PF10, af: 14 }]
+      G0: [{ pin: PB1, af: 14 }, { pin: PB14, af: 6 }, { pin: PE5, af: 14 }]
+      G1: [{ pin: PB0, af: 14 }, { pin: PE6, af: 14 }]
+      G2: [{ pin: PD15, af: 7 }, { pin: PC0, af: 11 }, { pin: PA6, af: 14 }, { pin: PD5, af: 15 }]
+      G3: [{ pin: PC9, af: 10 }, { pin: PD6, af: 15 }, { pin: PF4, af: 9 }, { pin: PE11, af: 14 }]
+      G4: [{ pin: PB10, af: 14 }, { pin: PC8, af: 14 }, { pin: PD7, af: 15 }]
+      G5: [{ pin: PB11, af: 14 }, { pin: PC1, af: 14 }, { pin: PF3, af: 15 }]
+      G6: [{ pin: PC7, af: 14 }, { pin: PF4, af: 15 }]
+      G7: [{ pin: PD3, af: 14 }, { pin: PF2, af: 14 }, { pin: PF5, af: 15 }, { pin: PB15, af: 14 }]
+      HSYNC: [{ pin: PC10, af: 15 }, { pin: PC6, af: 14 }, { pin: PA6, af: 11 }]
+      R0: [{ pin: PE1, af: 14 }, { pin: PA0, af: 14 }, { pin: PA14, af: 15 }]
+      R1: [{ pin: PF0, af: 11 }, { pin: PA2, af: 14 }]
+      R2: [{ pin: PD13, af: 3 }, { pin: PA1, af: 14 }, { pin: PC10, af: 14 }]
+      R3: [{ pin: PD0, af: 15 }, { pin: PD12, af: 11 }, { pin: PA15, af: 9 }, { pin: PB0, af: 9 }]
+      R4: [{ pin: PA5, af: 14 }, { pin: PD1, af: 15 }, { pin: PD11, af: 11 }, { pin: PA11, af: 14 }]
+      R5: [{ pin: PA12, af: 14 }, { pin: PA9, af: 14 }, { pin: PC0, af: 14 }, { pin: PD2, af: 15 }]
+      R6: [{ pin: PA8, af: 14 }, { pin: PE2, af: 14 }, { pin: PC12, af: 14 }, { pin: PB1, af: 9 }, { pin: PD3, af: 15 }]
+      R7: [{ pin: PD4, af: 15 }, { pin: PE15, af: 14 }, { pin: PC4, af: 14 }, { pin: PF0, af: 14 }]
+      VSYNC: [{ pin: PB12, af: 10 }, { pin: PC11, af: 15 }, { pin: PA4, af: 14 }, { pin: PA7, af: 14 }]
     notes: >
       Parallel RGB output, always 24 bits wide at the pad - the width you pick here is
       how many lines you WIRED, not a mode the silicon has (RM 43.4.5 gives the global
@@ -3011,35 +3041,6 @@ peripherals:
       converter expands them to ARGB8888 before the output stage. Choosing one saves
       memory and changes no pin. Selecting it is not modelled yet - the generator has no
       way to fill the per-layer init struct - so it is an open item rather than a gap.
-    signal_pins:
-      B0: [{ pin: PF1, af: 8 }, { pin: PE4, af: 14 }, { pin: PF3, af: 14 }]
-      B1: [{ pin: PC10, af: 10 }, { pin: PA10, af: 14 }, { pin: PD0, af: 14 }, { pin: PD14, af: 8 }, { pin: PE0, af: 14 }]
-      B2: [{ pin: PA13, af: 8 }, { pin: PA3, af: 9 }, { pin: PC9, af: 14 }, { pin: PD2, af: 14 }, { pin: PD6, af: 14 }, { pin: PF4, af: 14 }]
-      B3: [{ pin: PD10, af: 14 }, { pin: PA8, af: 13 }, { pin: PD7, af: 14 }, { pin: PE0, af: 15 }, { pin: PF5, af: 14 }]
-      B4: [{ pin: PA15, af: 10 }, { pin: PA10, af: 12 }, { pin: PC11, af: 14 }, { pin: PD4, af: 14 }, { pin: PE0, af: 9 }, { pin: PE1, af: 15 }, { pin: PE12, af: 14 }]
-      B5: [{ pin: PD5, af: 14 }, { pin: PA3, af: 14 }, { pin: PB5, af: 3 }, { pin: PF14, af: 15 }]
-      B6: [{ pin: PA14, af: 14 }, { pin: PA15, af: 14 }, { pin: PB8, af: 14 }]
-      B7: [{ pin: PD2, af: 9 }, { pin: PB9, af: 14 }, { pin: PD8, af: 14 }]
-      CLK: [{ pin: PB14, af: 14 }, { pin: PA15, af: 15 }, { pin: PE14, af: 13 }, { pin: PF1, af: 14 }]
-      DE: [{ pin: PE13, af: 14 }, { pin: PC12, af: 15 }, { pin: PC5, af: 14 }, { pin: PF10, af: 14 }]
-      G0: [{ pin: PB1, af: 14 }, { pin: PB14, af: 6 }, { pin: PE5, af: 14 }]
-      G1: [{ pin: PB0, af: 14 }, { pin: PE6, af: 14 }]
-      G2: [{ pin: PD15, af: 7 }, { pin: PA6, af: 14 }, { pin: PC0, af: 11 }, { pin: PD5, af: 15 }]
-      G3: [{ pin: PC9, af: 10 }, { pin: PD6, af: 15 }, { pin: PE11, af: 14 }, { pin: PF4, af: 9 }]
-      G4: [{ pin: PB10, af: 14 }, { pin: PC8, af: 14 }, { pin: PD7, af: 15 }]
-      G5: [{ pin: PB11, af: 14 }, { pin: PC1, af: 14 }, { pin: PF3, af: 15 }]
-      G6: [{ pin: PC7, af: 14 }, { pin: PF4, af: 15 }]
-      G7: [{ pin: PD3, af: 14 }, { pin: PB15, af: 14 }, { pin: PF2, af: 14 }, { pin: PF5, af: 15 }]
-      HSYNC: [{ pin: PC6, af: 14 }, { pin: PA6, af: 11 }, { pin: PC10, af: 15 }]
-      R0: [{ pin: PE1, af: 14 }, { pin: PA0, af: 14 }, { pin: PA14, af: 15 }]
-      R1: [{ pin: PF0, af: 11 }, { pin: PA2, af: 14 }]
-      R2: [{ pin: PD13, af: 3 }, { pin: PA1, af: 14 }, { pin: PC10, af: 14 }]
-      R3: [{ pin: PD0, af: 15 }, { pin: PA15, af: 9 }, { pin: PB0, af: 9 }, { pin: PD12, af: 11 }]
-      R4: [{ pin: PA5, af: 14 }, { pin: PA11, af: 14 }, { pin: PD1, af: 15 }, { pin: PD11, af: 11 }]
-      R5: [{ pin: PC0, af: 14 }, { pin: PA12, af: 14 }, { pin: PA9, af: 14 }, { pin: PD2, af: 15 }]
-      R6: [{ pin: PC12, af: 14 }, { pin: PA8, af: 14 }, { pin: PB1, af: 9 }, { pin: PD3, af: 15 }, { pin: PE2, af: 14 }]
-      R7: [{ pin: PD4, af: 15 }, { pin: PC4, af: 14 }, { pin: PE15, af: 14 }, { pin: PF0, af: 14 }]
-      VSYNC: [{ pin: PB12, af: 10 }, { pin: PA4, af: 14 }, { pin: PA7, af: 14 }, { pin: PC11, af: 15 }]
   OPA:
     category: Analog
     settings:
@@ -3115,10 +3116,23 @@ peripherals:
           - { name: Disable }
           - { name: "Programmable IO", signals: [IO0, IO1] }
     signal_pins:
-      IO0: [{ pin: PA0, af: 5 }, { pin: PB8, af: 5 }, { pin: PC1, af: 7 }, { pin: PE3, af: 5 }, { pin: PF12, af: 3 }]
-      IO1: [{ pin: PB9, af: 7 }, { pin: PC0, af: 5 }, { pin: PC2, af: 8 }, { pin: PE4, af: 4 }, { pin: PF13, af: 5 }, { pin: PF14, af: 5 }]
+      IO0: [{ pin: PC1, af: 7 }, { pin: PA0, af: 5 }, { pin: PE3, af: 5 }, { pin: PF12, af: 3 }, { pin: PB8, af: 5 }]
+      IO1: [{ pin: PC0, af: 5 }, { pin: PC2, af: 8 }, { pin: PF14, af: 5 }, { pin: PE4, af: 4 }, { pin: PF13, af: 5 }, { pin: PB9, af: 7 }]
   PWR:
     category: System Core
+    settings:
+      - name: "Programmable Voltage Detector (PVD)"
+        choices:
+          - { name: Disable }
+          - { name: Enabled }
+      - name: "Low power mode"
+        choices:
+          - { name: None }
+          - { name: Sleep }
+          - { name: Stop }
+          - { name: Standby }
+    notes: This peripheral holds no pin on any package; it is configured
+      through its own registers and the clock tree only.
     pins:
       none: true
       source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)"
@@ -3205,19 +3219,6 @@ peripherals:
             Ground, and the analog return for VDD33A and VREFP. Star VSSA to VSS at the pin
             rather than along the digital ground path.
           source: "CH32H417DS0.md Table 2-1-1"
-    settings:
-      - name: "Programmable Voltage Detector (PVD)"
-        choices:
-          - { name: Disable }
-          - { name: Enabled }
-      - name: "Low power mode"
-        choices:
-          - { name: None }
-          - { name: Sleep }
-          - { name: Stop }
-          - { name: Standby }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
   QSPI1:
     category: Connectivity
     settings:
@@ -3242,11 +3243,11 @@ peripherals:
       SIO0: [{ pin: PC9, af: 9 }, { pin: PD11, af: 9 }, { pin: PF8, af: 10 }]
       SIO1: [{ pin: PC10, af: 9 }, { pin: PD12, af: 9 }, { pin: PF9, af: 10 }]
       SIO2: [{ pin: PD14, af: 9 }, { pin: PF7, af: 10 }]
-      SIO3: [{ pin: PA1, af: 9 }, { pin: PD13, af: 9 }, { pin: PF6, af: 10 }]
+      SIO3: [{ pin: PD13, af: 9 }, { pin: PA1, af: 9 }, { pin: PF6, af: 10 }]
       SIOX0: [{ pin: PE7, af: 10 }]
       SIOX1: [{ pin: PE8, af: 10 }]
-      SIOX2: [{ pin: PE9, af: 10 }, { pin: PF3, af: 9 }]
-      SIOX3: [{ pin: PE10, af: 10 }, { pin: PF5, af: 9 }]
+      SIOX2: [{ pin: PF3, af: 9 }, { pin: PE9, af: 10 }]
+      SIOX3: [{ pin: PF5, af: 9 }, { pin: PE10, af: 10 }]
   QSPI2:
     category: Connectivity
     settings:
@@ -3265,10 +3266,10 @@ peripherals:
           - { name: SIOX2, signals: [SIOX2] }
           - { name: SIOX3, signals: [SIOX3] }
     signal_pins:
-      SCK: [{ pin: PE10, af: 7 }, { pin: PF0, af: 5 }, { pin: PF6, af: 4 }]
-      SCSN: [{ pin: PE11, af: 7 }, { pin: PF1, af: 5 }, { pin: PF7, af: 4 }]
+      SCK: [{ pin: PF0, af: 5 }, { pin: PE10, af: 7 }, { pin: PF6, af: 4 }]
+      SCSN: [{ pin: PF1, af: 5 }, { pin: PE11, af: 7 }, { pin: PF7, af: 4 }]
       SCSXN: [{ pin: PB10, af: 11 }, { pin: PC1, af: 10 }]
-      SIO0: [{ pin: PE12, af: 7 }, { pin: PF2, af: 5 }, { pin: PF8, af: 4, notes: "DS Table 2-1-1 gives this pin AF4 and AF8 for this signal; `signal_pins:` takes one AF code per pin, so AF4 is used and AF8 also work here" }]
+      SIO0: [{ pin: PF2, af: 5 }, { pin: PE12, af: 7 }, { pin: PF8, af: 4, notes: "DS Table 2-1-1 gives this pin AF4 and AF8 for this signal; `signal_pins:` takes one AF code per pin, so AF4 is used and AF8 also work here" }]
       SIO1: [{ pin: PE13, af: 7 }, { pin: PF9, af: 4 }]
       SIO2: [{ pin: PE14, af: 7 }, { pin: PF10, af: 4 }]
       SIO3: [{ pin: PC0, af: 10 }, { pin: PE15, af: 7 }]
@@ -3287,25 +3288,33 @@ peripherals:
       - name: "Master Clock Output (MCO)"
         choices:
           - { name: Disable }
-          - { name: SYSCLK }
-          - { name: HSI }
-          - { name: HSE }
-          - { name: "PLLCLK/2" }
-          - { name: "UTMI clock" }
-          - { name: "USBSS_PLL/2" }
-          - { name: "ETH_PLL/8" }
-          - { name: "SERDES_PLL/16" }
+          - { name: SYSCLK, signals: [MCO] }
+          - { name: HSI, signals: [MCO] }
+          - { name: HSE, signals: [MCO] }
+          - { name: "PLLCLK/2", signals: [MCO] }
+          - { name: "UTMI clock", signals: [MCO] }
+          - { name: "USBSS_PLL/2", signals: [MCO] }
+          - { name: "ETH_PLL/8", signals: [MCO] }
+          - { name: "SERDES_PLL/16", signals: [MCO] }
+      - name: "Low Speed Clock (LSE)"
+        choices:
+          - { name: Disable }
+          - { name: "BYPASS clock source", signals: [OSC32_IN] }
+          - { name: "Crystal / ceramic resonator", signals: [OSC32_IN, OSC32_OUT] }
     signal_pins:
+      MCO: [{ pin: PB0, af: 0 }]
+      OSC32_IN: [{ pin: PC14, notes: "the LSE crystal input. DS Table 2-1-1 names the row `PC14(4)-OSC32_IN` and gives it no AF code - RCC_BDCTLR.LSEON, not the AF multiplexer, decides whether the pad is LSE or PC14 (RM 9.2.11.1)" }]
+      OSC32_OUT: [{ pin: PC15, notes: "the LSE crystal output. DS Table 2-1-1 row `PC15(4)-OSC32_OUT`, likewise no AF code; suspended in LSE bypass mode (RM 3.2)" }]
       XI: [{ pin: XI, notes: "dedicated HSE crystal input pad; not a GPIO on any package" }]
       XO: [{ pin: XO, notes: "dedicated HSE crystal output pad; not a GPIO on any package" }]
   RNG:
     category: Security
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   RTC:
@@ -3333,11 +3342,11 @@ peripherals:
     signal_pins:
       FS_A: [{ pin: PC3, af: 7 }, { pin: PE4, af: 6 }]
       FS_B: [{ pin: PA15, af: 13 }, { pin: PF9, af: 6 }]
-      MCLK_A: [{ pin: PC0, af: 7 }, { pin: PE2, af: 6 }, { pin: PF1, af: 6 }]
+      MCLK_A: [{ pin: PC0, af: 7 }, { pin: PF1, af: 6 }, { pin: PE2, af: 6 }]
       MCLK_B: [{ pin: PC9, af: 15 }, { pin: PF7, af: 6 }]
       SCK_A: [{ pin: PC2, af: 7 }, { pin: PE5, af: 6 }]
       SCK_B: [{ pin: PA14, af: 13 }, { pin: PF8, af: 6 }]
-      SD_A: [{ pin: PB2, af: 6 }, { pin: PC1, af: 7 }, { pin: PD6, af: 6 }, { pin: PE6, af: 6 }]
+      SD_A: [{ pin: PC1, af: 7 }, { pin: PD6, af: 6 }, { pin: PE6, af: 6 }, { pin: PB2, af: 6 }]
       SD_B: [{ pin: PA13, af: 13 }, { pin: PE3, af: 6 }, { pin: PF6, af: 6 }]
   SDIO:
     category: Connectivity
@@ -3350,13 +3359,13 @@ peripherals:
           - { name: "SD 8-bit", signals: [CK, CMD, D0, D1, D2, D3, D4, D5, D6, D7] }
     signal_pins:
       CK: [{ pin: PB11, af: 8 }, { pin: PC1, af: 11 }]
-      CMD: [{ pin: PA0, af: 9 }, { pin: PB10, af: 8 }]
+      CMD: [{ pin: PB10, af: 8 }, { pin: PA0, af: 9 }]
       D0: [{ pin: PB14, af: 9 }, { pin: PE8, af: 8 }]
       D1: [{ pin: PB15, af: 9 }, { pin: PE9, af: 8 }]
       D2: [{ pin: PB3, af: 9 }, { pin: PE10, af: 8 }]
       D3: [{ pin: PB4, af: 9 }, { pin: PE11, af: 8 }]
-      D4: [{ pin: PB8, af: 10 }, { pin: PE12, af: 8 }]
-      D5: [{ pin: PB9, af: 10 }, { pin: PE13, af: 8 }]
+      D4: [{ pin: PE12, af: 8 }, { pin: PB8, af: 10 }]
+      D5: [{ pin: PE13, af: 8 }, { pin: PB9, af: 10 }]
       D6: [{ pin: PC6, af: 9 }, { pin: PE14, af: 8 }]
       D7: [{ pin: PC7, af: 9 }, { pin: PE15, af: 8 }]
   SDMMC:
@@ -3378,16 +3387,16 @@ peripherals:
       CMD: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
       D0: [{ pin: PB13 }, { pin: PC8 }, { pin: PD0 }]
       D1: [{ pin: PC9 }, { pin: PD1 }]
-      D2: [{ pin: PB10 }, { pin: PC10 }, { pin: PD2 }]
+      D2: [{ pin: PB10 }, { pin: PD2 }, { pin: PC10 }]
       D3: [{ pin: PB11 }, { pin: PC11 }, { pin: PD3 }]
       D4: [{ pin: PA14 }, { pin: PD4 }]
       D5: [{ pin: PA15 }, { pin: PD5 }]
       D6: [{ pin: PC6 }, { pin: PD6 }]
       D7: [{ pin: PC7 }, { pin: PD7 }]
       SDCK: [{ pin: PC12 }, { pin: PD11 }]
-      SLVCK: [{ pin: PC12 }, { pin: PD11 }]
+      SLVCK: [{ pin: PD11 }, { pin: PC12 }]
       STR: [{ pin: PC11 }, { pin: PD10 }, { pin: PD3 }]
-      STS: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
+      STS: [{ pin: PD12 }, { pin: PD2 }, { pin: PC10 }]
   SERDES:
     category: Connectivity
     settings:
@@ -3418,10 +3427,10 @@ peripherals:
           - { name: "Hardware NSS Input", signals: [NSS] }
           - { name: "Hardware NSS Output", signals: [NSS] }
     signal_pins:
-      MISO: [{ pin: PB4, af: 6 }, { pin: PC11, af: 6 }, { pin: PC9, af: 5 }]
-      MOSI: [{ pin: PA13, af: 1 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }]
+      MISO: [{ pin: PC11, af: 6 }, { pin: PC9, af: 5 }, { pin: PB4, af: 6 }]
+      MOSI: [{ pin: PA13, af: 1 }, { pin: PC12, af: 6 }, { pin: PD6, af: 5 }, { pin: PB2, af: 7 }, { pin: PB5, af: 7 }]
       NSS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
-      SCK: [{ pin: PA14, af: 1 }, { pin: PB3, af: 6 }, { pin: PC10, af: 6 }]
+      SCK: [{ pin: PA14, af: 1 }, { pin: PC10, af: 6 }, { pin: PB3, af: 6 }]
   SPI4:
     category: Connectivity
     settings:
@@ -3492,8 +3501,8 @@ peripherals:
     signal_pins:
       CH1: [{ pin: PA6, af: 9 }, { pin: PB6, af: 0 }, { pin: PF8, af: 9 }]
       CH2: [{ pin: PA7, af: 9 }, { pin: PB7, af: 0 }, { pin: PF9, af: 9 }]
-      CH3: [{ pin: PA3, af: 8 }, { pin: PB8, af: 1 }, { pin: PF6, af: 9 }]
-      CH4: [{ pin: PA4, af: 9 }, { pin: PB9, af: 1 }, { pin: PF7, af: 9 }]
+      CH3: [{ pin: PA3, af: 8 }, { pin: PF6, af: 9 }, { pin: PB8, af: 1 }]
+      CH4: [{ pin: PA4, af: 9 }, { pin: PF7, af: 9 }, { pin: PB9, af: 1 }]
       ETR: [{ pin: PA5, af: 9 }, { pin: PB5, af: 0 }, { pin: PF10, af: 8 }]
   TIM11:
     category: Timers
@@ -3529,9 +3538,9 @@ peripherals:
     signal_pins:
       CH1: [{ pin: PD3, af: 2 }, { pin: PE0, af: 13 }, { pin: PF6, af: 13 }]
       CH2: [{ pin: PD4, af: 2 }, { pin: PE1, af: 13 }, { pin: PF7, af: 13 }]
-      CH3: [{ pin: PD5, af: 2 }, { pin: PD7, af: 13 }, { pin: PF8, af: 13 }]
+      CH3: [{ pin: PD7, af: 13 }, { pin: PF8, af: 13 }, { pin: PD5, af: 2 }]
       CH4: [{ pin: PD6, af: 2 }, { pin: PF9, af: 13 }]
-      ETR: [{ pin: PB2, af: 13 }, { pin: PD5, af: 13 }]
+      ETR: [{ pin: PD5, af: 13 }, { pin: PB2, af: 13 }]
   TIM12:
     category: Timers
     settings:
@@ -3565,7 +3574,7 @@ peripherals:
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
       CH1: [{ pin: PB1, af: 5 }, { pin: PE3, af: 3 }]
-      CH2: [{ pin: PB2, af: 5 }, { pin: PE13, af: 2 }, { pin: PE4, af: 3 }]
+      CH2: [{ pin: PE13, af: 2 }, { pin: PE4, af: 3 }, { pin: PB2, af: 5 }]
       CH3: [{ pin: PE14, af: 2 }, { pin: PE5, af: 3 }, { pin: PF12, af: 13 }]
       CH4: [{ pin: PE15, af: 2 }, { pin: PE6, af: 3 }, { pin: PF13, af: 13 }]
       ETR: [{ pin: PB0, af: 13 }, { pin: PB3, af: 14 }]
@@ -3601,29 +3610,29 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      CH1: [{ pin: PA0, af: 2 }, { pin: PC1, af: 2 }, { pin: PD12, af: 6 }]
-      CH2: [{ pin: PA1, af: 2 }, { pin: PC2, af: 2 }, { pin: PD13, af: 6 }]
-      CH3: [{ pin: PA2, af: 2 }, { pin: PC3, af: 2 }, { pin: PD14, af: 6 }]
-      CH4: [{ pin: PA3, af: 2 }, { pin: PB0, af: 4 }, { pin: PD15, af: 6 }]
-      ETR: [{ pin: PA4, af: 2 }, { pin: PD11, af: 6 }]
+      CH1: [{ pin: PC1, af: 2 }, { pin: PD12, af: 6 }, { pin: PA0, af: 2 }]
+      CH2: [{ pin: PC2, af: 2 }, { pin: PD13, af: 6 }, { pin: PA1, af: 2 }]
+      CH3: [{ pin: PC3, af: 2 }, { pin: PD14, af: 6 }, { pin: PA2, af: 2 }]
+      CH4: [{ pin: PB0, af: 4 }, { pin: PD15, af: 6 }, { pin: PA3, af: 2 }]
+      ETR: [{ pin: PD11, af: 6 }, { pin: PA4, af: 2 }]
   TIM6:
     category: Timers
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   TIM7:
     category: Timers
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
   TIM8:
@@ -3667,16 +3676,16 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      BKIN: [{ pin: PA6, af: 3 }, { pin: PB12, af: 2 }, { pin: PC0, af: 0 }]
-      BKIN2: [{ pin: PA8, af: 3 }, { pin: PB13, af: 2 }]
+      BKIN: [{ pin: PB12, af: 2 }, { pin: PC0, af: 0 }, { pin: PA6, af: 3 }]
+      BKIN2: [{ pin: PB13, af: 2 }, { pin: PA8, af: 3 }]
       CH1: [{ pin: PC6, af: 3 }, { pin: PE3, af: 0 }]
-      CH1N: [{ pin: PA5, af: 3 }, { pin: PA7, af: 3 }, { pin: PC1, af: 0 }]
+      CH1N: [{ pin: PA5, af: 3 }, { pin: PC1, af: 0 }, { pin: PA7, af: 3 }]
       CH2: [{ pin: PC7, af: 3 }, { pin: PE4, af: 0 }]
       CH2N: [{ pin: PB0, af: 3 }, { pin: PB14, af: 3 }, { pin: PC2, af: 0 }]
       CH3: [{ pin: PC8, af: 3 }, { pin: PE5, af: 0 }]
-      CH3N: [{ pin: PB1, af: 3 }, { pin: PB15, af: 3 }, { pin: PC3, af: 0 }]
+      CH3N: [{ pin: PB1, af: 3 }, { pin: PC3, af: 0 }, { pin: PB15, af: 3 }]
       CH4: [{ pin: PC9, af: 3 }, { pin: PE6, af: 0 }]
-      ETR: [{ pin: PA0, af: 3 }, { pin: PF2, af: 3 }]
+      ETR: [{ pin: PF2, af: 3 }, { pin: PA0, af: 3 }]
   TIM9:
     category: Timers
     settings:
@@ -3709,21 +3718,39 @@ peripherals:
           - { name: Disable }
           - { name: "External clock mode 2", signals: [ETR] }
     signal_pins:
-      CH1: [{ pin: PA0, af: 6 }, { pin: PB14, af: 2 }, { pin: PC9, af: 6 }]
-      CH2: [{ pin: PA1, af: 6 }, { pin: PB10, af: 2 }, { pin: PB15, af: 2 }, { pin: PC10, af: 2 }]
-      CH3: [{ pin: PA2, af: 4 }, { pin: PB12, af: 8 }, { pin: PC12, af: 2 }, { pin: PE5, af: 4 }]
-      CH4: [{ pin: PA3, af: 4 }, { pin: PB11, af: 9 }, { pin: PC11, af: 2 }, { pin: PE6, af: 4 }]
-      ETR: [{ pin: PA4, af: 4 }, { pin: PB13, af: 4 }, { pin: PC8, af: 6 }]
+      CH1: [{ pin: PB14, af: 2 }, { pin: PC9, af: 6 }, { pin: PA0, af: 6 }]
+      CH2: [{ pin: PB10, af: 2 }, { pin: PC10, af: 2 }, { pin: PA1, af: 6 }, { pin: PB15, af: 2 }]
+      CH3: [{ pin: PB12, af: 8 }, { pin: PC12, af: 2 }, { pin: PE5, af: 4 }, { pin: PA2, af: 4 }]
+      CH4: [{ pin: PB11, af: 9 }, { pin: PC11, af: 2 }, { pin: PE6, af: 4 }, { pin: PA3, af: 4 }]
+      ETR: [{ pin: PB13, af: 4 }, { pin: PC8, af: 6 }, { pin: PA4, af: 4 }]
   TKEY:
     category: Analog
-    pins: { open: true, owner: AGENT-1, task: "CH32H417: close the coverage ledger" }
+    # TKEY HAS NO PAD OF ITS OWN, and this is the citation rather than an assumption from
+    # a sibling part. RM ch.13 "Touch Key Detection (TKEY)" (CH32H417RM.md:15745): "The
+    # detection channel reuses 16 external channels of the ADC, and the touch key
+    # detection is realized through the single conversion mode of the ADC module", and
+    # RM 13.1 (:15752): "For TKEY detection, the ADC module is needed. To enable TKEY,
+    # ensure that ADC is powered on (ADON=1), then set the TKENABLE bit in the ADC_CTLR1
+    # register to 1." The SPL agrees: ch32h417.h:1760-1761 defines TKey1 and TKey2 as
+    # `ADC_TypeDef *` at ADC1_BASE and ADC2_BASE, and :1880 defines ADC_TKENABLE as an
+    # ADC_CTLR1 bit. So the pads a touch design claims are ADC1/ADC2's IN0-IN15, and the
+    # user claims them on the ADC's `Channels` row - the same pad offered twice would be
+    # a conflict the silicon has not got. DS 1.4.13 and the model table's `ADC/TKey ...
+    # Channels 16+2` row say the same thing from the datasheet side.
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Enabled }
-    notes: This peripheral holds no pin on any package; it is configured
-      through its own registers and the clock tree only.
+    pins:
+      none: true
+      source: "CH32H417RM.md:15745 (RM ch.13: the detection channels reuse the ADC's 16 external channels) and CH32H417DS0.md Table 2-1-1, which carries no TKEY function on any pin row"
+    notes: >
+      Touch-key capacitance detection: an operating mode of the two ADCs rather than a
+      block with pads. Enabling it sets ADC_CTLR1.TKENABLE (ch32h417.h:1880) on an ADC
+      that is already powered on, and the channel converted is the first of that ADC's
+      regular sequence. Pick the pads on ADC1's or ADC2's `Channels` row; up to 16
+      detection channels, one conversion at a time (RM 13.1).
   UHSIF:
     category: Connectivity
     settings:
@@ -3732,7 +3759,7 @@ peripherals:
           - { name: Disable }
           - { name: Enabled, signals: [CLK, PORT0, PORT1, PORT2, PORT3, PORT4, PORT5, PORT6, PORT7, PORT8, PORT9, PORT10, PORT11, PORT12, PORT13, PORT14, PORT15, PORT16, PORT17, PORT18, PORT19, PORT20, PORT21, PORT22, PORT23, PORT24, PORT25, PORT26, PORT27, PORT28, PORT29, PORT30, PORT31, PORT32, PORT33, PORT34, PORT35, PORT36, PORT37, PORT38, PORT39, PORT40, PORT41, PORT42, PORT43, PORT44, PORT45, PORT46, PORT47] }
     signal_pins:
-      CLK: [{ pin: PC0 }, { pin: PD9 }, { pin: PF11 }, { pin: PF14 }]
+      CLK: [{ pin: PC0 }, { pin: PF14 }, { pin: PD9 }, { pin: PF11 }]
       PORT0: [{ pin: PC1 }, { pin: PF12 }]
       PORT1: [{ pin: PC2 }, { pin: PF13 }]
       PORT10: [{ pin: PE15 }]
@@ -3756,7 +3783,7 @@ peripherals:
       PORT27: [{ pin: PC8 }]
       PORT28: [{ pin: PC9 }]
       PORT29: [{ pin: PA13 }]
-      PORT3: [{ pin: PB0 }, { pin: PC1 }, { pin: PE8 }]
+      PORT3: [{ pin: PE8 }, { pin: PB0 }, { pin: PC1 }]
       PORT30: [{ pin: PA14 }]
       PORT31: [{ pin: PA15 }]
       PORT32: [{ pin: PC10 }]
@@ -3767,7 +3794,7 @@ peripherals:
       PORT37: [{ pin: PD2 }]
       PORT38: [{ pin: PD3 }]
       PORT39: [{ pin: PD4 }]
-      PORT4: [{ pin: PB1 }, { pin: PC2 }, { pin: PE9 }]
+      PORT4: [{ pin: PE9 }, { pin: PB1 }, { pin: PC2 }]
       PORT40: [{ pin: PD5 }]
       PORT41: [{ pin: PD6 }]
       PORT42: [{ pin: PD7 }]
@@ -3776,9 +3803,9 @@ peripherals:
       PORT45: [{ pin: PF5 }]
       PORT46: [{ pin: PE0 }]
       PORT47: [{ pin: PE1 }]
-      PORT5: [{ pin: PC3 }, { pin: PE10 }]
-      PORT6: [{ pin: PB0 }, { pin: PE11 }]
-      PORT7: [{ pin: PB1 }, { pin: PE12 }]
+      PORT5: [{ pin: PE10 }, { pin: PC3 }]
+      PORT6: [{ pin: PE11 }, { pin: PB0 }]
+      PORT7: [{ pin: PE12 }, { pin: PB1 }]
       PORT8: [{ pin: PE13 }]
       PORT9: [{ pin: PE14 }]
   USART4:
@@ -3827,7 +3854,7 @@ peripherals:
       CK: [{ pin: PD6, af: 11 }, { pin: PE15, af: 11 }]
       CTS: [{ pin: PE1, af: 4 }]
       RTS: [{ pin: PD7, af: 4 }]
-      RX: [{ pin: PE2, af: 4 }, { pin: PF5, af: 4 }]
+      RX: [{ pin: PF5, af: 4 }, { pin: PE2, af: 4 }]
       TX: [{ pin: PE0, af: 4 }, { pin: PE3, af: 11 }]
   USART6:
     category: Connectivity
@@ -3848,11 +3875,11 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PA10, af: 6 }, { pin: PA2, af: 3 }, { pin: PB10, af: 9 }, { pin: PD3, af: 8 }, { pin: PE2, af: 8 }]
+      CK: [{ pin: PB10, af: 9 }, { pin: PD3, af: 8 }, { pin: PA10, af: 6 }, { pin: PA2, af: 3 }, { pin: PE2, af: 8 }]
       CTS: [{ pin: PB0, af: 8 }, { pin: PB15, af: 8 }]
       RTS: [{ pin: PA15, af: 8 }, { pin: PB14, af: 8 }]
-      RX: [{ pin: PA1, af: 8 }, { pin: PA11, af: 6 }, { pin: PB8, af: 8 }, { pin: PC11, af: 8 }, { pin: PD0, af: 8 }]
-      TX: [{ pin: PA0, af: 8 }, { pin: PA12, af: 6 }, { pin: PB9, af: 8 }, { pin: PC10, af: 8 }, { pin: PD1, af: 8 }]
+      RX: [{ pin: PC11, af: 8 }, { pin: PD0, af: 8 }, { pin: PA11, af: 6 }, { pin: PA1, af: 8 }, { pin: PB8, af: 8 }]
+      TX: [{ pin: PC10, af: 8 }, { pin: PD1, af: 8 }, { pin: PA0, af: 8 }, { pin: PA12, af: 6 }, { pin: PB9, af: 8 }]
   USART7:
     category: Connectivity
     settings:
@@ -3872,11 +3899,11 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PB14, af: 13 }, { pin: PB4, af: 14 }, { pin: PD4, af: 8 }]
+      CK: [{ pin: PB14, af: 13 }, { pin: PD4, af: 8 }, { pin: PB4, af: 14 }]
       CTS: [{ pin: PC9, af: 8 }]
       RTS: [{ pin: PC8, af: 8 }]
-      RX: [{ pin: PB12, af: 14 }, { pin: PB5, af: 14 }, { pin: PD2, af: 8 }]
-      TX: [{ pin: PB13, af: 14 }, { pin: PB6, af: 14 }, { pin: PC12, af: 8 }]
+      RX: [{ pin: PB12, af: 14 }, { pin: PD2, af: 8 }, { pin: PB5, af: 14 }]
+      TX: [{ pin: PB13, af: 14 }, { pin: PC12, af: 8 }, { pin: PB6, af: 14 }]
   USART8:
     category: Connectivity
     settings:
@@ -3896,52 +3923,32 @@ peripherals:
           - { name: "RTS only", signals: [RTS] }
           - { name: "CTS/RTS", signals: [CTS, RTS] }
     signal_pins:
-      CK: [{ pin: PA14, af: 11 }, { pin: PB7, af: 10 }, { pin: PE6, af: 8 }, { pin: PF10, af: 7 }]
+      CK: [{ pin: PA14, af: 11 }, { pin: PE6, af: 8 }, { pin: PB7, af: 10 }, { pin: PF10, af: 7 }]
       CTS: [{ pin: PF10, af: 11 }, { pin: PF9, af: 7 }]
       RTS: [{ pin: PF8, af: 7 }, { pin: PF9, af: 11 }]
-      RX: [{ pin: PA8, af: 11 }, { pin: PB3, af: 11 }, { pin: PE7, af: 7 }, { pin: PF6, af: 7 }]
+      RX: [{ pin: PB3, af: 11 }, { pin: PA8, af: 11 }, { pin: PE7, af: 7 }, { pin: PF6, af: 7 }]
       TX: [{ pin: PA15, af: 11 }, { pin: PB4, af: 11 }, { pin: PE8, af: 7 }, { pin: PF7, af: 7 }]
   USBFS:
     category: Connectivity
-    # DS Table 2-2-18 "USBFS Pin Functions": OTG_DP PA12, OTG_DM PA11, OTG_VBUS PA9,
-    # OTG_ID PA10 - and DS Table 2-1-1 puts the same four on the same pads, first in each
-    # row and with NO (AFn) code, because the transceiver is hard-wired to the pad rather
-    # than selected through GPIOx_AFR. That is why they are in `codegen.skip_signals`.
     settings:
-      # RM ch.26: "OTG_FS is a dual-role USB controller supporting both host and device
-      # functionality ... Additionally, this controller can be configured as a host-only or
-      # device-only controller". Three roles, and all three drive the same data pair.
       - name: Mode
         choices:
           - { name: Disable }
           - { name: "Device (FS)", signals: [DP, DM] }
           - { name: "Host (FS)", signals: [DP, DM] }
           - { name: "Dual-role (OTG FS)", signals: [DP, DM] }
-      # VBUS and ID are offered separately rather than tied to a role, because NEITHER
-      # source says which role requires them: the DS lists all four under one "Optional
-      # pin" column and RM ch.26 calls On-The-Go support "an optional feature in the
-      # OTG_FS controller's physical layer". Inferring "host needs VBUS" from general USB
-      # knowledge is the family-not-a-citation move this repo bans - so the board decides,
-      # and both pads are reachable.
-      - name: OTG pins
+      - name: "OTG pins"
         type: checkboxes
         choices:
           - { name: "VBUS (bus voltage sense)", signals: [VBUS] }
           - { name: "ID (role detect)", signals: [ID] }
     signal_pins:
-      DP: [{ pin: PA12, notes: "OTG_DP, DS Table 2-2-18 and Table 2-1-1 - no AF code: the pad's own function" }]
       DM: [{ pin: PA11, notes: "OTG_DM, DS Table 2-2-18 and Table 2-1-1 - likewise" }]
-      VBUS: [{ pin: PA9, notes: "OTG_VBUS, DS Table 2-2-18 and Table 2-1-1 - likewise" }]
+      DP: [{ pin: PA12, notes: "OTG_DP, DS Table 2-2-18 and Table 2-1-1 - no AF code: the pad's own function" }]
       ID: [{ pin: PA10, notes: "OTG_ID, DS Table 2-2-18 and Table 2-1-1 - likewise" }]
+      VBUS: [{ pin: PA9, notes: "OTG_VBUS, DS Table 2-2-18 and Table 2-1-1 - likewise" }]
   USBHS:
     category: Connectivity
-    # DS Table 2-2-19 "USBHS Pin Functions": USBHS_DP PB8, USBHS_DM PB9. Two pads, no VBUS
-    # and no ID - this controller is not an OTG part.
-    #
-    # THESE ARE THE DEBUG PADS. DS Table 2-1-1 spells PB8 `SWCLK/USBHS_DP/...` and PB9
-    # `SWIO/SWDIO/USBHS_DM/...`, and SYS routes SWCLK/SWIO to exactly those two. So
-    # enabling USBHS while the 2-wire debug port is on is a genuine conflict on real
-    # silicon, and the conflict engine now reports it instead of the file hiding it.
     settings:
       - name: Mode
         choices:
@@ -3949,8 +3956,8 @@ peripherals:
           - { name: "Device (HS)", signals: [DP, DM] }
           - { name: "Host (HS)", signals: [DP, DM] }
     signal_pins:
-      DP: [{ pin: PB8, notes: "USBHS_DP, DS Table 2-2-19 and Table 2-1-1 - no AF code: the pad's own function, shared with SWCLK" }]
       DM: [{ pin: PB9, notes: "USBHS_DM, DS Table 2-2-19 and Table 2-1-1 - likewise, shared with SWIO/SWDIO" }]
+      DP: [{ pin: PB8, notes: "USBHS_DP, DS Table 2-2-19 and Table 2-1-1 - no AF code: the pad's own function, shared with SWCLK" }]
   USBPD:
     category: Connectivity
     settings:
@@ -3965,15 +3972,6 @@ peripherals:
       CC2: [{ pin: PB4, af: 4 }]
   USBSS:
     category: Connectivity
-    # The USB 3.0 SuperSpeed pairs. These are DEDICATED pads, not GPIO: DS Table 2-1-1
-    # lists SSTXB, SSTXA, SSRXB and SSRXA with the pin type `USB3.0` and no alternate
-    # function of any kind, and all three packages bond all four (QFN68 pins 1/2/4/5,
-    # QFN88 84/85/87/88, QFN128 123/124/126/127). `pins:` types them `sys` for that reason.
-    #
-    # The pads are named A/B rather than P/N deliberately - DS Note 7: "USB3.0 pin signals
-    # support positive and negative identification and exchange ... SSRXA/SSRXB default
-    # connection to each other TXP/TXN, support cross-connect TXN/TXP". The polarity is
-    # swappable, so the signal names follow the pad names exactly and invent no P/N.
     settings:
       - name: Mode
         choices:
@@ -3981,18 +3979,18 @@ peripherals:
           - { name: "Device (SS)", signals: [TXA, TXB, RXA, RXB] }
           - { name: "Host (SS)", signals: [TXA, TXB, RXA, RXB] }
     signal_pins:
-      TXA: [{ pin: SSTXA, notes: "DS Table 2-1-1, pin type USB3.0 - a dedicated pad with no AF" }]
-      TXB: [{ pin: SSTXB, notes: "DS Table 2-1-1, pin type USB3.0 - likewise" }]
       RXA: [{ pin: SSRXA, notes: "DS Table 2-1-1, pin type USB3.0 - likewise" }]
       RXB: [{ pin: SSRXB, notes: "DS Table 2-1-1, pin type USB3.0 - likewise" }]
+      TXA: [{ pin: SSTXA, notes: "DS Table 2-1-1, pin type USB3.0 - a dedicated pad with no AF" }]
+      TXB: [{ pin: SSTXB, notes: "DS Table 2-1-1, pin type USB3.0 - likewise" }]
   WWDG:
     category: System Core
-    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Activated }
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
 nvic:
@@ -4197,6 +4195,49 @@ codegen:
     USBFS: [DP, DM, VBUS, ID]
     USBHS: [DP, DM]
     USBSS: [TXA, TXB, RXA, RXB]
+    # SerDes is the fourth, on the same evidence: DS Table 2-1-1 gives SERDES_TXP/TXN/
+    # RXP/RXN on PE3-PE6 no `(AFn)` code, and the vendor's own bring-up never configures
+    # those pads. `sds_initial()` in EXAM/SerDes/FullDuxTrans/Common/hardware.c:65-67
+    # enables RCC_HBPeriph_SERDES and the GPIOE *clock* and then calls no GPIO_Init for
+    # PE3-PE6 at all - the differential pair is driven by the SerDes block, not by the
+    # GPIO cell. EXAM/SerDes/AcquireConfig does the same. The pins stay CLAIMED, so the
+    # conflict engine still sees SerDes taking PE3-PE6; only the GPIO setup is skipped.
+    SERDES: [TXP, TXN, RXP, RXN]
+
+  # AN ANALOG PAD IS `GPIO_Mode_AIN`, NOT AN ALTERNATE FUNCTION, and without this list the
+  # generator could not tell the difference. `analogClaim()` (app/engine/constraints.js:255)
+  # reads this table; with no entry it falls back to "an Analog-category peripheral on a
+  # pin flagged `analog:`", and this file flags no pin, so the fallback returned false and
+  # `gpioEffectiveMode()` took the alternate-function branch: PA4, PB0, PB1 and PC4 came
+  # out of the generator as `GPIO_Mode_AF_PP` where the silicon needs `GPIO_Mode_AIN`.
+  # Wrong, and it compiles - the defect class this round exists to remove. Evidence and
+  # the generated C: tests/evidence/round5/2026-09-12-analog-pads.md.
+  #
+  # Every line below is what the vendor's own examples do, not an inference from the
+  # category:
+  #   ADC1/ADC2  EXAM/ADC/ADC_DMA/Common/hardware.c:64-65      GPIO_Mode_AIN
+  #   HSADC      EXAM/HSADC/.../Common/hardware.c:31           GPIO_Mode_AIN
+  #   DAC        EXAM/DAC/DAC_DMA/Common/hardware.c:35         GPIO_Mode_AIN
+  #   OPA        EXAM/OPA/OPA/Common/hardware.c:27,31          GPIO_Mode_AIN
+  #   CMP        EXAM/OPA/CMP/Common/hardware.c:34-35          GPIO_Mode_AIN (PB1, PB2)
+  #
+  # CMP_OUT IS NOT IN THE LIST, and the same file is why: :26-31 gives PB12 GPIO_AF13 and
+  # `GPIO_Mode_AF_PP`. The comparator's inputs are analog and its output is a digital
+  # alternate function, so listing `OUT` here would take an AF code off a pad that needs
+  # one. This is exactly the distinction the fallback cannot make, and the reason the
+  # list is authoritative rather than a hint.
+  #
+  # SERDES is not here either - see `skip_signals:` above: those pads take no GPIO
+  # configuration of any kind, analog or otherwise.
+  analog_signals:
+    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13, IN14, IN15]
+    ADC2: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13, IN14, IN15]
+    HSADC: [IN0, IN1, IN2, IN3, IN4, IN5, IN6]
+    DAC: [OUT1, OUT2]
+    OPA: [P01, P02, P03, P11, P12, P13,
+          N01, N02, N03, N11, N12, N13,
+          OUT01, OUT02, OUT03, OUT11, OUT12, OUT13]
+    CMP: [P0, P1, N0, N1]
   sdk:
     evt: H417
     series: ch32h417
@@ -16686,6 +16727,41 @@ function analogClaim(claim, pin) {
 }
 
 /**
+ * Which KEY the data is missing when a claimed signal has no `af:` — and it is not
+ * always `af:`.
+ *
+ * An ADC, OPA, CMP, DAC or HSADC pad has no alternate-function code and never will:
+ * the function IS analog and the pad is selected by `GPIO_Mode_AIN`, a GPIO *mode*,
+ * not a four-bit field in `GPIOx_AFRL`. Telling that pad's owner to "add `af:`" is
+ * advice nobody can follow, so it sends the next reader off to invent a number — which
+ * is the failure this generator's whole TODO discipline exists to prevent. A TODO that
+ * names the wrong fix is worse than no TODO.
+ *
+ * Decided from the two things the data already states, and from nothing else:
+ *   - the peripheral's `category`, which is what `analogClaim`'s fallback reads too;
+ *   - whether the pin is marked analog-capable, which is the fallback's other half.
+ * A peripheral this file does not call Analog gets the `af:` answer, because a
+ * non-analog pad genuinely is muxed. A part whose analog pads are NOT in an
+ * Analog-category peripheral (a SERDES lane, a USB pair) states
+ * `codegen.analog_signals` — the authoritative list — and never reaches here at all.
+ *
+ * Returns null when `af:` is the right answer, otherwise the analog repair:
+ *   { key, entry, pinFlagMissing }
+ */
+function analogAdvice(claim, pin) {
+  const P = (M.peripherals || {})[claim.who];
+  if (!P || P.category !== 'Analog') return null;
+  const bare = String(claim.signal).slice(String(claim.who).length + 1);
+  return {
+    key: `codegen.analog_signals.${claim.who}`,
+    entry: bare,
+    // The fallback needs BOTH halves. Naming only one sends the reader back for a
+    // second round, so when the pin flag is absent the TODO says so in the same breath.
+    pinFlagMissing: !((M.pins || {})[pin] || {}).analog,
+  };
+}
+
+/**
  * The mode this pin will be configured with, and whether it was inferred.
  *
  * Order matters and it is the generator's order: a stored value wins, then an analog
@@ -17176,6 +17252,8 @@ function unnamedPeripherals(M) {
 //    conflictList: [ { pin, label, num, signals, owners, shorted, text } ]
 //    resources:    { exti, dma }  — see resources.js
 //    resourceIssues: [ { kind:'exti'|'dma', severity:'conflict'|'warning', text, owners } ]
+//    constraintIssues: [ { pin, field, value, id, sentence, reason, source } ]
+//    analogIssues: [ { pin, label, analog:[sig], af:[sig], sentence } ]
 //  }
 // =============================================================================
 
@@ -17272,6 +17350,38 @@ function compute() {
     }
   }
 
+  // Analog against alternate function, on one pad, from ONE owner.
+  //
+  // `GPIO_Mode_AIN` and `GPIO_Mode_AF_PP` are two values of ONE field, so a pad is an
+  // analog input or it is a muxed alternate function and never both - and
+  // `gpioEffectiveMode()` resolves that by putting analog first, silently dropping the
+  // alternate function.
+  //
+  // TWO owners on one pad are already a conflict above, said loudly and by name, so this
+  // deliberately says nothing there: a second sentence on a pad the user must fix anyway
+  // is noise, and it fired on 2 pads of a fully-enabled CH32V006 when it did not have
+  // this guard. The gap is ONE owner claiming its own pad twice - ADC1_IN4 beside a muxed
+  // ADC1 signal - where `owners.length === 1`, nothing above looks, and the generated C
+  // configures the pad analog and never writes the AF field the other signal needs. A
+  // peripheral that looks configured and does not work is the round's defect class.
+  const analogIssues = [];
+  for (const [canonPin, info] of Object.entries(pins)) {
+    if (info.state === 'conflict') continue;              // already reported, by name, above
+    const live = info.claims.filter(c => !skippedClaim(c) && c.who !== 'GPIO' && M.peripherals[c.who]);
+    if (live.length < 2) continue;
+    const isAn = c => analogClaim(c, c.via || canonPin).analog;
+    const an = live.filter(isAn), af = live.filter(c => !isAn(c));
+    if (!an.length || !af.length) continue;
+    const label = pinLabel(canonPin);
+    const sentence = `${label}: ${an.map(c => c.signal).join(', ')} ${an.length > 1 ? 'are' : 'is'}`
+      + ` an analog function and ${af.map(c => c.signal).join(', ')} ${af.length > 1 ? 'are' : 'is'}`
+      + ' an alternate function. One pad is GPIO_Mode_AIN or it is muxed, never both, so'
+      + ` the generated C configures ${canonPin} analog and writes no alternate-function`
+      + ' field for the rest.';
+    analogIssues.push({ pin: canonPin, label, analog: an.map(c => c.signal), af: af.map(c => c.signal), sentence });
+    for (const owner of [...new Set(live.map(c => c.who))]) (issues[owner] ||= []).push(sentence);
+  }
+
   const status = {}, issueCount = {};
   for (const pid of Object.keys(M.peripherals)) {
     status[pid] = !isAvailable(pid) ? 'na' : issues[pid] ? 'warn' : isEnabled(pid) ? 'ok' : '';
@@ -17281,7 +17391,7 @@ function compute() {
   E = {
     pins, issues, status, issueCount, conflictList, resources,
     resourceIssues: resources.issues,
-    constraintIssues,
+    constraintIssues, analogIssues,
     conflicts: conflictList.map(c => `${c.label}: ${c.signals.join(' / ')}`),
   };
   return E;
@@ -18058,8 +18168,12 @@ function remapPlan() {
  */
 function afPlan() {
   const c = cfg().remap || {};
+  // The "nothing here" object is deliberately NOT the `af` shape: it carries no `macro`
+  // and no analog buckets, and `tests/afmux.test.js` pins it as "exactly what a part
+  // with no signal_pins produced before this key existed". Every reader of the extra
+  // keys is already behind an `ap.style === 'af'` test. Do not tidy the two into one.
   if ((c.style || '') !== 'af') return { style: null, fn: null, calls: [], missing: [] };
-  const calls = [], missing = [];
+  const calls = [], missing = [], analog = [], contradictory = [], dropped = [];
   for (const [pid, P] of Object.entries(M.peripherals)) {
     if (!P.signal_pins || !S.periph[pid]) continue;
     const req = requiredSignals(pid);
@@ -18073,12 +18187,46 @@ function afPlan() {
       if (!m) continue;
       const af = signalAf(pid, sig, pin);
       const entry = { periph: pid, signal: sig, pin, port: m[1], bit: +m[2], af };
-      (af === null || Number.isNaN(af) ? missing : calls).push(entry);
+
+      // An analog pad has no AF field to write. `gpioEffectiveMode()` puts this pin in
+      // GPIO_Mode_AIN, so writing GPIOx_AFRL for it too would be the generator
+      // disagreeing with itself one block further down the same function. Same rule,
+      // same source of truth: `analogClaim()`.
+      const an = analogClaim({ who: pid, signal: sigName(pid, sig) }, pin);
+      if (an.analog) {
+        // The data states BOTH that the pad is analog and that it has an AF code. That
+        // is one fact written twice with two different answers; the generator picks
+        // neither and says which two keys disagree.
+        (af === null || Number.isNaN(af) ? analog : contradictory)
+          .push({ ...entry, inferred: an.inferred });
+        continue;
+      }
+      if (af !== null && !Number.isNaN(af)) {
+        // The claim is not analog, but the PAD may be: another claim on the same pin can
+        // be, and `gpioEffectiveMode()` puts analog first, so GPIO_Init above writes
+        // GPIO_Mode_AIN. Writing this signal's AFR nibble anyway would configure a mux
+        // field on a pad that is not muxed - the generator disagreeing with itself two
+        // blocks apart. The engine reports the same pad as an analog-vs-AF issue; here
+        // the AF is declined and said out loud rather than emitted or dropped in silence.
+        const padClaims = ((E || compute()).pins[canon(pin)] || {}).claims || [];
+        if (padClaims.length > 1 && gpioEffectiveMode(pin, padClaims, S.gpio[pin] || {}).mode === 'Analog') {
+          dropped.push({ ...entry, with: padClaims.filter(c => c.who !== pid || c.signal !== sigName(pid, sig))
+            .map(c => c.signal) });
+          continue;
+        }
+        calls.push(entry);
+        continue;
+      }
+      // No `af:`, and not settled as analog. Which key the data is short of depends on
+      // what it already says about the peripheral and the pin — see analogAdvice().
+      missing.push({ ...entry, advice: analogAdvice({ who: pid, signal: sigName(pid, sig) }, pin) });
     }
   }
   const order = (a, b) => (a.port === b.port ? a.bit - b.bit : a.port.localeCompare(b.port));
   return { style: 'af', fn: c.fn || null, macro: c.macro || 'GPIO_AF$AF',
-           calls: calls.sort(order), missing: missing.sort(order) };
+           calls: calls.sort(order), missing: missing.sort(order),
+           analog: analog.sort(order), contradictory: contradictory.sort(order),
+           dropped: dropped.sort(order) };
 }
 
 /** True when this peripheral's selected remap is applied by a macro call. */
@@ -18341,7 +18489,8 @@ function gpioSection() {
   // AF style: one call per SIGNAL. Emitted before the two whole-peripheral styles
   // because a part is only ever one of the three, so at most one of these blocks runs.
   const ap = afPlan();
-  if (ap.style === 'af' && (ap.calls.length || ap.missing.length)) {
+  if (ap.style === 'af'
+      && (ap.calls.length || ap.missing.length || ap.contradictory.length || ap.dropped.length)) {
     if (ap.calls.length && ap.fn) {
       L.push('    /* Alternate function select (GPIOx_AFRL/AFRH, one field per pin) */');
       for (const c of ap.calls) {
@@ -18356,11 +18505,72 @@ function gpioSection() {
       for (const c of ap.calls) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} = AF${c.af}`);
       L.push('       Add codegen.remap.fn (GPIO_PinAFConfig on the parts seen so far). */');
     }
-    if (ap.missing.length) {
+    // Two different gaps wear the same symptom — "a claimed signal with no `af:`" — and
+    // they need two different keys. Splitting them here is the whole point: the first
+    // list is followable advice, the second one used to be an instruction to invent an
+    // AF code for a pad that has none.
+    const needAf = ap.missing.filter(c => !c.advice);
+    const needAnalog = ap.missing.filter(c => c.advice);
+    if (needAf.length) {
       L.push('    /* TODO: alternate function select. These signals have a pin but the MCU file');
       L.push('       states no `af:` for it, and this generator does not guess an AF code:');
-      for (const c of ap.missing) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)}`);
+      for (const c of needAf) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)}`);
       L.push('       Add `af:` to the signal_pins entry and generate again. */');
+    }
+    if (needAnalog.length) {
+      L.push('    /* TODO: these signals have a pin and no `af:` — and `af:` is most likely NOT');
+      L.push('       what the MCU file is short of. Every one of them sits on a peripheral this');
+      L.push('       file puts in the Analog category, and an analog pad has no alternate-function');
+      L.push('       code to add: the function IS analog, and the pad is selected by the GPIO mode');
+      L.push('       (GPIO_Mode_AIN), not by a field in GPIOx_AFRL/AFRH. The key is the analog');
+      L.push('       list, one line per peripheral:');
+      const byKey = new Map();
+      for (const c of needAnalog) {
+        (byKey.get(c.advice.key) || byKey.set(c.advice.key, []).get(c.advice.key)).push(c);
+      }
+      for (const [key, list] of [...byKey].sort((a, b) => a[0].localeCompare(b[0]))) {
+        const sigs = [...new Set(list.map(c => c.advice.entry))].sort();
+        L.push(`         ${key}: [${sigs.join(', ')}]`);
+        for (const c of list) L.push(`           ${c.pin} — ${sigName(c.periph, c.signal)}`);
+      }
+      // The consequence, said out loud. GPIO_Init above has already configured these
+      // pads as an alternate function, because that is what the data it was given says
+      // — and a pad configured AF_PP when the silicon wants AIN is wrong-but-compiling,
+      // which no gate downstream of here can see.
+      L.push(`       Until that list exists, GPIO_Init above configures ${
+        [...new Set(needAnalog.map(c => c.pin))].sort().join(', ')}`);
+      L.push('       as an alternate function, which is wrong for an analog pad. If one of these');
+      L.push('       really is muxed, `af:` is still the right answer for that one.');
+      // The fallback route needs the pin flag too; the authoritative list does not. Say
+      // which one is short of what rather than leaving the reader to find out by trying.
+      const noFlag = needAnalog.filter(c => c.advice.pinFlagMissing).map(c => c.pin);
+      if (noFlag.length) {
+        L.push(`       (pins.<pin>.analog is not set for ${[...new Set(noFlag)].sort().join(', ')}`);
+        L.push('        either, so the Analog-category fallback cannot answer this on its own.');
+        L.push('        codegen.analog_signals is authoritative and needs no pin flag.) */');
+      } else {
+        L.push('       */');
+      }
+    }
+    if (ap.dropped.length) {
+      L.push('    /* TODO: these signals have an `af:` and it is NOT written, because another');
+      L.push('       function on the same pad is analog and GPIO_Init above put the pad in');
+      L.push('       GPIO_Mode_AIN. One pad is analog or it is muxed, never both:');
+      for (const c of ap.dropped) {
+        L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} (AF${c.af}) shares the pad with `
+          + `${c.with.join(', ')}`);
+      }
+      L.push('       Move one of them to another pad, or switch the analog function off. */');
+    }
+    if (ap.contradictory.length) {
+      L.push('    /* TODO: the MCU file says two different things about these pads. Each is in');
+      L.push('       codegen.analog_signals — so its pad is GPIO_Mode_AIN and has no AF field —');
+      L.push('       and each ALSO carries an `af:` code, which only a muxed pad can have:');
+      for (const c of ap.contradictory) {
+        L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} — af: ${c.af},`
+          + ` and listed in codegen.analog_signals.${c.periph}`);
+      }
+      L.push('       Delete whichever is wrong; this generator will not pick one. */');
     }
   }
 
@@ -21765,7 +21975,23 @@ function gpioTable(pinsList) {
   const speedOf = g => (typeof gpioSpeedFor === 'function' ? gpioSpeedFor(g.speed) : g.speed) || (speeds[0] || {}).name || '';
   const rows = pinsList.slice().sort(pinSort).map(pin => {
     const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
-    const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
+    // THE SAME derivation the conflict engine reports and the generator emits
+    // (app/engine/constraints.js). This used to be a third copy - "any peripheral claims
+    // it, therefore alternate function" - which knew nothing about analog, so an ADC, OPA,
+    // CMP or DAC pad read "Alternate Function Push Pull" in this table while the generated
+    // C put it in GPIO_Mode_AIN. Measured on 2026-09-12 across every part x every package
+    // with every signal claimed: 175 rows disagreed. One rule, one answer, three consumers.
+    const eff = typeof gpioEffectiveMode === 'function'
+      ? gpioEffectiveMode(pin, i.claims, g)
+      : { mode: i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input') };
+    const defMode = eff.mode;
+    // A pad whose every claim is one GPIO_Init must not touch - the debug interface and
+    // the reset pin - has no mode to offer. The generator says "Not configured here, by
+    // design" and prints the reason; this table said "Alternate Function Push Pull",
+    // which is a mode nothing ever writes. Fixed text, the same rule the one-speed
+    // column follows: a control is for a choice that exists.
+    const untouched = typeof skippedClaim === 'function'
+      && i.claims.length > 0 && i.claims.every(c => skippedClaim(c));
     const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
 
     // Per ROW, from the data: the part's options for this column minus whatever the
@@ -21782,17 +22008,36 @@ function gpioTable(pinsList) {
         || `${gpioFieldLabel(field)} is fixed on this pin`;
     };
     const cell = (field, cur) => {
+      if (untouched) {
+        return `<td class="fixedval" title="${attr('GPIO_Init does not configure this pad: '
+          + i.claims.map(c => c.signal).join(', ') + ' is controlled by the option bytes and the '
+          + 'debug hardware, not by a GPIO register')}">\u2014</td>`;
+      }
       const opts = typeof gpioFieldOptions === 'function' ? gpioFieldOptions(pin, field) : gpioFieldOptionNames(field);
       if (!opts.length) return `<td class="fixedval" title="${attr(why(field))}">${esc(cur || '\u2014')}</td>`;
       const notes = typeof gpioRowNotes === 'function' ? gpioRowNotes(pin, field) : [];
       const tip = notes.length ? ` title="${attr(notes.map(c => `${c.reason || c.id}${c.source ? ` (${c.source})` : ''}`).join(' '))}"` : '';
       return `<td${tip}>${sel(opts, opts.includes(cur) ? cur : opts[0], field)}</td>`;
     };
+    // The pull column means something ONLY on an input pin, and that is not this file's
+    // opinion - it is what the other two consumers already do. `modeMacro()` reads the
+    // pull only when the mode is Input, because the SPL has no standalone pull bit and
+    // folds it into GPIO_Mode_IN_FLOATING / _IPU / _IPD; `compute()` checks a pull
+    // constraint only when the mode is Input for the same reason. So on an output,
+    // alternate-function or ANALOG row this select changed the stored value and changed
+    // nothing else - a choice the app offered that the silicon does not have, which is
+    // the defect class this round exists to remove. The value is kept, not cleared: a
+    // row that goes back to Input gets its pull back.
+    const pullCell = untouched || (g.mode || defMode) === 'Input'
+      ? cell('pull', g.pull || (gpioFieldOptionNames('pull')[0] || 'No pull'))
+      : `<td class="fixedval" title="${attr(`${defMode} has no pull-up/pull-down: the SPL folds the pull `
+        + `into the input mode macro, so this column applies to an input pin only`
+        + `${g.pull ? ` (${g.pull} is remembered for when this pin is an input again)` : ''}`)}">—</td>`;
     const speedCell = !speeds.length ? ''
-      : speedIsChoice ? cell('speed', speedOf(g))
+      : (speedIsChoice || untouched) ? cell('speed', speedOf(g))
         : `<td class="fixedval" title="${attr(`${M.mcu.name} has one output speed${speeds[0].macro ? ` (${speeds[0].macro})` : ''}, so there is nothing to choose`)}">${esc(speedOf(g))}</td>`;
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
-      ${cell('mode', g.mode || defMode)}${cell('pull', g.pull || (gpioFieldOptionNames('pull')[0] || 'No pull'))}${speedCell}
+      ${cell('mode', g.mode || defMode)}${pullCell}${speedCell}
       <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';

@@ -2830,7 +2830,23 @@ function gpioTable(pinsList) {
   const speedOf = g => (typeof gpioSpeedFor === 'function' ? gpioSpeedFor(g.speed) : g.speed) || (speeds[0] || {}).name || '';
   const rows = pinsList.slice().sort(pinSort).map(pin => {
     const i = E.pins[pin] || { state: '', label: '', claims: [] }, g = S.gpio[pin] || {}, num = pinNum(pin);
-    const defMode = i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input');
+    // THE SAME derivation the conflict engine reports and the generator emits
+    // (app/engine/constraints.js). This used to be a third copy - "any peripheral claims
+    // it, therefore alternate function" - which knew nothing about analog, so an ADC, OPA,
+    // CMP or DAC pad read "Alternate Function Push Pull" in this table while the generated
+    // C put it in GPIO_Mode_AIN. Measured on 2026-09-12 across every part x every package
+    // with every signal claimed: 175 rows disagreed. One rule, one answer, three consumers.
+    const eff = typeof gpioEffectiveMode === 'function'
+      ? gpioEffectiveMode(pin, i.claims, g)
+      : { mode: i.claims.some(c => c.who !== 'GPIO') ? 'Alternate Function Push Pull' : (g.mode || 'Input') };
+    const defMode = eff.mode;
+    // A pad whose every claim is one GPIO_Init must not touch - the debug interface and
+    // the reset pin - has no mode to offer. The generator says "Not configured here, by
+    // design" and prints the reason; this table said "Alternate Function Push Pull",
+    // which is a mode nothing ever writes. Fixed text, the same rule the one-speed
+    // column follows: a control is for a choice that exists.
+    const untouched = typeof skippedClaim === 'function'
+      && i.claims.length > 0 && i.claims.every(c => skippedClaim(c));
     const sel = (opts, cur, key) => `<select data-pin="${pin}" data-k="${key}">` + opts.map(o => `<option${(cur || '') === o ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
 
     // Per ROW, from the data: the part's options for this column minus whatever the
@@ -2847,17 +2863,36 @@ function gpioTable(pinsList) {
         || `${gpioFieldLabel(field)} is fixed on this pin`;
     };
     const cell = (field, cur) => {
+      if (untouched) {
+        return `<td class="fixedval" title="${attr('GPIO_Init does not configure this pad: '
+          + i.claims.map(c => c.signal).join(', ') + ' is controlled by the option bytes and the '
+          + 'debug hardware, not by a GPIO register')}">\u2014</td>`;
+      }
       const opts = typeof gpioFieldOptions === 'function' ? gpioFieldOptions(pin, field) : gpioFieldOptionNames(field);
       if (!opts.length) return `<td class="fixedval" title="${attr(why(field))}">${esc(cur || '\u2014')}</td>`;
       const notes = typeof gpioRowNotes === 'function' ? gpioRowNotes(pin, field) : [];
       const tip = notes.length ? ` title="${attr(notes.map(c => `${c.reason || c.id}${c.source ? ` (${c.source})` : ''}`).join(' '))}"` : '';
       return `<td${tip}>${sel(opts, opts.includes(cur) ? cur : opts[0], field)}</td>`;
     };
+    // The pull column means something ONLY on an input pin, and that is not this file's
+    // opinion - it is what the other two consumers already do. `modeMacro()` reads the
+    // pull only when the mode is Input, because the SPL has no standalone pull bit and
+    // folds it into GPIO_Mode_IN_FLOATING / _IPU / _IPD; `compute()` checks a pull
+    // constraint only when the mode is Input for the same reason. So on an output,
+    // alternate-function or ANALOG row this select changed the stored value and changed
+    // nothing else - a choice the app offered that the silicon does not have, which is
+    // the defect class this round exists to remove. The value is kept, not cleared: a
+    // row that goes back to Input gets its pull back.
+    const pullCell = untouched || (g.mode || defMode) === 'Input'
+      ? cell('pull', g.pull || (gpioFieldOptionNames('pull')[0] || 'No pull'))
+      : `<td class="fixedval" title="${attr(`${defMode} has no pull-up/pull-down: the SPL folds the pull `
+        + `into the input mode macro, so this column applies to an input pin only`
+        + `${g.pull ? ` (${g.pull} is remembered for when this pin is an input again)` : ''}`)}">—</td>`;
     const speedCell = !speeds.length ? ''
-      : speedIsChoice ? cell('speed', speedOf(g))
+      : (speedIsChoice || untouched) ? cell('speed', speedOf(g))
         : `<td class="fixedval" title="${attr(`${M.mcu.name} has one output speed${speeds[0].macro ? ` (${speeds[0].macro})` : ''}, so there is nothing to choose`)}">${esc(speedOf(g))}</td>`;
     return `<tr><td>${pinLabel(pin)} <span style="color:var(--muted)">(${num})</span></td><td${i.state === 'conflict' ? ' style="color:var(--bad)"' : ''}>${i.label}</td>
-      ${cell('mode', g.mode || defMode)}${cell('pull', g.pull || (gpioFieldOptionNames('pull')[0] || 'No pull'))}${speedCell}
+      ${cell('mode', g.mode || defMode)}${pullCell}${speedCell}
       <td><input data-pin="${pin}" data-k="label" value="${(g.label || '').replace(/"/g, '&quot;')}" placeholder="—" maxlength="32"></td></tr>`;
   }).join('');
   if (!rows) return '<div class="empty">No pins configured yet.</div>';

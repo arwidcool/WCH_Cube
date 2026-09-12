@@ -268,6 +268,41 @@ export function analogClaim(claim, pin) {
 }
 
 /**
+ * Which KEY the data is missing when a claimed signal has no `af:` — and it is not
+ * always `af:`.
+ *
+ * An ADC, OPA, CMP, DAC or HSADC pad has no alternate-function code and never will:
+ * the function IS analog and the pad is selected by `GPIO_Mode_AIN`, a GPIO *mode*,
+ * not a four-bit field in `GPIOx_AFRL`. Telling that pad's owner to "add `af:`" is
+ * advice nobody can follow, so it sends the next reader off to invent a number — which
+ * is the failure this generator's whole TODO discipline exists to prevent. A TODO that
+ * names the wrong fix is worse than no TODO.
+ *
+ * Decided from the two things the data already states, and from nothing else:
+ *   - the peripheral's `category`, which is what `analogClaim`'s fallback reads too;
+ *   - whether the pin is marked analog-capable, which is the fallback's other half.
+ * A peripheral this file does not call Analog gets the `af:` answer, because a
+ * non-analog pad genuinely is muxed. A part whose analog pads are NOT in an
+ * Analog-category peripheral (a SERDES lane, a USB pair) states
+ * `codegen.analog_signals` — the authoritative list — and never reaches here at all.
+ *
+ * Returns null when `af:` is the right answer, otherwise the analog repair:
+ *   { key, entry, pinFlagMissing }
+ */
+export function analogAdvice(claim, pin) {
+  const P = (M.peripherals || {})[claim.who];
+  if (!P || P.category !== 'Analog') return null;
+  const bare = String(claim.signal).slice(String(claim.who).length + 1);
+  return {
+    key: `codegen.analog_signals.${claim.who}`,
+    entry: bare,
+    // The fallback needs BOTH halves. Naming only one sends the reader back for a
+    // second round, so when the pin flag is absent the TODO says so in the same breath.
+    pinFlagMissing: !((M.pins || {})[pin] || {}).analog,
+  };
+}
+
+/**
  * The mode this pin will be configured with, and whether it was inferred.
  *
  * Order matters and it is the generator's order: a stored value wins, then an analog

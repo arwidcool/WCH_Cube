@@ -32,7 +32,7 @@
 // =============================================================================
 import {
   M, S, pinType, requiredSignals, sigName, gpioSpeeds, gpioSpeedFor, gpioModes,
-  gpioInputModes, isEnabled, pinExists, signalPins, signalAf,
+  gpioInputModes, isEnabled, pinExists, signalPins, signalAf, canon,
 } from './model.js';
 import { paramDefs, paramValue, paramApplies, depProblems } from './params.js';
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
@@ -42,6 +42,7 @@ import { clockCalc, firstPre } from './clock.js';
 import { PROJECT } from './project.js';
 import {
   constraintFor, constraintSentence, skippedClaim, gpioEffectiveMode,
+  analogClaim, analogAdvice,
 } from './constraints.js';
 import { isConstParam } from './util.js';
 
@@ -215,8 +216,12 @@ export function remapPlan() {
  */
 export function afPlan() {
   const c = cfg().remap || {};
+  // The "nothing here" object is deliberately NOT the `af` shape: it carries no `macro`
+  // and no analog buckets, and `tests/afmux.test.js` pins it as "exactly what a part
+  // with no signal_pins produced before this key existed". Every reader of the extra
+  // keys is already behind an `ap.style === 'af'` test. Do not tidy the two into one.
   if ((c.style || '') !== 'af') return { style: null, fn: null, calls: [], missing: [] };
-  const calls = [], missing = [];
+  const calls = [], missing = [], analog = [], contradictory = [], dropped = [];
   for (const [pid, P] of Object.entries(M.peripherals)) {
     if (!P.signal_pins || !S.periph[pid]) continue;
     const req = requiredSignals(pid);
@@ -230,12 +235,46 @@ export function afPlan() {
       if (!m) continue;
       const af = signalAf(pid, sig, pin);
       const entry = { periph: pid, signal: sig, pin, port: m[1], bit: +m[2], af };
-      (af === null || Number.isNaN(af) ? missing : calls).push(entry);
+
+      // An analog pad has no AF field to write. `gpioEffectiveMode()` puts this pin in
+      // GPIO_Mode_AIN, so writing GPIOx_AFRL for it too would be the generator
+      // disagreeing with itself one block further down the same function. Same rule,
+      // same source of truth: `analogClaim()`.
+      const an = analogClaim({ who: pid, signal: sigName(pid, sig) }, pin);
+      if (an.analog) {
+        // The data states BOTH that the pad is analog and that it has an AF code. That
+        // is one fact written twice with two different answers; the generator picks
+        // neither and says which two keys disagree.
+        (af === null || Number.isNaN(af) ? analog : contradictory)
+          .push({ ...entry, inferred: an.inferred });
+        continue;
+      }
+      if (af !== null && !Number.isNaN(af)) {
+        // The claim is not analog, but the PAD may be: another claim on the same pin can
+        // be, and `gpioEffectiveMode()` puts analog first, so GPIO_Init above writes
+        // GPIO_Mode_AIN. Writing this signal's AFR nibble anyway would configure a mux
+        // field on a pad that is not muxed - the generator disagreeing with itself two
+        // blocks apart. The engine reports the same pad as an analog-vs-AF issue; here
+        // the AF is declined and said out loud rather than emitted or dropped in silence.
+        const padClaims = ((E || compute()).pins[canon(pin)] || {}).claims || [];
+        if (padClaims.length > 1 && gpioEffectiveMode(pin, padClaims, S.gpio[pin] || {}).mode === 'Analog') {
+          dropped.push({ ...entry, with: padClaims.filter(c => c.who !== pid || c.signal !== sigName(pid, sig))
+            .map(c => c.signal) });
+          continue;
+        }
+        calls.push(entry);
+        continue;
+      }
+      // No `af:`, and not settled as analog. Which key the data is short of depends on
+      // what it already says about the peripheral and the pin — see analogAdvice().
+      missing.push({ ...entry, advice: analogAdvice({ who: pid, signal: sigName(pid, sig) }, pin) });
     }
   }
   const order = (a, b) => (a.port === b.port ? a.bit - b.bit : a.port.localeCompare(b.port));
   return { style: 'af', fn: c.fn || null, macro: c.macro || 'GPIO_AF$AF',
-           calls: calls.sort(order), missing: missing.sort(order) };
+           calls: calls.sort(order), missing: missing.sort(order),
+           analog: analog.sort(order), contradictory: contradictory.sort(order),
+           dropped: dropped.sort(order) };
 }
 
 /** True when this peripheral's selected remap is applied by a macro call. */
@@ -498,7 +537,8 @@ function gpioSection() {
   // AF style: one call per SIGNAL. Emitted before the two whole-peripheral styles
   // because a part is only ever one of the three, so at most one of these blocks runs.
   const ap = afPlan();
-  if (ap.style === 'af' && (ap.calls.length || ap.missing.length)) {
+  if (ap.style === 'af'
+      && (ap.calls.length || ap.missing.length || ap.contradictory.length || ap.dropped.length)) {
     if (ap.calls.length && ap.fn) {
       L.push('    /* Alternate function select (GPIOx_AFRL/AFRH, one field per pin) */');
       for (const c of ap.calls) {
@@ -513,11 +553,72 @@ function gpioSection() {
       for (const c of ap.calls) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} = AF${c.af}`);
       L.push('       Add codegen.remap.fn (GPIO_PinAFConfig on the parts seen so far). */');
     }
-    if (ap.missing.length) {
+    // Two different gaps wear the same symptom — "a claimed signal with no `af:`" — and
+    // they need two different keys. Splitting them here is the whole point: the first
+    // list is followable advice, the second one used to be an instruction to invent an
+    // AF code for a pad that has none.
+    const needAf = ap.missing.filter(c => !c.advice);
+    const needAnalog = ap.missing.filter(c => c.advice);
+    if (needAf.length) {
       L.push('    /* TODO: alternate function select. These signals have a pin but the MCU file');
       L.push('       states no `af:` for it, and this generator does not guess an AF code:');
-      for (const c of ap.missing) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)}`);
+      for (const c of needAf) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)}`);
       L.push('       Add `af:` to the signal_pins entry and generate again. */');
+    }
+    if (needAnalog.length) {
+      L.push('    /* TODO: these signals have a pin and no `af:` — and `af:` is most likely NOT');
+      L.push('       what the MCU file is short of. Every one of them sits on a peripheral this');
+      L.push('       file puts in the Analog category, and an analog pad has no alternate-function');
+      L.push('       code to add: the function IS analog, and the pad is selected by the GPIO mode');
+      L.push('       (GPIO_Mode_AIN), not by a field in GPIOx_AFRL/AFRH. The key is the analog');
+      L.push('       list, one line per peripheral:');
+      const byKey = new Map();
+      for (const c of needAnalog) {
+        (byKey.get(c.advice.key) || byKey.set(c.advice.key, []).get(c.advice.key)).push(c);
+      }
+      for (const [key, list] of [...byKey].sort((a, b) => a[0].localeCompare(b[0]))) {
+        const sigs = [...new Set(list.map(c => c.advice.entry))].sort();
+        L.push(`         ${key}: [${sigs.join(', ')}]`);
+        for (const c of list) L.push(`           ${c.pin} — ${sigName(c.periph, c.signal)}`);
+      }
+      // The consequence, said out loud. GPIO_Init above has already configured these
+      // pads as an alternate function, because that is what the data it was given says
+      // — and a pad configured AF_PP when the silicon wants AIN is wrong-but-compiling,
+      // which no gate downstream of here can see.
+      L.push(`       Until that list exists, GPIO_Init above configures ${
+        [...new Set(needAnalog.map(c => c.pin))].sort().join(', ')}`);
+      L.push('       as an alternate function, which is wrong for an analog pad. If one of these');
+      L.push('       really is muxed, `af:` is still the right answer for that one.');
+      // The fallback route needs the pin flag too; the authoritative list does not. Say
+      // which one is short of what rather than leaving the reader to find out by trying.
+      const noFlag = needAnalog.filter(c => c.advice.pinFlagMissing).map(c => c.pin);
+      if (noFlag.length) {
+        L.push(`       (pins.<pin>.analog is not set for ${[...new Set(noFlag)].sort().join(', ')}`);
+        L.push('        either, so the Analog-category fallback cannot answer this on its own.');
+        L.push('        codegen.analog_signals is authoritative and needs no pin flag.) */');
+      } else {
+        L.push('       */');
+      }
+    }
+    if (ap.dropped.length) {
+      L.push('    /* TODO: these signals have an `af:` and it is NOT written, because another');
+      L.push('       function on the same pad is analog and GPIO_Init above put the pad in');
+      L.push('       GPIO_Mode_AIN. One pad is analog or it is muxed, never both:');
+      for (const c of ap.dropped) {
+        L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} (AF${c.af}) shares the pad with `
+          + `${c.with.join(', ')}`);
+      }
+      L.push('       Move one of them to another pad, or switch the analog function off. */');
+    }
+    if (ap.contradictory.length) {
+      L.push('    /* TODO: the MCU file says two different things about these pads. Each is in');
+      L.push('       codegen.analog_signals — so its pad is GPIO_Mode_AIN and has no AF field —');
+      L.push('       and each ALSO carries an `af:` code, which only a muxed pad can have:');
+      for (const c of ap.contradictory) {
+        L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} — af: ${c.af},`
+          + ` and listed in codegen.analog_signals.${c.periph}`);
+      }
+      L.push('       Delete whichever is wrong; this generator will not pick one. */');
     }
   }
 
