@@ -1,5 +1,12 @@
 # Round 5 — "every choice the app offers must be one the silicon can honour"
 
+> **Added 2026-09-12, and it governs every part from here on:** *every function the datasheet
+> puts on a pin is modelled, or declared absent with a `file:line`, or the build is red.* The
+> mechanism is the coverage ledger — `docs/COVERAGE.md`, `python tools/coverage.py <PART>` — and
+> a part is not done while it prints an open row. This is the complement of the round's rule: that
+> one stops the app offering what the silicon cannot do; this one stops the app *omitting* what
+> the silicon does. The counts today: CH32H417 113 open, CH32L103 33, CH32V003 3, the rest 0.
+
 Rounds 1–4 built a configurator, made what you can click correct, made the generated C compile,
 and added a second family plus a project you can flash. Round 5 has **two deliverables that
 prove each other**, and the round's rule is written in the title.

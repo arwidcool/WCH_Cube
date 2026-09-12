@@ -61,8 +61,10 @@ Everything else that coordinates agents is in this folder.
 - Repo sits on a Google Drive mount: `npm install` fails with `EBADF`. Test deps live in
   `%LOCALAPPDATA%\wchcube-deps` and `tests/lib/deps.js` finds them.
   (Human: moving the repo to a local folder fixes this.)
-- **Git: one repo, no remote, one shared working tree.** Worktrees stay suspended until a remote
-  exists — never create one. Commit straight to `main`, small, `AGENT-n: <task>`.
+- **Git: one repo, remote `origin https://github.com/arwidcool/WCH_Cube.git`, one shared working
+  tree.** Commit straight to `main`, small, `AGENT-n: <task>`, and push. Worktrees are still
+  suspended — the remote exists, but the condition for switching is CI being green, not the remote
+  merely existing; see the Git model below and `BOARD.md` 2026-09-12T12:19Z.
 - **The tree is shared, so run the suite serially.** Two `node tests/run.js` at once corrupt each
   other: one rebuilds `dist/index.html` while the other reads it, and the compile gate builds
   into a shared drop zone. One suite at a time per machine.
@@ -74,11 +76,15 @@ Everything else that coordinates agents is in this folder.
 
 ## Git model
 
-One repo, one `main`, **one shared tree**, no remote. Commit small, straight to `main`.
+One repo, one `main`, **one shared tree**, remote `origin` at
+`https://github.com/arwidcool/WCH_Cube.git`. Commit small, straight to `main`, and push.
 
-Worktrees are suspended until a remote exists. When one appears, AGENT-3 posts
-`DECISION | worktrees ON` and the model becomes one worktree per agent with a rebase-and-test
-merge:
+Worktrees are suspended, and the condition for turning them on is **not** "a remote exists" — it
+is `AGENT_3_QA_RELEASE.md` item 12's list: pushed, CI green, and `pio run` present for
+`data/firmware` **and** the generated-project gate. The remote appeared on 2026-09-12 and the
+first two of those are done; CI has not been read green yet, so AGENT-3 keeps posting the state
+rather than flipping the model. When it does flip, it is one worktree per agent with a
+rebase-and-test merge:
 
 ```
 git fetch && git rebase origin/main && python build.py && node tests/run.js && git push origin HEAD:main
@@ -110,6 +116,15 @@ that cycle.
 
 ## Gates — what a commit has to pass
 
+- **The coverage ledger, before any part is called done** (`docs/COVERAGE.md`, and `CLAUDE.md`
+  at the root says the same in three paragraphs): `python tools/coverage.py <PART>` prints every
+  function the datasheet puts on a pin, every RM chapter and every SDK instance the MCU file does
+  not account for, and exits 1 while any row is open. A part is `status: complete` in
+  `data/coverage/<PART>.yaml` only at 0 open rows; otherwise it is `in_extraction` with an owner,
+  a `TASKS.md` line and an `open_rows:` count that **may only go down** — the gate fails on a
+  count that rose and on one that is stale. `python tools/coverage.py --gate` is what the suite
+  and CI run. **Never report a part as done while the tool prints an open row, and never patch
+  `data/mcus/*.yaml` with an ad-hoc script — model the row or declare it with a `file:line`.**
 - `python build.py && node tests/run.js` → **ALL GREEN, no unexplained skips.** The runner counts
   skips and prints every reason above the verdict; a check that did not run is never a pass.
 - **If you changed what the generator emits, or what an MCU file claims, compile it** on a
@@ -134,6 +149,11 @@ that cycle.
   wrong, the generator is wrong.
 - Every MCU fact in YAML cites a DS/RM table or an EVT `file:line` in the part's `.notes.md`.
   **"The other CH32 parts have it" is not a citation.**
+- **A peripheral that routes no pin says so** — `pins: { none: true, source: ... }` when the
+  silicon gives it no pad (the ledger checks the claim against the datasheet), `pins: { open:
+  true, owner: ..., task: ... }` while its pads are unextracted. A routed signal no choice can
+  claim is a dead pad and a validator ERROR. Silence in either direction is the defect that
+  shipped 207 dead pads and four name-only USB controllers on one part.
 - Precedence for anything the software must *name*: **EVT → RM → DS → anything else.** Where EVT
   and the RM disagree they answer different questions; record both, average neither.
 - **Read the markdown conversion first; the PDF is the LAST resort.** Which document wins is the

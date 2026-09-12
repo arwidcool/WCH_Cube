@@ -19,6 +19,12 @@ What it checks
   remap-consistency  every signal a setting can ask for is routed by at least one remap,
                      every remap_by_package index is in range, and remap tables agree
                      with each other about which signals they carry
+  dead pins          the reverse direction: every signal that IS routed to a pin is
+                     claimable by some setting choice, or that pad can never be assigned
+  pins declaration   a peripheral that routes nothing says so - `pins: { none: true,
+                     source: ... }` (the silicon gives it no pad; tools/coverage.py checks
+                     the claim against the datasheet) or `pins: { open: true, owner: ...,
+                     task: ... }` (its pads are not extracted yet). Silence is an error
   I/O counts         mcu.variants[*].io_count vs the io pins actually in that package
                      table (a shorted pair counts once) - catches a dropped or
                      duplicated row in `packages:`
@@ -93,6 +99,10 @@ PIN_ENTRY_KEYS = {"type", "analog", "notes", "five_volt_tolerant", "drive"}
 # GPIOx_AFRy field must hold to carry it. Checked for stray keys like everything else
 # written in flow style, because an unquoted comma truncates the value before it.
 SIGNAL_PIN_KEYS = {"pin", "af", "notes"}
+# A peripheral's `pins:` declaration - the statement a routing-less peripheral must make
+# (docs/COVERAGE.md): `none` + `source` when the silicon gives it no pad, `open` +
+# `owner` + `task` while its pads are unextracted.
+PERIPH_PINS_KEYS = {"none", "open", "source", "owner", "task", "notes"}
 # How a remap reaches the silicon. `register` and `macro` move a whole peripheral at
 # once; `af` moves one pin at a time and is the only one that pairs with `signal_pins:`.
 REMAP_STYLES = {"register", "macro", "af"}
@@ -445,6 +455,45 @@ def check_peripherals(doc: dict, r: Report) -> None:
                 r.error(where, f"signal `{sig}` can be selected but no remap routes it")
             elif sig_pins:
                 r.error(where, f"signal `{sig}` can be selected but `signal_pins:` gives it no pin")
+
+        # The reverse direction, and the one that let 207 dead pads ship on CH32H417 and
+        # ten unselectable ADC channels on CH32L103 (2026-09-12): a signal that is routed
+        # to a pin but that no setting's choice ever names is a pad the user can never
+        # assign. It renders on the chip as a function and the picker offers nothing.
+        for sig in sorted((routed | af_routed) - wanted):
+            r.error(where, f"signal `{sig}` is routed to a pin but no setting choice claims it, "
+                           f"so that pad can never be assigned (a dead pin); add it to a "
+                           f"choice's `signals:` or drop the routing")
+
+        # A peripheral with no routing must SAY so. `pins: { none: true, source: ... }`
+        # is the claim that the silicon gives it no pad (tools/coverage.py checks that
+        # claim against the datasheet); `pins: { open: true, owner: ..., task: ... }` is
+        # the admission that its pads are not extracted yet. Silence was how USBFS,
+        # USBHS, USBSS and TKEY shipped on CH32H417 as "holds no pin on any package"
+        # while the datasheet gives every one of them pads.
+        decl = P.get("pins")
+        if not routed and not af_routed:
+            if not isinstance(decl, dict):
+                r.error(where, "routes no signal to any pin and declares nothing; add "
+                               "`pins: { none: true, source: ... }` if the silicon gives it no "
+                               "pad, or `pins: { open: true, owner: ..., task: ... }` while its "
+                               "pads are unextracted")
+            else:
+                stray = unknown_keys(decl, PERIPH_PINS_KEYS)
+                if stray:
+                    r.error(f"{where}.pins", f"unknown key(s) {stray}")
+                if bool(decl.get("none")) == bool(decl.get("open")):
+                    r.error(f"{where}.pins", "needs exactly one of `none: true` or `open: true`")
+                elif decl.get("none") and not decl.get("source"):
+                    r.error(f"{where}.pins", "`none: true` needs a `source:` - a DS table or "
+                                             "note number saying no pin carries it; a family "
+                                             "is not a source")
+                elif decl.get("open") and not (decl.get("owner") and decl.get("task")):
+                    r.error(f"{where}.pins", "`open: true` needs `owner:` and `task:` (a phrase "
+                                             "that exists in TASKS.md) so the gap has a name")
+        elif isinstance(decl, dict):
+            r.error(f"{where}.pins", "declared, but this peripheral routes signals to pins; one "
+                                     "of the two is wrong")
 
         rbp = P.get("remap_by_package") or {}
         if rbp and not isinstance(rbp, dict):

@@ -133,6 +133,118 @@ test('CI really compiles the generated C, in a job that has PlatformIO', () => {
   assert.empty(problems, 'CI does not actually compile anything, whatever else it proves');
 });
 
+// ---------------------------------------------------------------- the coverage ledger in CI
+//
+// The ledger is the round's definition of done for a part, and it is the only gate that reads
+// the SOURCES. `validate_mcu.py` proves an MCU file is consistent with itself,
+// `verify_sdk_names.py` proves a claimed name exists, and neither asks whether the datasheet has
+// all been said - which is how CH32H417 shipped 207 signals routed to pins no setting could claim
+// with every gate green. Running it in CI is what stops "every part meets its declared status"
+// from being a claim made only on the machine where somebody remembered to type it.
+
+/** Index of the first step whose `run:` matches, or -1. Pure, so the plant below can test it. */
+function stepIndex(steps, re) {
+  return (steps || []).findIndex(s => re.test(String((s && s.run) || '')));
+}
+
+test('CI runs the coverage ledger, after the SDK-name check', () => {
+  const file = workflowFiles().find(f => /^ci\.ya?ml$/.test(f));
+  assert.ok(file, 'there is no .github/workflows/ci.yml');
+  const doc = loadWorkflow(file);
+  const jobs = doc.jobs || {};
+
+  // Find the job that runs the data gates, by the steps rather than by the job's name - a
+  // rename must not silently drop the check.
+  const GATE_STEPS = /tools\/coverage\.py\s+--gate/;
+  const runners = Object.keys(jobs).filter(j => stepIndex(jobs[j].steps, GATE_STEPS) >= 0);
+  assert.ok(runners.length >= 1,
+    'no CI job runs `tools/coverage.py --gate`, so the coverage ledger is a gate only on the '
+    + 'machine where somebody remembers to type it. Every part\'s declared status would go '
+    + 'unverified on every push');
+
+  const problems = [];
+  for (const job of runners) {
+    const steps = jobs[job].steps || [];
+    const sdk = stepIndex(steps, /tools\/verify_sdk_names\.py/);
+    const cov = stepIndex(steps, GATE_STEPS);
+    // Order, and it is not cosmetic: a coverage row is closed by naming a signal, and a signal
+    // named after a macro this part's headers do not define is the defect the name check exists
+    // to catch FIRST. Reporting it as a missing coverage row instead sends the reader to the
+    // datasheet when the answer is in the header.
+    if (sdk < 0) {
+      problems.push(`${job}: runs the coverage ledger but never runs verify_sdk_names.py in the same `
+        + 'job, so a signal named after a macro that does not exist is reported as a coverage gap');
+    } else if (cov < sdk) {
+      problems.push(`${job}: the coverage ledger step (${cov}) runs BEFORE verify_sdk_names.py `
+        + `(${sdk}); the name check must come first`);
+    }
+  }
+  assert.empty(problems, 'CI does not run the coverage ledger where the other data gates run');
+});
+
+test('the coverage-ledger CI check can fail: a missing or reordered step is caught', () => {
+  // Planted breaks, run every time. The check above is a scan for a step and a comparison of two
+  // indices, and BOTH halves matter: a scan that matched nothing would report "no job runs it",
+  // and an index comparison that was off by one would pass on a workflow that runs the ledger
+  // first. Neither is hypothetical - the ordering requirement is the one most likely to be lost
+  // in a future edit, because moving a step looks like tidying.
+  const COV = /tools\/coverage\.py\s+--gate/;
+  const SDK = /tools\/verify_sdk_names\.py/;
+
+  const ok = [
+    { run: 'pip install -r requirements.txt' },
+    { run: 'python tools/validate_mcu.py' },
+    { run: 'python tools/verify_sdk_names.py' },
+    { run: 'python tools/coverage.py --gate' },
+  ];
+  assert.equal(stepIndex(ok, COV), 3, 'the coverage step is not found at all');
+  assert.ok(stepIndex(ok, COV) > stepIndex(ok, SDK), 'a correct order is reported as wrong');
+
+  // The ledger checked out of the repo but never run.
+  const missing = ok.filter(s => !COV.test(s.run));
+  assert.equal(stepIndex(missing, COV), -1, 'a workflow with no coverage step is reported as having one');
+
+  // Present but before the name check - the likeliest edit, and the one that misattributes a
+  // failed row to the datasheet when the answer is in the header.
+  const reordered = [ok[0], ok[3], ok[1], ok[2]];
+  assert.ok(stepIndex(reordered, COV) < stepIndex(reordered, SDK),
+    'a reordered ledger step is not detected, so the ordering rule is not really checked');
+});
+
+test('the Taskfile exposes the coverage ledger tasks, and they run the real tools', () => {
+  // `task coverage`, `task coverage:gate` and `task ledger` are how a human or an agent runs the
+  // ledger without reading docs/COVERAGE.md first. A task that exists but runs the wrong command
+  // is worse than no task: it is a green tick from a command that did not check anything.
+  const taskfile = fs.readFileSync(path.join(ROOT, 'Taskfile.yml'), 'utf8');
+
+  /** The `cmds:` block of a top-level task, or null. Tasks here are two-space indented. */
+  const taskBlock = name => {
+    const re = new RegExp(`^  ${name.replace(/:/g, ':')}:\\s*$([\\s\\S]*?)(?=^  [\\w:-]+:\\s*$|\\Z)`, 'm');
+    const m = re.exec(taskfile);
+    return m ? m[1] : null;
+  };
+
+  const problems = [];
+  const wants = [
+    ['coverage', /tools\/coverage\.py/],
+    ['coverage:gate', /tools\/coverage\.py\s+--gate/],
+    ['ledger', /tools\/ledger\.py\s+--write/],
+  ];
+  for (const [name, re] of wants) {
+    const body = taskBlock(name);
+    if (body === null) { problems.push(`Taskfile.yml has no \`${name}\` task`); continue; }
+    if (!re.test(body)) {
+      problems.push(`\`task ${name}\` exists but does not run what it claims (expected ${re})`);
+    }
+  }
+  assert.empty(problems, 'the Taskfile does not expose the coverage ledger as runnable tasks');
+
+  // …and the parser above is not vacuously finding nothing.
+  assert.ok(taskBlock('coverage:gate') !== null && /--gate/.test(taskBlock('coverage:gate')),
+    'the task-body parser cannot read a task it was just shown');
+  assert.equal(taskBlock('no-such-task'), null, 'the task-body parser invents tasks');
+});
+
 test('the compile-gate guard can fail: commenting out the install is caught', () => {
   // The planted break, run every time — and it is here because this check shipped
   // once WITHOUT being able to fail: it matched the raw step text, so a commented

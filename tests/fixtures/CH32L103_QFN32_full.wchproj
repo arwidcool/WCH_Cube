@@ -14,6 +14,7 @@ peripherals:
     settings:
       High Speed Clock (HSE): Crystal / ceramic resonator
       Master Clock Output (MCO): Disable
+      Low Speed Clock (LSE): Disable
     remap: 0
   USART1:
     settings:
@@ -163,6 +164,8 @@ peripherals:
   ADC1:
     settings:
       Mode: Independent
+      Channels:
+        - IN4
     remap: 0
     params:
       mode: Independent
@@ -189,6 +192,7 @@ peripherals:
   PWR:
     settings:
       Mode: Disable
+      Wake-up pin: Disable
     remap: 0
     params:
       pvd_level: 2.14 V rising / 2.08 V falling
@@ -234,6 +238,7 @@ peripherals:
   RTC:
     settings:
       Mode: Disable
+      RTC output on PC13: Disable
     remap: 0
     params:
       prescaler: 32767
@@ -241,6 +246,7 @@ peripherals:
   BKP:
     settings:
       Mode: Disable
+      TAMPER pin: Disable
     remap: 0
     params:
       tamper_level: High
@@ -251,6 +257,12 @@ peripherals:
     remap: 0
     params:
       id: 0
+  EXTEN:
+    settings:
+      Lock-up reset: Disable
+    remap: 0
+    params:
+      lockup: false
   USBFS:
     settings:
       Mode: Disable

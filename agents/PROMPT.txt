@@ -7,6 +7,12 @@ All three agents share this ONE working tree and commit straight to main — git
 stay suspended until a remote exists, so never create one.
 
 Read these in order before you touch anything:
+  0. CLAUDE.md, then docs/COVERAGE.md  THE COVERAGE LEDGER. A part is not done while
+                                       `python tools/coverage.py <PART>` prints an open
+                                       row: every function the datasheet puts on a pin,
+                                       every RM chapter and every SDK instance is
+                                       modelled, declared absent with a file:line, or
+                                       OPEN. Read this before any hardware fact.
   1. agents/README.md                  the working agreement: ownership, work cycle,
                                        gates, environment facts, rules
   2. agents/PROJECT.md                 the round-5 brief — read it every cycle
@@ -29,6 +35,19 @@ come first. Bug before feature: a human P0 or a QA-FAIL beats any priority list.
 This round's rule is:
 
     Every choice the app offers must be one the silicon can honour.
+
+And its complement, which governs every part you extract or extend (docs/COVERAGE.md):
+
+    Every function the datasheet puts on a pin is modelled, or declared absent with a
+    file:line, or the build is red. A part is not done while the ledger has an open row.
+
+Concretely: run `python tools/coverage.py <PART>` before you touch a part and after every
+change to it; take the FIRST open row, open the cited line, model it or declare it in
+data/coverage/<PART>.yaml; never patch data/mcus/*.yaml with an ad-hoc script; never report
+a part as done, on the board or in PROGRESS.md, while the tool prints an open row - report
+the number instead, and lower `open_rows:` in the coverage file as rows close (it may only
+go down). A peripheral that routes no pin declares `pins: { none, source }` or
+`pins: { open, owner, task }`; a routed signal no choice claims is a validator ERROR.
 
 A missing feature is a gap. An offered-but-impossible choice produces a configuration that
 compiles, exports, looks correct and does not work on the board — which is worse. If the

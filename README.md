@@ -34,6 +34,7 @@ click when a choice would collide with something you have already set.
 |---|---|
 | **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** | You want to understand the design and **exactly how much of it to trust**. Start here. |
 | **[docs/ADDING-A-PART.md](docs/ADDING-A-PART.md)** | Your microcontroller is not supported. The whole process: drop the vendor files in, let an AI extract them, verify. |
+| **[docs/COVERAGE.md](docs/COVERAGE.md)** | You are extracting a part, or asking whether one is finished. The coverage ledger: every function on every pin the datasheet lists is modelled, declared absent with a citation, or **open** — and a part is not done while a row is open. |
 | **[data/FORMAT.md](data/FORMAT.md)** | You are writing or editing an MCU file. The field-by-field schema. |
 | **[PROGRESS.md](PROGRESS.md)** | What is actually done, broken, and never tested. |
 | **[docs/](docs/)** | Index of all of the above. |
@@ -135,6 +136,11 @@ The one idea worth knowing: **alternate functions are never listed per pin.** Ea
 peripheral carries a `remaps:` table saying which pin each signal lands on for each value
 of the AFIO remap field. The app derives every pin's signal list, and every conflict, from
 those tables. One place to edit, and the conflicts are computed rather than maintained.
+
+5. Close the coverage ledger — `python tools/coverage.py YOUR_PART` lists every function
+   the datasheet puts on a pin that the file does not model, every RM chapter and every SDK
+   instance it does not account for, and exits 1 while any remain. Zero open rows is what
+   "done" means here; [`docs/COVERAGE.md`](docs/COVERAGE.md) is the loop.
 
 `tools/validate_mcu.py` checks schema, that every package has a geometry to draw it with,
 that pin numbers run 1..N with no gaps, that every signal a mode can request is actually

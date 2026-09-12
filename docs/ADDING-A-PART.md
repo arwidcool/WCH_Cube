@@ -83,13 +83,34 @@ flowchart TD
     D --> F["4. python tools/validate_mcu.py data/mcus/PART.yaml"]
     E --> F
     F --> G["5. python tools/verify_sdk_names.py<br/>data/mcus/PART.yaml"]
-    G --> H["6. Write data/mcus/PART.notes.md<br/>citing a source for every fact"]
-    H --> I["7. python build.py"]
-    I --> J["8. Open dist/index.html —<br/>the part is in the selector"]
-    J --> K["9. node tests/run.js<br/>+ a fixture so the compile gate covers it"]
+    G --> L["6. Write data/coverage/PART.yaml, then<br/>python tools/coverage.py PART<br/>until it prints 0 open rows"]
+    L --> H["7. Write data/mcus/PART.notes.md<br/>citing a source for every fact"]
+    H --> I["8. python build.py"]
+    I --> J["9. Open dist/index.html —<br/>the part is in the selector"]
+    J --> K["10. node tests/run.js<br/>+ a fixture so the compile gate covers it"]
 ```
 
-Steps 3b and 6 are the work. Everything else is a command.
+Steps 3b, 6 and 7 are the work. Everything else is a command.
+
+**Step 6 is the one that was missing until 2026-09-12, and it is why parts shipped with pins
+missing.** Steps 4 and 5 prove the file is consistent and its names exist; neither asks whether
+everything the datasheet says has been said. `tools/coverage.py` does: every function the
+datasheet puts on a pin, every reference-manual chapter and every SDK instance is a ledger row
+that is modelled, declared absent with a `file:line`, or **open** — and the tool exits 1 while
+any row is open. The loop is one paragraph:
+
+```
+python tools/coverage.py PART          # every OPEN row, with the datasheet line to read
+# take the FIRST open row, open the cited line, then exactly one of:
+#   model it   - through the part's generator, into data/mcus/PART.yaml
+#   declare it - in data/coverage/PART.yaml (aliases / absent / disagreements / corrections), cited
+# never an ad-hoc script that patches the MCU file. Run the tool again. Stop at 0.
+```
+
+Until it reaches 0 the part is `status: in_extraction` with an owner, a `TASKS.md` line and an
+`open_rows:` count that may only go down. [`COVERAGE.md`](COVERAGE.md) is the whole mechanism:
+the seven checks, the two files per part, the `pins:` declaration a routing-less peripheral must
+make, and what the tool refuses to do.
 
 ### Asking an AI to do the extraction
 
@@ -108,6 +129,13 @@ the constraints**. A prompt that produces usable output looks roughly like:
 >
 > Then run `python tools/validate_mcu.py data/mcus/CH32V003.yaml` and
 > `python tools/verify_sdk_names.py data/mcus/CH32V003.yaml` and fix what they report.
+>
+> Then write `data/coverage/CH32V003.yaml` (`docs/COVERAGE.md` has the schema; start from
+> `data/coverage/CH32V006.yaml`) and run `python tools/coverage.py CH32V003` until it prints
+> **0 open rows**. Every row it prints is a function the datasheet puts on a pin, a chapter or
+> an SDK instance the file does not account for: model it, or declare it with a `file:line`.
+> **Do not report the part as done while it prints an open row**; record the count in the
+> coverage file as `in_extraction` instead.
 >
 > Read the **markdown** only — the PDF is the last resort and you do not open it by eye. If a
 > table the YAML needs is destroyed by the conversion (dropped columns, lost placeholder
@@ -690,6 +718,8 @@ behaves exactly as it did before the block existed.
 ```bash
 python tools/validate_mcu.py data/mcus/YOUR_PART.yaml     # schema + internal consistency
 python tools/verify_sdk_names.py data/mcus/YOUR_PART.yaml # every claimed name vs that part's headers
+python tools/coverage.py YOUR_PART                        # every DS function / RM chapter / SDK instance
+                                                          # not accounted for; 0 open rows = done
 python tools/extract_pins.py                              # re-derive the pin tables and diff
 python tools/extract_remaps.py                            # re-derive the remap tables and diff
 python build.py && node tests/run.js                      # the gate

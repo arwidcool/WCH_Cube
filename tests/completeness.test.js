@@ -140,6 +140,30 @@ const ABSENT = {
   'CH32L103.CMP1.clock': 'the OPA/CMP block has no clock gate: ch32l103_rcc.h defines no '
     + 'RCC_*Periph_OPA and no RCC_*Periph_CMP (checked, not assumed). Same shape as '
     + 'CH32V006 OPA1.clock and the bare OPA1.clock entry above',
+
+  // --- CH32L103 CMP2 and CMP3, STAGED ahead of the peripherals themselves
+  //
+  // AGENT-1 asked for these four (BOARD 2026-09-12T12:01Z) because the moment CMP2 and CMP3
+  // are modelled this matrix demands an `nvic` and a `clock` cell for each, and both answers
+  // are absences rather than gaps. Written now because the requests ARE the two facts, and
+  // both were re-checked here rather than pasted:
+  //
+  //   * `ch32l103.h:100` has `CMPWakeUp_IRQn = 68,` and it is the ONLY comparator entry in
+  //     `IRQn_Type` - so one vector serves three comparators, exactly as CH32X035's single
+  //     `OPA_IRQn = 48` serves two OPAs and three comparators (the entries above).
+  //   * `ch32l103_rcc.h` contains no `RCC_*Periph_CMP` and no `RCC_*Periph_OPA` at all.
+  //
+  // These take effect the moment AGENT-1 adds the two peripherals. If CMP2/CMP3 are ever
+  // abandoned, these four are dead entries in the sense docs/COVERAGE.md warns about - they
+  // read exactly like working ones - so the board entry that records them says so.
+  'CH32L103.CMP2.nvic': 'shares CMPWakeUp_IRQn = 68 with CMP1: `IRQn_Type` in ch32l103.h has '
+    + 'ONE comparator wake-up vector (line 100) and this part has three comparators, so CMP1 '
+    + 'carries it and CMP2/CMP3 share it. Inventing a vector would be a claim about silicon',
+  'CH32L103.CMP3.nvic': 'shares CMPWakeUp_IRQn = 68 with CMP1 - see the CMP2 entry above; '
+    + 'ch32l103.h:100 is the only comparator vector in the enum',
+  'CH32L103.CMP2.clock': 'same OPA/CMP block as CMP1, and the same absent gate: '
+    + 'ch32l103_rcc.h defines no RCC_*Periph_CMP for any of the three comparators',
+  'CH32L103.CMP3.clock': 'same as CMP2.clock - one OPA/CMP block, one (absent) gate',
   'CH32L103.CRC.nvic': 'the CRC raises no interrupt: `IRQn_Type` in ch32l103.h lists 58 '
     + 'vectors and contains no CRC entry of any kind. The unit is polled - the SPL\'s own '
     + 'API is CRC_ResetDR / CRC_CalcCRC / CRC_GetCRC',
@@ -334,6 +358,58 @@ test('every peripheral of every real part has settings, params, a clock bit, and
 `);
   }
   assert.empty(missing, 'peripheral cells that are neither filled in nor declared absent in ABSENT');
+});
+
+// ---------------------------------------------------------------- how far a part may be soft
+//
+// `IN_EXTRACTION` lets a part that is being extracted print a cell with an owner instead of
+// failing a shared gate, and `SOFT_CELLS` decides WHICH cells may be treated that way. That set
+// is the widening risk the round-5 brief names: "it may soften `params` and `clock` only — never
+// a setting, a pin or a chapter". A cell that gets added here silently stops being checked for
+// every in-extraction part, and because those cells print rather than fail, the loss is invisible
+// — the run gets quieter and stays green. So the set is pinned, and the pin is proven to bite.
+
+/** Soft cells beyond `params` and `clock` — the ones that may never be excused. */
+const ALLOWED_SOFT = new Set(['params', 'clock']);
+function illegalSoftCells(cells) {
+  return [...cells].filter(c => !ALLOWED_SOFT.has(c)).sort();
+}
+
+test('IN_EXTRACTION softens exactly params and clock, and no other cell', () => {
+  assert.deep([...SOFT_CELLS].sort(), ['clock', 'params'],
+    'SOFT_CELLS is the list of cells an in-extraction part may leave unchecked while printing '
+    + 'them with an owner. It must be exactly {params, clock}: widening it turns a real check '
+    + 'into a printed line for every in-extraction part, and because those cells only print, the '
+    + 'loss does not show up as a failure. If a cell genuinely cannot be checked yet, that is an '
+    + 'IN_EXTRACTION entry with a TASKS.md line — or an ABSENT declaration with a citation — not '
+    + 'a wider soft set.');
+
+  assert.empty(illegalSoftCells(SOFT_CELLS),
+    'SOFT_CELLS contains cells beyond params and clock, so an in-extraction part stops being '
+    + 'checked on them');
+
+  // The two other cells this matrix produces, named individually: a `settings` cell is "the user
+  // cannot switch this peripheral on" and an `nvic` cell is "no vector names it". Neither is a
+  // depth gap, and softening either would hide a peripheral that does nothing.
+  for (const cell of ['settings', 'nvic', 'pins', 'chapter', 'routed']) {
+    assert.ok(!SOFT_CELLS.has(cell),
+      `IN_EXTRACTION must never soften a \`${cell}\` cell — that is a peripheral the user cannot `
+      + 'use reported as work-in-progress');
+  }
+});
+
+test('the soft-cell pin can fail: a widened SOFT_CELLS is caught', () => {
+  // Planted breaks, run every time. The check above compares a set against two literals, and a
+  // comparison that could not fail would pass on any widening — which is the exact edit it
+  // exists to stop, and the likeliest one to arrive as "just add it, CH32H417 needs it".
+  assert.deep(illegalSoftCells(new Set(['params', 'clock', 'settings'])), ['settings'],
+    'a widened set that softens `settings` is not caught');
+  assert.deep(illegalSoftCells(new Set(['params', 'clock', 'nvic', 'pins'])), ['nvic', 'pins'],
+    'a widened set that softens pin and vector cells is not caught');
+  assert.deep(illegalSoftCells(new Set(['params', 'clock', 'chapter'])), ['chapter'],
+    'a widened set that softens a chapter cell is not caught');
+  // …and the real set reports nothing, or the check above fails on correct data.
+  assert.empty(illegalSoftCells(SOFT_CELLS), 'the shipped SOFT_CELLS is reported as illegal');
 });
 
 test('every signal a peripheral routes can be claimed by one of its settings', () => {

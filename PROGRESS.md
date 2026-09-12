@@ -6,8 +6,40 @@ statement here stops being true, change it here first.
 - **Last updated:** 2026-09-12 (round 5, AGENT-3 cycle 2 — CI made publish-ready, the
   case-sensitivity defects that preparing it exposed, and one reading order for the data
   sources: markdown first, PDF last, in `tools/source_docs.py` and `tests/source_order.test.js`)
-- **Branch:** `main` (no remote). **One shared working tree**, three agents, one working
-  directory (`agents/`); rounds 1–4 are archived under `agents/history/`.
+- **Branch:** `main`, remote `origin https://github.com/arwidcool/WCH_Cube.git`. **One shared
+  working tree**, three agents, one working directory (`agents/`); rounds 1–4 are archived under
+  `agents/history/`.
+- **New 2026-09-12 (human-directed): the coverage ledger, and the numbers it found.** Every
+  gate in this repository proved an MCU file was *consistent*; nothing proved it was
+  *complete* against the sources, which is how the committed CH32H417 file carried **207**
+  signals routed to pins that no setting could claim, CH32L103's ADC routed ten channels with
+  no way to select one, and USBFS/USBHS/USBSS/TKEY said "holds no pin on any package" while the
+  datasheet gives every one of them pads. `tools/coverage.py` now reads the datasheet's pin
+  table (both readings, where the DS has two), the RM's chapter list and the SPL header's
+  instances on every run and joins them to the file: a row is modelled, absent with a
+  `file:line` in `data/coverage/<PART>.yaml`, or **open**, and `tests/coverage.test.js` holds
+  every part to its declared status. `validate_mcu.py` gained the reverse-direction check (a
+  routed signal no choice claims is an ERROR) and the `pins: { none | open }` declaration a
+  routing-less peripheral must make. **Coverage, quoted from `python tools/coverage.py --quiet`
+  at 2026-09-12T12:19Z** — the numbers move as rows close, so read the tool rather than this
+  line, and treat what follows as a dated snapshot:
+
+  ```
+    CH32H417   OPEN 113  (modelled 1234, absent 20, disagreements 0)
+    CH32L103   OPEN 13   (modelled 260, absent 10, disagreements 1)
+    CH32V003   OPEN 3    (modelled 113, absent 10, disagreements 0)
+    CH32V005   OPEN 0    (modelled 214, absent 14, disagreements 0)
+    CH32V006   OPEN 0    (modelled 218, absent 11, disagreements 0)
+    CH32X035   OPEN 0    (modelled 278, absent 11, disagreements 0)
+  ```
+
+  CH32V006, CH32V005 and CH32X035 are `complete`; CH32V003, CH32L103 and CH32H417 are
+  `in_extraction`, owned, and their counts may only go down — never reported as done while the
+  tool prints an open row. The tool found two things on the "clean" parts too: CH32V003's USART1
+  clock pin (declared open, not absent) and a handful of conversion typos (`X0` for `XO`, `C1NO`
+  for `C1N0`, a torn `ACK4`) now recorded as corrections with the line they came from. Planted
+  breaks: 21/21 caught. `docs/COVERAGE.md`
+  is the process; `CLAUDE.md` puts it first for every session.
 - **Verified this pass:** `python build.py` → OK · `node tests/run.js` → **ALL GREEN, 0
   skipped** · `python tools/validate_mcu.py` → 0 errors, 5 warnings ·
   `python tools/verify_sdk_names.py` → 0 errors · `node tools/wchcube_cli.js --project

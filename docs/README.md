@@ -6,6 +6,7 @@ Three documents, in the order most people want them.
 |---|---|
 | **[HOW-IT-WORKS.md](HOW-IT-WORKS.md)** | You want to understand the project — what it is, how it is structured, why it is shaped this way, and **exactly how much of it you should trust**. |
 | **[ADDING-A-PART.md](ADDING-A-PART.md)** | Your microcontroller is not supported. This is the whole process, from dropping the vendor's files into `data/sources/` to seeing generated C compile. |
+| **[COVERAGE.md](COVERAGE.md)** | You are extracting a part, or asking whether one is finished. The coverage ledger: every function on every pin, every RM chapter and every SDK instance is modelled, declared absent with a citation, or **open** — and a part is not done while a row is open. |
 | **[../data/FORMAT.md](../data/FORMAT.md)** | You are writing or editing an MCU file. It is the field-by-field schema and the authoritative DATA↔ENGINE contract. |
 
 Two more, if you are picking the project up rather than using it:

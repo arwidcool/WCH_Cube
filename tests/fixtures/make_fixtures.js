@@ -258,6 +258,23 @@ export const FIXTURES = [
 
       eng.setSetting('TIM1', 'Channel1', 'PWM Generation CH1 CH1N');
 
+      // NOTE — what is deliberately NOT claimed here, and why.
+      //
+      // The OPA inputs/outputs and the DAC output are pads the coverage ledger made reachable
+      // (before it, `OPA` offered Disable/Enabled per unit with no P/N/OUT selection and `DAC`'s
+      // row named no signal). Claiming them was tried, and it made this fixture uncover a real
+      // defect: `GPIO_Init` configures them `GPIO_Mode_AF_PP` where an analog pad must be
+      // `GPIO_Mode_AIN`, because CH32H417 declares no `codegen.analog_signals` and has no
+      // `pins.<PIN>.analog` for the fallback to use. The generated C also carries a TODO asking
+      // for an `af:` code those pads do not have.
+      //
+      // They are therefore claimed in the commit that lands the fix, not before: while they are
+      // here this fixture cannot be `--strict` clean, and `--strict` exit 0 for every fixture is
+      // round 5's acceptance test for deliverable B — a fixture that keeps it red on two other
+      // agents' outstanding work is premature rather than brave. The defect is recorded with its
+      // generated C in tests/evidence/round5/2026-09-12-analog-pads.md and owned on TASKS.md;
+      // AGENT-1 adds `analog_signals`, and the four lines below come back with it.
+
       // Manual GPIO on three ports INCLUDING PE, which is past the A..D range every
       // pin regex in this repo used to assume. PE0 is here on purpose.
       eng.assignSignal('PC0', { gpio: 'GPIO_Output' });
@@ -311,6 +328,21 @@ export const FIXTURES = [
       eng.setSetting('SYS', 'External reset pin', 'Reset pin disabled - pin is GPIO');
 
       eng.setSetting('ADC1', 'Mode', 'Independent');
+      // The ledger's headline CH32L103 row was "its ADC routed ten channels with no way to
+      // select one" - ten analog pads the datasheet puts on PA0-PA7/PB0-PB1 that no user could
+      // claim. Ticking one channel is what makes the compile gate prove the analog pad
+      // generates C that builds; `Mode: Independent` alone configures a converter with no input.
+      // It is a `checkboxes` row, so it is ticked with toggleSetting rather than setSetting -
+      // an empty set is the off state, which is why a fresh project claims no analog pin.
+      //
+      // **IN0 was tried first and REFUSED, correctly**: `IN0` is PA0 and this fixture also
+      // enables TIM2's CH1, which is PA0's other first-mapping function, so the builder stopped
+      // with `PA0: TIM2_CH1_ETR / ADC1_IN0`. The timer keeps the pad because it exercises the
+      // remap path this part is here to cover, and the analog claim moves to IN4 (PA4), whose
+      // only rival here is USART2's CK - and USART2 is configured Asynchronous, which needs no
+      // CK. Recorded because "pick another pin" is the right answer only when the refusal is
+      // understood, and the builder printing the pair is what makes it understandable.
+      eng.toggleSetting('ADC1', 'Channels', 'IN4', true);   // -> PA4
 
       eng.setSetting('IWDG', 'Mode', 'Independent watchdog');
       eng.setSetting('WWDG', 'Mode', 'Window watchdog');;

@@ -53,10 +53,27 @@ tasks:
       - task: test
 
   validate:
-    desc: Validate every MCU file, and check its SPL names against the EVT headers
+    desc: Validate every MCU file, check its SPL names against the EVT headers, and run the coverage gate
     cmds:
       - python tools/validate_mcu.py
       - python tools/verify_sdk_names.py
+      - python tools/coverage.py --gate
+
+  # ------------------------------------------------------------ the coverage ledger
+  coverage:
+    desc: 'The open ledger rows for a part (docs/COVERAGE.md). Usage: task coverage -- CH32L103'
+    cmds:
+      - python tools/coverage.py {{.CLI_ARGS}}
+
+  coverage:gate:
+    desc: Every part against its declared coverage status - what the suite and CI run
+    cmds:
+      - python tools/coverage.py --gate
+
+  ledger:
+    desc: Regenerate data/coverage/ledger/*.yaml after a parser or datasheet change
+    cmds:
+      - python tools/ledger.py --write
 
   # ------------------------------------------------------------- the firmware
   firmware:

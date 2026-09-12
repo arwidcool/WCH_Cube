@@ -232,12 +232,14 @@ peripherals:
 
   DMA1:
     category: System Core
+    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated (7 channels) } ]
 
   IWDG:
     category: System Core
+    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     # No init struct and no handle: ch32v00x_iwdg.h declares IWDG_WriteAccessCmd,
     # IWDG_SetPrescaler(uint8_t), IWDG_SetReload(uint16_t) and IWDG_Enable(void), and
     # not one of them takes an IWDG_TypeDef*. So `sdk_args` is [$VALUE] with no
@@ -291,6 +293,7 @@ peripherals:
 
   WWDG:
     category: System Core
+    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     # Also struct-free and handle-free. Note WWDG_Enable(uint8_t Counter) TAKES the
     # counter, so "switch it on" and "set the counter" are one call — which is why
     # `counter` below names WWDG_Enable rather than a setter.
@@ -337,6 +340,7 @@ peripherals:
   # either (see `exti.internal`).
   PWR:
     category: System Core
+    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Power voltage detector (PVD)
         choices:
@@ -421,6 +425,7 @@ peripherals:
   # reset, so it belongs to SYS where the conflict engine can see it.
   FLASH:
     category: System Core
+    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Independent watchdog start (IWDGSW)
         choices:
@@ -478,6 +483,7 @@ peripherals:
   # lock-up already reset the part, which firmware reads at startup rather than sets.
   EXTEN:
     category: System Core
+    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Lock-up reset
         choices:
@@ -509,6 +515,7 @@ peripherals:
   # has to see. What is configurable here is what each line does once it has a pin.
   EXTI:
     category: System Core
+    pins: { none: true, source: "CH32V003.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: EXTI line 0 trigger
         choices:

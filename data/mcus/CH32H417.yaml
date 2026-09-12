@@ -1633,6 +1633,7 @@ peripherals:
       P1: [{ pin: PB2 }]
   CRC:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1656,6 +1657,7 @@ peripherals:
       OUT2: [{ pin: PA5 }]
   DBGMCU:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: "Debug in low power"
         choices:
@@ -1688,6 +1690,7 @@ peripherals:
       DATIN1: [{ pin: PB1, af: 6 }, { pin: PB12, af: 6 }, { pin: PC3, af: 3 }, { pin: PD6, af: 4 }]
   DMA1:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1697,6 +1700,7 @@ peripherals:
       through its own registers and the clock tree only.
   DMA2:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1731,6 +1735,7 @@ peripherals:
       VSYNC: [{ pin: PA5, af: 11 }, { pin: PB14, af: 15 }, { pin: PB7, af: 13 }, { pin: PF3, af: 13 }]
   ECDC:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1779,6 +1784,7 @@ peripherals:
       TXEN: [{ pin: PD14, af: 10 }]
   EXTI:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: "EXTI trigger edge"
         choices:
@@ -1789,6 +1795,7 @@ peripherals:
       through its own registers and the clock tree only.
   FLASH:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: "Independent watchdog start (IWDG_SW)"
         choices:
@@ -1916,6 +1923,7 @@ peripherals:
       WE_N: [{ pin: PA7, af: 12 }, { pin: PC0, af: 12 }, { pin: PC1, af: 15 }]
   GPHA:
     category: Graphics
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -1950,6 +1958,7 @@ peripherals:
       IN6: [{ pin: PF10 }]
   HSEM:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -2013,6 +2022,7 @@ peripherals:
       WS: [{ pin: PA15, af: 6 }, { pin: PA4, af: 6 }]
   IPC:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -2022,6 +2032,7 @@ peripherals:
       through its own registers and the clock tree only.
   IWDG:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -2201,6 +2212,7 @@ peripherals:
       IO1: [{ pin: PB9, af: 7 }, { pin: PC0, af: 5 }, { pin: PC2, af: 8 }, { pin: PE4, af: 4 }, { pin: PF13, af: 5 }, { pin: PF14, af: 5 }]
   PWR:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: "Programmable Voltage Detector (PVD)"
         choices:
@@ -2296,6 +2308,7 @@ peripherals:
       XO: [{ pin: XO, notes: "dedicated HSE crystal output pad; not a GPIO on any package" }]
   RNG:
     category: Security
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -2603,6 +2616,7 @@ peripherals:
       ETR: [{ pin: PA4, af: 2 }, { pin: PD11, af: 6 }]
   TIM6:
     category: Timers
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -2612,6 +2626,7 @@ peripherals:
       through its own registers and the clock tree only.
   TIM7:
     category: Timers
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:
@@ -2709,6 +2724,7 @@ peripherals:
       ETR: [{ pin: PA4, af: 4 }, { pin: PB13, af: 4 }, { pin: PC8, af: 6 }]
   TKEY:
     category: Analog
+    pins: { open: true, owner: AGENT-1, task: "CH32H417: close the coverage ledger" }
     settings:
       - name: Mode
         choices:
@@ -2895,6 +2911,7 @@ peripherals:
       TX: [{ pin: PA15, af: 11 }, { pin: PB4, af: 11 }, { pin: PE8, af: 7 }, { pin: PF7, af: 7 }]
   USBFS:
     category: Connectivity
+    pins: { open: true, owner: AGENT-1, task: "CH32H417: close the coverage ledger" }
     settings:
       - name: Mode
         choices:
@@ -2905,6 +2922,7 @@ peripherals:
       through its own registers and the clock tree only.
   USBHS:
     category: Connectivity
+    pins: { open: true, owner: AGENT-1, task: "CH32H417: close the coverage ledger" }
     settings:
       - name: Mode
         choices:
@@ -2927,6 +2945,7 @@ peripherals:
       CC2: [{ pin: PB4, af: 4 }]
   USBSS:
     category: Connectivity
+    pins: { open: true, owner: AGENT-1, task: "CH32H417: close the coverage ledger" }
     settings:
       - name: Mode
         choices:
@@ -2937,6 +2956,7 @@ peripherals:
       through its own registers and the clock tree only.
   WWDG:
     category: System Core
+    pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices:

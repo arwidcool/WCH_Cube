@@ -700,18 +700,21 @@ peripherals:
 
   IWDG:
     category: System Core
+    pins: { none: true, source: "synthetic layout fixture - not silicon; it has no datasheet and claims no pad" }
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
 
   WWDG:
     category: System Core
+    pins: { none: true, source: "synthetic layout fixture - not silicon; it has no datasheet and claims no pad" }
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]
 
   DMA1:
     category: System Core
+    pins: { none: true, source: "synthetic layout fixture - not silicon; it has no datasheet and claims no pad" }
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated } ]

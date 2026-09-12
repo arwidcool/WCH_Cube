@@ -456,6 +456,7 @@ peripherals:
 
   DMA1:
     category: System Core
+    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: "EIGHT channels (DMA1_Channel1_BASE..DMA1_Channel8_BASE, ch32x035.h), against CH32V006's seven."
     settings:
       - name: Mode
@@ -463,6 +464,7 @@ peripherals:
 
   IWDG:
     category: System Core
+    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     # Same API as CH32V006 - free functions taking scalars, no init struct and no
     # handle (ch32x035_iwdg.h). ORDER IS LOAD-BEARING: write_access first, because
     # IWDG_PSCR and IWDG_RLDR are write-protected until 0x5555 reaches IWDG_CTLR and a
@@ -512,6 +514,7 @@ peripherals:
 
   WWDG:
     category: System Core
+    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     # WWDG_Enable(uint8_t Counter) TAKES the counter, so switching it on and setting the
     # counter are one call - hence `counter` names WWDG_Enable, not WWDG_SetCounter.
     settings:
@@ -1823,6 +1826,7 @@ peripherals:
 
   PWR:
     category: System Core
+    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: >
       Power control. The PVD thresholds are named twice in the header - PWR_PVDLevel_0..3
       and the aliases PWR_PVDLevel_2V1/2V3/3V0/4V0 pointing at the same four values
@@ -1872,6 +1876,7 @@ peripherals:
 
   FLASH:
     category: System Core
+    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: >
       Only the user option bytes are offered. The programming API (unlock, erase,
       program) is a runtime concern rather than a configuration, and the write-protection
@@ -1897,6 +1902,7 @@ peripherals:
 
   EXTI:
     category: System Core
+    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: >
       THIRTY lines, not the 26 the grouped vectors cover. Lines 0-25 reach pins through
       AFIO_EXTICR and are served by the three grouped vectors EXTI7_0 / EXTI15_8 /
@@ -1913,6 +1919,7 @@ peripherals:
 
   AWU:
     category: System Core
+    pins: { none: true, source: "CH32X035DS0.md Table 2-1: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: >
       Automatic wake-up. Nothing here claims a pin: the AWU runs from the internal
       low-speed clock and its event reaches the core through EXTI line 27. A peripheral

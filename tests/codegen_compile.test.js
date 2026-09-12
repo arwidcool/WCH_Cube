@@ -476,6 +476,21 @@ const TRACKED_TODOS = [
     task: '`params:` carry `struct:` and `field:` so codegen does not infer the SDK mapping',
     why: 'the parameter is set by a call rather than a struct field, and the MCU file does not say which call',
   },
+// NOT tracked here, and worth knowing before anyone re-adds it: the "These signals have a pin
+// but the MCU file states no `af:` for it" TODO that appears when a CH32H417 fixture claims an
+// analog pad (OPA P/N/OUT, DAC OUT). It was tracked for part of 2026-09-12 and then removed,
+// because keeping it meant keeping the fixture claim - and a fixture that claims an analog pad
+// cannot be `--strict` clean while that TODO is emitted, so the finding would have held round 5's
+// deliverable-B acceptance test red on two other agents' outstanding work. Premature, not wrong.
+//
+// The defect is real and is NOT cosmetic: `analogClaim()` (app/engine/constraints.js) needs
+// `codegen.analog_signals`, CH32H417 is the only shipped part without it, so `gpioEffectiveMode()`
+// falls through to the alternate-function branch and `GPIO_Init` writes `GPIO_Mode_AF_PP` for a
+// pad that must be `GPIO_Mode_AIN`. Evidence, with the generated C:
+// tests/evidence/round5/2026-09-12-analog-pads.md. Owned on TASKS.md by AGENT-1 (the data half)
+// and AGENT-2 (the message half). Those four fixture lines come back in the commit that lands the
+// fix - not before, because `--strict` is a gate with no excuse mechanism, and widening it to
+// admit a known-bad fixture is the one thing it exists to prevent.
 ];
 
 test('generated C contains no TODO or #error that is not a tracked data gap', async () => {

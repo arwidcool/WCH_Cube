@@ -277,12 +277,14 @@ peripherals:
 
   DMA1:
     category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Mode
         choices: [ { name: Disable }, { name: Activated (7 channels) } ]
 
   IWDG:
     category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     # The independent watchdog has NO init struct and NO handle: every setting is its own
     # call and the peripheral is a singleton. ch32v00X_iwdg.h declares
     # IWDG_SetPrescaler(uint8_t), IWDG_SetReload(uint16_t) and IWDG_Enable(void) - not one
@@ -346,6 +348,7 @@ peripherals:
 
   WWDG:
     category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     # Also struct-free and handle-free (ch32v00X_wwdg.h). Note WWDG_Enable(uint8_t Counter)
     # TAKES the counter, so "switch it on" and "set the counter" are one call rather than
     # two - which is why `counter` below names WWDG_Enable and not WWDG_SetCounter.
@@ -393,6 +396,7 @@ peripherals:
   # regulator mode and the wake-up period are all choices with consequences.
   PWR:
     category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Power voltage detector (PVD)
         choices:
@@ -474,6 +478,7 @@ peripherals:
   # disagree.
   FLASH:
     category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: Independent watchdog start (IWDG_SW)
         choices:
@@ -537,6 +542,7 @@ peripherals:
   # nothing useful at init time.
   EXTEN:
     category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: >
       Extended configuration unit (RM ch.20). Clocked from HB and reset only by a system
       reset. No SPL driver exists, so generated code writes EXTEN->EXTEN_CTR directly.
@@ -561,6 +567,7 @@ peripherals:
 
   EXTI:
     category: System Core
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     settings:
       - name: EXTI line 0 trigger
         choices:
@@ -1304,6 +1311,7 @@ peripherals:
 
   TIM3:
     category: Timers
+    pins: { none: true, source: "CH32V006DS0.md Table 2-1-1 and 2-1-2: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: >
       Streamlined timer - output compare only, no external pins (RM ch.13). Not on CH32V005.
       It shares the full TIM driver, so its time base is TIM_TimeBaseInitTypeDef exactly like

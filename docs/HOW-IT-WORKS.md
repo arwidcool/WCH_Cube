@@ -266,8 +266,9 @@ This is the part of the project worth copying. The rules exist because each one 
 flowchart TB
     A["a claim about hardware"] --> B{"is it cited?"}
     B -->|no| X["it does not go in the YAML.<br/>It goes in .notes.md as an open question"]
-    B -->|DS/RM/EVT file:line| C["tools/validate_mcu.py"]
-    C --> D["tools/verify_sdk_names.py<br/>does that macro exist in THIS part's headers?"]
+    B -->|DS/RM/EVT file:line| C["tools/validate_mcu.py<br/>is the file consistent with itself?"]
+    C --> L["tools/coverage.py<br/>have the SOURCES all been said?<br/>every pin function, chapter and instance"]
+    L --> D["tools/verify_sdk_names.py<br/>does that macro exist in THIS part's headers?"]
     D --> E{"does it reach<br/>generated C?"}
     E -->|yes| F["tests/codegen_compile.test.js<br/>pio run — the COMPILE gate"]
     E -->|no| G["tests/data.test.js"]
@@ -308,6 +309,44 @@ invisible to jsdom, because jsdom has no layout engine.
 **6. Nothing is asserted twice.** If the app can produce it, a test measures it. Where the
 tests cannot measure it, they say so.
 
+**7. Consistent is not the same as complete.** Every rule above asks whether what an MCU file
+*says* holds together. `tools/validate_mcu.py` proves that a remap names a real pin;
+`verify_sdk_names.py` proves that a macro exists; the compile gate proves that the C builds. Not
+one of them asks whether what the **sources** say has all been said — so a peripheral written as
+`Mode: [Disable, Enabled]` with no signals and a note “holds no pin” passed every gate, and so
+did one whose routing listed ten pads that no choice could claim. On 2026-09-12 the committed
+CH32H417 file routed **207** signals to pins no setting could claim, and USBFS, USBHS, USBSS and
+TKEY said “holds no pin on any package” while the datasheet gives every one of them pads. Nobody
+could see it, because nothing read the datasheet at gate time.
+
+`tools/coverage.py` does, on every run. It builds an inventory from the sources — every
+function the datasheet puts on a pin, every reference-manual chapter, every instance the part's
+SPL header defines — and holds each part to the status its ledger declares:
+
+| Declared | Means |
+|---|---|
+| `complete` | **0 open** rows. Nothing else passes. |
+| `in_extraction` | the open count is **exactly** the recorded `open_rows:`, with an `owner` and a `task:` line that exists in `TASKS.md` |
+
+An open row is a function on a pin that no peripheral routes, a chapter mapped to nothing, an
+instance with no peripheral, or **a peripheral that routes nothing and does not say so** — which
+is why a routing-less peripheral must carry `pins: { none: true, source: ... }` or
+`pins: { open: true, owner: ..., task: ... }`. Silence in either direction is the defect.
+
+`data/coverage/<PART>.yaml` is written and every entry is cited; `data/coverage/ledger/<PART>.yaml`
+is generated (`python tools/ledger.py --write`) so a reader can follow a row to its datasheet
+line. `python tools/coverage.py <PART>` prints the open rows with the line to read and exits 1
+while any remain. `python tools/coverage.py --quiet` is the one-line-per-part form, and a part is
+not done — may not be reported done — while it prints an open row.
+
+> **The count may only go down.** A diff that raises `open_rows:` is a lowered threshold wearing
+a disguise: it says “these gaps are now expected”. The gate fails on a count that rose
+(`REGRESSION: … new gap(s) were introduced`) **and** on one that is stale (`… lower it to N`),
+because a number nobody updates stops measuring anything. `tools/coverage_selftest.py` plants 21
+breaks across every check and row kind and requires all 21 to be caught; `tests/coverage.test.js`
+runs it, and also asserts that the ledger is **tracked by git** — a ratchet with no history is not
+a ratchet.
+
 ### What is *not* verified
 
 **Nothing has ever been flashed.** Every green result in this repository is a compile. No board
@@ -315,7 +354,7 @@ has been attached to this project. `SystemCoreClock` is computed, not measured. 
 reads **"builds, not flashed"**, in exactly those words, and it stays that way until somebody
 runs `pio run -t upload` and reports what the serial output said.
 
-If you have any CH32V006, CH32V005, CH32X003 or CH32X035 board and a WCH-Link, that is a
+If you have any CH32V006, CH32V005, CH32V003 or CH32X035 board and a WCH-Link, that is a
 five-minute job and it is the single most valuable contribution you could make — see
 [`../agents/HUMAN_TODO.md`](../agents/HUMAN_TODO.md).
 
@@ -332,12 +371,17 @@ five-minute job and it is the single most valuable contribution you could make �
 ├── data/
 │   ├── mcus/*.yaml          one file per part — the whole part definition
 │   ├── mcus/*.notes.md      where every number came from
+│   ├── coverage/            the coverage ledger — what the SOURCES say, per part
+│   │   ├── <PART>.yaml      written: status, open_rows, aliases, absent, disagreements
+│   │   └── ledger/          GENERATED: one line per fact, with its datasheet line
 │   ├── packages/            package geometries (SOP, TSSOP, QFN, LQFP…)
 │   ├── sources/<PART>/      the DS, the RM and the EVT package
 │   └── firmware/            a PlatformIO project — compiles generated C for real silicon
 ├── tests/                   QA suites + the runner
 ├── tools/
-│   ├── validate_mcu.py      checks an MCU file before you trust it
+│   ├── validate_mcu.py      is the MCU file consistent with itself?
+│   ├── coverage.py          have the SOURCES all been said? (the ledger gate)
+│   ├── ledger.py            writes/checks the generated inventory
 │   ├── verify_sdk_names.py  checks a part's claimed names against its own SDK headers
 │   ├── extract_*.py         re-derive facts from the PDFs/markdown and diff
 │   └── wchcube_cli.js       the whole engine, headless

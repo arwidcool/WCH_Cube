@@ -74,6 +74,14 @@ jobs:
       - name: Check every SDK name each part claims
         run: python tools/verify_sdk_names.py
 
+      # A third question, and the one neither of the above can ask: has everything the
+      # SOURCES say been said? Every function the datasheet puts on a pin, every RM
+      # chapter and every SPL instance is a ledger row that is modelled, declared absent
+      # with a citation, or OPEN - and a part meets its declared status (complete: 0 open;
+      # in_extraction: exactly the recorded count, which may only go down). docs/COVERAGE.md.
+      - name: Coverage ledger - every part meets its declared status
+        run: python tools/coverage.py --gate
+
       - name: Build dist/index.html
         run: python build.py
 
