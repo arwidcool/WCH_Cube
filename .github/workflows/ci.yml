@@ -139,6 +139,11 @@ jobs:
             grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true
             grep -E '^[0-9]+ FAILED' run.log | sed 's/^/::error title=verdict::/' || true
           fi
+          # On success too: the verdict and every skip reason, as public annotations. "Read
+          # green" means knowing WHAT ran - a green job whose compile suites all skipped is
+          # not green for the thing it exists to prove, and the log body needs a token.
+          grep -E 'ALL GREEN|test\(s\) SKIPPED' run.log | sed 's/^/::notice title=verdict::/' || true
+          grep -E '^  - tests/' run.log | sed 's/^/::notice title=skipped::/' || true
           exit "$rc"
 
   # ---------------------------------------------------------------------------
@@ -247,6 +252,11 @@ jobs:
             grep -E 'LOAD FAIL' run.log | sed 's/^/::error title=load fail::/' || true
             grep -E '^[0-9]+ FAILED' run.log | sed 's/^/::error title=verdict::/' || true
           fi
+          # On success too - THIS job is where the compile gates must have RUN, not skipped,
+          # so its verdict and skip list are the proof and they are published as notices.
+          grep -E 'ALL GREEN|test\(s\) SKIPPED' run.log | sed 's/^/::notice title=verdict::/' || true
+          grep -E '^  - tests/' run.log | sed 's/^/::notice title=skipped::/' || true
+          grep -E 'compiles for|builds standalone' run.log | grep -E '^  ok' | wc -l | sed 's/^/::notice title=compile gates that ran::/'
           exit "$rc"
 
   # ---------------------------------------------------------------------------

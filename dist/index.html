@@ -8478,6 +8478,24 @@ peripherals:
     params:
       # CMP_InitTypeDef, applied by OPA_CMP_Init (ch32l103_opa.h). Every macro below is
       # the header's own; the field names are the struct's.
+      #
+      # `CMP_NUM` COMES FIRST AND IS NOT A CHOICE, and until this row existed CMP1 was
+      # right BY ACCIDENT. `OPA_CMP_Init()` takes no handle - it takes the struct alone
+      # (ch32l103_opa.h:229) - and branches on this member to decide WHICH comparator it
+      # configures: `if(CMP_NUM == CMP1) tmp1 |= Mode << 1 ... else if(CMP_NUM == CMP2)
+      # ... << 9 ... else if(CMP_NUM == CMP3) ... << 17` (ch32l103_opa.c). One register,
+      # three six-bit fields. So a struct with the member unset writes CMP1's field group
+      # whatever the user was configuring - which happens to be correct for CMP1, because
+      # `CMP1 = 0` in `CMP_Num_TypeDef` and the struct is zero-initialised, and is silently
+      # wrong for CMP2 and CMP3. It is `const:` rather than an editable row because
+      # offering CMP1 a choice of "CMP2" would offer a choice the silicon has not got.
+      - key: cmp_num
+        name: Comparator
+        struct: CMP_InitTypeDef
+        sdk_field: CMP_NUM
+        const: CMP1
+        default: CMP1
+        help: "CMP_Num_TypeDef (ch32l103_opa.h:154-159). Which of the three comparators this struct configures; OPA_CMP_Init() branches on it, so it is fixed per instance and not a choice."
       - key: mode
         name: Output routing
         struct: CMP_InitTypeDef
@@ -8524,6 +8542,190 @@ peripherals:
     remaps:
       - name: Default
         pins: { N0: PB1, N1: PB3, OUT0: PB0, OUT1: PB10, P0: PA2, P1: PB2 }
+
+  # ---------------------------------------------------------------------------------
+  # CMP2 and CMP3 - the twelve pads that were CH32L103's last open coverage rows.
+  #
+  # THREE COMPARATORS, ONE REGISTER, ONE STRUCT. `CMP_Num_TypeDef` (ch32l103_opa.h:154-159)
+  # is `CMP1 = 0, CMP2, CMP3`; `OPA_CMP_Init()` writes `OPA->CTLR2` and shifts the same four
+  # fields by 1, 9 or 17 depending on `CMP_NUM` (ch32l103_opa.c). So these two are not a
+  # different peripheral with different parameters - they are the same four parameters
+  # aimed at a different six bits, and the ONLY thing that differs per instance is the
+  # `const: CMP_NUM` and the pads.
+  #
+  # The pads, each from the datasheet's own pin row (CH32L103DS0.md, Table 2-1-1):
+  #   CMP2  P0 PB8 (:2466)   P1 PB6 (:2434)   N0 PB3 (:2404)
+  #         N1 PB7 (:2449)   OUT0 PB5 (:2420) OUT1 PB11 (:2202)
+  #   CMP3  P0 PB5 (:2421)   P1 PB10 (:2195)  N0 PB3 (:2405)
+  #         N1 PB11 (:2203)  OUT0 PB4 (:2412) OUT1 PB12 (:2225)
+  #
+  # NOTE THE PADS THE THREE COMPARATORS SHARE, which is why `Inputs` is CHECKBOXES here
+  # exactly as it is on CMP1 and why nothing is pre-ticked: PB3 carries CMP1_N1, CMP2_N0
+  # AND CMP3_N0; PB5 carries CMP2_OUT0 and CMP3_P0; PB11 carries CMP2_OUT1 and CMP3_N1;
+  # PB10 carries CMP1_OUT1 and CMP3_P1. Every one of those is a real conflict the engine
+  # reports the moment two of them are ticked, and a single-choice row would have had to
+  # pick one pad per input and hide the rest - the offered-but-impossible defect in
+  # reverse, which is the reasoning OPA1's notes already record for the same silicon.
+  #
+  # `nvic:` and `clock:` are absences, not gaps, and they are declared in
+  # tests/completeness.test.js:159-166: `IRQn_Type` (ch32l103.h:100) has ONE comparator
+  # wake-up vector for three comparators, and ch32l103_rcc.h defines no RCC_*Periph_CMP
+  # and no RCC_*Periph_OPA at all.
+  CMP2:
+    category: Analog
+    notes: >
+      The second comparator. It shares CMPWakeUp_IRQn = 68 with CMP1 and CMP3 - the
+      enum has one comparator vector for three comparators - and shares the OPA/CMP
+      block's (absent) clock gate. Its pads overlap CMP3's on PB3, PB5 and PB11 and
+      CMP1's on PB3, so the inputs are checkboxes and the conflict engine decides.
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [] }
+      - name: Inputs
+        type: checkboxes
+        choices:
+          - { name: "P0 (on PB8)", signals: [P0] }
+          - { name: "P1 (on PB6)", signals: [P1] }
+          - { name: "N0 (on PB3)", signals: [N0] }
+          - { name: "N1 (on PB7)", signals: [N1] }
+          - { name: "OUT0 (on PB5)", signals: [OUT0] }
+          - { name: "OUT1 (on PB11)", signals: [OUT1] }
+    params:
+      - key: cmp_num
+        name: Comparator
+        struct: CMP_InitTypeDef
+        sdk_field: CMP_NUM
+        const: CMP2
+        default: CMP2
+        help: "CMP_Num_TypeDef (ch32l103_opa.h:154-159). OPA_CMP_Init() shifts this instance's fields by 9 in OPA_CTLR2; without this member the struct would configure CMP1."
+      - key: mode
+        name: Output routing
+        struct: CMP_InitTypeDef
+        sdk_field: Mode
+        type: enum
+        group: Basic
+        default: "Comparator output only (OUT_IO0)"
+        options:
+          - { name: "Comparator output only (OUT_IO0)", value: 0, sdk: OUT_IO0 }
+          - { name: "Output and TIM input (OUT_IO1)",    value: 1, sdk: OUT_IO1 }
+          - { name: "TIM input only (OUT_IO_TIM2)",      value: 2, sdk: OUT_IO_TIM2 }
+        help: "Where the comparator result goes. This is a routing choice, not a speed: the header has no high/low-power option for a comparator."
+      - key: psel
+        name: Non-inverting input
+        struct: CMP_InitTypeDef
+        sdk_field: PSEL
+        type: enum
+        group: Basic
+        default: "CHP0 (PB8)"
+        options:
+          - { name: "CHP0 (PB8)", value: 0, sdk: CMP_CHP_0 }
+          - { name: "CHP1 (PB6)", value: 1, sdk: CMP_CHP_1 }
+        help: "OPA_CTLR2 bit 12 for this instance. The MACROS are shared with CMP1 and CMP3 - there is one CMP_PSEL_TypeDef - but the PADS they select are this comparator's own, which is why the labels name PB8 and PB6 rather than CMP1's PA2 and PB2."
+      - key: nsel
+        name: Inverting input
+        struct: CMP_InitTypeDef
+        sdk_field: NSEL
+        type: enum
+        group: Basic
+        default: "CHN0 (PB3)"
+        options:
+          - { name: "CHN0 (PB3)", value: 0, sdk: CMP_CHN0 }
+          - { name: "CHN1 (PB7)", value: 1, sdk: CMP_CHN1 }
+        help: "OPA_CTLR2 bit 11 for this instance. CHN0 is PB3, which CMP1 and CMP3 can also claim - tick it on one comparator only."
+      - key: hyen
+        name: Hysteresis
+        struct: CMP_InitTypeDef
+        sdk_field: HYEN
+        type: enum
+        group: Advanced
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: CMP_HYEN0 }
+          - { name: Enabled,  value: 1, sdk: CMP_HYEN1 }
+        help: "Hysteresis on the comparator input, so a slow or noisy signal does not chatter the output."
+    remaps:
+      - name: Default
+        pins: { N0: PB3, N1: PB7, OUT0: PB5, OUT1: PB11, P0: PB8, P1: PB6 }
+
+  CMP3:
+    category: Analog
+    notes: >
+      The third comparator. It shares CMPWakeUp_IRQn = 68 with CMP1 and CMP2 and the
+      OPA/CMP block's (absent) clock gate. Its pads overlap CMP2's on PB3, PB5 and
+      PB11 and CMP1's on PB3 and PB10, so the inputs are checkboxes and the conflict
+      engine decides.
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Enabled, signals: [] }
+      - name: Inputs
+        type: checkboxes
+        choices:
+          - { name: "P0 (on PB5)", signals: [P0] }
+          - { name: "P1 (on PB10)", signals: [P1] }
+          - { name: "N0 (on PB3)", signals: [N0] }
+          - { name: "N1 (on PB11)", signals: [N1] }
+          - { name: "OUT0 (on PB4)", signals: [OUT0] }
+          - { name: "OUT1 (on PB12)", signals: [OUT1] }
+    params:
+      - key: cmp_num
+        name: Comparator
+        struct: CMP_InitTypeDef
+        sdk_field: CMP_NUM
+        const: CMP3
+        default: CMP3
+        help: "CMP_Num_TypeDef (ch32l103_opa.h:154-159). OPA_CMP_Init() shifts this instance's fields by 17 in OPA_CTLR2; without this member the struct would configure CMP1."
+      - key: mode
+        name: Output routing
+        struct: CMP_InitTypeDef
+        sdk_field: Mode
+        type: enum
+        group: Basic
+        default: "Comparator output only (OUT_IO0)"
+        options:
+          - { name: "Comparator output only (OUT_IO0)", value: 0, sdk: OUT_IO0 }
+          - { name: "Output and TIM input (OUT_IO1)",    value: 1, sdk: OUT_IO1 }
+          - { name: "TIM input only (OUT_IO_TIM2)",      value: 2, sdk: OUT_IO_TIM2 }
+        help: "Where the comparator result goes. This is a routing choice, not a speed: the header has no high/low-power option for a comparator."
+      - key: psel
+        name: Non-inverting input
+        struct: CMP_InitTypeDef
+        sdk_field: PSEL
+        type: enum
+        group: Basic
+        default: "CHP0 (PB5)"
+        options:
+          - { name: "CHP0 (PB5)", value: 0, sdk: CMP_CHP_0 }
+          - { name: "CHP1 (PB10)", value: 1, sdk: CMP_CHP_1 }
+        help: "OPA_CTLR2 bit 20 for this instance. CHP0 is PB5, which is also CMP2_OUT0 - tick one of the two."
+      - key: nsel
+        name: Inverting input
+        struct: CMP_InitTypeDef
+        sdk_field: NSEL
+        type: enum
+        group: Basic
+        default: "CHN0 (PB3)"
+        options:
+          - { name: "CHN0 (PB3)", value: 0, sdk: CMP_CHN0 }
+          - { name: "CHN1 (PB11)", value: 1, sdk: CMP_CHN1 }
+        help: "OPA_CTLR2 bit 19 for this instance. CHN0 is PB3, shared with CMP1_N1 and CMP2_N0; CHN1 is PB11, shared with CMP2_OUT1 and OPA_N0."
+      - key: hyen
+        name: Hysteresis
+        struct: CMP_InitTypeDef
+        sdk_field: HYEN
+        type: enum
+        group: Advanced
+        default: Disabled
+        options:
+          - { name: Disabled, value: 0, sdk: CMP_HYEN0 }
+          - { name: Enabled,  value: 1, sdk: CMP_HYEN1 }
+        help: "Hysteresis on the comparator input, so a slow or noisy signal does not chatter the output."
+    remaps:
+      - name: Default
+        pins: { N0: PB3, N1: PB11, OUT0: PB4, OUT1: PB12, P0: PB5, P1: PB10 }
 exti:
   register: { name: AFIO_EXTICR, bits_per_line: 4, reset: 0x00000000 }
   # RM 10.3.2.3-10.3.2.6: EXTIx[3:0] = 0000 PA, 0001 PB, 0010 PC, 0011 PD.
@@ -8892,6 +9094,15 @@ codegen:
     ADC_InitTypeDef:         { fn: ADC_Init }
     CAN_InitTypeDef:         { fn: CAN_Init }
     LPTIM_TimeBaseInitTypeDef: { fn: LPTIM_TimeBaseInit }
+    # THE COMPARATORS' STRUCT WAS NEVER APPLIED, and CMP1 has carried `params:` since the
+    # part landed - the rows were filled in and then followed by `/* TODO: nothing applies
+    # this struct */`, invisible because no fixture switched a comparator on. Modelling
+    # CMP2 and CMP3 is what surfaced it. `OPA_CMP_Init()` takes the struct ALONE
+    # (ch32l103_opa.h:229): there is no handle, because the comparator it configures is the
+    # `CMP_NUM` member rather than a register block - one OPA_CTLR2 holds all three, at
+    # shifts 1, 9 and 17 (ch32l103_opa.c). Hence `no_handle: true`, and hence the
+    # `const: CMP_NUM` row that now heads all three comparators' params.
+    CMP_InitTypeDef:         { fn: OPA_CMP_Init, no_handle: true }
   periph_handle: { DMA1: DMA1, USART1: USART1, USART2: USART2, USART3: USART3, USART4: USART4, SPI1: SPI1, I2C1: I2C1, TIM1: TIM1, TIM2: TIM2, TIM3: TIM3, TIM4: TIM4, ADC1: ADC1, CAN1: CAN1, LPTIM: LPTIM }
   # ch32l103_rcc.h:113-144, read off the macro VALUES rather than transcribed: the
   # bit is `value.bit_length()-1` for each single-bit macro the header defines. The
@@ -10115,19 +10326,26 @@ peripherals:
   # ---------------- Connectivity ----------------
   USART1:
     category: Connectivity
-    # USART1_CK is NOT modelled, and that is a declared gap rather than an oversight.
-    # RM Table 7-10 routes a CK pin in every mapping and DS Table 2-2 marks it UCK, and
-    # the SPL can drive it (USART_ClockInitTypeDef + USART_ClockInit,
-    # ch32v00x_usart.h:51-66,156). Modelling the pin without the struct would let the
-    # app claim a pad that generated code never configures; modelling the struct means
-    # a second init call that the generator has no way to gate off today. It is
-    # recorded in CH32V003.notes.md as an open item, which is the same treatment
-    # CH32V006 gives it.
+    # USART1_CK IS MODELLED NOW, and the three coverage rows it left open are closed.
+    # It was declared a gap because the pad and the register are one fact and only half
+    # of it could be written: routing CK without the struct would offer a pad the
+    # generated code never configures, and writing the struct without a way to gate it
+    # off would emit a second init call on every asynchronous project. Both halves are
+    # here - a `Synchronous` mode that claims the pad, and a `USART_ClockInitTypeDef`
+    # block whose every row depends on that mode - so neither can appear without the
+    # other. RM 12.4 (CH32V003RM.md:9878) is the mode; RM Table 7-10 (:3756) is the pad
+    # in each of the four mappings; USART_ClockInit is ch32v00x_usart.h:156.
+    #
+    # THE SILICON IS MASTER-ONLY, which is why there is one Synchronous choice and not
+    # two: RM 12.4 - "The USART module synchronization mode works only in the main mode,
+    # i.e. the CK pin outputs only the clock and does not receive inputs." A Slave entry
+    # would be a choice the part has not got.
     settings:
       - name: Mode
         choices:
           - { name: Disable }
           - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
           - { name: Single Wire (Half-Duplex), signals: [TX] }
           - { name: Transmit only, signals: [TX] }
           - { name: Receive only, signals: [RX] }
@@ -10142,11 +10360,16 @@ peripherals:
     # AFIO_PCFR1 bit 2 (USART1_RM) and the high bit is bit 21 (USART1_RM1), and the
     # manual writes the pair as "[21,2]". The index below is the two-bit value, high
     # bit first, and `codegen.remap.fields.USART1` reassembles it.
+    #
+    # CK's pad per mapping is RM Table 7-10's own CK row (CH32V003RM.md:3756):
+    # PD4 / PD7 / PD7 / PC5. NOTE THAT 01 AND 10 ARE THE SAME PAD - the datasheet's pin
+    # row for PD7 writes both suffixes on one pin, `UCK_1/UCK_2` (CH32V003.md:1114), and
+    # the two mappings differ in TX and RX rather than in the clock.
     remaps:
-      - { name: "00 Default", pins: { TX: PD5, RX: PD6, CTS: PD3, RTS: PC2 } }
-      - { name: "01",         pins: { TX: PD0, RX: PD1, CTS: PC3, RTS: PC2 } }
-      - { name: "10",         pins: { TX: PD6, RX: PD5, CTS: PC6, RTS: PC7 } }
-      - { name: "11",         pins: { TX: PC0, RX: PC1, CTS: PC6, RTS: PC7 } }
+      - { name: "00 Default", pins: { TX: PD5, RX: PD6, CTS: PD3, RTS: PC2, CK: PD4 } }
+      - { name: "01",         pins: { TX: PD0, RX: PD1, CTS: PC3, RTS: PC2, CK: PD7 } }
+      - { name: "10",         pins: { TX: PD6, RX: PD5, CTS: PC6, RTS: PC7, CK: PD7 } }
+      - { name: "11",         pins: { TX: PC0, RX: PC1, CTS: PC6, RTS: PC7, CK: PC5 } }
     params:
       - key: baud
         name: Baud rate
@@ -10191,6 +10414,60 @@ peripherals:
           - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
           - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
         help: "USART_CTLR2 STOP[13:12], listed in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+      # ---- the CK pin's own register, and the four rows below exist ONLY in Synchronous
+      # mode. `USART_ClockInitTypeDef` is a SECOND struct with a SECOND init call -
+      # USART_ClockInit(USARTx, &s), ch32v00x_usart.h:156 - which writes the four clock
+      # bits of CTLR2 and nothing else (ch32v00x_usart.c:189-198). Every row carries
+      # `depends_on: { setting: Mode, equals: Synchronous }`, so an asynchronous project
+      # emits no second call at all: that gating is what the old "declared gap" comment
+      # above said did not exist, and it is an ordinary `depends_on:`.
+      #
+      # ORDER MATTERS AND IS CORRECT AS WRITTEN. These come after the USART_InitTypeDef
+      # rows, so the generated C calls USART_Init() and then USART_ClockInit(). RM 12.4
+      # requires CPOL, CPHA and LBCL to be written "when TE and RE are not enabled", and
+      # they are: nothing here sets USART_Mode, so USART_Init() leaves TE and RE clear
+      # and the user's own USART_Cmd(ENABLE) is what starts the peripheral.
+      - key: ck_enable
+        name: Clock output
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_Clock
+        const: USART_Clock_Enable
+        default: USART_Clock_Enable
+        depends_on: { setting: Mode, equals: Synchronous }
+        help: "USART_CTLR2 CLKEN, bit 11 (ch32v00x_usart.h:95). Not a choice: the Mode row is what turns synchronous mode on and claims the CK pad, so this follows it."
+      - key: ck_cpol
+        name: Clock polarity (CPOL)
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_CPOL
+        type: enum
+        default: Low
+        depends_on: { setting: Mode, equals: Synchronous }
+        options:
+          - { name: Low , value: 0, sdk: USART_CPOL_Low }
+          - { name: High, value: 1, sdk: USART_CPOL_High }
+        help: "USART_CTLR2 CPOL, bit 10 (ch32v00x_usart.h:98-99). The steady state of CK between frames. RM 12.4, Figure 12-2."
+      - key: ck_cpha
+        name: Clock phase (CPHA)
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_CPHA
+        type: enum
+        default: 1 Edge
+        depends_on: { setting: Mode, equals: Synchronous }
+        options:
+          - { name: 1 Edge, value: 0, sdk: USART_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: USART_CPHA_2Edge }
+        help: "USART_CTLR2 CPHA, bit 9 (ch32v00x_usart.h:102-103). Which clock edge the bit is captured on."
+      - key: ck_lastbit
+        name: Last-bit clock pulse
+        struct: USART_ClockInitTypeDef
+        sdk_field: USART_LastBit
+        type: enum
+        default: Disabled
+        depends_on: { setting: Mode, equals: Synchronous }
+        options:
+          - { name: Disabled, value: 0, sdk: USART_LastBit_Disable }
+          - { name: Enabled , value: 1, sdk: USART_LastBit_Enable }
+        help: "USART_CTLR2 LBCL, bit 8 (ch32v00x_usart.h:106-107). Whether CK pulses for the last data bit as well. RM 12.4 names LBCL, CPOL and CPHA together as the three bits to set before TE and RE are enabled."
 
   SPI1:
     category: Connectivity
@@ -10778,6 +11055,11 @@ codegen:
   init_structs:
     GPIO_InitTypeDef:        { fn: GPIO_Init }
     USART_InitTypeDef:       { fn: USART_Init }
+    # The SECOND USART struct, and it is a second CALL rather than more members of the
+    # first: USART_ClockInit(USARTx, &s) writes CTLR2's CLKEN/CPOL/CPHA/LBCL and nothing
+    # else (ch32v00x_usart.h:156, ch32v00x_usart.c:189-198). Its rows all depend on
+    # `Mode = Synchronous`, so on an asynchronous project the block is not emitted at all.
+    USART_ClockInitTypeDef:  { fn: USART_ClockInit }
     SPI_InitTypeDef:         { fn: SPI_Init }
     I2C_InitTypeDef:         { fn: I2C_Init }
     ADC_InitTypeDef:         { fn: ADC_Init }

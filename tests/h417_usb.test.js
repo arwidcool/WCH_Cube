@@ -41,6 +41,7 @@ import path from 'node:path';
 import { suite, test, assert } from './lib/harness.js';
 import { ROOT } from './lib/app.js';
 import * as eng from '../app/engine/index.js';
+import { withMutantMcu } from './lib/mutant.js';
 
 suite('CH32H417 USB');
 
@@ -211,6 +212,28 @@ test('each USB controller reaches the generated C with its clock enable and no T
     }
   }
   assert.empty(bad, 'USB controllers whose generated C is wrong');
+});
+
+test('planted break: a USB controller re-declared as pinless is caught', () => {
+  // Round 6, deliverable B. The literal regression this file guards - `pins: { none: true }`
+  // on a controller the datasheet gives pads - planted on a re-registered COPY of the part's
+  // text (tests/lib/mutant.js), and the check below must name USBFS. Restore is proved.
+  const pinless = () => {
+    eng.loadMcu(eng.MCU_FILES['CH32H417']);
+    const bad = [];
+    for (const pid of ['USBFS', 'USBHS', 'USBSS', 'USBPD']) {
+      const p = (eng.M.peripherals[pid] || {}).pins || {};
+      if (p.none || p.open) bad.push(`${pid}: pins.${p.none ? 'none' : 'open'}`);
+    }
+    return bad;
+  };
+  assert.empty(pinless(), 'the baseline already has a pinless USB controller, so the plant could not be attributed');
+  const bad = withMutantMcu(eng, 'CH32H417',
+    src => src.replace('  USBFS:\n    category: Connectivity', '  USBFS:\n    category: Connectivity\n    pins: { none: true, source: planted }'),
+    pinless);
+  assert.deep(bad, ['USBFS: pins.none'], `expected exactly the planted USBFS, got: ${JSON.stringify(bad)}`);
+  console.log(`      planted refusal (pinless USB): ${bad[0]}`);
+  assert.empty(pinless(), 'the original part was not restored after the plant');
 });
 
 test('no USB controller claims to hold no pin', () => {

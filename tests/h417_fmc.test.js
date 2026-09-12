@@ -27,6 +27,7 @@ import path from 'node:path';
 import { suite, test, assert } from './lib/harness.js';
 import { ROOT } from './lib/app.js';
 import * as eng from '../app/engine/index.js';
+import { withMutantMcu } from './lib/mutant.js';
 
 suite('CH32H417 FMC');
 
@@ -199,4 +200,32 @@ test('the address rows are contiguous from A0, and A0-only really is one line', 
     }
   }
   assert.empty(bad, 'the address-line groups are not contiguous runs from A0');
+});
+
+// =============================================================================
+//  THE PLANTED BREAK — round 6, deliverable B. The completeness check above is the one a
+//  beginner is protected by: a preset that claimed the data lines and forgot a strobe would
+//  look configured and the panel would never answer. Drop WR (NWE) from the 8-bit preset in
+//  a re-registered COPY of the part's text and the check must name exactly that. The tree
+//  is untouched; the restore is proved by re-running the check and requiring it clean.
+// =============================================================================
+test('planted break: an 8080 preset missing its WR strobe is named by the completeness check', () => {
+  const LINE = 'signals: [D0, D1, D2, D3, D4, D5, D6, D7, A0, NE1, NOE, NWE] }';
+  const incomplete = () => {
+    const bad = [];
+    for (const mode of busModes().filter(n => /^8080 LCD/.test(n))) {
+      const s = new Set(fmcPads('QFN128', mode).signals);
+      for (const need of ['A0', 'NOE', 'NWE']) if (!s.has(need)) bad.push(`${mode}: no ${need}`);
+    }
+    return bad;
+  };
+  assert.empty(incomplete(), 'the baseline has an incomplete preset, so the plant could not be attributed');
+  const bad = withMutantMcu(eng, PART,
+    src => src.replace(LINE, 'signals: [D0, D1, D2, D3, D4, D5, D6, D7, A0, NE1, NOE] }'),
+    incomplete);
+  assert.equal(bad.length, 1, `expected exactly the planted preset to be reported, got ${bad.length}:\n${bad.join('\n')}`);
+  assert.match(bad[0], /^8080 LCD, 8-bit \(/, 'the wrong preset was named');
+  assert.match(bad[0], /no NWE$/, 'the report does not say which strobe is missing');
+  console.log(`      planted refusal (8080 preset): ${bad[0]}`);
+  assert.empty(incomplete(), 'the original part was not restored after the plant');
 });

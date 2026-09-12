@@ -7,7 +7,7 @@
 // `window.M` is not a boot signal; the model is reached by evaluating `M` in global scope,
 // which is exactly what a devtools console does, and what a.ev('M') does here.
 import { suite, test, assert } from './lib/harness.js';
-import { boot } from './lib/app.js';
+import { boot, readDist } from './lib/app.js';
 
 suite('boot');
 
@@ -46,6 +46,38 @@ test('booting is silent - no console output of any kind', () => {
   const a = boot();
   try {
     assert.empty(a.problems(), 'the app wrote to the console while starting up');
+  } finally { a.close(); }
+});
+
+// ---------------------------------------------------------------------------------------
+//  Planted breaks - round 6, deliverable B. `boot()` accepts the page's HTML, so a break is
+//  the built page with one thing broken, handed to the SAME checks above. The tree is not
+//  touched: `readDist()` is read, mutated in memory, and booted. Each mutation asserts it
+//  changed the text, or a moved anchor would turn the break into a silent pass.
+// ---------------------------------------------------------------------------------------
+test('planted break: a page whose peripheral tree never renders is caught as unpainted', () => {
+  const html = readDist();
+  const broken = html.replace('id="cats"', 'id="cats-planted"');
+  assert.notEqual(broken, html, 'the tree container id="cats" is no longer in dist/index.html - the anchor moved');
+  const a = boot({ html: broken });
+  try {
+    const items = a.document.querySelectorAll('#cats .item').length;
+    assert.equal(items, 0, `the planted page still shows ${items} tree item(s), so the plant did not take`);
+    console.log('      planted refusal (painted): the peripheral tree is empty - #cats .item = 0');
+  } finally { a.close(); }
+});
+
+test('planted break: a page that writes to the console at boot is caught as not silent', () => {
+  const html = readDist();
+  const broken = html.replace('</head>', '<script>console.warn("planted: boot is not silent")</script></head>');
+  assert.notEqual(broken, html, 'no </head> in dist/index.html - the anchor moved');
+  const a = boot({ html: broken });
+  try {
+    const problems = a.problems();
+    assert.ok(problems.length >= 1, 'a console.warn at boot was not reported - the silence check is blind');
+    assert.ok(problems.some(p => /planted: boot is not silent/.test(String(p))),
+      `the reported problems do not include the planted warning:\n${problems.join('\n')}`);
+    console.log(`      planted refusal (silent): ${problems.find(p => /planted/.test(String(p)))}`);
   } finally { a.close(); }
 });
 
