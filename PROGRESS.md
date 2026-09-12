@@ -21,11 +21,12 @@ statement here stops being true, change it here first.
   every part to its declared status. `validate_mcu.py` gained the reverse-direction check (a
   routed signal no choice claims is an ERROR) and the `pins: { none | open }` declaration a
   routing-less peripheral must make. **Coverage, quoted from `python tools/coverage.py --quiet`
-  at 2026-09-12T16:36Z** — the numbers move as rows close, so read the tool rather than this
-  line, and treat what follows as a dated snapshot:
+  at 2026-09-12T16:52Z** — the numbers move as rows close, so read the tool rather than this
+  line, and treat what follows as a dated snapshot. On CH32H417 this figure moved
+  **113 → 104 → 58 → 50 → 0 in a single afternoon**, which is the reason it is dated:
 
   ```
-    CH32H417   OPEN 50  (modelled 1254, absent 23, disagreements 0)
+    CH32H417   OPEN 0  (modelled 1252, absent 23, disagreements 45)
     CH32L103   OPEN 12  (modelled 260, absent 11, disagreements 1)
     CH32V003   OPEN 3  (modelled 113, absent 10, disagreements 0)
     CH32V005   OPEN 0  (modelled 214, absent 14, disagreements 0)
@@ -33,9 +34,24 @@ statement here stops being true, change it here first.
     CH32X035   OPEN 0  (modelled 278, absent 11, disagreements 0)
   ```
 
-  CH32V006, CH32V005 and CH32X035 are `complete`; CH32V003, CH32L103 and CH32H417 are
+  CH32V006, CH32V005, CH32X035 and now **CH32H417** are `complete`; CH32V003 and CH32L103 are
   `in_extraction`, owned, and their counts may only go down — never reported as done while the
-  tool prints an open row. The tool found two things on the "clean" parts too: CH32V003's USART1
+  tool prints an open row.
+
+  **CH32H417 reaching 0 open rows is not the same as CH32H417 being finished, and the
+  difference is the point of this round.** The ledger asks whether every fact the DATASHEET
+  states has been accounted for. It now has been — including 45 `disagreements:` entries, each
+  citing BOTH readings with a `file:line` rather than averaging them (the SerDes pairs are the
+  clearest: DS Table 2-1-1 line 3791 puts `SERDES_TXP` on PE3 and Table 2-2-20 line 7341 puts
+  `SERDES_RXP` there; both are recorded, neither is picked). What the ledger does NOT ask is
+  what the APP does with those facts, and asking that found a defect the same day the count
+  reached zero: `tests/h417_packages.test.js` sweeps all 428 mode choices on each package and
+  found **26 / 20 / 17** choices that put two signals on one pad although the signal had another
+  bonded pad free — reached by doing nothing but switching a peripheral on, and invisible to
+  the conflict engine because both claims share an owner. Now **4 / 0 / 0**, ratcheted, owner
+  AGENT-1. A part can pass every gate and still be half-built if no gate reads the datasheet;
+  it can also pass the gate that reads the datasheet and still hand the user a configuration
+  the silicon cannot honour. The tool found two things on the "clean" parts too: CH32V003's USART1
   clock pin (declared open, not absent) and a handful of conversion typos (`X0` for `XO`, `C1NO`
   for `C1N0`, a torn `ACK4`) now recorded as corrections with the line they came from. Planted
   breaks: 21/21 caught. `docs/COVERAGE.md`

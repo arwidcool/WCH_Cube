@@ -200,11 +200,25 @@ test('every peripheral offers a mode that does something, or declares that it ho
 // about which pad ends up as the default. The hand-ordering fix lives in the generator's
 // OUTPUT, so every regeneration throws it away. That is the actual bug to fix, and it is
 // AGENT-1's: the order belongs in the generator.
+// LOWERED TWICE ON THE AFTERNOON IT WAS WRITTEN: 26/20/17 -> 8/3/0 -> 4/0/0. AGENT-1 took the
+// finding and moved the ordering into the generator, which is where it belongs; QFN88 and
+// QFN128 are now at ZERO, so on those packages switching a peripheral on can no longer produce
+// a pad doing two jobs. That is the ratchet working in the direction it is supposed to, and it
+// is worth saying that the number was lowered by re-measuring twice and getting the same answer
+// both times, not by writing down whatever the last run printed - the data was moving under this
+// file all afternoon.
+//
+// The four that remain are all QFN68, all cases where a signal has few pads to move to:
+//   FMC.Address bus A0-A25   FMC_A6 + FMC_A11 + FMC_A20 on PB11  (FMC_A11 could move)
+//   FMC.Address bus A0-A25   FMC_A7 + FMC_A12 + FMC_A21 on PB12  (FMC_A12 could move)
+//   UHSIF.Mode = Enabled     UHSIF_PORT3 + UHSIF_PORT6 on PB0    (UHSIF_PORT3 could move)
+//   UHSIF.Mode = Enabled     UHSIF_PORT4 + UHSIF_PORT7 on PB1    (UHSIF_PORT4 could move)
+// At 0 the entry goes and these three checks become the plain assertions they want to be.
 const COLLISION_CEILING = {
   // package: choices that default onto an already-taken pad they could have avoided
-  QFN68: 26,
-  QFN88: 20,
-  QFN128: 17,
+  QFN68: 4,
+  QFN88: 0,
+  QFN128: 0,
 };
 const COLLISION_OWNER = 'AGENT-1';
 const COLLISION_TASK = 'CH32H417: default pins collide';
