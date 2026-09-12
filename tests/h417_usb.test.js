@@ -93,6 +93,15 @@ const MODES = [
   ['USBPD', 'DRP',                { CC1: 'PB3', CC2: 'PB4' }],
 ];
 
+/** Every pin name this package brings out, shorted names counted separately. */
+function bondedPins(pkg) {
+  const out = new Set();
+  for (const v of Object.values(eng.M.packages[pkg] || {})) {
+    for (const n of [].concat(v)) out.add(String(n));
+  }
+  return out;
+}
+
 for (const pkg of PACKAGES) {
   test(`${pkg}: every USB mode claims the pads the datasheet gives it`, () => {
     const bad = [];
@@ -101,9 +110,24 @@ for (const pkg of PACKAGES) {
       // The debug port holds PB8/PB9 from reset, so USBHS is measured with it off —
       // the conflict that causes is asserted on its own below, not smuggled in here.
       if (pid === 'USBHS') eng.setSetting('SYS', 'Debug', 'No Debug');
+      const bonded = bondedPins(pkg);
+      const reachable = Object.entries(want).filter(([, pin]) => bonded.has(pin));
+
+      // A package that brings out NONE of a controller's pads cannot host it, and that
+      // is real silicon rather than a gap: the 68-pin part bonds no PA9–PA12 and no
+      // PB3/PB4, so USBFS and USBPD are genuinely unusable there. The app must say so —
+      // `isAvailable` false puts a ⊘ on the tree entry — instead of offering a mode that
+      // claims nothing, which is the very defect this file exists to stop.
+      if (!reachable.length) {
+        if (eng.isAvailable(pid)) {
+          bad.push(`${pid} bonds none of its pads on ${pkg}, so it should read as UNAVAILABLE, `
+            + 'not be offered with nothing behind it');
+        }
+        continue;
+      }
       eng.setSetting(pid, 'Mode', choice);
       const got = held(pid);
-      for (const [sig, pin] of Object.entries(want)) {
+      for (const [sig, pin] of reachable) {
         if (got[sig] !== pin) {
           bad.push(`${pid} "${choice}" should hold ${sig} on ${pin}, holds ${got[sig] || 'NOTHING'}`);
         }
@@ -113,6 +137,22 @@ for (const pkg of PACKAGES) {
     assert.empty(bad, `USB modes that do not claim their datasheet pads on ${pkg}`);
   });
 }
+
+test('QFN68 brings out no USBFS or USBPD pad at all, and both read as unavailable', () => {
+  // The other half of the rule above, stated for the one package it bites on, so that a
+  // future change which quietly bonds those pads — or which makes `isAvailable` lenient —
+  // is named here rather than noticed on a board.
+  fresh('QFN68');
+  const bonded = bondedPins('QFN68');
+  for (const pin of ['PA9', 'PA10', 'PA11', 'PA12', 'PB3', 'PB4']) {
+    assert.notOk(bonded.has(pin), `QFN68 should not bond ${pin} (DS Table 2-1-1 has a dash in that column)`);
+  }
+  assert.notOk(eng.isAvailable('USBFS'), 'USBFS should be unavailable on QFN68');
+  assert.notOk(eng.isAvailable('USBPD'), 'USBPD should be unavailable on QFN68');
+  // ...while the two whose pads ARE bonded stay usable on the same package.
+  assert.ok(eng.isAvailable('USBHS'), 'USBHS should be available on QFN68 (PB8/PB9 are bonded)');
+  assert.ok(eng.isAvailable('USBSS'), 'USBSS should be available on QFN68 (the four SuperSpeed pads are bonded)');
+});
 
 test('USBFS\'s two OTG pads are reachable, not stranded behind the Mode row', () => {
   // DS Table 2-2-18 lists four pins and neither it nor RM ch.26 says which ROLE needs
