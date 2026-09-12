@@ -34,6 +34,22 @@ export function withMutantMcu(eng, part, mutate, fn) {
   try { return fn(); } finally { eng.registerMcuFile(src); }
 }
 
+/**
+ * A copy of dist/index.html with ONE occurrence of `find` replaced, for the real-browser
+ * suites (`withPage(fn, { url })`). Returns `{ file }`, or `{ error }` when the anchor is not
+ * exactly once in the page - the app moved, and the break would plant nothing.
+ */
+export function withMutantDist(find, replace) {
+  const DIST = path.join(ROOT, 'dist', 'index.html');
+  const src = fs.readFileSync(DIST, 'utf8');
+  const n = src.split(find).length - 1;
+  if (n !== 1) return { error: `the anchor ${JSON.stringify(find)} appears ${n} times in dist/index.html, expected 1 — the app moved and this planted break no longer plants anything` };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-distbreak-'));
+  const file = path.join(dir, 'index.html');
+  fs.writeFileSync(file, src.replace(find, replace));
+  return { file };
+}
+
 /** Write a mutated copy of `src` into a fresh temp folder and return its path. */
 export function withMutantFile(src, mutate) {
   const text = fs.readFileSync(src, 'utf8');

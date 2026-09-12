@@ -23,8 +23,10 @@ function rng(seed) {
 const PINS_PER_PACKAGE = 5;
 
 // One jsdom window per MCU (booting is the slow part), every package inside it.
-function walk(mcuName, onProblem) {
-  const a = boot();
+function walk(mcuName, onProblem, html) {
+  // `html`: an alternative page to boot - used ONLY by the planted break below, which hands
+  // in a mutated copy of dist/index.html so the sweep can be seen refusing a broken page.
+  const a = boot(html ? { html } : undefined);
   try {
     a.loadMcu(mcuName);
     const packages = a.packages;
@@ -81,6 +83,33 @@ function walk(mcuName, onProblem) {
 }
 
 // Discover the MCU list from a throwaway window, then give each its own test.
+// ---------------------------------------------------------------------------------------
+//  Planted break - round 6, deliverable B. The sweep below reports a package that draws no
+//  pins. Hand `walk()` a copy of the built page whose renderer emits the pin class under a
+//  different name - the page still boots and still draws, but `#svg .pin` matches nothing -
+//  and every package of one part must come back as "nothing drawn (0 pins)"; then the real
+//  page must walk clean. (The first version of this plant renamed the chip CONTAINER instead,
+//  and the app threw at boot - `innerHTML` on null - which escapes walk() before the check
+//  it was meant to trip. A plant has to break the thing the check measures, not the page.)
+//  Dynamic imports so this file's own import list is not touched; the tree is not touched
+//  either - `withMutantDist` writes the copy to a temp folder.
+// ---------------------------------------------------------------------------------------
+test('planted break: a page that draws no chip is reported by the sweep for every package', async () => {
+  const { withMutantDist } = await import('./lib/mutant.js');
+  const fs = await import('node:fs');
+  const m = withMutantDist("let cls = 'pin ' + (t === 'io' ? 'io' : t);", "let cls = 'pinx ' + (t === 'io' ? 'io' : t);");
+  assert.notOk(m.error, m.error || '');
+  const part = 'CH32V006';
+  const problems = [];
+  walk(part, p => problems.push(p), fs.readFileSync(m.file, 'utf8'));
+  const drewNothing = problems.filter(p => /nothing drawn \(0 pins\)/.test(p));
+  assert.ok(drewNothing.length >= 1, `the sweep did not report the empty chip; problems were:\n${problems.join('\n') || '(none)'}`);
+  console.log(`      planted refusal (smoke sweep): ${drewNothing[0]}`);
+  const clean = [];
+  walk(part, p => clean.push(p));
+  assert.empty(clean, 'the real page walks with problems, so the plant could not be attributed');
+});
+
 const MCUS = (() => {
   const a = boot();
   try { return a.mcuNames; } finally { a.close(); }

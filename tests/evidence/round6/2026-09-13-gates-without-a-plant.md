@@ -25,13 +25,15 @@ why it cannot be. Status at 2026-09-13T00:00Z, after cycle 1.
 |---|---|---|
 | `features › a user label set on a pin shows on the chip and in the export` | needs a mutation of the label RENDERER inside the bundled app, not of data; the anchor is engine code, which is AGENT-2's and moves | a `data-test` hook on the label element, or a `boot({html})` mutation once the renderer's markup is stable |
 | `features › arrow keys / Enter / Delete` (keyboard) | jsdom key-event plumbing; a plant would test jsdom, not the app | a real-browser sibling first |
-| `newproject › every part number in every MCU file has a row` | real-browser; a plant is a mutated dist copy via `withPage({url})` (the `clock_ui` pattern) with one part's rows removed | one `mutantOf()` in `newproject.test.js`, next cycle |
-| `smoke › <part>: every package loads, draws and survives clicking` | the click sweep has no single assertion to invert; its failure mode is an exception | a mutated dist whose `setPackage` throws for one package |
 | `legibility`, `layout` (real browser) | already carry breaks (3–4 refs each); listed only to say they were checked, not skipped | — |
 
-## Planted this cycle (seven, all in `2026-09-12-planted-breaks.md` with the red verbatim)
+## Planted this cycle (twelve, all in `2026-09-12-planted-breaks.md` with the red verbatim)
 
 collision ratchet · reachability · SPL-header guard · fixture freshness · LTDC default pad ·
 IN_EXTRACTION expiry (40 cells) · 8080 preset completeness · pinless-USB · boot painted ·
-boot silent. Plus the pre-existing: `--strict` TODO, coverage self-test (21), sdk_names,
+boot silent · New Project catalogue (a variant renamed in a dist copy via `withMutantDist`,
+`CH32V003F4P6/TSSOP20` reported missing) · smoke click sweep (the renderer's pin class
+renamed in a dist copy — the page boots and draws, `#svg .pin` matches nothing, every
+package of CH32V006 reported "nothing drawn (0 pins)"; the first attempt renamed the chip
+container and the app threw at boot, which is a different finding and is written beside it). Plus the pre-existing: `--strict` TODO, coverage self-test (21), sdk_names,
 source_order, clock_ui (2), data duplicate-key (9 cases), constraints, layout, legibility.

@@ -283,21 +283,9 @@ test('the clock tab is silent: no console errors or warnings while configuring i
 //  This is the same shape as tools/coverage_selftest.py and tests/source_order.test.js:
 //  mutate, watch it go red, restore. Here "restore" is free — the mutant is a temp file.
 // =============================================================================
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { DIST } from './lib/browser.js';
-
-/** Write a one-string mutation of dist/index.html to a temp file and return its path. */
-function mutantOf(find, replace) {
-  const src = fs.readFileSync(DIST, 'utf8');
-  const n = src.split(find).length - 1;
-  if (n !== 1) return { error: `the anchor ${JSON.stringify(find)} appears ${n} times in dist/index.html, expected 1 — the app moved and this planted break no longer plants anything` };
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-clockbreak-'));
-  const file = path.join(dir, 'index.html');
-  fs.writeFileSync(file, src.replace(find, replace));
-  return { file };
-}
+// The one-string dist mutation lives in tests/lib/mutant.js now (round 6), so every
+// real-browser suite plants its breaks the same way. Same contract: `{ file }` or `{ error }`.
+import { withMutantDist as mutantOf } from './lib/mutant.js';
 
 // [anchor in dist/index.html, the truncation, which mux it cripples, what the sweep says]
 const BREAKS = [

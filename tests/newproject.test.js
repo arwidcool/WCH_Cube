@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { suite, test, assert, skip } from './lib/harness.js';
 import { withPage, browserAvailable, ROOT } from './lib/browser.js';
+import { withMutantDist } from './lib/mutant.js';
 import { yaml } from './lib/deps.js';
 
 suite('new project selector (real browser)');
@@ -56,6 +57,28 @@ function expectedParts() {
   }
   return out;
 }
+
+test('planted break: a part renamed in the bundle drops out of the catalogue, and the check names it', async () => {
+  // Round 6, deliverable B. The catalogue check below compares the New Project rows against
+  // data/mcus/. Rename ONE part inside a COPY of dist/index.html (the bundled YAML carries
+  // `name: CH32V003` once) and open the dialog on that copy: the real CH32V003 must then be
+  // absent from the rows while data/mcus/ still expects it - the check's own `missing`
+  // condition, seen true. The tree is untouched; `withMutantDist` refuses a moved anchor.
+  // The catalogue is keyed by PART NUMBER (the variant key), not by the MCU's name - the
+  // first version of this plant renamed `mcu.name` and changed nothing the check compares.
+  if (!browserAvailable()) return assert.ok(true, NO_BROWSER);
+  const m = withMutantDist('CH32V003F4P6: {', 'CH32V003F4P6_PLANTED: {');
+  assert.notOk(m.error, m.error || '');
+  await withPage(async page => {
+    await openDialog(page);
+    const got = await page.eval(`return NP.rows.map(r => r.part + '/' + r.pkg)`);
+    assert.ok(!got.some(g => g.startsWith('CH32V003F4P6/')), 'the renamed variant is still listed under its real part number, so the plant did not take');
+    assert.ok(got.some(g => g.startsWith('CH32V003F4P6_PLANTED/')), `the planted part number is not in the catalogue either - the mutation broke the bundle:\n${got.slice(0, 12).join(', ')}`);
+    const missing = expectedParts().filter(p => !got.includes(p));
+    assert.ok(missing.includes('CH32V003F4P6/TSSOP20'), `the check's missing-list does not name the dropped variant: ${JSON.stringify(missing)}`);
+    console.log(`      planted refusal (catalogue): parts in data/mcus/ the New Project list does not offer - ${missing.join(', ')}`);
+  }, { url: m.file });
+});
 
 test('every part number in every MCU file has a row', async () => {
   if (!browserAvailable()) skip(NO_BROWSER);
