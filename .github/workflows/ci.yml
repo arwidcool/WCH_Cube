@@ -110,8 +110,25 @@ jobs:
   # ---------------------------------------------------------------------------
   firmware:
     name: firmware + generated project
-    runs-on: ubuntu-latest
+    # **Windows, and it has to be.** The `ch32v` platform's registry metadata pins its
+    # toolchain as `https://github.com/Community-PIO-CH32V/toolchain-riscv-windows.git`
+    # - a WINDOWS-ONLY package - and its `tool-wlink` uploader is pinned to `#windows`
+    # too. On ubuntu-latest `pio run` therefore fails in about one second, having
+    # resolved a toolchain that has no Linux binaries, which is exactly the failure the
+    # first two CI runs reported. That is not a mistake in this workflow; it is the
+    # platform being Windows-only, and the honest fix is to run the job where the
+    # toolchain exists rather than to drop the gate.
+    #
+    # This box is Windows too, which is why `pio run` has always worked locally and why
+    # the problem only ever appeared on the runner.
+    runs-on: windows-latest
     timeout-minutes: 40
+    # Git Bash ships with the Windows runner and is the same shell the POSIX steps below
+    # are written for. Without this the default is PowerShell, where `for f in ...; do`
+    # is a syntax error rather than a loop.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -138,7 +155,7 @@ jobs:
         with:
           path: |
             ~/.platformio
-            ~/.cache/pip
+            ~/AppData/Local/pip/cache
           key: pio-${{ runner.os }}-${{ hashFiles('data/firmware/platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 

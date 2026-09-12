@@ -227,6 +227,46 @@ test('nothing under .github/ ships an unresolved OWNER/REPO placeholder', () => 
     + 'Use a relative markdown reference instead, which works in a fork and after a rename');
 });
 
+test('the firmware job runs where the platform\'s toolchain exists', () => {
+  // The `ch32v` platform pins its toolchain as `toolchain-riscv-windows` (its
+  // `platform.json`, `packages."toolchain-riscv".version`) and its `tool-wlink` uploader
+  // to `#windows`. On an ubuntu runner `pio run` therefore fails in about a second having
+  // resolved a toolchain with no Linux binaries - which is what the first two CI runs
+  // reported, and what made the workflow look broken when the workflow was fine.
+  //
+  // So: whichever job installs PlatformIO and runs the generated-project gate must NOT be
+  // on a POSIX runner. This check is deliberately about the RUNNER rather than about the
+  // platform's metadata, because the metadata lives in ~/.platformio (not in this repo)
+  // and is not readable on a machine that has never installed it.
+  const file = workflowFiles().find(f => /^ci\.ya?ml$/.test(f));
+  assert.ok(file, 'there is no .github/workflows/ci.yml');
+  const doc = loadWorkflow(file);
+  const jobs = doc.jobs || {};
+
+  const shell = j => shellOf((jobs[j] && jobs[j].steps) || []);
+  const pioJobs = Object.keys(jobs).filter(j => /(^|\n)\s*(python -m )?pip3?\s+install\s[^\n]*\bplatformio\b/.test(shell(j)));
+  assert.ok(pioJobs.length, 'no job installs PlatformIO any more');
+
+  for (const j of pioJobs) {
+    const runner = String((jobs[j] || {})['runs-on'] || '');
+    assert.match(runner, /windows/i,
+      `job "${j}" installs PlatformIO but runs on "${runner}". The ch32v platform pins a `
+      + 'WINDOWS-ONLY RISC-V toolchain, so `pio run` fails there in about a second with no '
+      + 'usable error. Keep this job on windows-latest, or install the platform from source '
+      + 'so it can pick a per-OS toolchain — do not simply move it back.');
+
+    // And once it is on Windows, the POSIX-syntax steps need Git Bash explicitly, or the
+    // runner's default PowerShell reads `for f in ...; do` as a syntax error.
+    if (/for\s+\w+\s+in\s/.test(shell(j))) {
+      const shellName = ((jobs[j] || {}).defaults || {}).run || {};
+      const perStep = ((jobs[j] || {}).steps || []).some(s => /bash/.test(String(s.shell || '')));
+      assert.ok(/bash/i.test(String(shellName.shell || '')) || perStep,
+        `job "${j}" runs POSIX shell syntax on a Windows runner with no \`shell: bash\`. `
+        + 'The default there is PowerShell, where that loop is a syntax error');
+    }
+  }
+});
+
 test('a release archive carries no vendor material, and does carry the app', () => {
   // The release workflow attaches `git archive` output and tells the reader it holds
   // no SDK and no datasheets. That is a redistribution claim about WCH's files, not
