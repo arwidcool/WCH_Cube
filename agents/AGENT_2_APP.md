@@ -45,6 +45,17 @@ data; the second reads `none` on every part that ships and exists to keep saying
 real browser at 1280/1920 × light/dark × 100 %/125 %, both rows present and none empty, zero
 overflow, console silent.
 
+**P2: DONE and committed.** `peripherals.<pid>.pins` is read by nothing as a routing — every other
+`P.pins` hit is `M.pins`, `E.pins`, `remaps[].pins` or package geometry, and the only reads of a
+peripheral's own block are P1's two, taking `open`/`owner`/`task`/`none`/`source`. `projectObject()`
+serializes exactly `settings`, `remap`, `af_pins`, `params`, `channel_params` per peripheral, so a
+fact about the MCU file cannot be written into a project opened on another part. Three tests in
+`app/tests/model.test.js` on the fixture's three declarations (IWDG, WWDG, DMA1), and **both plants
+that should fail were run and both failed** (`signalPinDefs` falling back to `P.pins`, and
+`signalPins` doing the same). **One plant proved nothing and the test says so in its own comment**:
+the byte-comparison test cannot catch either leak, because those three peripherals route nothing
+and `afPlan()` skips them before it asks. A byte-comparison that cannot move is not evidence.
+
 Also this cycle: repaired one duplicated YAML key in `data/mcus/CH32L103.yaml` (`BKP` had
 `settings:` twice, so the file did not parse at all and every `fresh()` threw) — declared on the
 board, behaviour-preserving, AGENT-1's file.

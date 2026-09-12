@@ -136,6 +136,89 @@ test('unclaimableSignals is empty for every shipped part, and catches a dead row
   assert.deepEqual(e.unclaimableSignals(), [], 'skip_signals is exempt, by design');
 });
 
+// ---- `peripherals.<pid>.pins` is a DECLARATION, not a routing ------------------
+// FORMAT.md: a peripheral with neither `remaps:` nor `signal_pins:` must say WHY it
+// claims nothing - `pins: { none: true, source: }` when the silicon gives it no pad,
+// `pins: { open: true, owner:, task: }` when nobody has extracted it yet. The routing is
+// `remaps:` (the whole peripheral moves as one) or `signal_pins:` (per pin, with an `af:`
+// code); `pins:` answers "why is there no routing", and reading it AS one would invent
+// pads out of a sentence. The synthetic fixture carries three of them, on IWDG, WWDG and
+// DMA1, so the question can be asked against a real file rather than a hand-made object.
+
+const declaredPins = e => Object.entries(e.M.peripherals)
+  .filter(([, P]) => P.pins && !P.remaps && !P.signal_pins);
+
+test('a peripherals.<pid>.pins declaration routes nothing and claims nothing', () => {
+  const e = fresh('WCH-DUMMY32-C8');
+  const declared = declaredPins(e);
+  assert.equal(declared.length, 3, 'setup: the fixture carries three of these');
+  assert.deepEqual(declared.map(([pid]) => pid).sort(), ['DMA1', 'IWDG', 'WWDG']);
+  for (const [pid, P] of declared) {
+    // Every entry point the engine has into a routing, checked one at a time, because
+    // each of the three is a different route to the same defect and a plant in any one
+    // of them has to be caught here.
+    assert.equal(e.signalPinDefs(pid), null,
+      `${pid}: no per-pin map may be derived from the declaration`);
+    assert.deepEqual(e.signalPins(pid).pins, {},
+      `${pid}: and the routing lookup must come back empty, not holding a sentence`);
+    assert.deepEqual([...e.requiredSignals(pid)], [],
+      `${pid}: and it must claim no signal, however the declaration reads`);
+    assert.deepEqual(e.unclaimableSignals().filter(u => u.pid === pid), [],
+      `${pid}: a declaration is not a routed signal either`);
+    assert.equal(P.pins.source, 'synthetic layout fixture - not silicon; it has no datasheet and claims no pad');
+  }
+});
+
+test('deleting the declaration changes not one byte of the app output', () => {
+  // Same part, same state, the only difference being the declaration - so this is a
+  // whole-model byte comparison rather than a list of the places I thought to look. What
+  // it does NOT prove on its own is that the routing queries ignore it: these three
+  // peripherals route nothing at all, so `afPlan()` skips them before it asks, and a
+  // leak would have nowhere to land. The test above is the one that catches that, one
+  // entry point at a time; this one is the backstop for everything else.
+  const snap = e => JSON.stringify({
+    c: e.cSource(),
+    conflicts: e.E.conflictList,
+    issues: e.E.issues,
+    pins: Object.fromEntries(Object.entries(e.E.pins).map(([p, v]) => [p, {
+      state: v.state, claims: (v.claims || []).map(c => `${c.who}:${c.sig}`).sort(),
+    }])),
+  });
+  const e = fresh('WCH-DUMMY32-C8');
+  e.toggleSetting('ADC1', 'Channels', 'IN0', true);
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  // the declared peripherals are switched ON too, so their init blocks are generated
+  for (const pid of ['IWDG', 'WWDG', 'DMA1']) e.setSetting(pid, 'Mode', 'Activated');
+  e.compute();
+  const before = snap(e);
+  assert.ok((e.E.pins.PA0.claims || []).length, 'setup: a channel claims a pad, so the grid has state');
+  assert.ok(before.includes('void WCHCube_DMA1_Init(void)'), 'setup: a declared peripheral is generated');
+  for (const [, P] of declaredPins(e)) delete P.pins;
+  e.compute();
+  assert.equal(snap(e), before);
+});
+
+test('a project round-trip neither writes nor needs the declaration', () => {
+  const e = fresh('WCH-DUMMY32-C8');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.compute();
+  const text = e.projectSerialize();
+  const obj = e.projectObject();
+  // a .wchproj carries what the USER chose. `pins:` is a fact about the MCU file, so
+  // writing it would put one file's claim inside a project that can be opened on another.
+  for (const pid of ['IWDG', 'WWDG', 'DMA1']) {
+    assert.equal('pins' in Object(obj.peripherals[pid] || {}), false, `${pid}.pins is not saved`);
+    assert.deepEqual(Object.keys(obj.peripherals[pid]).sort(), ['remap', 'settings'],
+      `${pid}: a peripheral state is its settings and its remap index, nothing else`);
+  }
+  assert.equal(/^\s*pins:/m.test(text), false, 'and the serialized YAML has no such key');
+
+  const e2 = fresh('WCH-DUMMY32-C8');
+  e2.projectApply(e.yamlLoad(text));
+  e2.compute();
+  assert.equal(e2.cSource(), e.cSource(), 'and reopening it reproduces the same C');
+});
+
 test('every bundled MCU file loads on every one of its packages', () => {
   const e = fresh();
   for (const name of Object.keys(e.MCU_FILES)) {
