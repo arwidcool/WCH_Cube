@@ -260,20 +260,40 @@ peripherals:
   assert.match(eng.cSource(), /TIM_OC1Init\(TIM1, &TIM_OCInitStructure\);/);
 });
 
-test('a part whose blocks name no setting at all is UNCHANGED, and says why in a note', () => {
-  // Every shipped `channel_params` is in this state (E2). Before the per-instance
-  // emitter existed the generated C said nothing whatever about these structs, so the
-  // report is a note rather than a TODO - spelling it TODO would turn a pre-existing,
-  // already-tracked data gap into four red fixtures on another agent's gate.
-  const e = fresh('CH32V006', 'TSSOP20');
-  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
-  e.compute();
-  const plan = e.activeInstances('TIM1');
+test('a block that names no setting at all is UNCHANGED, and says why in a note', () => {
+  // THE INVARIANT, ON A SYNTHETIC PART NOW. When this was written every shipped
+  // `channel_params` named no setting, so CH32V006 could stand in for the case. AGENT-1 has
+  // since landed `channels:` on all eight timers and on H417's LTDC layers, so no shipped part
+  // is in this state any more - and a check that quietly stops having a subject is exactly what
+  // this round is about. The RULE it guards is still live: a block the data cannot identify a
+  // channel for must emit NOTHING and say why, because spelling it TODO would fail `--strict`
+  // over a data gap somebody is already tracking. So it now carries its own subject instead of
+  // borrowing one that moved out from under it.
+  // `inherits:` MERGES key by key, so omitting `setting` here would keep CH32V006's - which
+  // is exactly what happened on the first attempt at this and produced an instance. Null it.
+  fresh('CH32V006');
+  eng.registerMcuFile(`
+mcu:
+  name: CH32V006-NOSETTING
+  inherits: CH32V006
+peripherals:
+  TIM1:
+    channel_params:
+      channels:
+        1: { setting: null, output_choices: ["PWM Generation CH1"] }
+        2: { setting: null }
+        3: { setting: null }
+        4: { setting: null }
+`);
+  eng.loadMcu('CH32V006-NOSETTING');
+  eng.setPackage('TSSOP20');
+  eng.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  eng.compute();
+  const plan = eng.activeInstances('TIM1');
   assert.deepEqual(plan.instances, []);
   assert.equal(plan.missing, null, 'not a TODO');
   assert.match(plan.note, /names no setting for any channel/);
-  assert.match(plan.note, /TASKS\.md E2/);
-  const c = e.cSource();
+  const c = eng.cSource();
   assert.doesNotMatch(c, /TIM_OC1Init/, 'nothing is emitted for a channel nobody can identify');
   assert.equal((c.match(/TODO/g) || []).length, 0, 'and the strict gate stays clean');
 });
@@ -373,60 +393,54 @@ test('driving a per-instance editor changes that instance and only that instance
 const TIMS = [['CH32V003', 'TIM1'], ['CH32V003', 'TIM2'], ['CH32V005', 'TIM1'], ['CH32V005', 'TIM2'],
               ['CH32V006', 'TIM1'], ['CH32V006', 'TIM2'], ['CH32X035', 'TIM1'], ['CH32X035', 'TIM2']];
 
-test('the eight shipped timer blocks still emit no TIM_OCxInit, and say so out loud', () => {
-  const silent = [];
+test('all eight shipped timer blocks can now identify their channels', () => {
+  // THIS TEST USED TO ASSERT THE OPPOSITE, and its own message said what to do about it:
+  // "all eight are still waiting on a channels: map - when one lands, update this list, and
+  // when the last one does, delete this test." The last one landed (AGENT-1, E's data half),
+  // so the list is empty and the gap is closed.
+  //
+  // Inverted rather than deleted. A gap-tracker that reaches zero is a REGRESSION GUARD for
+  // free: the same eight rows, asserted the other way round, now fail the day a `channels:`
+  // map is dropped from any of them - which is the failure the original was written to see
+  // coming. Deleting it would have thrown that away, and this repository does not delete
+  // tests; it repoints them.
+  const stillSilent = [];
   for (const [part, pid] of TIMS) {
-    const e = fresh(part);
+    fresh(part);
     const cp = eng.channelParamBlock(pid);
     assert.ok(cp && cp.struct === 'TIM_OCInitTypeDef', `${part}.${pid}: setup`);
     assert.ok(cp.sdk_calls && Object.keys(cp.sdk_calls).length === 4,
-      `${part}.${pid}: the call table is complete - it is the SETTING map that is missing`);
-    const plan = eng.activeInstances(pid);
-    if (!plan.instances.length && plan.note) silent.push(`${part}.${pid}`);
+      `${part}.${pid}: the call table should still name one init per channel`);
+    const inst = cp.channels || cp.instances || {};
+    const named = Object.values(inst).filter(v => v && v.setting).length;
+    if (named !== 4) stillSilent.push(`${part}.${pid}: ${named} of 4 channels name a setting`);
   }
-  assert.deepEqual(silent, TIMS.map(([a, b]) => `${a}.${b}`),
-    'all eight are still waiting on a channels: map — when one lands, update this list, '
-    + 'and when the last one does, delete this test');
+  assert.deepEqual(stillSilent, [],
+    'timer blocks that can no longer identify their channels - a channels: map has been '
+    + 'dropped, and the per-instance emitter goes silent for them again');
 });
 
-test('a configured PWM channel reaches the C the moment the channels: map exists', () => {
+test('a configured PWM channel reaches the C, and the channels it did not configure do not', () => {
   // What the user did: switched Channel1 to PWM, gave it a pulse, left the rest alone.
-  const configure = e => {
-    e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
-    e.setSetting('TIM1', 'Channel2', 'Input Capture');
-    e.setChannelParam('TIM1', 1, 'pulse', 500);
-    e.compute();
-    return e.cSource();
-  };
+  //
+  // THIS USED TO BE A BEFORE/AFTER. The "before" was the shipped CH32V006 emitting nothing but
+  // a note, and the "after" was a synthetic part carrying the `channels:` map "proposed on the
+  // board". AGENT-1 landed that map, so the shipped part IS the after - and the assertion that
+  // it emits no TIM_OC1Init became false the moment the feature arrived. Now the shipped part
+  // carries the whole check, which is the stronger place for it: a regression in the real data
+  // fails here rather than in a fixture nobody ships.
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setSetting('TIM1', 'Channel1', 'PWM Generation CH1');
+  e.setSetting('TIM1', 'Channel2', 'Input Capture');
+  e.setChannelParam('TIM1', 1, 'pulse', 500);
+  e.compute();
+  const c = e.cSource();
 
-  // Today, on the shipped part.
-  const before = configure(fresh('CH32V006', 'TSSOP20'));
-  assert.match(before, /TIM_TimeBaseInit\(TIM1, /, 'the time base is emitted');
-  assert.doesNotMatch(before, /TIM_OC1Init/, 'and the PWM the user asked for is not');
-  assert.match(before, /names no setting for any channel/, 'the C says why, which is the only reason this is not a silent defect');
-
-  // With the map proposed on the board, and nothing else changed.
-  const e = fresh('CH32V006');
-  eng.registerMcuFile(`
-mcu:
-  name: CH32V006-TIMCHANNELS
-  inherits: CH32V006
-peripherals:
-  TIM1:
-    channel_params:
-      channels:
-        1: { setting: Channel1, output_choices: ["PWM Generation CH1", "PWM Generation CH1 CH1N", "PWM Generation CH1N only"] }
-        2: { setting: Channel2, output_choices: ["PWM Generation CH2", "PWM Generation CH2 CH2N", "PWM Generation CH2N only"] }
-        3: { setting: Channel3, output_choices: ["PWM Generation CH3", "PWM Generation CH3 CH3N", "PWM Generation CH3N only"] }
-        4: { setting: Channel4, output_choices: ["PWM Generation CH4"] }
-`);
-  eng.loadMcu('CH32V006-TIMCHANNELS');
-  eng.setPackage('TSSOP20');
-  const after = configure(eng);
-  assert.match(after, /TIM_OC1Init\(TIM1, &TIM_OCInitStructure\);/, 'the channel the user turned on is initialised');
-  assert.match(after, /TIM_OCInitStructure\.TIM_Pulse = 500;/, 'with the pulse they typed');
-  assert.doesNotMatch(after, /TIM_OC2Init/, 'an input-capture channel is not an output compare');
-  assert.doesNotMatch(after, /TIM_OC3Init|TIM_OC4Init/, 'and a channel left at Disable is not initialised');
-  assert.doesNotMatch(after, /names no setting for any channel/, 'the note is gone because the gap is');
-  assert.equal((after.match(/TODO/g) || []).length, 0, 'and nothing became a TODO on the way');
+  assert.match(c, /TIM_TimeBaseInit\(TIM1, /, 'the time base is emitted');
+  assert.match(c, /TIM_OC1Init\(TIM1, &TIM_OCInitStructure\);/, 'the channel the user turned on is initialised');
+  assert.match(c, /TIM_OCInitStructure\.TIM_Pulse = 500;/, 'with the pulse they typed');
+  assert.doesNotMatch(c, /TIM_OC2Init/, 'an input-capture channel is not an output compare');
+  assert.doesNotMatch(c, /TIM_OC3Init|TIM_OC4Init/, 'and a channel left at Disable is not initialised');
+  assert.doesNotMatch(c, /names no setting for any channel/, 'the note is gone because the gap is');
+  assert.equal((c.match(/TODO/g) || []).length, 0, 'and nothing became a TODO on the way');
 });
