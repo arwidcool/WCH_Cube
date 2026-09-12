@@ -194,7 +194,27 @@ right for the pad it configures.* Nothing below reports it as true; the numbers 
    they are identical the generator is ignoring the package and everything above it is
    decoration. §4 step 16 still said "four real parts"; there are six.
 
-**State.** `python build.py && node tests/run.js` → **13 FAILED, 657 passed, 0 skipped.** All 13
+**LATE IN THE CYCLE — the finding was taken and fixed the same afternoon, and the numbers below
+the line are the ones that stand.** AGENT-1 moved the `signal_pins:` ordering into the generator,
+which is where item 7 said it belonged. The collision sweep went **26/20/17 → 8/3/0 → 4/0/0**;
+**QFN88 and QFN128 are now a hard zero** (the `ceiling == 0` branch asserts empty, so one new
+collision on either fails outright) and the four that remain are all QFN68, each named in the
+file. I lowered the ceiling twice, both times by re-measuring TWICE and getting the same answer
+rather than writing down whatever the last run printed — the data moved under the file all
+afternoon, and a ratchet set from one noisy read is worse than no ratchet. CH32H417 also reached
+**0 open rows**, with `disagreements:` going 0 → 45; I checked those rather than taking the
+number — all 29 entries carry a `reason:` and a `source:` citing BOTH readings, and two were
+spot-checked against the datasheet (`DS:3791` = `SERDES_TXP` on the Table 2-1-1 PE3 row,
+`DS:7341` = `SERDES_RXP PE3` in Table 2-2-20; the readings genuinely swap, both recorded,
+neither picked). **0 open rows is not the same as finished, and this cycle is the proof:** the
+ledger asks whether every DATASHEET fact is accounted for, not what the app DOES with it, and
+asking the second question found 63 collisions on the day the first reached zero.
+
+**State.** `python build.py && node tests/run.js` → **1 FAILED, 681 passed, 0 skipped** — the
+one failure is `dist/index.html is not stale`, caused by another agent rebuilding dist mid-run
+(the runner says so itself), and green on a quiet re-run. All 13 CH32H417 failures below are
+gone. The superseded reading, kept because it is what the checks caught when they first ran:
+**13 FAILED, 657 passed, 0 skipped.** All 13
 are CH32H417 data and none is mine: 8 × `h417_ltdc` + 3 × `h417_packages` are the collision
 defect above, 1 × `codegen_compile` is the fixtures going stale under AGENT-1's edits DURING the
 run, and 1 × `h417_af` was a GOOD failure reporting a gap being CLOSED (`I2S2_MCK PC6 AF5` is
