@@ -139,7 +139,18 @@ def main() -> None:
             sys.exit(f"build: template.html is missing {token}")
         tpl = tpl.replace(token, builder())
     (ROOT / "dist").mkdir(exist_ok=True)
-    (ROOT / "dist" / "index.html").write_text(tpl, encoding="utf-8")
+    # `newline="\n"` is load-bearing, not tidiness. Without it, `write_text` uses the
+    # platform default: this file comes out CRLF on Windows and LF on Linux, so the SAME
+    # source produces a DIFFERENT dist on the developer's box and on the CI runner. That
+    # broke CI from the first push and in the most confusing way available -- the
+    # "dist/index.html is up to date" step, whose job is to catch a stale build, failed on
+    # a build that was perfectly current, because `git diff` was comparing 19 270 line
+    # endings rather than content. Two platforms, two answers, one committed file.
+    #
+    # `.gitattributes` deliberately sets no `* text=auto` and renormalises nothing (see its
+    # own comment), so the fix has to be here: pick the line ending in the generator rather
+    # than inherit it from whichever OS happens to run it.
+    (ROOT / "dist" / "index.html").write_text(tpl, encoding="utf-8", newline="\n")
     print("wrote dist/index.html", len(tpl) // 1024, "KB")
 
 

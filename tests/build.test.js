@@ -74,6 +74,34 @@ function sourceStamp() {
   }).join('|');
 }
 
+test('dist/index.html carries no CRLF, so it builds the same bytes on every OS', () => {
+  // THE DEFECT THIS EXISTS FOR, measured on the CI runner rather than reasoned about:
+  // `build.py` wrote dist with `write_text(tpl, encoding="utf-8")`, which uses the
+  // PLATFORM DEFAULT line ending. Windows produced CRLF, Linux produced LF, and the same
+  // source therefore produced two different files. The "dist/index.html is up to date"
+  // step in `ci.yml` exists to catch a stale build; it failed on a build that was
+  // perfectly current, because `git diff` was comparing 19 270 line endings rather than
+  // content - and it failed identically on two consecutive CI runs while passing on every
+  // developer box, which reads exactly like a broken workflow.
+  //
+  // `.gitattributes` deliberately sets no `* text=auto` and renormalises nothing (it says
+  // so, at length), so nothing else can fix this: the generator has to choose the line
+  // ending instead of inheriting one from whichever OS ran it. A committed dist with any
+  // CRLF at all is a dist that cannot round-trip through `python build.py` on Linux.
+  const html = fs.readFileSync(DIST);
+  const crlf = (html.toString('latin1').match(/\r\n/g) || []).length;
+  assert.equal(crlf, 0,
+    `dist/index.html contains ${crlf} CRLF(s). build.py must write with newline="\\n" so `
+    + 'the committed file is byte-identical on Windows and Linux — a CRLF dist makes the '
+    + 'CI "dist is up to date" check fail on a current build, in both directions');
+
+  // And the generator really does ask for LF, not merely happen to produce it here.
+  const py = fs.readFileSync(path.join(ROOT, 'build.py'), 'utf8');
+  assert.match(py, /write_text\([^)]*newline=["']\\n["']/,
+    'build.py no longer passes newline="\\n" to write_text — the dist line ending is back '
+    + 'under the control of whichever OS runs the build');
+});
+
 test('dist/index.html is not stale', () => {
   // Rebuild and compare: a difference means someone changed app/ or data/ and shipped
   // the old build - or hand-edited dist itself.
