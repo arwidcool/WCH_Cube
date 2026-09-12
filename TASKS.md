@@ -821,10 +821,20 @@ one pin, and a whole-peripheral enumeration is 8.5e20 entries. Measured by
 - [x] `data/packages/packages.yaml` — `QFN128`, `QFN88`, `QFN60X6` added; `QFN68` confirmed (AGENT-4)
 - [x] `tools/extract_h417_pins.py` — package tables + AF map + the format audit (AGENT-4)
 - [x] `data/mcus/CH32H417.notes.md` — the finding, the extraction, the open questions (AGENT-4)
-- [~] `codegen.remap.style: af` + `signal_pins:` in `data/FORMAT.md` (AGENT-4, AGENT-1's file)
-- [~] engine: `signalPins(pid)` seam, pin grid, conflict engine, codegen (AGENT-4, AGENT-2's files)
-- [~] `tools/validate_mcu.py` — checks for the new keys, in the same commit as the keys (AGENT-4)
-- [ ] `data/mcus/CH32H417.yaml` (AGENT-4, blocked on the three above)
+- [x] `codegen.remap.style: af` + `signal_pins:` in `data/FORMAT.md` (AGENT-4)
+- [x] engine: `signalPins(pid)` seam, pin grid, conflict engine, codegen (AGENT-4)
+- [x] `tools/validate_mcu.py` — checks for the new keys, in the same change as the keys (AGENT-4)
+- [x] `tools/validate_afmux_selftest.py` — 11 planted breaks, 11 caught (AGENT-4)
+- [x] `app/tests/afmux.test.js` (engine, synthetic part) + `tests/afmux.test.js` (shipped data) (AGENT-4)
+- [x] `data/mcus/CH32H417.yaml` — 12 peripherals on 3 packages; `--strict` 0, `pio run` SUCCESS (AGENT-4)
+- [x] `[env:CH32H417QEU6]` in `data/firmware/platformio.ini` + Taskfile ENVS (AGENT-4)
+- [x] `tests/fixtures/CH32H417_QFN128_full.wchproj` — TX and SCK moved off their defaults
+      while their siblings stay put, which no remap-shaped model can express (AGENT-4)
+- [x] Latent defects a sixth part surfaced: `sys`/`nc`/`analog` had no CSS rule (44 labels at
+      1.14:1); `codegen_compile.test.js` counted pins with `P[A-D]`; `port_clock()` fell off
+      the end of a non-void function; `data/sources/H417/` casing (AGENT-4)
+- [x] Generated `main.c` reads `codegen.clock_update_fn` / `sdi_printf_fn` instead of naming
+      SDK functions this part renames — three link failures, no part named in `app/` (AGENT-4)
 - [ ] Which family owns MEU6/WEU6 — DS contradicts itself 3 sources to 1 (AGENT-1)
 - [ ] `data/sources/H417/` rename to the documented `Datasheets/` + `Evt/` layout (AGENT-1)
 - [ ] How the dual core (RISC-V5F 400 MHz + RISC-V3F 160 MHz) is modelled (AGENT-1)
@@ -848,6 +858,21 @@ one pin, and a whole-peripheral enumeration is 8.5e20 entries. Measured by
       against `data/mcus/` and will therefore cover the new part. Recorded so that "fewer pins than
       expected and no console output" is recognised as this and not as an extraction bug.
 
-Regression rule for the whole block, and it is absolute: **CH32V003/V005/V006/X035 byte-identical,
-530 tests green, `--strict` 0 on all five fixtures.** A part with no `signal_pins:` behaves exactly
-as it did before the key existed — the same rule a part with no `constraints:` follows.
+Regression rule for the whole block, and it HELD: **CH32V003/V005/V006/X035 byte-identical,
+559 tests green, `--strict` 0 on all six fixtures.** `app/tests/afmux.test.js` asserts that for
+every peripheral of the four earlier parts, `signalPins(pid)` returns the IDENTICAL object the old
+code read — not an equal copy — so nothing downstream can see a difference; and the checked-in
+fixtures still match what the engine produces. A part with no `signal_pins:` behaves exactly as it
+did before the key existed, the same rule a part with no `constraints:` follows.
+
+Still open, and none of it blocks the mechanism — all four are argued in
+`data/mcus/CH32H417.notes.md`:
+
+- [ ] Settle whether MEU6/WEU6 are CH32H416 or CH32H417 — the DS contradicts itself 3 sources
+      to 1; this file follows the majority with a `notes:` on each variant (AGENT-1)
+- [ ] Re-derive the AF map from DS Table 2-2-x and diff to zero, the CH32V006 standard (AGENT-1)
+- [ ] The clock tree (RM ch.8, several PLLs). It gates every analog peripheral (AGENT-1)
+- [ ] How the dual core is modelled — `mcu.core` is one string, PlatformIO ships three board
+      files per package (AGENT-1)
+- [ ] CH32H416 / CH32H415 — DS Tables 2-1-2 and 2-1-3, on QFN60X6, whose geometry is already
+      in `packages.yaml`. Separate parts under the repo's own rule (AGENT-1)

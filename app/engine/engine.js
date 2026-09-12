@@ -18,6 +18,7 @@
 import {
   M, S, canon, pinExists, pinLabel, pinNum, groupOf, sigName,
   requiredSignals, isEnabled, isAvailable, neutralChoice, gpioSpeeds, gpioSpeedFor,
+  signalPins, signalPinOptions, isAfMuxed,
 } from './model.js';
 import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
@@ -36,7 +37,7 @@ export function compute() {
   for (const [pid, P] of Object.entries(M.peripherals)) {
     const req = requiredSignals(pid);
     if (!req.size) continue;
-    const r = (P.remaps || [])[S.periph[pid].remap] || { pins: {} };
+    const r = signalPins(pid);
     for (const sig of req) {
       const pin = r.pins[sig];
       if (!pin) { (issues[pid] ||= []).push(`${sig}: not routed in "${r.name}"`); continue; }
@@ -134,9 +135,16 @@ export function previewAssign(pin, opt) {
   const cur = E.pins[canon(pin)];
   if (opt.gpio || opt.reset) return cur && cur.claims.some(c => c.who !== 'GPIO') ? 'pin in use' : '';
   const { periph, signal, remap } = opt;
-  const isCur = !!(cur
-    && cur.claims.some(c => c.who === periph && c.signal === sigName(periph, signal))
-    && S.periph[periph].remap === remap);
+  const onThisPin = !!(cur && cur.claims.some(c => c.who === periph && c.signal === sigName(periph, signal)));
+  // An AF-muxed signal moves ALONE, so picking it can only ever collide on the pin
+  // being clicked - there is no sibling to drag along. That is the whole difference
+  // between the two shapes, and it is why this returns before the remap check below:
+  // running that check here would invent collisions on pins nothing is about to move.
+  if (isAfMuxed(periph)) {
+    if (onThisPin) return '';
+    return cur && cur.claims.some(c => c.who !== periph) ? 'pin in use' : '';
+  }
+  const isCur = !!(onThisPin && S.periph[periph].remap === remap);
   if (isCur) return '';
   if (cur && cur.claims.some(c => c.who !== periph)) return 'pin in use';
   if (S.periph[periph].remap !== remap && requiredSignals(periph).size) {
@@ -196,7 +204,15 @@ export function assignSignal(pin, opt) {
   const { periph, signal, remap } = opt;
   const P = M.peripherals[periph], st = S.periph[periph];
   for (const n of groupOf(pin)) delete S.manual[n];
-  st.remap = remap;
+  // Selecting the route is the one step that differs by mux shape: a remap part picks
+  // an index that moves every signal at once, an AF part records THIS signal's pin and
+  // leaves its siblings where they were.
+  if (P.signal_pins) {
+    const chosen = groupOf(pin).find(n => signalPinOptions(periph, signal).some(o => o.pin === n));
+    if (chosen) (st.afPins ||= {})[signal] = chosen;
+  } else {
+    st.remap = remap;
+  }
   // turn on the first setting choice that carries this signal (if none already does)
   if (!requiredSignals(periph).has(signal)) {
     outer: for (const s of P.settings || []) for (const c of s.choices) {
@@ -277,6 +293,21 @@ export function setRemap(pid, index) {
   if (!remaps[index]) throw new Error(`${pid} has no remap ${index}`);
   record(`${pid} remap ${remaps[index].name}`);
   S.periph[pid].remap = index;
+}
+
+// Move ONE signal of an AF-muxed peripheral to one of its listed pins. The remap
+// equivalent is setRemap() above, and the two are deliberately separate calls rather
+// than one that guesses: a remap index and a signal's pin are not the same decision,
+// and a part that took both would have two ways to say where a signal goes.
+// Refuses a pin the data does not list for that signal, by name - the same contract
+// requirePin() applies to a pin the package does not have.
+export function setSignalPin(pid, signal, pin) {
+  const opts = signalPinOptions(pid, signal);
+  if (!opts.length) throw new Error(`${pid} has no signal_pins entry for ${signal}`);
+  if (!opts.some(o => o.pin === pin))
+    throw new Error(`${pid}_${signal} cannot use ${pin}: the data lists ${opts.map(o => o.pin).join(', ')}`);
+  record(`${sigName(pid, signal)} on ${pinLabel(pin)}`);
+  (S.periph[pid].afPins ||= {})[signal] = pin;
 }
 
 // One cell of the GPIO settings table (mode, pull, speed, label).

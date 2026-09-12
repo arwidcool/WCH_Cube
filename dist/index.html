@@ -126,6 +126,11 @@
   .mode select{width:100%;padding:3px 6px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
   .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:2px 12px}
   .checks label{background:none;font-weight:400}
+  /* One row per signal on an AF-muxed part: the signal name, then its pin list. The
+     name column is fixed so the selects line up however long the signal names are. */
+  .afrow{display:grid;grid-template-columns:minmax(90px,auto) 1fr;align-items:center;gap:6px;margin:1px 0}
+  .afrow .afsig{font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--muted);white-space:nowrap}
+  .afrow select{width:100%}
   .mode .issue{grid-column:1/-1;color:var(--bad);background:var(--warn-bg);border-left:3px solid var(--pin-conflict);padding:4px 8px}
   .mode .hint{grid-column:1/-1;color:var(--muted)}
   /* a shared resource is contended, not a pin clash: dashed edge, own colour */
@@ -395,7 +400,14 @@
   .pin.unused rect{fill:var(--pin-unused)}
   .pin.power rect{fill:var(--pin-power)}
   .pin.ground rect{fill:var(--pin-gnd)}
-  .pin.reset rect,.pin.boot rect{fill:var(--pin-sys)}
+  /* `sys`, `analog` and `nc` are documented pin types in data/FORMAT.md and had NO
+     rule here, because no part used them until CH32H417 - whose crystal pads, Ethernet
+     MDI pairs and USB SuperSpeed pairs are all fixed-function rather than GPIO. Without
+     a fill the rect kept the SVG default and the label sat on it at 1.14:1, which
+     legibility.test.js caught. `--pin-sys` is the same fill reset and boot already use,
+     so the pairing with --on-pin is one the suite has always checked. */
+  .pin.reset rect,.pin.boot rect,.pin.sys rect,.pin.analog rect{fill:var(--pin-sys)}
+  .pin.nc rect{fill:var(--pin-unused)}
   .pin.set rect{fill:var(--pin-set)}
   .pin.set text{fill:var(--on-pin)}       /* white on CubeMX green is 2.8:1 */
   .pin.conflict rect{fill:var(--pin-conflict)}
@@ -783,8 +795,21 @@ packages:
   - { id: QFN40,    kind: quad, pins: 40,  pitch: 0.5,  body: [6, 6],  epad: true }
   - { id: QFN48,    kind: quad, pins: 48,  pitch: 0.5,  body: [7, 7],  epad: true }
   - { id: QFN56,    kind: quad, pins: 56,  pitch: 0.5,  body: [8, 8],  epad: true }
+  # CH32H417/H416/H415 DS v1.8 ch.4: "QFN60X6 6*6mm 0.35mm". The `X6` is WCH's own
+  # suffix for the 6*6 mm body, not a pin count - the package has sixty pins. Kept as
+  # the datasheet spells it, for the same reason LQFP64M is: a package id that does not
+  # match the datasheet is its own source of doubt. Used by CH32H416RDU6 and
+  # CH32H415REU6, neither of which is in data/mcus/ yet.
+  - { id: QFN60X6, kind: quad, pins: 60,  pitch: 0.35, body: [6, 6],  epad: true }
   - { id: QFN64,    kind: quad, pins: 64,  pitch: 0.5,  body: [9, 9],  epad: true }
+  # QFN68 was already here at 8*8 mm 0.4 mm and the CH32H417 datasheet agrees exactly
+  # (DS v1.8 ch.4, "QFN68 8*8mm 0.4mm"). Left untouched; recorded so nobody re-measures.
   - { id: QFN68,    kind: quad, pins: 68,  pitch: 0.4,  body: [8, 8],  epad: true }
+  # CH32H417/H416/H415 DS v1.8 ch.4. Both are new with CH32H417 - QFN88 is
+  # CH32H417MEU6 and QFN128 is CH32H417QEU6. QFN128 is the largest package in this
+  # library and the finest pitch in it: 32 pins a side at 0.35 mm.
+  - { id: QFN88,    kind: quad, pins: 88,  pitch: 0.4,  body: [10, 10], epad: true }
+  - { id: QFN128,   kind: quad, pins: 128, pitch: 0.35, body: [12.3, 12.3], epad: true }
 
   # ---- quad, leaded -------------------------------------------------------
   - { id: LQFP32,   kind: quad, pins: 32,  pitch: 0.8,  body: [7, 7] }
@@ -804,11 +829,1628 @@ packages:
 # Future: BGA / WLCSP need a grid layout (rows A..T x columns 1..n). Not needed for WCH yet.
 
 </script>
+<script type="text/x-yaml" id="yaml-mcu-CH32H417" data-file="data/mcus/CH32H417.yaml">
+# =============================================================================
+#  CH32H417 - extracted from CH32H417/H416/H415 Datasheet V1.8 (DS), CH32H417
+#  Reference Manual V1.7 (RM) and the EVT package, all under data/sources/H417/.
+#
+#  THIS IS THE FIRST AF-MUXED PART IN THE REPO, and it is why `signal_pins:` and
+#  `codegen.remap.style: af` exist. Every other part here moves a whole peripheral's
+#  pins with ONE register field (CH32V003/V005/V006) or ONE macro call (CH32X035).
+#  This one gives every PIN four bits in `GPIOx_AFRL`/`AFRH` - `AFRy[3:0]` = AF0..AF15,
+#  RM 9.3.2.2, applied by `GPIO_PinAFConfig` - so each signal picks its pin ALONE.
+#  A `remaps:` list cannot express that: 70 % of this part's 418 signals reach more
+#  than one pin, and enumerating the legal combinations would need 8.5e20 entries.
+#  `python tools/extract_h417_pins.py --audit` prints the measurement.
+#
+#  The `packages:`, `pins:` and `signal_pins:` blocks below are EMITTED by
+#  `tools/extract_h417_pins.py --yaml`, not transcribed. 284 package assignments and
+#  950 pin-AF pairs cannot be hand-copied without an error, and an error here is
+#  invisible: a wrong AF code compiles and the pin carries the wrong function.
+#  Re-emit and diff after any change to the datasheet.
+#
+#  SCOPE. This part has ~47 peripheral families and a 68,330-line reference manual.
+#  Twelve connectivity and timer peripherals are modelled here - enough to exercise
+#  the mechanism on real silicon across five ports and AF codes 1..14. Everything
+#  else is listed as absent-by-omission in data/mcus/CH32H417.notes.md rather than
+#  half-modelled. See that file before adding to this one.
+# =============================================================================
+
+mcu:
+  name: CH32H417
+  vendor: WCH
+  family: CH32H41x
+  # DUAL CORE, and `core:` has room for one name. DS "Feature": "Dual-core structure:
+  # QingKe RISC-V5F and RISC-V3F", "V5F up to 400MHz, V3F up to 160MHz". PlatformIO
+  # models the split as separate board files per package (`_V5F` / `_V3F`), and how
+  # this file should express it is an open question in the notes - so both cores are
+  # named here rather than one being silently dropped.
+  core: QingKe RISC-V5F (400 MHz) + RISC-V3F (160 MHz)
+  flash_kb: 960
+  sram_kb: 896
+  vdd_v: [3.0, 3.6]
+  max_sysclk_mhz: 400
+  default_package: QFN128
+  # DS p.1 model table for the resources; DS ch.4 ordering table and DS Table 2-1-1
+  # for the part numbers. THE TWO DISAGREE about which family MEU6 and WEU6 belong to
+  # - the model table calls them CH32H416 - and the disagreement is 3 sources to 1:
+  # Table 2-1-1 is titled "CH32H417 Pin definitions" with columns H417WEU6/MEU6/QEU6,
+  # ch.4 names them CH32H417MEU6/WEU6, and PlatformIO ships genericCH32H417{Q,M,W}EU6.
+  # Recorded in full in the notes; AGENT-1 owns the final call.
+  #
+  # io_count is the model table's own "GPIO port number" row, and all three match the
+  # extracted pin tables exactly (95 / 65 / 50) - which is what caught a parser bug in
+  # the extractor rather than the other way round.
+  variants:
+    CH32H417QEU6: { package: QFN128, flash_kb: 960, sram_kb: 896, temp: 85, io_count: 95, pio_board: genericCH32H417QEU6 }
+    CH32H417MEU6: { package: QFN88,  flash_kb: 960, sram_kb: 896, temp: 85, io_count: 65, pio_board: genericCH32H417MEU6,
+                    notes: "DS p.1 calls this CH32H416MEU6; DS Table 2-1-1, DS ch.4 and PlatformIO all call it CH32H417. Unresolved - see the notes file." }
+    CH32H417WEU6: { package: QFN68,  flash_kb: 960, sram_kb: 896, temp: 85, io_count: 50, pio_board: genericCH32H417WEU6,
+                    notes: "Same naming disagreement as MEU6. No SDIO, no USBFS and one QSPI on this package (DS p.1 resource table)." }
+
+# -----------------------------------------------------------------------------
+# DS Table 2-1-1, three package columns. EMITTED - see the header.
+packages:
+  QFN68:
+    0: VSS
+    1: SSTXB
+    2: SSTXA
+    3: VDD12A
+    4: SSRXB
+    5: SSRXA
+    6: VDD33
+    7: VDDK
+    8: MDIRN
+    9: MDIRP
+    10: MDITN
+    11: MDITP
+    12: VDD33
+    13: XI
+    14: XO
+    15: PC0
+    16: PC1
+    17: PC2
+    18: PC3
+    19: VDD33A
+    20: PA5
+    21: PB0
+    22: PB1
+    23: PE13
+    24: PE14
+    25: PE15
+    26: PB10
+    27: PB11
+    28: VIO18
+    29: VDDIO
+    30: PB12
+    31: PB13
+    32: PB14
+    33: PD10
+    34: PD11
+    35: PD12
+    36: PD13
+    37: PD14
+    38: PD15
+    39: PF0
+    40: PF1
+    41: PF2
+    42: PC6
+    43: PC7
+    44: PC8
+    45: PC9
+    46: PA13
+    47: PA14
+    48: PA15
+    49: PC10
+    50: PC11
+    51: PC12
+    52: PD0
+    53: PD1
+    54: PD2
+    55: PD3
+    56: PD4
+    57: PD5
+    58: PD6
+    59: PD7
+    60: PF3
+    61: PF4
+    62: PF5
+    63: PE0
+    64: PE1
+    65: PF14
+    66: VIO18
+    67: PB8
+    68: PB9
+  QFN88:
+    0: VSS
+    1: VDD33
+    2: PE3
+    3: PE4
+    4: PE5
+    5: PE6
+    6: VDDK
+    7: MDIRN
+    8: MDIRP
+    9: MDITN
+    10: MDITP
+    11: VDD33
+    12: XI
+    13: XO
+    14: NRST
+    15: PC0
+    16: PC1
+    17: PC2
+    18: PC3
+    19: VDDIO
+    20: VDD33A
+    21: PA0
+    22: PA4
+    23: PA5
+    24: PB0
+    25: PB1
+    26: PE10
+    27: PE11
+    28: PE12
+    29: PE13
+    30: PE14
+    31: PE15
+    32: PB10
+    33: PB11
+    34: VIO18
+    35: VDDIO
+    36: PB12
+    37: PB13
+    38: PB14
+    39: PD10
+    40: PD11
+    41: PD12
+    42: PD13
+    43: PD14
+    44: PD15
+    45: PF0
+    46: PF1
+    47: PF2
+    48: VDDK
+    49: VIO18
+    50: PC6
+    51: PC7
+    52: PC8
+    53: PC9
+    54: PA9
+    55: PA10
+    56: PA11
+    57: PA12
+    58: PA13
+    59: VDD33
+    60: PA14
+    61: PA15
+    62: PC10
+    63: PC11
+    64: PC12
+    65: PD0
+    66: PD1
+    67: PD2
+    68: PD3
+    69: PD4
+    70: PD5
+    71: PD6
+    72: PD7
+    73: PF3
+    74: PF4
+    75: PF5
+    76: PE0
+    77: PE1
+    78: PF14
+    79: VIO18
+    80: PB3
+    81: PB4
+    82: PB8
+    83: PB9
+    84: SSTXB
+    85: SSTXA
+    86: VDD12A
+    87: SSRXB
+    88: SSRXA
+  QFN128:
+    0: VSS
+    1: PE2
+    2: PE3
+    3: PE4
+    4: PE5
+    5: PE6
+    6: VDDIO
+    7: VBAT
+    8: PC13
+    9: PC14
+    10: PC15
+    11: VDDK
+    12: MDIRN
+    13: MDIRP
+    14: MDITN
+    15: MDITP
+    16: VDD33
+    17: PF6
+    18: PF7
+    19: PF8
+    20: PF9
+    21: PF10
+    22: VSS
+    23: XI
+    24: XO
+    25: NRST
+    26: PC0
+    27: PC1
+    28: PC2
+    29: PC3
+    30: VDDIO
+    31: VSSA
+    32: VREFP
+    33: VDD33A
+    34: PA0
+    35: PA1
+    36: PA2
+    37: PA3
+    38: VDDIO
+    39: PA4
+    40: PA5
+    41: PA6
+    42: PA7
+    43: PC4
+    44: PC5
+    45: PB0
+    46: PB1
+    47: PB2
+    48: PF11
+    49: PF12
+    50: PF13
+    51: VDDIO
+    52: PE7
+    53: PE8
+    54: PE9
+    55: PE10
+    56: PE11
+    57: PE12
+    58: PE13
+    59: PE14
+    60: PE15
+    61: PB10
+    62: PB11
+    63: VIO18
+    64: VDDIO
+    65: PB12
+    66: PB13
+    67: PB14
+    68: PB15
+    69: PD8
+    70: PD9
+    71: PD10
+    72: PD11
+    73: PD12
+    74: PD13
+    75: PD14
+    76: PD15
+    77: PF0
+    78: PF1
+    79: PF2
+    80: VDDK
+    81: VIO18
+    82: VDDIO
+    83: PC6
+    84: PC7
+    85: PC8
+    86: PC9
+    87: PA8
+    88: PA9
+    89: PA10
+    90: PA11
+    91: PA12
+    92: PA13
+    93: VDD33
+    94: PA14
+    95: PA15
+    96: PC10
+    97: PC11
+    98: PC12
+    99: PD0
+    100: PD1
+    101: PD2
+    102: PD3
+    103: PD4
+    104: PD5
+    105: VIO18
+    106: PD6
+    107: PD7
+    108: PF3
+    109: PF4
+    110: PF5
+    111: PE0
+    112: PE1
+    113: PF14
+    114: VDDIO
+    115: PB3
+    116: PB4
+    117: PB5
+    118: PB6
+    119: PB7
+    120: PB8
+    121: PB9
+    122: VSS
+    123: SSTXB
+    124: SSTXA
+    125: VDD12A
+    126: SSRXB
+    127: SSRXA
+    128: VDD33
+
+# -----------------------------------------------------------------------------
+# EMITTED. Pin TYPE is classified by name here: P<port><n> is io, V* is power or
+# ground, and the rest (XI/XO, the Ethernet MDI pairs, the USB SuperSpeed pairs,
+# NRST) are fixed-function pads. The DS's own "I/O characteristic" column carries
+# more - FT for 5 V tolerance, A for analog, SDP for the SerDes pads - and it is NOT
+# extracted yet, so `analog:` and `five_volt_tolerant:` are absent rather than
+# guessed. That is a declared gap in the notes, not an oversight: the column is
+# split across lines by the PDF conversion and wants its own pass.
+pins:
+  MDIRN: { type: sys }
+  MDIRP: { type: sys }
+  MDITN: { type: sys }
+  MDITP: { type: sys }
+  NRST: { type: reset }
+  PA0: { type: io }
+  PA1: { type: io }
+  PA10: { type: io }
+  PA11: { type: io }
+  PA12: { type: io }
+  PA13: { type: io }
+  PA14: { type: io }
+  PA15: { type: io }
+  PA2: { type: io }
+  PA3: { type: io }
+  PA4: { type: io }
+  PA5: { type: io }
+  PA6: { type: io }
+  PA7: { type: io }
+  PA8: { type: io }
+  PA9: { type: io }
+  PB0: { type: io }
+  PB1: { type: io }
+  PB10: { type: io }
+  PB11: { type: io }
+  PB12: { type: io }
+  PB13: { type: io }
+  PB14: { type: io }
+  PB15: { type: io }
+  PB2: { type: io }
+  PB3: { type: io }
+  PB4: { type: io }
+  PB5: { type: io }
+  PB6: { type: io }
+  PB7: { type: io }
+  PB8: { type: io }
+  PB9: { type: io }
+  PC0: { type: io }
+  PC1: { type: io }
+  PC10: { type: io }
+  PC11: { type: io }
+  PC12: { type: io }
+  PC13: { type: io }
+  PC14: { type: io }
+  PC15: { type: io }
+  PC2: { type: io }
+  PC3: { type: io }
+  PC4: { type: io }
+  PC5: { type: io }
+  PC6: { type: io }
+  PC7: { type: io }
+  PC8: { type: io }
+  PC9: { type: io }
+  PD0: { type: io }
+  PD1: { type: io }
+  PD10: { type: io }
+  PD11: { type: io }
+  PD12: { type: io }
+  PD13: { type: io }
+  PD14: { type: io }
+  PD15: { type: io }
+  PD2: { type: io }
+  PD3: { type: io }
+  PD4: { type: io }
+  PD5: { type: io }
+  PD6: { type: io }
+  PD7: { type: io }
+  PD8: { type: io }
+  PD9: { type: io }
+  PE0: { type: io }
+  PE1: { type: io }
+  PE10: { type: io }
+  PE11: { type: io }
+  PE12: { type: io }
+  PE13: { type: io }
+  PE14: { type: io }
+  PE15: { type: io }
+  PE2: { type: io }
+  PE3: { type: io }
+  PE4: { type: io }
+  PE5: { type: io }
+  PE6: { type: io }
+  PE7: { type: io }
+  PE8: { type: io }
+  PE9: { type: io }
+  PF0: { type: io }
+  PF1: { type: io }
+  PF10: { type: io }
+  PF11: { type: io }
+  PF12: { type: io }
+  PF13: { type: io }
+  PF14: { type: io }
+  PF2: { type: io }
+  PF3: { type: io }
+  PF4: { type: io }
+  PF5: { type: io }
+  PF6: { type: io }
+  PF7: { type: io }
+  PF8: { type: io }
+  PF9: { type: io }
+  SSRXA: { type: sys }
+  SSRXB: { type: sys }
+  SSTXA: { type: sys }
+  SSTXB: { type: sys }
+  VBAT: { type: power }
+  VDD12A: { type: power }
+  VDD33: { type: power }
+  VDD33A: { type: power }
+  VDDIO: { type: power }
+  VDDK: { type: power }
+  VIO18: { type: power }
+  VREFP: { type: power }
+  VSS: { type: ground }
+  VSSA: { type: ground }
+  XI: { type: sys }
+  XO: { type: sys }
+
+# -----------------------------------------------------------------------------
+peripherals:
+
+  # ---------------- System Core ----------------
+  SYS:
+    category: System Core
+    # The debug pins are NOT AF-selected: DS Table 2-1-1 lists SWCLK on PB8 and
+    # SWIO/SWDIO on PB9 with no (AFn) marker at all, because they are the reset-state
+    # function of those pads rather than an alternate function. So these entries carry
+    # a pin and no `af:`, and `codegen.skip_signals` (SYS by default) keeps the
+    # generator away from them entirely - driving the debug interface or the reset pin
+    # from GPIO_Init would be actively harmful.
+    notes: >
+      DS "Feature": "Support 1-wire (default) and 2-wire debugging modes". NRST is its
+      own pad (DS Table 2-1-1, QFN128 pin 25) rather than a multiplexed GPIO, which is
+      a change from every CH32V00x part in this repo - there is no RST_MODE option byte
+      deciding whether a GPIO is the reset.
+    settings:
+      - name: Debug
+        choices:
+          - { name: No Debug }
+          - { name: 1-wire SDI (SWIO), signals: [SWIO], default: true }
+          - { name: 2-wire (SWIO + SWCLK), signals: [SWIO, SWCLK] }
+    signal_pins:
+      SWIO:  [{ pin: PB9, notes: "SWIO/SWDIO, DS Table 2-1-1 - no AF code: this is the pad's reset-state function" }]
+      SWCLK: [{ pin: PB8, notes: "SWCLK, DS Table 2-1-1 - likewise" }]
+
+  # ---------------- Connectivity ----------------
+  USART1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+          - { name: Transmit only, signals: [TX] }
+          - { name: Receive only, signals: [RX] }
+          - { name: LIN, signals: [TX, RX] }
+      - name: Hardware Flow Control
+        choices:
+          - { name: Disable }
+          - { name: CTS only, signals: [CTS] }
+          - { name: RTS only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    # DS Table 2-2-9. Each signal chooses independently - TX on PA9 with RX on PD12 is
+    # legal, and so is every other combination of the four and four.
+    signal_pins:
+      CK: [{ pin: PD11, af: 14 }, { pin: PA8, af: 7 }]
+      CTS: [{ pin: PD15, af: 14 }, { pin: PA11, af: 7 }]
+      RTS: [{ pin: PD14, af: 14 }, { pin: PA12, af: 7 }]
+      RX: [{ pin: PB15, af: 4 }, { pin: PD12, af: 14 }, { pin: PA10, af: 7 }, { pin: PB7, af: 7 }]
+      TX: [{ pin: PB14, af: 4 }, { pin: PD13, af: 14 }, { pin: PA9, af: 7 }, { pin: PB6, af: 7 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part; CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS. With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+
+  USART2:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+          - { name: Transmit only, signals: [TX] }
+          - { name: Receive only, signals: [RX] }
+          - { name: LIN, signals: [TX, RX] }
+      - name: Hardware Flow Control
+        choices:
+          - { name: Disable }
+          - { name: CTS only, signals: [CTS] }
+          - { name: RTS only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    signal_pins:
+      CK: [{ pin: PA4, af: 7 }, { pin: PD7, af: 7 }]
+      CTS: [{ pin: PA0, af: 7 }, { pin: PD3, af: 7 }]
+      RTS: [{ pin: PA1, af: 7 }, { pin: PD4, af: 7 }]
+      RX: [{ pin: PA3, af: 7 }, { pin: PD6, af: 7 }]
+      TX: [{ pin: PA2, af: 7 }, { pin: PD5, af: 7 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part; CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS. With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+
+  USART3:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Asynchronous, signals: [TX, RX] }
+          - { name: Synchronous, signals: [TX, RX, CK] }
+          - { name: Single Wire (Half-Duplex), signals: [TX] }
+          - { name: Transmit only, signals: [TX] }
+          - { name: Receive only, signals: [RX] }
+          - { name: LIN, signals: [TX, RX] }
+      - name: Hardware Flow Control
+        choices:
+          - { name: Disable }
+          - { name: CTS only, signals: [CTS] }
+          - { name: RTS only, signals: [RTS] }
+          - { name: CTS/RTS, signals: [CTS, RTS] }
+    signal_pins:
+      CK: [{ pin: PB12, af: 7 }, { pin: PD10, af: 7 }, { pin: PA11, af: 4 }, { pin: PC12, af: 7 }]
+      CTS: [{ pin: PB13, af: 7 }, { pin: PD11, af: 7 }, { pin: PA15, af: 4 }]
+      RTS: [{ pin: PB14, af: 7 }, { pin: PD12, af: 7 }, { pin: PA12, af: 4 }]
+      RX: [{ pin: PB11, af: 7 }, { pin: PD9, af: 7 }, { pin: PA14, af: 4 }, { pin: PC11, af: 7 }]
+      TX: [{ pin: PB10, af: 7 }, { pin: PD8, af: 7 }, { pin: PA13, af: 4 }, { pin: PC10, af: 7 }]
+    # THE WORD LENGTHS ARE NOT THE CH32V00x SET. ch32h417_usart.h:71-75 offers FIVE -
+    # 5b, 6b, 7b, 8b and 9b - where every CH32V00x part in this repo has two.
+    params:
+      - key: baud
+        name: Baud rate
+        struct: USART_InitTypeDef
+        sdk_field: USART_BaudRate
+        type: int
+        default: 115200
+        min: 110
+        max: 25000000
+        unit: Bd
+        help: "USART_BRR. Ceiling is fCK/16; this part's clock tree is not modelled yet, so the bound is the documented peripheral maximum rather than a computed one."
+      - key: word
+        name: Word length
+        struct: USART_InitTypeDef
+        sdk_field: USART_WordLength
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 5 bits, value: 4, sdk: USART_WordLength_5b }
+          - { name: 6 bits, value: 3, sdk: USART_WordLength_6b }
+          - { name: 7 bits, value: 2, sdk: USART_WordLength_7b }
+          - { name: 8 bits, value: 0, sdk: USART_WordLength_8b }
+          - { name: 9 bits, value: 1, sdk: USART_WordLength_9b }
+        help: "USART_CTLR1 M. Five lengths on this part; CH32V003/V005/V006 have only 8b and 9b."
+      - key: parity
+        name: Parity
+        struct: USART_InitTypeDef
+        sdk_field: USART_Parity
+        type: enum
+        default: "None"
+        options:
+          - { name: "None", value: 0, sdk: USART_Parity_No }
+          - { name: Even  , value: 2, sdk: USART_Parity_Even }
+          - { name: Odd   , value: 3, sdk: USART_Parity_Odd }
+        help: "USART_CTLR1 PCE and PS. With parity on, the parity bit takes the last data bit."
+      - key: stop
+        name: Stop bits
+        struct: USART_InitTypeDef
+        sdk_field: USART_StopBits
+        type: enum
+        default: "1"
+        options:
+          - { name: "1"  , value: 0, sdk: USART_StopBits_1 }
+          - { name: "0.5", value: 1, sdk: USART_StopBits_0_5 }
+          - { name: "2"  , value: 2, sdk: USART_StopBits_2 }
+          - { name: "1.5", value: 3, sdk: USART_StopBits_1_5 }
+        help: "USART_CTLR2 STOP[13:12], in register order: 00 = 1, 01 = 0.5, 10 = 2, 11 = 1.5."
+
+  SPI1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Full-Duplex Master, signals: [SCK, MISO, MOSI] }
+          - { name: Full-Duplex Slave, signals: [SCK, MISO, MOSI] }
+          - { name: Half-Duplex Master, signals: [SCK, MOSI] }
+          - { name: Half-Duplex Slave, signals: [SCK, MISO] }
+          - { name: Receive Only Master, signals: [SCK, MISO] }
+          - { name: Transmit Only Master, signals: [SCK, MOSI] }
+      - name: Hardware NSS Signal
+        choices:
+          - { name: Disable (software NSS) }
+          - { name: Hardware NSS Input, signals: [NSS] }
+          - { name: Hardware NSS Output, signals: [NSS] }
+    # DS Table 2-2-8. Note PF6/PF7 carry SPI1_NSS/SCK at AF3 while PA4/PA5 carry the
+    # same two at AF5 - the AF code is a property of the PIN, not of the peripheral,
+    # which is the fact `remaps:` has no way to hold.
+    signal_pins:
+      MISO: [{ pin: PF9, af: 3 }, { pin: PA6, af: 5 }, { pin: PF3, af: 5 }, { pin: PB4, af: 5 }]
+      MOSI: [{ pin: PF8, af: 3 }, { pin: PA7, af: 5 }, { pin: PD7, af: 5 }, { pin: PB5, af: 5 }]
+      NSS: [{ pin: PF6, af: 3 }, { pin: PA4, af: 5 }, { pin: PA15, af: 5 }, { pin: PF4, af: 5 }]
+      SCK: [{ pin: PF7, af: 3 }, { pin: PA5, af: 5 }, { pin: PF5, af: 5 }, { pin: PB3, af: 5 }]
+    # THE PRESCALER MACROS ARE NOT THE CH32V00x SET EITHER. ch32h417_spi.h:106-113
+    # names them SPI_BaudRatePrescaler_Mode0..Mode7, not _2 / _4 / ... / _256. Which
+    # divider each Mode selects depends on the SPI clock tree, which is not modelled
+    # here, so the options carry the header's own names rather than a division this
+    # file cannot yet prove. Copying CH32V006's list would fail verify_sdk_names.py.
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
+        type: enum
+        default: Mode 3
+        options:
+          - { name: Mode 0, value: 0, sdk: SPI_BaudRatePrescaler_Mode0 }
+          - { name: Mode 1, value: 1, sdk: SPI_BaudRatePrescaler_Mode1 }
+          - { name: Mode 2, value: 2, sdk: SPI_BaudRatePrescaler_Mode2 }
+          - { name: Mode 3, value: 3, sdk: SPI_BaudRatePrescaler_Mode3 }
+          - { name: Mode 4, value: 4, sdk: SPI_BaudRatePrescaler_Mode4 }
+          - { name: Mode 5, value: 5, sdk: SPI_BaudRatePrescaler_Mode5 }
+          - { name: Mode 6, value: 6, sdk: SPI_BaudRatePrescaler_Mode6 }
+          - { name: Mode 7, value: 7, sdk: SPI_BaudRatePrescaler_Mode7 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111. The header names these Mode0..Mode7 rather than by divider."
+      - key: cpol
+        name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
+        help: SPI_CTLR1 CPOL, bit 1.
+      - key: cpha
+        name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
+        type: enum
+        default: 1 Edge
+        options:
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
+        help: SPI_CTLR1 CPHA, bit 0.
+      - key: datasize
+        name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
+        help: SPI_CTLR1 DFF, bit 11.
+      - key: firstbit
+        name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
+        type: enum
+        default: MSB First
+        options:
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
+        help: SPI_CTLR1 LSBFIRST, bit 7.
+
+  SPI2:
+    category: Connectivity
+    notes: SPI2 shares its pads with I2S2; only the SPI half is modelled here (see the notes file).
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: Full-Duplex Master, signals: [SCK, MISO, MOSI] }
+          - { name: Full-Duplex Slave, signals: [SCK, MISO, MOSI] }
+          - { name: Half-Duplex Master, signals: [SCK, MOSI] }
+          - { name: Half-Duplex Slave, signals: [SCK, MISO] }
+          - { name: Receive Only Master, signals: [SCK, MISO] }
+          - { name: Transmit Only Master, signals: [SCK, MOSI] }
+      - name: Hardware NSS Signal
+        choices:
+          - { name: Disable (software NSS) }
+          - { name: Hardware NSS Input, signals: [NSS] }
+          - { name: Hardware NSS Output, signals: [NSS] }
+      - name: Master clock output
+        choices:
+          - { name: Disable }
+          - { name: MCK, signals: [MCK] }
+    signal_pins:
+      MCK: [{ pin: PC6, af: 5 }]
+      MISO: [{ pin: PC2, af: 5 }, { pin: PB14, af: 5 }]
+      MOSI: [{ pin: PC1, af: 5 }, { pin: PC3, af: 5 }, { pin: PB15, af: 5 }]
+      NSS: [{ pin: PB12, af: 5 }, { pin: PA11, af: 5 }, { pin: PB4, af: 7 }, { pin: PB9, af: 5 }]
+      SCK: [{ pin: PB10, af: 5 }, { pin: PB13, af: 5 }, { pin: PA9, af: 5 }, { pin: PA12, af: 5 }, { pin: PD3, af: 5 }]
+    # THE PRESCALER MACROS ARE NOT THE CH32V00x SET EITHER. ch32h417_spi.h:106-113
+    # names them SPI_BaudRatePrescaler_Mode0..Mode7, not _2 / _4 / ... / _256. Which
+    # divider each Mode selects depends on the SPI clock tree, which is not modelled
+    # here, so the options carry the header's own names rather than a division this
+    # file cannot yet prove. Copying CH32V006's list would fail verify_sdk_names.py.
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_BaudRatePrescaler
+        type: enum
+        default: Mode 3
+        options:
+          - { name: Mode 0, value: 0, sdk: SPI_BaudRatePrescaler_Mode0 }
+          - { name: Mode 1, value: 1, sdk: SPI_BaudRatePrescaler_Mode1 }
+          - { name: Mode 2, value: 2, sdk: SPI_BaudRatePrescaler_Mode2 }
+          - { name: Mode 3, value: 3, sdk: SPI_BaudRatePrescaler_Mode3 }
+          - { name: Mode 4, value: 4, sdk: SPI_BaudRatePrescaler_Mode4 }
+          - { name: Mode 5, value: 5, sdk: SPI_BaudRatePrescaler_Mode5 }
+          - { name: Mode 6, value: 6, sdk: SPI_BaudRatePrescaler_Mode6 }
+          - { name: Mode 7, value: 7, sdk: SPI_BaudRatePrescaler_Mode7 }
+        help: "SPI_CTLR1 BR[5:3], codes 000..111. The header names these Mode0..Mode7 rather than by divider."
+      - key: cpol
+        name: Clock polarity (CPOL)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPOL
+        type: enum
+        default: Low
+        options:
+          - { name: Low , value: 0, sdk: SPI_CPOL_Low }
+          - { name: High, value: 1, sdk: SPI_CPOL_High }
+        help: SPI_CTLR1 CPOL, bit 1.
+      - key: cpha
+        name: Clock phase (CPHA)
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_CPHA
+        type: enum
+        default: 1 Edge
+        options:
+          - { name: 1 Edge, value: 0, sdk: SPI_CPHA_1Edge }
+          - { name: 2 Edge, value: 1, sdk: SPI_CPHA_2Edge }
+        help: SPI_CTLR1 CPHA, bit 0.
+      - key: datasize
+        name: Data size
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_DataSize
+        type: enum
+        default: 8 bits
+        options:
+          - { name: 8 bits , value: 0, sdk: SPI_DataSize_8b }
+          - { name: 16 bits, value: 1, sdk: SPI_DataSize_16b }
+        help: SPI_CTLR1 DFF, bit 11.
+      - key: firstbit
+        name: First bit
+        struct: SPI_InitTypeDef
+        sdk_field: SPI_FirstBit
+        type: enum
+        default: MSB First
+        options:
+          - { name: MSB First, value: 0, sdk: SPI_FirstBit_MSB }
+          - { name: LSB First, value: 1, sdk: SPI_FirstBit_LSB }
+        help: SPI_CTLR1 LSBFIRST, bit 7.
+
+  I2C1:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: I2C, signals: [SCL, SDA] }
+          - { name: SMBus, signals: [SCL, SDA, SMBA] }
+    signal_pins:
+      SCL: [{ pin: PB6, af: 4 }, { pin: PB8, af: 4 }]
+      SDA: [{ pin: PB7, af: 4 }, { pin: PB9, af: 4 }]
+      SMBA: [{ pin: PB5, af: 4 }]
+    params:
+      - key: speed
+        name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
+        type: int
+        default: 100000
+        min: 1000
+        max: 1000000
+        unit: Hz
+        help: "I2C_CKCFGR CCR together with F/S. Above 100 kHz the peripheral must be in fast mode."
+      - key: duty
+        name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
+        type: enum
+        default: "2:1"
+        options:
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
+        help: "I2C_CKCFGR DUTY, bit 14. Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
+        type: enum
+        default: 7-bit
+        options:
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
+        help: I2C_OAR1 ADDMODE, bit 15.
+      - key: addr
+        name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0]. Only the low 7 bits are used in 7-bit addressing mode."
+
+  I2C2:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: I2C, signals: [SCL, SDA] }
+          - { name: SMBus, signals: [SCL, SDA, SMBA] }
+    signal_pins:
+      SCL: [{ pin: PC0, af: 9 }, { pin: PB10, af: 4 }]
+      SDA: [{ pin: PC1, af: 9 }, { pin: PB11, af: 4 }]
+      SMBA: [{ pin: PC2, af: 9 }, { pin: PB12, af: 4 }]
+    params:
+      - key: speed
+        name: Clock speed
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_ClockSpeed
+        type: int
+        default: 100000
+        min: 1000
+        max: 1000000
+        unit: Hz
+        help: "I2C_CKCFGR CCR together with F/S. Above 100 kHz the peripheral must be in fast mode."
+      - key: duty
+        name: Fast-mode duty cycle
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_DutyCycle
+        type: enum
+        default: "2:1"
+        options:
+          - { name: "2:1" , value: 0, sdk: I2C_DutyCycle_2 }
+          - { name: "16:9", value: 1, sdk: I2C_DutyCycle_16_9 }
+        help: "I2C_CKCFGR DUTY, bit 14. Ignored below 100 kHz, where the peripheral runs in standard mode."
+      - key: addrmode
+        name: Addressing mode
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_AcknowledgedAddress
+        type: enum
+        default: 7-bit
+        options:
+          - { name: 7-bit , value: 0, sdk: I2C_AcknowledgedAddress_7bit }
+          - { name: 10-bit, value: 1, sdk: I2C_AcknowledgedAddress_10bit }
+        help: I2C_OAR1 ADDMODE, bit 15.
+      - key: addr
+        name: Own address
+        struct: I2C_InitTypeDef
+        sdk_field: I2C_OwnAddress1
+        type: int
+        default: 0
+        min: 0
+        max: 1023
+        help: "I2C_OAR1 ADD[9:0]. Only the low 7 bits are used in 7-bit addressing mode."
+
+  I3C:
+    category: Connectivity
+    notes: DS Table 2-2-7. Four pin choices per line, spread across ports C, D, E and F.
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: I3C, signals: [SCL, SDA] }
+    signal_pins:
+      SCL: [{ pin: PF6, af: 5 }, { pin: PC4, af: 7 }, { pin: PE14, af: 3 }, { pin: PD9, af: 5 }]
+      SDA: [{ pin: PF7, af: 5 }, { pin: PC5, af: 7 }, { pin: PE15, af: 3 }, { pin: PD10, af: 5 }]
+    # I3C has NO single *_InitTypeDef the way USART and SPI do: ch32h417_i3c.h defines
+    # seven structs (I3C_Ctrl_BusTypeDef, I3C_CtrlConfTypeDef, I3C_TgtConfTypeDef and
+    # four more) split across controller, target and FIFO roles. The two bus-timing
+    # members that are a configuration choice are modelled here against
+    # I3C_Ctrl_BusTypeDef; the rest is protocol-stack state rather than pinout
+    # configuration and is declared absent in the notes rather than half-filled.
+    params:
+      - key: sda_hold
+        name: SDA hold time
+        struct: I3C_Ctrl_BusTypeDef
+        sdk_field: SDAHoldTime
+        type: enum
+        default: 0.5 cycle
+        options:
+          - { name: 0.5 cycle, value: 0, sdk: I3C_SDAHoldTime_0_5 }
+          - { name: 1.5 cycle, value: 1, sdk: I3C_SDAHoldTime_1_5 }
+        help: "ch32h417_i3c.h:246-247. How long SDA is held after the SCL falling edge."
+      - key: wait_time
+        name: Wait time before start
+        struct: I3C_Ctrl_BusTypeDef
+        sdk_field: WaitTime
+        type: enum
+        default: State 0
+        options:
+          - { name: State 0, value: 0, sdk: I3C_WaitTime_State_0 }
+          - { name: State 1, value: 1, sdk: I3C_WaitTime_State_1 }
+          - { name: State 2, value: 2, sdk: I3C_WaitTime_State_2 }
+          - { name: State 3, value: 3, sdk: I3C_WaitTime_State_3 }
+        help: "ch32h417_i3c.h:250-253. How long a controller waits before issuing a start."
+
+  # ---------------- Timers ----------------
+  TIM1:
+    category: Timers
+    notes: Advanced-control timer - 4 channels, 3 complementary outputs and TWO break inputs (DS Table 2-2-4).
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH1] }
+          - { name: PWM Generation CH1, signals: [CH1] }
+          - { name: PWM Generation CH1 CH1N, signals: [CH1, CH1N] }
+          - { name: PWM Generation CH1N only, signals: [CH1N] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+          - { name: PWM Generation CH2 CH2N, signals: [CH2, CH2N] }
+          - { name: PWM Generation CH2N only, signals: [CH2N] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+          - { name: PWM Generation CH3 CH3N, signals: [CH3, CH3N] }
+          - { name: PWM Generation CH3N only, signals: [CH3N] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR (external), signals: [ETR] }
+      # TWO break inputs, which no CH32V00x part in this repo has. Offered as one
+      # setting with four states rather than two settings, because they are one feature.
+      - name: Break Input
+        choices:
+          - { name: Disable }
+          - { name: BKIN, signals: [BKIN] }
+          - { name: BKIN2, signals: [BKIN2] }
+          - { name: BKIN + BKIN2, signals: [BKIN, BKIN2] }
+    signal_pins:
+      BKIN: [{ pin: PA6, af: 1 }, { pin: PE15, af: 1 }, { pin: PB12, af: 1 }]
+      BKIN2: [{ pin: PE6, af: 1 }, { pin: PA5, af: 2 }, { pin: PA12, af: 12 }]
+      CH1: [{ pin: PE9, af: 1 }, { pin: PA8, af: 1 }]
+      CH1N: [{ pin: PA7, af: 1 }, { pin: PE8, af: 1 }, { pin: PB13, af: 1 }]
+      CH2: [{ pin: PE11, af: 1 }, { pin: PA9, af: 1 }]
+      CH2N: [{ pin: PB0, af: 1 }, { pin: PE10, af: 1 }, { pin: PB14, af: 1 }]
+      CH3: [{ pin: PE13, af: 1 }, { pin: PA10, af: 1 }]
+      CH3N: [{ pin: PB1, af: 1 }, { pin: PE12, af: 1 }, { pin: PB15, af: 1 }]
+      CH4: [{ pin: PE14, af: 1 }, { pin: PA11, af: 1 }]
+      ETR: [{ pin: PE7, af: 1 }, { pin: PA12, af: 1 }]
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
+      - key: rcr
+        name: Repetition counter (RPTCR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_RepetitionCounter
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: "TIM1_RPTCR. An update event happens every (value + 1) counter cycles. Advanced timer only, so it is ABSENT from TIM2/3/4 rather than offered and ignored."
+
+  TIM2:
+    category: Timers
+    # CH1 and ETR are ONE pad in every option the datasheet lists, exactly as they are
+    # on CH32V006, so they are modelled as one signal rather than two that would fight.
+    notes: General-purpose timer. CH1 and ETR share a pad (DS Table 2-2-4 writes the pair as TIM2_CH1_ETR).
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH1_ETR] }
+          - { name: PWM Generation CH1, signals: [CH1_ETR] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR (shares the CH1 pad), signals: [CH1_ETR] }
+      - name: Encoder Mode
+        choices:
+          - { name: Disable }
+          - { name: Encoder CH1/CH2, signals: [CH1_ETR, CH2] }
+    signal_pins:
+      CH1_ETR: [{ pin: PA0, af: 1 }, { pin: PA5, af: 1 }, { pin: PA15, af: 1 }]
+      CH2: [{ pin: PA1, af: 1 }, { pin: PB3, af: 1 }]
+      CH3: [{ pin: PA2, af: 1 }, { pin: PB10, af: 1 }]
+      CH4: [{ pin: PA3, af: 1 }, { pin: PB11, af: 1 }]
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
+
+  TIM3:
+    category: Timers
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH1] }
+          - { name: PWM Generation CH1, signals: [CH1] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR (external), signals: [ETR] }
+      - name: Encoder Mode
+        choices:
+          - { name: Disable }
+          - { name: Encoder CH1/CH2, signals: [CH1, CH2] }
+    signal_pins:
+      CH1: [{ pin: PA6, af: 2 }, { pin: PC6, af: 2 }, { pin: PD3, af: 9 }, { pin: PB4, af: 2 }]
+      CH2: [{ pin: PA7, af: 2 }, { pin: PC7, af: 2 }, { pin: PD4, af: 9 }, { pin: PB5, af: 2 }]
+      CH3: [{ pin: PB0, af: 2 }, { pin: PC8, af: 2 }, { pin: PD5, af: 9 }]
+      CH4: [{ pin: PB1, af: 2 }, { pin: PC9, af: 2 }, { pin: PD6, af: 9 }]
+      ETR: [{ pin: PD2, af: 2 }]
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
+
+  TIM4:
+    category: Timers
+    settings:
+      - name: Channel1
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH1] }
+          - { name: PWM Generation CH1, signals: [CH1] }
+      - name: Channel2
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH2] }
+          - { name: PWM Generation CH2, signals: [CH2] }
+      - name: Channel3
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH3] }
+          - { name: PWM Generation CH3, signals: [CH3] }
+      - name: Channel4
+        choices:
+          - { name: Disable }
+          - { name: Input Capture, signals: [CH4] }
+          - { name: PWM Generation CH4, signals: [CH4] }
+      - name: Clock Source
+        choices:
+          - { name: Internal Clock }
+          - { name: ETR (external), signals: [ETR] }
+      - name: Encoder Mode
+        choices:
+          - { name: Disable }
+          - { name: Encoder CH1/CH2, signals: [CH1, CH2] }
+    signal_pins:
+      CH1: [{ pin: PE3, af: 2 }, { pin: PD12, af: 2 }, { pin: PB6, af: 2 }]
+      CH2: [{ pin: PE4, af: 2 }, { pin: PD13, af: 2 }, { pin: PB7, af: 2 }]
+      CH3: [{ pin: PE5, af: 2 }, { pin: PD14, af: 2 }, { pin: PB8, af: 2 }]
+      CH4: [{ pin: PE6, af: 2 }, { pin: PD15, af: 2 }, { pin: PB9, af: 2 }]
+      ETR: [{ pin: PB4, af: 10 }]
+    params:
+      - key: prescaler
+        name: Prescaler (PSC)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "TIMx_PSC. Counter clock = the timer's bus clock / (Prescaler + 1)."
+      - key: period
+        name: Counter period (ATRLR)
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_Period
+        type: int
+        default: 65535
+        min: 0
+        max: 65535
+        help: "TIMx_ATRLR, shown at its reset value. One period is (Counter period + 1) counter ticks."
+      - key: counter
+        name: Counter mode
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_CounterMode
+        type: enum
+        default: Up
+        options:
+          - { name: Up              , value: 0, sdk: TIM_CounterMode_Up }
+          - { name: Down            , value: 1, sdk: TIM_CounterMode_Down }
+          - { name: Center aligned 1, value: 2, sdk: TIM_CounterMode_CenterAligned1 }
+          - { name: Center aligned 2, value: 3, sdk: TIM_CounterMode_CenterAligned2 }
+          - { name: Center aligned 3, value: 4, sdk: TIM_CounterMode_CenterAligned3 }
+        help: "TIMx_CTLR1 DIR (bit 4) and CMS[6:5]."
+      - key: ckd
+        name: Internal clock division
+        struct: TIM_TimeBaseInitTypeDef
+        sdk_field: TIM_ClockDivision
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: TIM_CKD_DIV1 }
+          - { name: "2", value: 1, sdk: TIM_CKD_DIV2 }
+          - { name: "4", value: 2, sdk: TIM_CKD_DIV4 }
+        help: "TIMx_CTLR1 CKD[9:8]. Divides the clock feeding the digital filters and the dead-time generator, not the counter."
+      - key: arpe
+        name: Auto-reload preload
+        sdk_call: TIM_ARRPreloadConfig
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        sdk_note: "TIM_TimeBaseInitTypeDef has no auto-reload-preload member; it is a call after TIM_TimeBaseInit. ch32h417_tim.h:502."
+        type: bool
+        default: false
+        help: "TIMx_CTLR1 ARPE, bit 7."
+
+# -----------------------------------------------------------------------------
+# GPIO capabilities.
+#
+# FOUR output speeds, and they are NAMED rather than given in MHz:
+# `GPIOSpeed_TypeDef` in data/sources/H417/Evt/EXAM/SRC/Peripheral/inc/ch32h417_gpio.h
+# lines 24-29 is { GPIO_Speed_Low = 0, GPIO_Speed_Medium, GPIO_Speed_High,
+# GPIO_Speed_Very_High }. Low/Medium/High are the very names that were INVENTED for
+# CH32V006 in round 3 and deleted in round 4 for not existing - and here they are
+# real, on a different part. That is the whole argument for `gpio.speeds` being read
+# from the data rather than assumed.
+gpio:
+  speeds:
+    - { name: Low,       macro: GPIO_Speed_Low }
+    - { name: Medium,    macro: GPIO_Speed_Medium }
+    - { name: High,      macro: GPIO_Speed_High }
+    - { name: Very high, macro: GPIO_Speed_Very_High }
+  # All eight members of GPIOMode_TypeDef (ch32h417_gpio.h:32-41) are accounted for:
+  # five here and three under input_modes. This part has open-drain in both forms.
+  modes:
+    - { name: Output Push Pull,              macro: GPIO_Mode_Out_PP, class: out }
+    - { name: Output Open Drain,             macro: GPIO_Mode_Out_OD, class: out }
+    - { name: Alternate Function Push Pull,  macro: GPIO_Mode_AF_PP,  class: out }
+    - { name: Alternate Function Open Drain, macro: GPIO_Mode_AF_OD,  class: out }
+    - { name: Analog,                        macro: GPIO_Mode_AIN,    class: analog }
+  input_modes:
+    - { name: No pull,   macro: GPIO_Mode_IN_FLOATING }
+    - { name: Pull-up,   macro: GPIO_Mode_IPU }
+    - { name: Pull-down, macro: GPIO_Mode_IPD }
+
+# There is no `constraints:` block. The three shapes were checked against this part's
+# sources and none has an instance in the twelve peripherals modelled here: no per-pin
+# note on any GPIOMode member in ch32h417_gpio.h, no shorted pin groups on any of the
+# three packages (the extractor reports "shorted groups none" for all three), and
+# nothing that couples a peripheral's enable state to a pin's legality. The USB and
+# SerDes pads are dedicated, not multiplexed GPIO, so they cannot be mis-configured.
+
+# -----------------------------------------------------------------------------
+codegen:
+  # ch32h417.h, guard __CH32H417_H. Series `ch32h417`, which is also what the
+  # PlatformIO board files say: genericCH32H417QEU6.json "spl_series": "ch32h417".
+  header: ch32h417.h
+  sdk:
+    evt: H417
+    series: ch32h417
+
+  # The SDK does not spell the clock-refresh call the same way on every family, and
+  # this part is the one that differs: System/ch32h417/{v3f,v5f}/system_ch32h417.h
+  # declares `SystemAndCoreClockUpdate` - it refreshes BOTH cores - where every other
+  # family here declares `SystemCoreClockUpdate`. The generated main.c reads this key,
+  # so no part is named in app/engine/. Omitting it means the usual name.
+  clock_update_fn: SystemAndCoreClockUpdate
+
+  # printf over the WCH-Link SDI channel costs no pin and is what every other part's
+  # generated main.c uses. **This part's Debug folder does not have it**: the whole of
+  # framework-wch-noneos-sdk/Debug/ch32h417/debug.h is one printf entry point,
+  # `USART_Printf_Init(uint32_t baudrate)`, which claims a USART and therefore two
+  # pins. An empty value means "this part has no SDI printf", and the generator emits
+  # a comment saying so instead of a call that would fail to link.
+  sdi_printf_fn: ""
+
+  # HB2, not PB2 and not APB2. This is the FOURTH spelling of the port clock enable in
+  # four families - CH32V003 says APB2, CH32V005/V006 say PB2, CH32X035 says APB2, and
+  # this part says HB2 (ch32h417_rcc.h:248-255, RCC_HB2PeriphClockCmd at :650).
+  gpio_clock: { fn: RCC_HB2PeriphClockCmd, port: RCC_HB2Periph_GPIO$PORT, afio: RCC_HB2Periph_AFIO }
+
+  speeds:
+    Low:         GPIO_Speed_Low
+    Medium:      GPIO_Speed_Medium
+    High:        GPIO_Speed_High
+    "Very high": GPIO_Speed_Very_High
+
+  # THE THIRD REMAP STYLE. `register` writes an AFIO field per peripheral, `macro`
+  # calls GPIO_PinRemapConfig per peripheral, and `af` calls GPIO_PinAFConfig per PIN.
+  # `fields:` is deliberately absent and the validator rejects it alongside `style: af`:
+  # this part's AFIO_PCFR1 still exists, but it carries only PD0_1_REMAP, UHSIF_CLK_RM,
+  # the PIOC port map and four ADC trigger-SOURCE bits (TIM8 vs EXTI, not a pin), none
+  # of which is peripheral pin muxing.
+  remap:
+    style: af
+    fn: GPIO_PinAFConfig          # (GPIOx, GPIO_PinSource<n>, GPIO_AF<n>) - ch32h417_gpio.h:160
+    macro: GPIO_AF$AF             # GPIO_AF0..GPIO_AF15 - ch32h417_gpio.h:129-145
+
+  # RCC_CFGR0 - RM 3.4.2, offset 0x04, reset 0x00000000. Only the two fields the clock
+  # tab below actually offers are encoded; the PLL, PPRE1/PPRE2 and the ADC muxes are
+  # absent because the tree that would drive them is not modelled. The generator writes
+  # what it is given and reports what it is not, so a missing field is a named TODO
+  # rather than a wrong bit.
+  rcc:
+    register: "RCC->CFGR0"
+    sw: { lsb: 0, bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }     # SW[1:0]; 11 is "not available"
+    prescalers:
+      # HPRE[3:0], and the run is NOT the CH32V00x one. Codes 0xxx all mean "no
+      # prescaling", then 1000..1111 are /2, /4, /8, /16, /64, /128, /256, /512 -
+      # **there is no /32**, the sequence jumps 16 to 64. Reading it as a doubling run
+      # would put /32 on code 1100 and silently run the bus at half the asked-for speed.
+      HB: { lsb: 4, bits: 4,
+            values: { 1: 0, 2: 8, 4: 9, 8: 10, 16: 11, 64: 12, 128: 13, 256: 14, 512: 15 } }
+
+  # Which SDK function applies each init struct, and what it applies it TO. The
+  # generator refuses to derive a function name from a struct name, and I3C is why
+  # that rule keeps earning its place here: `I3C_Ctrl_BusTypeDef` is applied by
+  # `I3C_Ctrl_Init`, which takes the struct ALONE - there is no handle argument, the
+  # same shape OPA_Init has on CH32V006. Every line below is from the EVT headers.
+  init_structs:
+    GPIO_InitTypeDef:        { fn: GPIO_Init }          # ch32h417_gpio.h:148
+    USART_InitTypeDef:       { fn: USART_Init }         # ch32h417_usart.h:184
+    SPI_InitTypeDef:         { fn: SPI_Init }           # ch32h417_spi.h:198
+    I2C_InitTypeDef:         { fn: I2C_Init }           # ch32h417_i2c.h:302
+    TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }   # ch32h417_tim.h:465
+    I3C_Ctrl_BusTypeDef:     { fn: I3C_Ctrl_Init, no_handle: true }   # ch32h417_i3c.h:400
+
+  periph_handle:
+    USART1: USART1
+    USART2: USART2
+    USART3: USART3
+    SPI1:   SPI1
+    SPI2:   SPI2
+    I2C1:   I2C1
+    I2C2:   I2C2
+    I3C:    I3C
+    TIM1:   TIM1
+    TIM2:   TIM2
+    TIM3:   TIM3
+    TIM4:   TIM4
+
+  # Which enable register each peripheral's clock bit lives in. Bit numbers from
+  # ch32h417_rcc.h:248-300 by taking log2 of each macro's value.
+  periph_clock:
+    HB2: { register: RCC_HB2PCENR, fn: RCC_HB2PeriphClockCmd, prefix: RCC_HB2Periph_,
+           bits: { AFIO: 0, GPIOA: 2, GPIOB: 3, GPIOC: 4, GPIOD: 5, GPIOE: 6, GPIOF: 7,
+                   TIM1: 11, SPI1: 12, USART1: 14, I3C: 31 } }
+    HB1: { register: RCC_HB1PCENR, fn: RCC_HB1PeriphClockCmd, prefix: RCC_HB1Periph_,
+           bits: { TIM2: 0, TIM3: 1, TIM4: 2, SPI2: 14, USART2: 17, USART3: 18,
+                   I2C1: 21, I2C2: 22 } }
+    notes: >
+      Only the twelve peripherals this file models are listed. The part has a third
+      domain, RCC_HBPeriphClockCmd, for the AHB masters (DMA, ETH, USB, LTDC, FMC and
+      the rest), and it is absent here rather than half-filled because none of those
+      peripherals is modelled yet.
+
+# -----------------------------------------------------------------------------
+# Clock tree. HSI and HSE are both 25 MHz on this part (ch32h417.h:23 and :29,
+# HSE_VALUE and HSI_VALUE, both 25000000) - not the 24 MHz every CH32V00x uses.
+# SYSCLK tops out at 400 MHz on the V5F core and 160 MHz on the V3F.
+clock:
+  sources:
+    HSI: { mhz: 25, fixed: true }
+    HSE: { mhz: 25, min_mhz: 4, max_mhz: 25 }
+    LSI: { khz: 40, fixed: true }
+    LSE: { khz: 32.768, fixed: true }
+  sysclk:
+    sources: [HSI, HSE, PLLCLK]
+    max_mhz: 400
+  prescalers:
+    HB: { options: [1, 2, 4, 8, 16, 64, 128, 256, 512], max_mhz: 400,
+          label: HB prescaler (HPRE) -> HCLK }
+  # No hse_peripheral / hse_setting / hse_signals. Those three keys join the clock tab
+  # to a PERIPHERAL setting that claims the crystal pins, and on this part XI and XO are
+  # dedicated pads (DS Table 2-1-1, QFN128 pins 23 and 24) rather than GPIO that a
+  # setting switches over. There is nothing for them to point at, and pointing them at
+  # an RCC peripheral this file does not model would fail the validator's own check.
+  notes: >
+    The PLL, the bus prescalers and the per-domain clock tree are NOT modelled. RM ch.8
+    gives this part several PLLs and a much deeper tree than any CH32V00x, and a
+    partial `pll:` block would let the app compute and display a frequency that is
+    wrong. Absent rather than approximated; see data/mcus/CH32H417.notes.md.
+
+</script>
 <script type="text/x-yaml" id="yaml-mcu-CH32V003" data-file="data/mcus/CH32V003.yaml">
 # =============================================================================
 #  CH32V003 — extracted from CH32V003 Datasheet V1.3 (DS) and CH32V003
-#  Reference Manual V1.6 (RM), both in data/sources/V003/datasheets/, and from the
-#  EVT package in data/sources/V003/evt/.  Sources are noted next to each block and
+#  Reference Manual V1.6 (RM), both in data/sources/V003/Datasheets/, and from the
+#  EVT package in data/sources/V003/Evt/.  Sources are noted next to each block and
 #  in data/mcus/CH32V003.notes.md.
 #
 #  THIS PART IS NOT A DELTA OF CH32V006 AND DOES NOT `inherits:` IT.  They are
@@ -1056,7 +2698,7 @@ peripherals:
     # this list gives them, and IWDG_PSCR and IWDG_RLDR are write-protected until
     # 0x5555 reaches IWDG_CTLR (RM 5.2) — a prescaler or reload written while locked
     # is discarded with no error anywhere. WCH's own example agrees:
-    # data/sources/V003/evt/EXAM/IWDG/IWDG/User/main.c enables write access first.
+    # data/sources/V003/Evt/EXAM/IWDG/IWDG/User/main.c enables write access first.
     params:
       - key: write_access
         name: Register write access
@@ -2349,8 +3991,8 @@ dma:
 # -----------------------------------------------------------------------------
 # Interrupts — the vector table. Both names for every vector are taken mechanically
 # from the EVT package rather than transcribed:
-#   irqn     IRQn_Type in data/sources/V003/evt/EXAM/SRC/Peripheral/inc/ch32v00x.h
-#   handler  the .word table in data/sources/V003/evt/EXAM/SRC/Startup/startup_ch32v00x.S
+#   irqn     IRQn_Type in data/sources/V003/Evt/EXAM/SRC/Peripheral/inc/ch32v00x.h
+#   handler  the .word table in data/sources/V003/Evt/EXAM/SRC/Startup/startup_ch32v00x.S
 #
 # THE TWO NAMES ARE NOT INTERCHANGEABLE and this part proves it harder than CH32V006
 # does. Vector 3 is `EXC_IRQn` in the enum and `HardFault_Handler` in the startup
@@ -2431,7 +4073,7 @@ nvic:
 # constant in the engine.
 #
 # The names below follow the EVT enum, not the manual: `GPIOSpeed_TypeDef` in
-# data/sources/V003/evt/EXAM/SRC/Peripheral/inc/ch32v00x_gpio.h:22-27 is
+# data/sources/V003/Evt/EXAM/SRC/Peripheral/inc/ch32v00x_gpio.h:22-27 is
 # three members in this order - GPIO_Speed_10MHz = 1, then GPIO_Speed_2MHz, then
 # GPIO_Speed_30MHz - and line 29 adds
 # `#define GPIO_Speed_50MHz GPIO_Speed_30MHz`. The RM calls code 11 "50MHz" and the
@@ -8232,13 +9874,28 @@ function registerMcuFile(text) {
 // Pin alternate functions are NOT listed per pin in the data files; they are
 // derived here from every peripheral's remap table (single source of truth).
 function deriveMcu(y) {
-  y._pinSignals = {};                                   // pin name -> [{periph, signal, remap}]
+  y._pinSignals = {};                                   // pin name -> [{periph, signal, remap|af}]
   for (const [pid, P] of Object.entries(y.peripherals)) {
     (P.remaps || []).forEach((r, ri) => {
       for (const [sig, pin] of Object.entries(r.pins || {})) {
         (y._pinSignals[pin] ||= []).push({ periph: pid, signal: sig, remap: ri });
       }
     });
+    // `signal_pins:` is the same fact for an AF-muxed part: where a signal CAN go.
+    // The difference is that each signal chooses independently, so an entry carries
+    // the pin's AF code instead of an index into a whole-peripheral remap list.
+    // Both shapes land in the same `_pinSignals` map, because every reader of it is
+    // asking the same question - "what can this pin do" - and neither answer is
+    // per-pin data duplicated from somewhere else: for an AF part the signal list IS
+    // the single source of truth, exactly as `remaps:` is for a remap part.
+    for (const [sig, opts] of Object.entries(P.signal_pins || {})) {
+      for (const o of (Array.isArray(opts) ? opts : [])) {
+        if (!o || !o.pin) continue;
+        (y._pinSignals[o.pin] ||= []).push({
+          periph: pid, signal: sig, af: o.af === undefined || o.af === null ? null : Number(o.af),
+        });
+      }
+    }
   }
   y._phys = {};                                         // package -> {pin number: [names]}
   y._alias = {};                                        // package -> {name: canonical name}
@@ -8291,7 +9948,12 @@ function initState(m) {
     for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
     // channelParams: TIM_OCInitTypeDef is filled once per CHANNEL, so its values are
     // keyed by the channel number the data uses. Empty until somebody sets one.
-    const ps = { settings: {}, remap: 0, params, channelParams: {} };
+    // `remap` is an index into `remaps:`; `afPins` is signal -> pin for a part that
+    // muxes per pin. A part uses one or the other and never both - which is checked,
+    // not assumed, by validate_mcu.py. `afPins` holds only what the user has actually
+    // chosen, so a signal the user never touched keeps whatever defaultSignalPin()
+    // answers and a .wchproj records a decision rather than a default.
+    const ps = { settings: {}, remap: 0, afPins: {}, params, channelParams: {} };
     for (const s of P.settings || []) {
       const def = s.choices.find(c => c.default);
       ps.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;
@@ -8410,6 +10072,67 @@ function applyPackageRemaps() {
     if (P.remap_by_package && S.pkg in P.remap_by_package) S.periph[pid].remap = P.remap_by_package[S.pkg];
 }
 
+// ---- where a peripheral's signals land ---------------------------------------
+// THE SEAM. Two families of silicon answer "which pin does this signal use" in two
+// different shapes, and this is the only place that knows there are two:
+//
+//   `remaps:`      ONE register field moves EVERY signal of the peripheral at once,
+//                  so a selected index is a complete, atomic, register-valued choice.
+//                  CH32V003/V005/V006 (AFIO_PCFR1 field) and CH32X035 (a macro).
+//   `signal_pins:` each signal picks its OWN pin, and the pin's four-bit AFR field
+//                  says which function it carries. CH32H417 (GPIOx_AFRL/AFRH).
+//
+// Everything downstream - the conflict engine, the pin grid, the picker, codegen -
+// asks this function and never looks at either key directly. That is what keeps the
+// remap parts byte-identical: for them this returns the very object they used before.
+const signalPinDefs = pid => (M.peripherals[pid] || {}).signal_pins || null;
+const isAfMuxed = pid => !!signalPinDefs(pid);
+
+// The pins a signal of an AF-muxed peripheral may use: [{ pin, af }], in file order.
+function signalPinOptions(pid, sig) {
+  const sp = signalPinDefs(pid);
+  const list = sp && sp[sig];
+  if (!Array.isArray(list)) return [];
+  return list.filter(o => o && o.pin).map(o => ({
+    pin: String(o.pin), af: o.af === undefined || o.af === null ? null : Number(o.af),
+  }));
+}
+
+// What a signal uses when the user has not chosen: the first option BONDED on this
+// package, falling back to the first option at all. Preferring a bonded pin matters -
+// this part's packages drop whole ports, and defaulting to an absent pin would make a
+// peripheral look unusable on a package where three other pins would have served.
+// It is a pure function of (part, package, file order), so a reload answers the same.
+function defaultSignalPin(pid, sig) {
+  const opts = signalPinOptions(pid, sig);
+  if (!opts.length) return null;
+  return (opts.find(o => pinExists(o.pin)) || opts[0]).pin;
+}
+
+// signal -> pin for this peripheral as it is configured right now, in the same shape
+// a `remaps:` entry has, so one reader covers both.
+function signalPins(pid) {
+  const P = M.peripherals[pid] || {}, st = S.periph[pid] || {};
+  if (!P.signal_pins) return (P.remaps || [])[st.remap] || { pins: {} };
+  const chosen = st.afPins || {};
+  const pins = {};
+  for (const sig of Object.keys(P.signal_pins)) {
+    const want = chosen[sig];
+    const ok = want && signalPinOptions(pid, sig).some(o => o.pin === want);
+    const pin = ok ? want : defaultSignalPin(pid, sig);
+    if (pin) pins[sig] = pin;
+  }
+  return { name: 'the per-pin AF map', pins, af: true };
+}
+
+// The AF code a signal needs on a given pin, or null when the data does not say.
+// Codegen refuses to emit a GPIO_PinAFConfig without one rather than guessing a
+// number - the same rule that stops it deriving a function name from a struct name.
+function signalAf(pid, sig, pin) {
+  const hit = signalPinOptions(pid, sig).find(o => o.pin === pin);
+  return hit ? hit.af : null;
+}
+
 // ---- peripheral queries ------------------------------------------------------
 // Which signals this peripheral needs, given its current settings.
 function requiredSignals(pid) {
@@ -8441,6 +10164,18 @@ function isEnabled(pid) {
 // Can any non-default choice of this peripheral be satisfied on this package?
 function isAvailable(pid) {
   const P = M.peripherals[pid];
+  // An AF-muxed peripheral is usable when every signal a choice needs has at least one
+  // bonded pin - and the signals are INDEPENDENT, so this is a per-signal test rather
+  // than a search for one remap that satisfies them all. Testing it the remap way here
+  // would call a peripheral unusable whenever no single listed combination happened to
+  // be fully bonded, which on this silicon is not what "unusable" means.
+  if (P.signal_pins) {
+    for (const s of P.settings || []) for (const c of s.choices) {
+      if (!c.signals) continue;
+      if (c.signals.every(sig => signalPinOptions(pid, sig).some(o => pinExists(o.pin)))) return true;
+    }
+    return !((P.settings || []).some(s => s.choices.some(c => c.signals)));
+  }
   if (!P.remaps || !P.remaps.length) return true;
   for (const s of P.settings || []) for (const c of s.choices) {
     if (!c.signals) continue;
@@ -10103,7 +11838,7 @@ function compute() {
   for (const [pid, P] of Object.entries(M.peripherals)) {
     const req = requiredSignals(pid);
     if (!req.size) continue;
-    const r = (P.remaps || [])[S.periph[pid].remap] || { pins: {} };
+    const r = signalPins(pid);
     for (const sig of req) {
       const pin = r.pins[sig];
       if (!pin) { (issues[pid] ||= []).push(`${sig}: not routed in "${r.name}"`); continue; }
@@ -10201,9 +11936,16 @@ function previewAssign(pin, opt) {
   const cur = E.pins[canon(pin)];
   if (opt.gpio || opt.reset) return cur && cur.claims.some(c => c.who !== 'GPIO') ? 'pin in use' : '';
   const { periph, signal, remap } = opt;
-  const isCur = !!(cur
-    && cur.claims.some(c => c.who === periph && c.signal === sigName(periph, signal))
-    && S.periph[periph].remap === remap);
+  const onThisPin = !!(cur && cur.claims.some(c => c.who === periph && c.signal === sigName(periph, signal)));
+  // An AF-muxed signal moves ALONE, so picking it can only ever collide on the pin
+  // being clicked - there is no sibling to drag along. That is the whole difference
+  // between the two shapes, and it is why this returns before the remap check below:
+  // running that check here would invent collisions on pins nothing is about to move.
+  if (isAfMuxed(periph)) {
+    if (onThisPin) return '';
+    return cur && cur.claims.some(c => c.who !== periph) ? 'pin in use' : '';
+  }
+  const isCur = !!(onThisPin && S.periph[periph].remap === remap);
   if (isCur) return '';
   if (cur && cur.claims.some(c => c.who !== periph)) return 'pin in use';
   if (S.periph[periph].remap !== remap && requiredSignals(periph).size) {
@@ -10263,7 +12005,15 @@ function assignSignal(pin, opt) {
   const { periph, signal, remap } = opt;
   const P = M.peripherals[periph], st = S.periph[periph];
   for (const n of groupOf(pin)) delete S.manual[n];
-  st.remap = remap;
+  // Selecting the route is the one step that differs by mux shape: a remap part picks
+  // an index that moves every signal at once, an AF part records THIS signal's pin and
+  // leaves its siblings where they were.
+  if (P.signal_pins) {
+    const chosen = groupOf(pin).find(n => signalPinOptions(periph, signal).some(o => o.pin === n));
+    if (chosen) (st.afPins ||= {})[signal] = chosen;
+  } else {
+    st.remap = remap;
+  }
   // turn on the first setting choice that carries this signal (if none already does)
   if (!requiredSignals(periph).has(signal)) {
     outer: for (const s of P.settings || []) for (const c of s.choices) {
@@ -10344,6 +12094,21 @@ function setRemap(pid, index) {
   if (!remaps[index]) throw new Error(`${pid} has no remap ${index}`);
   record(`${pid} remap ${remaps[index].name}`);
   S.periph[pid].remap = index;
+}
+
+// Move ONE signal of an AF-muxed peripheral to one of its listed pins. The remap
+// equivalent is setRemap() above, and the two are deliberately separate calls rather
+// than one that guesses: a remap index and a signal's pin are not the same decision,
+// and a part that took both would have two ways to say where a signal goes.
+// Refuses a pin the data does not list for that signal, by name - the same contract
+// requirePin() applies to a pin the package does not have.
+function setSignalPin(pid, signal, pin) {
+  const opts = signalPinOptions(pid, signal);
+  if (!opts.length) throw new Error(`${pid} has no signal_pins entry for ${signal}`);
+  if (!opts.some(o => o.pin === pin))
+    throw new Error(`${pid}_${signal} cannot use ${pin}: the data lists ${opts.map(o => o.pin).join(', ')}`);
+  record(`${sigName(pid, signal)} on ${pinLabel(pin)}`);
+  (S.periph[pid].afPins ||= {})[signal] = pin;
 }
 
 // One cell of the GPIO settings table (mode, pull, speed, label).
@@ -10514,6 +12279,12 @@ function projectObject() {
     const settings = {};
     for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
     periph[pid] = { settings, remap: st.remap };
+    // Only signals the user actually moved. A default is not a decision, so a project
+    // written before this key existed round-trips byte-identically and a diff shows
+    // only what somebody chose - the same rule `generator:` and `dma:` follow.
+    const af = {};
+    for (const [sig, pin] of Object.entries(st.afPins || {})) if (pin) af[sig] = pin;
+    if (Object.keys(af).length) periph[pid].af_pins = af;
     const params = paramsObject(pid);
     if (Object.keys(params).length) periph[pid].params = params;
     const chan = channelParamsObject(pid);
@@ -10682,6 +12453,16 @@ function projectApply(src) {
       else if (s.choices.some(c => c.name === v)) S.periph[pid].settings[s.name] = v;
     }
     if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
+    // A saved pin the part no longer lists for that signal is DROPPED and named, never
+    // carried: the same contract gpioSpeedFor() applies to a speed the part no longer
+    // offers. Silently keeping it would put a pin the data does not allow into the
+    // conflict engine and into generated C, where it compiles and does not work.
+    for (const [sig, pin] of Object.entries(st.af_pins || {})) {
+      const opts = signalPinOptions(pid, sig);
+      if (opts.some(o => o.pin === pin)) S.periph[pid].afPins[sig] = pin;
+      else if (opts.length) dropped.push(`${pid}_${sig}: ${pin} is not one of ${opts.map(o => o.pin).join(', ')}`);
+      else dropped.push(`${pid}_${sig}: this part has no signal_pins entry for it`);
+    }
     dropped.push(...applyParams(pid, st.params));
     dropped.push(...applyChannelParams(pid, st.channel_params));
   }
@@ -10900,6 +12681,45 @@ function remapPlan() {
   }
   calls.sort((a, b) => a.periph.localeCompare(b.periph));
   return { style: c.style || (c.fields ? 'register' : null), fn: c.fn || null, enable: c.enable || 'ENABLE', calls };
+}
+
+/**
+ * The `GPIO_PinAFConfig`-style calls this configuration needs - one per SIGNAL, not one
+ * per peripheral, because that is the unit the silicon muxes.
+ *
+ * This is the third mux shape and the first that is not a whole-peripheral switch. A
+ * remap part writes ONE field (or calls ONE macro) and every signal moves together; an
+ * AF part gives each pin four bits in `GPIOx_AFRL`/`AFRH` and each signal chooses
+ * alone, so the plan is a list of (pin, AF) pairs.
+ *
+ * `af: null` is NOT emitted. The data has to state the AF code; deriving one from a
+ * peripheral name or a pin number is the same class of guess as deriving a function
+ * name from a struct name, which this generator already refuses to make. A signal whose
+ * AF the file does not give becomes a named TODO, and `--strict` catches it.
+ */
+function afPlan() {
+  const c = cfg().remap || {};
+  if ((c.style || '') !== 'af') return { style: null, fn: null, calls: [], missing: [] };
+  const calls = [], missing = [];
+  for (const [pid, P] of Object.entries(M.peripherals)) {
+    if (!P.signal_pins || !S.periph[pid]) continue;
+    const req = requiredSignals(pid);
+    if (!req.size) continue;
+    const routed = signalPins(pid).pins;
+    for (const sig of [...req].sort()) {
+      const pin = routed[sig];
+      if (!pin || !pinExists(pin)) continue;               // compute() already says so
+      if (skippedClaim({ who: pid, signal: sigName(pid, sig) })) continue;
+      const m = PIN_RE.exec(pin);
+      if (!m) continue;
+      const af = signalAf(pid, sig, pin);
+      const entry = { periph: pid, signal: sig, pin, port: m[1], bit: +m[2], af };
+      (af === null || Number.isNaN(af) ? missing : calls).push(entry);
+    }
+  }
+  const order = (a, b) => (a.port === b.port ? a.bit - b.bit : a.port.localeCompare(b.port));
+  return { style: 'af', fn: c.fn || null, macro: c.macro || 'GPIO_AF$AF',
+           calls: calls.sort(order), missing: missing.sort(order) };
 }
 
 /** True when this peripheral's selected remap is applied by a macro call. */
@@ -11135,6 +12955,32 @@ function gpioSection() {
   }
 
   if (left.length) L.push(...skipNote(left));
+
+  // AF style: one call per SIGNAL. Emitted before the two whole-peripheral styles
+  // because a part is only ever one of the three, so at most one of these blocks runs.
+  const ap = afPlan();
+  if (ap.style === 'af' && (ap.calls.length || ap.missing.length)) {
+    if (ap.calls.length && ap.fn) {
+      L.push('    /* Alternate function select (GPIOx_AFRL/AFRH, one field per pin) */');
+      for (const c of ap.calls) {
+        const macro = String(ap.macro).replace('$AF', String(c.af));
+        L.push(`    ${ap.fn}(GPIO${c.port}, GPIO_PinSource${c.bit}, ${macro});`
+          + `   /* ${c.pin} — ${sigName(c.periph, c.signal)} */`);
+      }
+      L.push('');
+    } else if (ap.calls.length) {
+      L.push('    /* TODO: alternate function select. The MCU file muxes per pin but gives no');
+      L.push('       codegen.remap.fn, so the call that applies it cannot be written. Needed:');
+      for (const c of ap.calls) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} = AF${c.af}`);
+      L.push('       Add codegen.remap.fn (GPIO_PinAFConfig on the parts seen so far). */');
+    }
+    if (ap.missing.length) {
+      L.push('    /* TODO: alternate function select. These signals have a pin but the MCU file');
+      L.push('       states no `af:` for it, and this generator does not guess an AF code:');
+      for (const c of ap.missing) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)}`);
+      L.push('       Add `af:` to the signal_pins entry and generate again. */');
+    }
+  }
 
   // Macro style first: one SDK call per peripheral whose selected remap names a macro.
   const rp = remapPlan();
@@ -12268,7 +14114,18 @@ function mainC(t) {
   L.push(' *  would be a second HAL for you to maintain.');
   L.push(' * ' + '-'.repeat(74) + ' */');
   L.push(`#include "${cfg().header || 'debug.h'}"`);
-  L.push('#include "debug.h"      /* Delay_Init, Delay_Ms, SDI_Printf_Enable, printf */');
+  // The SDK does not spell these the same way on every family, so BOTH come from
+  // the MCU file rather than from a literal here:
+  //   codegen.clock_update_fn  SystemCoreClockUpdate on most parts, but
+  //                            SystemAndCoreClockUpdate on a dual-core one, where
+  //                            calling the other name fails at LINK.
+  //   codegen.sdi_printf_fn    absent on a part whose Debug folder has no SDI
+  //                            channel at all - it prints over a USART instead -
+  //                            and an absent key means the call is not emitted.
+  // Defaults keep every existing part's output byte-identical.
+  const clockUpdate = cfg().clock_update_fn || 'SystemCoreClockUpdate';
+  const sdiPrintf = cfg().sdi_printf_fn === undefined ? 'SDI_Printf_Enable' : cfg().sdi_printf_fn;
+  L.push(`#include "debug.h"      /* Delay_Init, Delay_Ms, ${sdiPrintf ? sdiPrintf + ', ' : ''}printf */`);
   L.push('#include "wchcube_init.h"');
   L.push('');
   L.push(...user('Includes'));
@@ -12277,16 +14134,22 @@ function mainC(t) {
   L.push('');
   L.push('int main(void)');
   L.push('{');
-  L.push('    SystemCoreClockUpdate();');
+  L.push(`    ${clockUpdate}();`);
   L.push('    Delay_Init();');
-  L.push('    SDI_Printf_Enable();   /* printf goes to the WCH-Link SDI channel; no pin is used */');
+  if (sdiPrintf) {
+    L.push(`    ${sdiPrintf}();   /* printf goes to the WCH-Link SDI channel; no pin is used */`);
+  } else {
+    L.push('    /* The SDK for this part has no SDI printf channel - its debug.h declares only');
+    L.push('       USART_Printf_Init(baud), which would claim a pin. Call it yourself if you');
+    L.push('       want printf, and pick the USART in the configurator so the pin is reserved. */');
+  }
   L.push('');
   L.push('    /* The board file sets SYSCLK before main() through SystemInit(); the generated');
   L.push('       WCHCube_RCC_Init() then applies the tree this project asked for and wins. So a');
   L.push(`       ${r ? r.SYSCLK : '?'} MHz project may boot at the board's rate and change here - which is why`);
-  L.push('       SystemCoreClockUpdate() is called again below, before anything reads the clock. */');
+  L.push(`       ${clockUpdate}() is called again below, before anything reads the clock. */`);
   L.push('    WCHCube_Init();');
-  L.push('    SystemCoreClockUpdate();');
+  L.push(`    ${clockUpdate}();`);
   L.push('');
   L.push(`    printf("\\r\\n${PROJECT.name} — ${t.variant} (${M.mcu.name}, ${t.package})\\r\\n");`);
   if (r) {
@@ -12354,7 +14217,7 @@ function readmeMd(t) {
   L.push('');
   L.push('The board file gives `SystemInit()` a SYSCLK before `main()` runs, then');
   L.push('`WCHCube_RCC_Init()` applies the tree this project asked for and wins. `main.c` calls');
-  L.push('`SystemCoreClockUpdate()` afterwards so `Delay_Ms()` and anything else reading');
+  L.push(`\`${cfg().clock_update_fn || 'SystemCoreClockUpdate'}()\` afterwards so \`Delay_Ms()\` and anything else reading`);
   L.push(`\`SystemCoreClock\` stay honest${r ? `. This project asks for ${r.SYSCLK} MHz from ${S.clock.sys}` : ''}.`);
   L.push('The banner prints both, so a configuration that did not take is visible on the first run.');
   L.push('');
@@ -12998,8 +14861,17 @@ function openPicker(pin, cx, cy) {
   const sigs = grp.flatMap(n => (M._pinSignals[n] || []).map(x => ({ ...x, via: n }))).sort((a, b) => (a.periph + a.signal).localeCompare(b.periph + b.signal));
   if (sigs.length) h += `<div class="grp">Alternate functions</div>`;
   for (const s of sigs) {
-    const P = M.peripherals[s.periph], rn = P.remaps.length > 1 ? P.remaps[s.remap].name : '';
-    const isCur = !!(cur && cur.claims.some(c => c.who === s.periph && c.signal === sigName(s.periph, s.signal)) && S.periph[s.periph].remap === s.remap);
+    const P = M.peripherals[s.periph];
+    // Two mux shapes, two things worth showing under the name. A remap part names the
+    // remap the click would select, because picking this signal moves its SIBLINGS
+    // too. An AF part names the AF code instead: the signal moves alone, so there is
+    // no remap to warn about and the useful fact is which function the pin's AFR field
+    // has to select.
+    const af = isAfMuxed(s.periph);
+    const rn = af ? (s.af === null || s.af === undefined ? '' : `AF${s.af}`)
+                  : (P.remaps.length > 1 ? P.remaps[s.remap].name : '');
+    const onThisPin = !!(cur && cur.claims.some(c => c.who === s.periph && c.signal === sigName(s.periph, s.signal)));
+    const isCur = af ? onThisPin : !!(onThisPin && S.periph[s.periph].remap === s.remap);
     // the engine decides whether picking this would collide (AGENT-2's previewAssign)
     const why = previewAssign(pin, s);          // engine decides; '' means no collision
     const warn = why ? '⚠ ' + why : '';
@@ -13441,6 +15313,10 @@ const isEnabledPeriph = pid => pid === 'GPIO' ? Object.keys(S.manual).length > 0
 function periphHasSignal(pid, q) {
   const P = M.peripherals[pid];
   if (!P) return false;
+  // Both mux shapes carry the same fact - the signal names this peripheral has - in
+  // different keys. Searching only `remaps:` would make an AF part unsearchable by
+  // signal, which is the one thing this box exists for.
+  if (Object.keys(P.signal_pins || {}).some(sig => sigName(pid, sig).toLowerCase().includes(q))) return true;
   return (P.remaps || []).some(r => Object.keys(r.pins || {}).some(sig => sigName(pid, sig).toLowerCase().includes(q)));
 }
 function renderTree() {
@@ -13747,6 +15623,26 @@ function renderCentre() {
       const missing = Object.values(r.pins).filter(p => !pinExists(p));
       return `<option value="${i}"${st.remap === i ? ' selected' : ''}>${r.name}${missing.length ? '  — missing ' + [...new Set(missing)].join(', ') : ''}</option>`;
     }).join('') + '</select>';
+  } else if (isAfMuxed(pid)) {
+    // ONE SELECTOR PER SIGNAL, not one for the peripheral. A remap dropdown here would
+    // be a control the silicon does not have: these signals move independently, so a
+    // single list of combinations could only ever offer a fraction of the legal ones.
+    // Only the signals the current settings actually require are shown - a pin picker
+    // for a signal nothing has asked for is a choice with no effect.
+    const routed = signalPins(pid).pins;
+    const req = [...requiredSignals(pid)].filter(sig => signalPinOptions(pid, sig).length).sort();
+    if (req.length) {
+      h += `<label>Pin per signal (GPIO AF)</label>`;
+      for (const sig of req) {
+        const opts = signalPinOptions(pid, sig);
+        h += `<div class="afrow"><span class="afsig">${esc(sigName(pid, sig))}</span>`
+          + `<select data-afsig="${attr(sig)}">` + opts.map(o => {
+            const gone = !pinExists(o.pin);
+            return `<option value="${attr(o.pin)}"${routed[sig] === o.pin ? ' selected' : ''}>`
+              + `${esc(o.pin)}${o.af === null ? '' : ` (AF${o.af})`}${gone ? ' — not bonded' : ''}</option>`;
+          }).join('') + '</select></div>';
+      }
+    }
   }
   // Shared-resource issues arrive folded into E.issues[pid] as plain text; pull them
   // back out so they read as what they are, and never print the same line twice.
@@ -13763,6 +15659,8 @@ function renderCentre() {
   mode.querySelectorAll('select[data-s]').forEach(el => el.onchange = () => { setSetting(pid, el.dataset.s, el.value); renderAll(); });
   mode.querySelectorAll('input[data-s]').forEach(el => el.onchange = () => { toggleSetting(pid, el.dataset.s, el.dataset.c, el.checked); renderAll(); });
   const rs = mode.querySelector('select[data-remap]'); if (rs) rs.onchange = () => { setRemap(pid, +rs.value); renderAll(); };
+  mode.querySelectorAll('select[data-afsig]').forEach(el =>
+    el.onchange = () => { setSignalPin(pid, el.dataset.afsig, el.value); renderAll(); });
 
   // The DMA controller's own entry is the one place that shows all its channels at
   // once, so the overview hangs off it whatever tabs it happens to have.

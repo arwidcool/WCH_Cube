@@ -9,6 +9,10 @@
  *              (the register really is spelled "PB2" on this family — CH32V00X
  *              RM v1.4 §3.4.7, R32_RCC_PB2PCENR at 0x40021018)
  *   CH32X035   ports A B C only, SPL fn RCC_APB2PeriphClockCmd
+ *   CH32H417   ports A B C D E F — SIX, more than any other family here — in
+ *              RCC_HB2PCENR, SPL fn RCC_HB2PeriphClockCmd. Note the spelling:
+ *              HB2, not PB2 and not APB2. That is the FOURTH name this same idea
+ *              has across four families (ch32h417_rcc.h:248-255, :650).
  */
 static int port_clock(const GPIO_TypeDef *port, FunctionalState state)
 {
@@ -37,6 +41,24 @@ static int port_clock(const GPIO_TypeDef *port, FunctionalState state)
     else return -1;
     RCC_APB2PeriphClockCmd(bit, state);
     return 0;
+#elif defined(WCH_HAL_SERIES_CH32H417)
+    uint32_t bit;
+    if      (port == GPIOA) bit = RCC_HB2Periph_GPIOA;
+    else if (port == GPIOB) bit = RCC_HB2Periph_GPIOB;
+    else if (port == GPIOC) bit = RCC_HB2Periph_GPIOC;
+    else if (port == GPIOD) bit = RCC_HB2Periph_GPIOD;
+    else if (port == GPIOE) bit = RCC_HB2Periph_GPIOE;
+    else if (port == GPIOF) bit = RCC_HB2Periph_GPIOF;
+    else return -1;
+    RCC_HB2PeriphClockCmd(bit, state);
+    return 0;
+#else
+    /* No branch matched. Previously this fell off the end of a non-void function,
+     * which is a warning and undefined behaviour rather than a build failure - so
+     * a new family reached the linker with a port_clock that returned garbage.
+     * Fail at COMPILE time instead, naming what is missing. */
+    (void)port; (void)state;
+#  error "wch_hal: no GPIO port clock mapping for this series. Add it above, reading the port list and the RCC_*PeriphClockCmd spelling from this part's headers."
 #endif
 }
 

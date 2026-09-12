@@ -5,7 +5,7 @@
 // =============================================================================
 import {
   M, S, MCU_FILES, loadMcu, applyPackageRemaps, yamlDump, yamlLoad, gpioSpeeds, gpioSpeedFor,
-  defaultNvicGroup,
+  defaultNvicGroup, signalPinOptions,
 } from './model.js';
 import {
   addDmaRequest, setDmaParam, setDmaRequest, dmaLegalChannels,
@@ -61,6 +61,12 @@ export function projectObject() {
     const settings = {};
     for (const [k, v] of Object.entries(st.settings)) settings[k] = v instanceof Set ? [...v] : v;
     periph[pid] = { settings, remap: st.remap };
+    // Only signals the user actually moved. A default is not a decision, so a project
+    // written before this key existed round-trips byte-identically and a diff shows
+    // only what somebody chose - the same rule `generator:` and `dma:` follow.
+    const af = {};
+    for (const [sig, pin] of Object.entries(st.afPins || {})) if (pin) af[sig] = pin;
+    if (Object.keys(af).length) periph[pid].af_pins = af;
     const params = paramsObject(pid);
     if (Object.keys(params).length) periph[pid].params = params;
     const chan = channelParamsObject(pid);
@@ -229,6 +235,16 @@ export function projectApply(src) {
       else if (s.choices.some(c => c.name === v)) S.periph[pid].settings[s.name] = v;
     }
     if (Number.isInteger(st.remap) && P.remaps && st.remap < P.remaps.length) S.periph[pid].remap = st.remap;
+    // A saved pin the part no longer lists for that signal is DROPPED and named, never
+    // carried: the same contract gpioSpeedFor() applies to a speed the part no longer
+    // offers. Silently keeping it would put a pin the data does not allow into the
+    // conflict engine and into generated C, where it compiles and does not work.
+    for (const [sig, pin] of Object.entries(st.af_pins || {})) {
+      const opts = signalPinOptions(pid, sig);
+      if (opts.some(o => o.pin === pin)) S.periph[pid].afPins[sig] = pin;
+      else if (opts.length) dropped.push(`${pid}_${sig}: ${pin} is not one of ${opts.map(o => o.pin).join(', ')}`);
+      else dropped.push(`${pid}_${sig}: this part has no signal_pins entry for it`);
+    }
     dropped.push(...applyParams(pid, st.params));
     dropped.push(...applyChannelParams(pid, st.channel_params));
   }

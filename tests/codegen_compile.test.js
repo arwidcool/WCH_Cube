@@ -421,7 +421,12 @@ test('every fixture configures something a default project would not', () => {
   const bad = [];
   for (const f of FIXTURES) {
     const text = fs.readFileSync(path.join(HERE, 'fixtures', f.file), 'utf8');
-    const pins = (text.match(/^ {2}P[A-D]\d+: GPIO_/gm) || []).length;
+    // `P[A-D]` until CH32H417 arrived with ports A..F, and a port letter this regex
+    // does not know is a pin this counter does not see - so a fixture made entirely
+    // of PE/PF pins would have read as "0 manual GPIO pins" and been rejected for
+    // exercising nothing. Same defect class as `tools/extract_pins.py`'s old
+    // `P[A-D][0-7]`, which silently missed two thirds of CH32X035.
+    const pins = (text.match(/^ {2}P[A-Z]\d+: GPIO_/gm) || []).length;
     if (pins < 3) bad.push(`${f.file}: ${pins} manual GPIO pin(s); a fixture with no pins generates an empty init`);
     if (!/^ +params:$/m.test(text)) bad.push(`${f.file}: no params: block, so no *_InitTypeDef field is exercised`);
     if (!f.env) bad.push(`${f.file}: names no PlatformIO environment, so it can never be compiled`);

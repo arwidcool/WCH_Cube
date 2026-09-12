@@ -33,6 +33,12 @@ extern "C" {
 #  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_30MHz
 #elif defined(WCH_HAL_SERIES_CH32X035)
 #  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_50MHz
+#elif defined(WCH_HAL_SERIES_CH32H417)
+/* FOUR speeds, and they are NAMED rather than given in MHz: GPIOSpeed_TypeDef in
+ * ch32h417_gpio.h is { GPIO_Speed_Low, GPIO_Speed_Medium, GPIO_Speed_High,
+ * GPIO_Speed_Very_High }. Low/Medium/High are the very spellings that were invented
+ * for CH32V006 and deleted for not existing — here they are real. */
+#  define WCH_HAL_GPIO_SPEED_MAX GPIO_Speed_Very_High
 #endif
 
 /* Enable the port's peripheral clock. Returns 0 on success, -1 if the port is

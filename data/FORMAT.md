@@ -473,6 +473,104 @@ hand-built mask is silent.
 planted `GPIO_FullRemap_USART2X` passed the gate, because the key was new and nothing
 looked at it. Every new schema key needs its checker in the same commit.
 
+---
+
+## `signal_pins` — when the silicon muxes per PIN, not per peripheral
+
+Everything above assumes the idea this document opens with: **one register field moves
+every signal of a peripheral at once**, so a `remaps[]` index is a complete, atomic,
+register-valued choice. That is true of CH32V003/V005/V006 (an AFIO_PCFR1 field) and of
+CH32X035 (a `GPIO_PinRemapConfig` macro).
+
+**It is not true of CH32H417**, and the difference is not a detail. That part gives every
+PIN four bits of its own — `GPIOx_AFRL` / `GPIOx_AFRH`, `AFRy[3:0]` = AF0..AF15, RM 9.3.2.2,
+applied with `GPIO_PinAFConfig(GPIOx, GPIO_PinSource<n>, GPIO_AF<n>)` — so **each signal
+picks its pin independently**. `USART1_TX` on PD13 with `USART1_RX` on PB15 is legal, and
+so is every other combination.
+
+`remaps:` cannot hold that, and the number says how badly. Run
+`python tools/extract_h417_pins.py --audit`:
+
+```
+  signals with an AF code   : 418
+  signals reaching >1 pin   : 294 of 418 (70%)
+  ALL        418 signals -> 851,948,976,569,927,895,391 entries
+```
+
+USART1 alone is 2 × 4 × 4 × 2 × 2 = **128** legal combinations, none of which is a register
+value. So a part like this declares `codegen.remap.style: af` and replaces `remaps:` with
+`signal_pins:`, one entry per signal:
+
+```yaml
+codegen:
+  remap:
+    style: af                     # per-pin. The other two are `register` and `macro`.
+    fn: GPIO_PinAFConfig          # the call that applies it
+    macro: GPIO_AF$AF             # $AF is substituted with the entry's `af:`
+
+peripherals:
+  USART1:
+    signal_pins:
+      TX: [{ pin: PA9,  af: 7 }, { pin: PB6, af: 7 }, { pin: PB14, af: 4 }, { pin: PD13, af: 14 }]
+      RX: [{ pin: PA10, af: 7 }, { pin: PB7, af: 7 }, { pin: PB15, af: 4 }, { pin: PD12, af: 14 }]
+```
+
+| Key | Required | What it is |
+|---|---|---|
+| `pin` | yes | a pin name, which must exist in `pins:` |
+| `af` | no, but warned | the AF code that pin's `AFRy` field must hold, 0–15. **Without it the generator emits a TODO rather than guessing a number** — the same rule that stops it deriving a function name from a struct name. |
+| `notes` | no | why, for an entry that needs one |
+
+### The rules, and why each one exists
+
+- **A peripheral has `remaps:` or `signal_pins:`, never both.** The engine reads
+  `signal_pins` first, so a file with both would have a `remaps:` list that silently never
+  applies. Rejected rather than resolved by precedence.
+- **`style: af` and `signal_pins:` require each other**, checked in both directions. A
+  `style: af` with no peripheral to apply it to emits nothing; a `signal_pins:` under any
+  other style reaches the pinout and never reaches the generated C. Both look like working
+  data, which is why both are errors.
+- **`style: af` forbids `codegen.remap.fields`.** There is no per-peripheral AFIO field to
+  write. (CH32H417 still *has* an `AFIO_PCFR1`, but it carries only `PD0_1_REMAP`,
+  `UHSIF_CLK_RM`, the PIOC port map and four ADC trigger-*source* bits — none of which is
+  pin muxing.)
+- **The same pin may not be listed twice for one signal.** The user's choice is keyed by
+  pin name, so the second entry is unreachable.
+- **Every signal a setting can request needs an entry**, exactly as it needs a remap.
+
+### What it means for the three consumers
+
+The engine funnels both shapes through one function, `signalPins(pid)` in
+`app/engine/model.js`, which answers "signal → pin" in the same shape a `remaps[]` entry
+has. Everything downstream — the pin grid, the conflict engine, the picker, codegen — asks
+that and never looks at either key. **A part with no `signal_pins:` therefore gets back the
+very object the old code read**, which is what keeps the remap parts byte-identical.
+
+Three behaviours do differ, and all three follow from signals moving alone:
+
+1. **The peripheral panel shows one selector per signal**, not one remap dropdown. A list
+   of whole-peripheral combinations could only ever offer a fraction of the legal ones.
+2. **`previewAssign` warns about the clicked pin only.** There is no sibling to drag along,
+   so "remap collides on …" cannot happen and is not reported.
+3. **`isAvailable` tests each signal separately** — a peripheral is usable when every
+   signal a choice needs has at least one bonded pin, rather than when one listed
+   combination happens to be fully bonded.
+
+A signal the user has not moved uses **the first option bonded on the current package**,
+falling back to the first option at all. Preferring a bonded pin matters on a part whose
+packages drop whole ports: defaulting to an absent pin would make a peripheral look
+unusable where three other pins would have served.
+
+### Saving
+
+`.wchproj` records `af_pins: { <signal>: <pin> }` per peripheral, and **only for signals
+the user actually moved** — a default is not a decision. A saved pin the part no longer
+lists is dropped and named, never carried, the same contract `gpioSpeedFor()` applies to a
+speed the part no longer offers.
+
+`tools/validate_afmux_selftest.py` plants a break in each of these checks and requires the
+validator to catch it, because a check that cannot fail is worth nothing.
+
 ## `exti`
 
 ```yaml

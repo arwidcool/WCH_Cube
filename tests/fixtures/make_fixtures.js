@@ -228,6 +228,45 @@ export const FIXTURES = [
       eng.setGpioField('PC0', 'label', 'LED');
     },
   },
+  {
+    file: 'CH32H417_QFN128_full.wchproj',
+    name: 'compile-gate CH32H417 QFN128',
+    mcu: 'CH32H417',
+    pkg: 'QFN128',
+    env: 'CH32H417QEU6',
+    build() {
+      // The FOURTH family and the first AF-MUXED part: every signal below picks its
+      // own pin from `signal_pins:` and writes its own GPIOx_AFRy field, instead of
+      // one AFIO word moving a whole peripheral. It exists because `strict.test.js`
+      // refuses a part with no fixture, and because the AF emitter has to be proven
+      // on real data rather than only on the synthetic part in `app/tests/afmux.test.js`.
+      //
+      // Three of the five signals are moved OFF their default pin on purpose, and
+      // they belong to the same two peripherals as signals that are left alone — a
+      // remap-shaped generator cannot produce this configuration at all, which is the
+      // point. It also spans five ports (A, B, D, E, F) and AF codes 1, 3, 4 and 14,
+      // so a single wrong `GPIO_AF$AF` substitution or port letter shows up here.
+      eng.setSetting('USART1', 'Mode', 'Asynchronous');
+      eng.setSignalPin('USART1', 'TX', 'PD13');     // AF14, while RX stays on PB15 (AF4)
+      eng.setSetting('USART2', 'Mode', 'Asynchronous');   // both signals on their defaults
+
+      eng.setSetting('SPI1', 'Mode', 'Full-Duplex Master');
+      eng.setSignalPin('SPI1', 'SCK', 'PA5');       // AF5, while MOSI/MISO stay on PF8/PF9 (AF3)
+
+      eng.setSetting('I2C1', 'Mode', 'I2C');
+      eng.setSignalPin('I2C1', 'SCL', 'PB8');       // AF4; SDA stays on PB7
+
+      eng.setSetting('TIM1', 'Channel1', 'PWM Generation CH1 CH1N');
+
+      // Manual GPIO on three ports INCLUDING PE, which is past the A..D range every
+      // pin regex in this repo used to assume. PE0 is here on purpose.
+      eng.assignSignal('PC0', { gpio: 'GPIO_Output' });
+      eng.assignSignal('PC1', { gpio: 'GPIO_Input' });
+      eng.assignSignal('PE0', { gpio: 'GPIO_Output' });
+      eng.setGpioField('PC0', 'label', 'LED');
+      eng.setGpioField('PC0', 'speed', 'Very high');  // four speeds on this part, not one
+    },
+  },
 ];
 
 /** Build one fixture and return its serialised .wchproj text. */

@@ -32,7 +32,7 @@
 // =============================================================================
 import {
   M, S, pinType, requiredSignals, sigName, gpioSpeeds, gpioSpeedFor, gpioModes,
-  gpioInputModes, isEnabled,
+  gpioInputModes, isEnabled, pinExists, signalPins, signalAf,
 } from './model.js';
 import { paramDefs, paramValue, paramApplies } from './params.js';
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
@@ -196,6 +196,45 @@ export function remapPlan() {
   }
   calls.sort((a, b) => a.periph.localeCompare(b.periph));
   return { style: c.style || (c.fields ? 'register' : null), fn: c.fn || null, enable: c.enable || 'ENABLE', calls };
+}
+
+/**
+ * The `GPIO_PinAFConfig`-style calls this configuration needs - one per SIGNAL, not one
+ * per peripheral, because that is the unit the silicon muxes.
+ *
+ * This is the third mux shape and the first that is not a whole-peripheral switch. A
+ * remap part writes ONE field (or calls ONE macro) and every signal moves together; an
+ * AF part gives each pin four bits in `GPIOx_AFRL`/`AFRH` and each signal chooses
+ * alone, so the plan is a list of (pin, AF) pairs.
+ *
+ * `af: null` is NOT emitted. The data has to state the AF code; deriving one from a
+ * peripheral name or a pin number is the same class of guess as deriving a function
+ * name from a struct name, which this generator already refuses to make. A signal whose
+ * AF the file does not give becomes a named TODO, and `--strict` catches it.
+ */
+export function afPlan() {
+  const c = cfg().remap || {};
+  if ((c.style || '') !== 'af') return { style: null, fn: null, calls: [], missing: [] };
+  const calls = [], missing = [];
+  for (const [pid, P] of Object.entries(M.peripherals)) {
+    if (!P.signal_pins || !S.periph[pid]) continue;
+    const req = requiredSignals(pid);
+    if (!req.size) continue;
+    const routed = signalPins(pid).pins;
+    for (const sig of [...req].sort()) {
+      const pin = routed[sig];
+      if (!pin || !pinExists(pin)) continue;               // compute() already says so
+      if (skippedClaim({ who: pid, signal: sigName(pid, sig) })) continue;
+      const m = PIN_RE.exec(pin);
+      if (!m) continue;
+      const af = signalAf(pid, sig, pin);
+      const entry = { periph: pid, signal: sig, pin, port: m[1], bit: +m[2], af };
+      (af === null || Number.isNaN(af) ? missing : calls).push(entry);
+    }
+  }
+  const order = (a, b) => (a.port === b.port ? a.bit - b.bit : a.port.localeCompare(b.port));
+  return { style: 'af', fn: c.fn || null, macro: c.macro || 'GPIO_AF$AF',
+           calls: calls.sort(order), missing: missing.sort(order) };
 }
 
 /** True when this peripheral's selected remap is applied by a macro call. */
@@ -431,6 +470,32 @@ function gpioSection() {
   }
 
   if (left.length) L.push(...skipNote(left));
+
+  // AF style: one call per SIGNAL. Emitted before the two whole-peripheral styles
+  // because a part is only ever one of the three, so at most one of these blocks runs.
+  const ap = afPlan();
+  if (ap.style === 'af' && (ap.calls.length || ap.missing.length)) {
+    if (ap.calls.length && ap.fn) {
+      L.push('    /* Alternate function select (GPIOx_AFRL/AFRH, one field per pin) */');
+      for (const c of ap.calls) {
+        const macro = String(ap.macro).replace('$AF', String(c.af));
+        L.push(`    ${ap.fn}(GPIO${c.port}, GPIO_PinSource${c.bit}, ${macro});`
+          + `   /* ${c.pin} — ${sigName(c.periph, c.signal)} */`);
+      }
+      L.push('');
+    } else if (ap.calls.length) {
+      L.push('    /* TODO: alternate function select. The MCU file muxes per pin but gives no');
+      L.push('       codegen.remap.fn, so the call that applies it cannot be written. Needed:');
+      for (const c of ap.calls) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)} = AF${c.af}`);
+      L.push('       Add codegen.remap.fn (GPIO_PinAFConfig on the parts seen so far). */');
+    }
+    if (ap.missing.length) {
+      L.push('    /* TODO: alternate function select. These signals have a pin but the MCU file');
+      L.push('       states no `af:` for it, and this generator does not guess an AF code:');
+      for (const c of ap.missing) L.push(`         ${c.pin}: ${sigName(c.periph, c.signal)}`);
+      L.push('       Add `af:` to the signal_pins entry and generate again. */');
+    }
+  }
 
   // Macro style first: one SDK call per peripheral whose selected remap names a macro.
   const rp = remapPlan();

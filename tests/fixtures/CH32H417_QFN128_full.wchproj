@@ -1,0 +1,183 @@
+wchproj: 1
+name: compile-gate CH32H417 QFN128
+saved: fixture
+mcu: CH32H417
+variant: null
+package: QFN128
+peripherals:
+  SYS:
+    settings:
+      Debug: 1-wire SDI (SWIO)
+    remap: 0
+  USART1:
+    settings:
+      Mode: Asynchronous
+      Hardware Flow Control: Disable
+    remap: 0
+    af_pins:
+      TX: PD13
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
+  USART2:
+    settings:
+      Mode: Asynchronous
+      Hardware Flow Control: Disable
+    remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
+  USART3:
+    settings:
+      Mode: Disable
+      Hardware Flow Control: Disable
+    remap: 0
+    params:
+      baud: 115200
+      word: 8 bits
+      parity: None
+      stop: '1'
+  SPI1:
+    settings:
+      Mode: Full-Duplex Master
+      Hardware NSS Signal: Disable (software NSS)
+    remap: 0
+    af_pins:
+      SCK: PA5
+    params:
+      prescaler: Mode 3
+      cpol: Low
+      cpha: 1 Edge
+      datasize: 8 bits
+      firstbit: MSB First
+  SPI2:
+    settings:
+      Mode: Disable
+      Hardware NSS Signal: Disable (software NSS)
+      Master clock output: Disable
+    remap: 0
+    params:
+      prescaler: Mode 3
+      cpol: Low
+      cpha: 1 Edge
+      datasize: 8 bits
+      firstbit: MSB First
+  I2C1:
+    settings:
+      Mode: I2C
+    remap: 0
+    af_pins:
+      SCL: PB8
+    params:
+      speed: 100000
+      duty: '2:1'
+      addrmode: 7-bit
+      addr: 0
+  I2C2:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      speed: 100000
+      duty: '2:1'
+      addrmode: 7-bit
+      addr: 0
+  I3C:
+    settings:
+      Mode: Disable
+    remap: 0
+    params:
+      sda_hold: 0.5 cycle
+      wait_time: State 0
+  TIM1:
+    settings:
+      Channel1: PWM Generation CH1 CH1N
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Break Input: Disable
+    remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
+      rcr: 0
+  TIM2:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Encoder Mode: Disable
+    remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
+  TIM3:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Encoder Mode: Disable
+    remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
+  TIM4:
+    settings:
+      Channel1: Disable
+      Channel2: Disable
+      Channel3: Disable
+      Channel4: Disable
+      Clock Source: Internal Clock
+      Encoder Mode: Disable
+    remap: 0
+    params:
+      prescaler: 0
+      period: 65535
+      counter: Up
+      ckd: '1'
+      arpe: false
+gpio_manual:
+  PC0: GPIO_Output
+  PC1: GPIO_Input
+  PE0: GPIO_Output
+gpio_settings:
+  PC0:
+    mode: Output Push Pull
+    pull: No pull
+    speed: Very high
+    label: LED
+  PC1:
+    mode: Input
+    pull: No pull
+    speed: Low
+    label: ''
+  PE0:
+    mode: Output Push Pull
+    pull: No pull
+    speed: Low
+    label: ''
+clock:
+  hse: 25
+  pllIn: 0
+  pllMul: 1
+  sys: HSI
+  pre:
+    HB: 1

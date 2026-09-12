@@ -89,6 +89,13 @@ SETTING_TYPES = {"choice", "checkboxes"}
 CHOICE_KEYS = {"name", "signals", "default"}
 SETTING_KEYS = {"name", "type", "choices", "notes"}
 PIN_ENTRY_KEYS = {"type", "analog", "notes", "five_volt_tolerant", "drive"}
+# One entry of `signal_pins:` - a pin this signal may use, and the AF code that pin's
+# GPIOx_AFRy field must hold to carry it. Checked for stray keys like everything else
+# written in flow style, because an unquoted comma truncates the value before it.
+SIGNAL_PIN_KEYS = {"pin", "af", "notes"}
+# How a remap reaches the silicon. `register` and `macro` move a whole peripheral at
+# once; `af` moves one pin at a time and is the only one that pairs with `signal_pins:`.
+REMAP_STYLES = {"register", "macro", "af"}
 
 # `gpio.*` entries. `class` is only meaningful on a mode - it is the direction the mode
 # drives, and `constraints:` selects modes by it (see GPIO_MODE_CLASSES).
@@ -314,6 +321,56 @@ def check_peripherals(doc: dict, r: Report) -> None:
             r.error(f"{where}.remaps", "must be a list")
             remaps = []
 
+        # `signal_pins:` - the per-pin AF shape. A peripheral uses ONE mux shape; a
+        # part carrying both would have two places saying where a signal goes, and the
+        # engine reads `signal_pins` first, so the `remaps:` list would silently be
+        # dead. Rejected rather than resolved by precedence.
+        sig_pins = P.get("signal_pins")
+        af_routed: set[str] = set()
+        if sig_pins is not None:
+            spw = f"{where}.signal_pins"
+            if not isinstance(sig_pins, dict) or not sig_pins:
+                r.error(spw, "must be a non-empty mapping signal -> [{pin, af}, ...]")
+                sig_pins = {}
+            elif remaps:
+                r.error(where, "has BOTH `remaps:` and `signal_pins:`; a peripheral muxes one "
+                               "way or the other. The engine reads `signal_pins` first, so the "
+                               "`remaps:` list here would never be used")
+            for signal, opts in (sig_pins or {}).items():
+                sw2 = f"{spw}.{signal}"
+                if not isinstance(opts, list) or not opts:
+                    r.error(sw2, "must be a non-empty list of { pin, af } entries")
+                    continue
+                af_routed.add(str(signal))
+                seen_pins: set[str] = set()
+                for k, o in enumerate(opts):
+                    ow = f"{sw2}[{k}]"
+                    if not isinstance(o, dict):
+                        r.error(ow, "must be a mapping with `pin` and `af`")
+                        continue
+                    stray = unknown_keys(o, SIGNAL_PIN_KEYS)
+                    if stray:
+                        r.error(ow, f"unknown key(s) {stray} - almost always an unquoted comma "
+                                    f"inside {{ }}, which truncates the value before it")
+                    pin = o.get("pin")
+                    if pin is None:
+                        r.error(ow, "missing `pin`")
+                    elif str(pin) not in pins_map:
+                        r.error(ow, f"`{pin}` is not declared in `pins:`")
+                    elif str(pin) in seen_pins:
+                        # Two entries for one pin can only differ in `af`, and the engine
+                        # keys the user's choice by PIN NAME, so the second is unreachable.
+                        r.error(ow, f"`{pin}` is listed twice for this signal; the engine keys "
+                                    f"the choice by pin name, so the second entry is dead")
+                    else:
+                        seen_pins.add(str(pin))
+                    af = o.get("af")
+                    if af is None:
+                        r.warn(ow, f"`{pin}` has no `af:`; codegen will not guess an AF code "
+                                   f"and emits a TODO instead")
+                    elif not isinstance(af, int) or not (0 <= af <= 15):
+                        r.error(ow, f"`af: {af}` must be an integer 0..15 (GPIOx_AFRy is four bits)")
+
         routed: set[str] = set()
         for i, remap in enumerate(remaps):
             rw = f"{where}.remaps[{i}]"
@@ -383,9 +440,11 @@ def check_peripherals(doc: dict, r: Report) -> None:
                 r.info(sw, f"first choice `{choices[0].get('name')}` carries signals, so this peripheral "
                            f"reads as enabled from reset - correct when the reset state holds the pin")
 
-        for sig in sorted(wanted - routed):
+        for sig in sorted(wanted - routed - af_routed):
             if remaps:
                 r.error(where, f"signal `{sig}` can be selected but no remap routes it")
+            elif sig_pins:
+                r.error(where, f"signal `{sig}` can be selected but `signal_pins:` gives it no pin")
 
         rbp = P.get("remap_by_package") or {}
         if rbp and not isinstance(rbp, dict):
@@ -718,6 +777,35 @@ def check_codegen(doc: dict, r: Report) -> None:
         r.error("codegen", "must be a mapping")
         return
     periphs = doc.get("peripherals") or {}
+
+    # `codegen.remap.style` names the route a remap takes to the silicon. Three exist:
+    #   register  an AFIO field per peripheral (the default when `fields:` is present)
+    #   macro     one GPIO_PinRemapConfig call per peripheral
+    #   af        one GPIO_PinAFConfig call per PIN - the per-pin shape
+    # `af` is the only one that pairs with `signal_pins:`, and the pairing is checked
+    # in both directions: a style with no peripheral to apply it to is as dead as a
+    # peripheral whose style was never declared, and both look like working data.
+    remap_cfg = cg.get("remap") or {}
+    style = remap_cfg.get("style")
+    if style is not None and style not in REMAP_STYLES:
+        r.error("codegen.remap.style", f"unknown style `{style}` (known: {', '.join(sorted(REMAP_STYLES))})")
+    af_periphs = sorted(pid for pid, P in periphs.items() if isinstance(P, dict) and P.get("signal_pins"))
+    if style == "af":
+        if not remap_cfg.get("fn"):
+            r.error("codegen.remap.fn", "`style: af` needs the function that applies it "
+                                        "(GPIO_PinAFConfig on the parts seen so far); without it "
+                                        "the generator emits a TODO instead of the call")
+        if remap_cfg.get("fields"):
+            r.error("codegen.remap.fields", "`style: af` muxes per PIN, so there is no "
+                                             "per-peripheral AFIO field to write")
+        if not af_periphs:
+            r.error("codegen.remap.style", "`style: af` but no peripheral has `signal_pins:`, "
+                                            "so nothing would ever be emitted")
+    elif af_periphs:
+        r.error("codegen.remap.style",
+                f"{', '.join(af_periphs)} use `signal_pins:` but codegen.remap.style is "
+                f"`{style or 'unset'}`; the AF emitter only runs on `style: af`, so the pin "
+                f"choices would reach the pinout and never reach the generated C")
 
     for pid, slices in ((cg.get("remap") or {}).get("fields") or {}).items():
         where = f"codegen.remap.fields.{pid}"

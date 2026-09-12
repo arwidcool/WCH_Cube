@@ -22,11 +22,19 @@ See the comment in board.h — an LED pin has to come from your schematic."
 
 void board_init(void)
 {
-    SystemCoreClockUpdate();
+    /* Through the HAL rather than calling the SDK directly: the function that
+     * refreshes SystemCoreClock is `SystemAndCoreClockUpdate` on CH32H417 (two
+     * cores) and `SystemCoreClockUpdate` everywhere else, and wch_hal_clock.c is
+     * the one place that knows which. Calling the SDK by name here compiled with
+     * an implicit declaration on H417 and would have failed at link. */
+    (void)wch_hal_clock_sysclk_hz();
     Delay_Init();
 
-#if defined(SDI_PRINT) && (SDI_PRINT == 1)
-    /* printf() over the WCH-Link debug data registers. Claims no pin. */
+#if defined(SDI_PRINT) && (SDI_PRINT == 1) && WCH_HAL_HAS_SDI_PRINTF
+    /* printf() over the WCH-Link debug data registers. Claims no pin.
+     * The third condition is not belt-and-braces: CH32H417's debug.h has no
+     * SDI_Printf_Enable at all, so on that part this block must not be compiled
+     * even though SDI_PRINT is set for every environment in platformio.ini. */
     SDI_Printf_Enable();
 #endif
 

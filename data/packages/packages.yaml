@@ -46,8 +46,21 @@ packages:
   - { id: QFN40,    kind: quad, pins: 40,  pitch: 0.5,  body: [6, 6],  epad: true }
   - { id: QFN48,    kind: quad, pins: 48,  pitch: 0.5,  body: [7, 7],  epad: true }
   - { id: QFN56,    kind: quad, pins: 56,  pitch: 0.5,  body: [8, 8],  epad: true }
+  # CH32H417/H416/H415 DS v1.8 ch.4: "QFN60X6 6*6mm 0.35mm". The `X6` is WCH's own
+  # suffix for the 6*6 mm body, not a pin count - the package has sixty pins. Kept as
+  # the datasheet spells it, for the same reason LQFP64M is: a package id that does not
+  # match the datasheet is its own source of doubt. Used by CH32H416RDU6 and
+  # CH32H415REU6, neither of which is in data/mcus/ yet.
+  - { id: QFN60X6, kind: quad, pins: 60,  pitch: 0.35, body: [6, 6],  epad: true }
   - { id: QFN64,    kind: quad, pins: 64,  pitch: 0.5,  body: [9, 9],  epad: true }
+  # QFN68 was already here at 8*8 mm 0.4 mm and the CH32H417 datasheet agrees exactly
+  # (DS v1.8 ch.4, "QFN68 8*8mm 0.4mm"). Left untouched; recorded so nobody re-measures.
   - { id: QFN68,    kind: quad, pins: 68,  pitch: 0.4,  body: [8, 8],  epad: true }
+  # CH32H417/H416/H415 DS v1.8 ch.4. Both are new with CH32H417 - QFN88 is
+  # CH32H417MEU6 and QFN128 is CH32H417QEU6. QFN128 is the largest package in this
+  # library and the finest pitch in it: 32 pins a side at 0.35 mm.
+  - { id: QFN88,    kind: quad, pins: 88,  pitch: 0.4,  body: [10, 10], epad: true }
+  - { id: QFN128,   kind: quad, pins: 128, pitch: 0.35, body: [12.3, 12.3], epad: true }
 
   # ---- quad, leaded -------------------------------------------------------
   - { id: LQFP32,   kind: quad, pins: 32,  pitch: 0.8,  body: [7, 7] }

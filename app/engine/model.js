@@ -47,13 +47,28 @@ export function registerMcuFile(text) {
 // Pin alternate functions are NOT listed per pin in the data files; they are
 // derived here from every peripheral's remap table (single source of truth).
 export function deriveMcu(y) {
-  y._pinSignals = {};                                   // pin name -> [{periph, signal, remap}]
+  y._pinSignals = {};                                   // pin name -> [{periph, signal, remap|af}]
   for (const [pid, P] of Object.entries(y.peripherals)) {
     (P.remaps || []).forEach((r, ri) => {
       for (const [sig, pin] of Object.entries(r.pins || {})) {
         (y._pinSignals[pin] ||= []).push({ periph: pid, signal: sig, remap: ri });
       }
     });
+    // `signal_pins:` is the same fact for an AF-muxed part: where a signal CAN go.
+    // The difference is that each signal chooses independently, so an entry carries
+    // the pin's AF code instead of an index into a whole-peripheral remap list.
+    // Both shapes land in the same `_pinSignals` map, because every reader of it is
+    // asking the same question - "what can this pin do" - and neither answer is
+    // per-pin data duplicated from somewhere else: for an AF part the signal list IS
+    // the single source of truth, exactly as `remaps:` is for a remap part.
+    for (const [sig, opts] of Object.entries(P.signal_pins || {})) {
+      for (const o of (Array.isArray(opts) ? opts : [])) {
+        if (!o || !o.pin) continue;
+        (y._pinSignals[o.pin] ||= []).push({
+          periph: pid, signal: sig, af: o.af === undefined || o.af === null ? null : Number(o.af),
+        });
+      }
+    }
   }
   y._phys = {};                                         // package -> {pin number: [names]}
   y._alias = {};                                        // package -> {name: canonical name}
@@ -106,7 +121,12 @@ export function initState(m) {
     for (const d of (Array.isArray(P.params) ? P.params : [])) if (d && d.key !== undefined) params[String(d.key)] = d.default;
     // channelParams: TIM_OCInitTypeDef is filled once per CHANNEL, so its values are
     // keyed by the channel number the data uses. Empty until somebody sets one.
-    const ps = { settings: {}, remap: 0, params, channelParams: {} };
+    // `remap` is an index into `remaps:`; `afPins` is signal -> pin for a part that
+    // muxes per pin. A part uses one or the other and never both - which is checked,
+    // not assumed, by validate_mcu.py. `afPins` holds only what the user has actually
+    // chosen, so a signal the user never touched keeps whatever defaultSignalPin()
+    // answers and a .wchproj records a decision rather than a default.
+    const ps = { settings: {}, remap: 0, afPins: {}, params, channelParams: {} };
     for (const s of P.settings || []) {
       const def = s.choices.find(c => c.default);
       ps.settings[s.name] = s.type === 'checkboxes' ? new Set(def ? [def.name] : []) : (def || s.choices[0]).name;
@@ -225,6 +245,67 @@ export function applyPackageRemaps() {
     if (P.remap_by_package && S.pkg in P.remap_by_package) S.periph[pid].remap = P.remap_by_package[S.pkg];
 }
 
+// ---- where a peripheral's signals land ---------------------------------------
+// THE SEAM. Two families of silicon answer "which pin does this signal use" in two
+// different shapes, and this is the only place that knows there are two:
+//
+//   `remaps:`      ONE register field moves EVERY signal of the peripheral at once,
+//                  so a selected index is a complete, atomic, register-valued choice.
+//                  CH32V003/V005/V006 (AFIO_PCFR1 field) and CH32X035 (a macro).
+//   `signal_pins:` each signal picks its OWN pin, and the pin's four-bit AFR field
+//                  says which function it carries. CH32H417 (GPIOx_AFRL/AFRH).
+//
+// Everything downstream - the conflict engine, the pin grid, the picker, codegen -
+// asks this function and never looks at either key directly. That is what keeps the
+// remap parts byte-identical: for them this returns the very object they used before.
+export const signalPinDefs = pid => (M.peripherals[pid] || {}).signal_pins || null;
+export const isAfMuxed = pid => !!signalPinDefs(pid);
+
+// The pins a signal of an AF-muxed peripheral may use: [{ pin, af }], in file order.
+export function signalPinOptions(pid, sig) {
+  const sp = signalPinDefs(pid);
+  const list = sp && sp[sig];
+  if (!Array.isArray(list)) return [];
+  return list.filter(o => o && o.pin).map(o => ({
+    pin: String(o.pin), af: o.af === undefined || o.af === null ? null : Number(o.af),
+  }));
+}
+
+// What a signal uses when the user has not chosen: the first option BONDED on this
+// package, falling back to the first option at all. Preferring a bonded pin matters -
+// this part's packages drop whole ports, and defaulting to an absent pin would make a
+// peripheral look unusable on a package where three other pins would have served.
+// It is a pure function of (part, package, file order), so a reload answers the same.
+export function defaultSignalPin(pid, sig) {
+  const opts = signalPinOptions(pid, sig);
+  if (!opts.length) return null;
+  return (opts.find(o => pinExists(o.pin)) || opts[0]).pin;
+}
+
+// signal -> pin for this peripheral as it is configured right now, in the same shape
+// a `remaps:` entry has, so one reader covers both.
+export function signalPins(pid) {
+  const P = M.peripherals[pid] || {}, st = S.periph[pid] || {};
+  if (!P.signal_pins) return (P.remaps || [])[st.remap] || { pins: {} };
+  const chosen = st.afPins || {};
+  const pins = {};
+  for (const sig of Object.keys(P.signal_pins)) {
+    const want = chosen[sig];
+    const ok = want && signalPinOptions(pid, sig).some(o => o.pin === want);
+    const pin = ok ? want : defaultSignalPin(pid, sig);
+    if (pin) pins[sig] = pin;
+  }
+  return { name: 'the per-pin AF map', pins, af: true };
+}
+
+// The AF code a signal needs on a given pin, or null when the data does not say.
+// Codegen refuses to emit a GPIO_PinAFConfig without one rather than guessing a
+// number - the same rule that stops it deriving a function name from a struct name.
+export function signalAf(pid, sig, pin) {
+  const hit = signalPinOptions(pid, sig).find(o => o.pin === pin);
+  return hit ? hit.af : null;
+}
+
 // ---- peripheral queries ------------------------------------------------------
 // Which signals this peripheral needs, given its current settings.
 export function requiredSignals(pid) {
@@ -256,6 +337,18 @@ export function isEnabled(pid) {
 // Can any non-default choice of this peripheral be satisfied on this package?
 export function isAvailable(pid) {
   const P = M.peripherals[pid];
+  // An AF-muxed peripheral is usable when every signal a choice needs has at least one
+  // bonded pin - and the signals are INDEPENDENT, so this is a per-signal test rather
+  // than a search for one remap that satisfies them all. Testing it the remap way here
+  // would call a peripheral unusable whenever no single listed combination happened to
+  // be fully bonded, which on this silicon is not what "unusable" means.
+  if (P.signal_pins) {
+    for (const s of P.settings || []) for (const c of s.choices) {
+      if (!c.signals) continue;
+      if (c.signals.every(sig => signalPinOptions(pid, sig).some(o => pinExists(o.pin)))) return true;
+    }
+    return !((P.settings || []).some(s => s.choices.some(c => c.signals)));
+  }
   if (!P.remaps || !P.remaps.length) return true;
   for (const s of P.settings || []) for (const c of s.choices) {
     if (!c.signals) continue;

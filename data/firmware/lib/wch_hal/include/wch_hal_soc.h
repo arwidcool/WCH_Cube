@@ -41,6 +41,15 @@ extern "C" {
 #elif defined(CH32X035) || defined(CH32X033)
 #  include <ch32x035.h>
 #  define WCH_HAL_SERIES_CH32X035 1
+#elif defined(CH32H417) || defined(CH32H41x)
+/* CH32H417 / H416 / H415 — SPL series "ch32h417". The board file sets
+ * -DCH32H417QE -DCH32H41X -DCH32H41x -DCH32H417, and this is the only family here
+ * that is DUAL CORE (QingKe RISC-V5F at 400 MHz plus RISC-V3F at 160 MHz); the
+ * framework ships a linker script per core, Link_CH32H417_v5f.ld and
+ * Link_CH32H417_v3f.ld. Which one a build uses comes from the board id, not from
+ * anything this header can see. */
+#  include <ch32h417.h>
+#  define WCH_HAL_SERIES_CH32H417 1
 #else
 #  error "wch_hal: unsupported series. Add the SPL header for this part here, \
 after checking the name in framework-wch-noneos-sdk/Peripheral/<series>/inc/."
@@ -50,6 +59,19 @@ after checking the name in framework-wch-noneos-sdk/Peripheral/<series>/inc/."
  * folder, which the platform puts on the include path unless
  * `board_build.use_builtin_debug_code = no` is set in platformio.ini. */
 #include <debug.h>
+
+/* Does this family's Debug folder offer printf over the WCH-Link debug data
+ * registers? On CH32V003/V00Xx/X035 it does, and `SDI_Printf_Enable()` costs no
+ * pin, which is why the firmware prefers it. **CH32H417's debug.h declares only
+ * `USART_Printf_Init(uint32_t)`** — there is no SDI_Printf_Enable to call, and
+ * calling it anyway compiles with an implicit declaration and fails at LINK.
+ * Stated here, beside the series switch, because "what this family has" is what
+ * this header is for. */
+#if defined(WCH_HAL_SERIES_CH32H417)
+#  define WCH_HAL_HAS_SDI_PRINTF 0
+#else
+#  define WCH_HAL_HAS_SDI_PRINTF 1
+#endif
 
 #ifdef __cplusplus
 }

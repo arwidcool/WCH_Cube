@@ -2,7 +2,7 @@
   "mcpServers": {
     "cortex-debug": {
       "type": "sse",
-      "url": "http://localhost:7583/sse"
+      "url": "http://localhost:7580/sse"
     }
   }
 }

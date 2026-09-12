@@ -122,6 +122,11 @@
   .mode select{width:100%;padding:3px 6px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
   .checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:2px 12px}
   .checks label{background:none;font-weight:400}
+  /* One row per signal on an AF-muxed part: the signal name, then its pin list. The
+     name column is fixed so the selects line up however long the signal names are. */
+  .afrow{display:grid;grid-template-columns:minmax(90px,auto) 1fr;align-items:center;gap:6px;margin:1px 0}
+  .afrow .afsig{font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--muted);white-space:nowrap}
+  .afrow select{width:100%}
   .mode .issue{grid-column:1/-1;color:var(--bad);background:var(--warn-bg);border-left:3px solid var(--pin-conflict);padding:4px 8px}
   .mode .hint{grid-column:1/-1;color:var(--muted)}
   /* a shared resource is contended, not a pin clash: dashed edge, own colour */
@@ -391,7 +396,14 @@
   .pin.unused rect{fill:var(--pin-unused)}
   .pin.power rect{fill:var(--pin-power)}
   .pin.ground rect{fill:var(--pin-gnd)}
-  .pin.reset rect,.pin.boot rect{fill:var(--pin-sys)}
+  /* `sys`, `analog` and `nc` are documented pin types in data/FORMAT.md and had NO
+     rule here, because no part used them until CH32H417 - whose crystal pads, Ethernet
+     MDI pairs and USB SuperSpeed pairs are all fixed-function rather than GPIO. Without
+     a fill the rect kept the SVG default and the label sat on it at 1.14:1, which
+     legibility.test.js caught. `--pin-sys` is the same fill reset and boot already use,
+     so the pairing with --on-pin is one the suite has always checked. */
+  .pin.reset rect,.pin.boot rect,.pin.sys rect,.pin.analog rect{fill:var(--pin-sys)}
+  .pin.nc rect{fill:var(--pin-unused)}
   .pin.set rect{fill:var(--pin-set)}
   .pin.set text{fill:var(--on-pin)}       /* white on CubeMX green is 2.8:1 */
   .pin.conflict rect{fill:var(--pin-conflict)}
@@ -1288,8 +1300,17 @@ function openPicker(pin, cx, cy) {
   const sigs = grp.flatMap(n => (M._pinSignals[n] || []).map(x => ({ ...x, via: n }))).sort((a, b) => (a.periph + a.signal).localeCompare(b.periph + b.signal));
   if (sigs.length) h += `<div class="grp">Alternate functions</div>`;
   for (const s of sigs) {
-    const P = M.peripherals[s.periph], rn = P.remaps.length > 1 ? P.remaps[s.remap].name : '';
-    const isCur = !!(cur && cur.claims.some(c => c.who === s.periph && c.signal === sigName(s.periph, s.signal)) && S.periph[s.periph].remap === s.remap);
+    const P = M.peripherals[s.periph];
+    // Two mux shapes, two things worth showing under the name. A remap part names the
+    // remap the click would select, because picking this signal moves its SIBLINGS
+    // too. An AF part names the AF code instead: the signal moves alone, so there is
+    // no remap to warn about and the useful fact is which function the pin's AFR field
+    // has to select.
+    const af = isAfMuxed(s.periph);
+    const rn = af ? (s.af === null || s.af === undefined ? '' : `AF${s.af}`)
+                  : (P.remaps.length > 1 ? P.remaps[s.remap].name : '');
+    const onThisPin = !!(cur && cur.claims.some(c => c.who === s.periph && c.signal === sigName(s.periph, s.signal)));
+    const isCur = af ? onThisPin : !!(onThisPin && S.periph[s.periph].remap === s.remap);
     // the engine decides whether picking this would collide (AGENT-2's previewAssign)
     const why = previewAssign(pin, s);          // engine decides; '' means no collision
     const warn = why ? '⚠ ' + why : '';
@@ -1731,6 +1752,10 @@ const isEnabledPeriph = pid => pid === 'GPIO' ? Object.keys(S.manual).length > 0
 function periphHasSignal(pid, q) {
   const P = M.peripherals[pid];
   if (!P) return false;
+  // Both mux shapes carry the same fact - the signal names this peripheral has - in
+  // different keys. Searching only `remaps:` would make an AF part unsearchable by
+  // signal, which is the one thing this box exists for.
+  if (Object.keys(P.signal_pins || {}).some(sig => sigName(pid, sig).toLowerCase().includes(q))) return true;
   return (P.remaps || []).some(r => Object.keys(r.pins || {}).some(sig => sigName(pid, sig).toLowerCase().includes(q)));
 }
 function renderTree() {
@@ -2037,6 +2062,26 @@ function renderCentre() {
       const missing = Object.values(r.pins).filter(p => !pinExists(p));
       return `<option value="${i}"${st.remap === i ? ' selected' : ''}>${r.name}${missing.length ? '  — missing ' + [...new Set(missing)].join(', ') : ''}</option>`;
     }).join('') + '</select>';
+  } else if (isAfMuxed(pid)) {
+    // ONE SELECTOR PER SIGNAL, not one for the peripheral. A remap dropdown here would
+    // be a control the silicon does not have: these signals move independently, so a
+    // single list of combinations could only ever offer a fraction of the legal ones.
+    // Only the signals the current settings actually require are shown - a pin picker
+    // for a signal nothing has asked for is a choice with no effect.
+    const routed = signalPins(pid).pins;
+    const req = [...requiredSignals(pid)].filter(sig => signalPinOptions(pid, sig).length).sort();
+    if (req.length) {
+      h += `<label>Pin per signal (GPIO AF)</label>`;
+      for (const sig of req) {
+        const opts = signalPinOptions(pid, sig);
+        h += `<div class="afrow"><span class="afsig">${esc(sigName(pid, sig))}</span>`
+          + `<select data-afsig="${attr(sig)}">` + opts.map(o => {
+            const gone = !pinExists(o.pin);
+            return `<option value="${attr(o.pin)}"${routed[sig] === o.pin ? ' selected' : ''}>`
+              + `${esc(o.pin)}${o.af === null ? '' : ` (AF${o.af})`}${gone ? ' — not bonded' : ''}</option>`;
+          }).join('') + '</select></div>';
+      }
+    }
   }
   // Shared-resource issues arrive folded into E.issues[pid] as plain text; pull them
   // back out so they read as what they are, and never print the same line twice.
@@ -2053,6 +2098,8 @@ function renderCentre() {
   mode.querySelectorAll('select[data-s]').forEach(el => el.onchange = () => { setSetting(pid, el.dataset.s, el.value); renderAll(); });
   mode.querySelectorAll('input[data-s]').forEach(el => el.onchange = () => { toggleSetting(pid, el.dataset.s, el.dataset.c, el.checked); renderAll(); });
   const rs = mode.querySelector('select[data-remap]'); if (rs) rs.onchange = () => { setRemap(pid, +rs.value); renderAll(); };
+  mode.querySelectorAll('select[data-afsig]').forEach(el =>
+    el.onchange = () => { setSignalPin(pid, el.dataset.afsig, el.value); renderAll(); });
 
   // The DMA controller's own entry is the one place that shows all its channels at
   // once, so the overview hangs off it whatever tabs it happens to have.

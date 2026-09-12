@@ -69,7 +69,9 @@ int main(void)
      * clock tree, everything read back below has to reflect the new tree.
      * See ARCHITECTURE.md, "Two clock owners". */
     WCHCube_Init();
-    SystemCoreClockUpdate();
+    /* Through the HAL: the SDK spells this SystemAndCoreClockUpdate on CH32H417
+     * and SystemCoreClockUpdate everywhere else (wch_hal_clock.c knows which). */
+    (void)wch_hal_clock_sysclk_hz();
 #endif
 
     app_banner();

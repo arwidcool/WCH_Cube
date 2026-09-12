@@ -452,7 +452,18 @@ function mainC(t) {
   L.push(' *  would be a second HAL for you to maintain.');
   L.push(' * ' + '-'.repeat(74) + ' */');
   L.push(`#include "${cfg().header || 'debug.h'}"`);
-  L.push('#include "debug.h"      /* Delay_Init, Delay_Ms, SDI_Printf_Enable, printf */');
+  // The SDK does not spell these the same way on every family, so BOTH come from
+  // the MCU file rather than from a literal here:
+  //   codegen.clock_update_fn  SystemCoreClockUpdate on most parts, but
+  //                            SystemAndCoreClockUpdate on a dual-core one, where
+  //                            calling the other name fails at LINK.
+  //   codegen.sdi_printf_fn    absent on a part whose Debug folder has no SDI
+  //                            channel at all - it prints over a USART instead -
+  //                            and an absent key means the call is not emitted.
+  // Defaults keep every existing part's output byte-identical.
+  const clockUpdate = cfg().clock_update_fn || 'SystemCoreClockUpdate';
+  const sdiPrintf = cfg().sdi_printf_fn === undefined ? 'SDI_Printf_Enable' : cfg().sdi_printf_fn;
+  L.push(`#include "debug.h"      /* Delay_Init, Delay_Ms, ${sdiPrintf ? sdiPrintf + ', ' : ''}printf */`);
   L.push('#include "wchcube_init.h"');
   L.push('');
   L.push(...user('Includes'));
@@ -461,16 +472,22 @@ function mainC(t) {
   L.push('');
   L.push('int main(void)');
   L.push('{');
-  L.push('    SystemCoreClockUpdate();');
+  L.push(`    ${clockUpdate}();`);
   L.push('    Delay_Init();');
-  L.push('    SDI_Printf_Enable();   /* printf goes to the WCH-Link SDI channel; no pin is used */');
+  if (sdiPrintf) {
+    L.push(`    ${sdiPrintf}();   /* printf goes to the WCH-Link SDI channel; no pin is used */`);
+  } else {
+    L.push('    /* The SDK for this part has no SDI printf channel - its debug.h declares only');
+    L.push('       USART_Printf_Init(baud), which would claim a pin. Call it yourself if you');
+    L.push('       want printf, and pick the USART in the configurator so the pin is reserved. */');
+  }
   L.push('');
   L.push('    /* The board file sets SYSCLK before main() through SystemInit(); the generated');
   L.push('       WCHCube_RCC_Init() then applies the tree this project asked for and wins. So a');
   L.push(`       ${r ? r.SYSCLK : '?'} MHz project may boot at the board's rate and change here - which is why`);
-  L.push('       SystemCoreClockUpdate() is called again below, before anything reads the clock. */');
+  L.push(`       ${clockUpdate}() is called again below, before anything reads the clock. */`);
   L.push('    WCHCube_Init();');
-  L.push('    SystemCoreClockUpdate();');
+  L.push(`    ${clockUpdate}();`);
   L.push('');
   L.push(`    printf("\\r\\n${PROJECT.name} — ${t.variant} (${M.mcu.name}, ${t.package})\\r\\n");`);
   if (r) {
@@ -538,7 +555,7 @@ function readmeMd(t) {
   L.push('');
   L.push('The board file gives `SystemInit()` a SYSCLK before `main()` runs, then');
   L.push('`WCHCube_RCC_Init()` applies the tree this project asked for and wins. `main.c` calls');
-  L.push('`SystemCoreClockUpdate()` afterwards so `Delay_Ms()` and anything else reading');
+  L.push(`\`${cfg().clock_update_fn || 'SystemCoreClockUpdate'}()\` afterwards so \`Delay_Ms()\` and anything else reading`);
   L.push(`\`SystemCoreClock\` stay honest${r ? `. This project asks for ${r.SYSCLK} MHz from ${S.clock.sys}` : ''}.`);
   L.push('The banner prints both, so a configuration that did not take is visible on the first run.');
   L.push('');
