@@ -847,13 +847,77 @@ function paramLiteral(pid, d, value) {
  * identifier each. Without them the block is still emitted - the field values are
  * known and useful - followed by a TODO naming the two keys that would apply it.
  */
+/**
+ * ONE peripheral, TWO register blocks — and which one is right is a MODE, not a name.
+ *
+ * `codegen.periph_handle.<PID>` is a string for every peripheral that has one register
+ * block. CH32H417's full-speed USB has two: `ch32h417.h:1810-1811` defines
+ *
+ *     #define USBFSD  ((USBFSD_TypeDef *)USBFS_BASE)
+ *     #define USBFSH  ((USBFSH_TypeDef *)USBFS_BASE)
+ *
+ * — the SAME base address behind two different struct types, because the peripheral is a
+ * device controller or a host controller and its registers mean different things in each
+ * role. A single string cannot name both, so USB `params:` could not be written at all;
+ * the same shape appeared on CH32X035 in round 4 (`USBFSD` / `USBFSH`) and was parked.
+ *
+ * It is not a second peripheral and it is not two handles at once: it is one handle whose
+ * value depends on a choice the user has ALREADY made. The Device/Host setting exists, it
+ * already decides which block is initialised, so the data names the setting and the handle
+ * each of its choices implies:
+ *
+ *     periph_handle:
+ *       USBFS:
+ *         setting: Mode
+ *         by_choice:
+ *           Device (FS): USBFSD
+ *           Host (FS):   USBFSH
+ *
+ * A choice with no entry is NOT defaulted to either one. Picking the device block for a
+ * host configuration writes host registers through device field names, which compiles and
+ * is wrong on the board - the defect class this generator exists to refuse - so it becomes
+ * a TODO naming the choice and the key.
+ */
+export function periphHandle(pid) {
+  const spec = (cfg().periph_handle || {})[pid];
+  if (spec === undefined || spec === null) return { handle: null, missing: null };
+  if (typeof spec === 'string') return { handle: spec, missing: null };
+  if (typeof spec !== 'object') {
+    return { handle: null, missing: `codegen.periph_handle.${pid} is neither a name nor a by_choice block` };
+  }
+  const setting = spec.setting;
+  const table = spec.by_choice;
+  if (!setting || !table || typeof table !== 'object') {
+    return {
+      handle: null,
+      missing: `codegen.periph_handle.${pid} is a block but names no `
+        + `${!setting ? 'setting:' : 'by_choice:'}, so which register block applies cannot be read`,
+    };
+  }
+  const chosen = ((S.periph[pid] || {}).settings || {})[setting];
+  if (chosen === undefined) {
+    return { handle: null, missing: `codegen.periph_handle.${pid}.setting names "${setting}", `
+      + `which is not a setting ${pid} has` };
+  }
+  const hit = table[chosen];
+  if (hit) return { handle: hit, missing: null, via: `${setting} = ${chosen}` };
+  return {
+    handle: null,
+    missing: `codegen.periph_handle.${pid}.by_choice has no register block for ${setting} = `
+      + `"${chosen}" (it names ${Object.keys(table).map(k => `"${k}"`).join(', ') || 'nothing'}). `
+      + 'The two blocks are the same base address read as different structs, so the wrong one '
+      + 'compiles and is wrong on the board; this generator will not pick one',
+  };
+}
+
 export function initPlan(pid) {
   const defs = paramDefs(pid).filter(d => !d.readonly && paramApplies(pid, d));
   const structs = [];
   const calls = [];
   const notes = [];
   const cg = cfg();
-  const handle = (cg.periph_handle || {})[pid];
+  const hs = periphHandle(pid);
+  const handle = hs.handle;
   for (const d of defs) {
     if (d.sdk_none) {
       notes.push(`${d.name} = ${paramValue(pid, d.key)} — the SDK exposes nothing for it`
@@ -880,6 +944,11 @@ export function initPlan(pid) {
       structs.push(block = {
         struct: d.struct, fn: spec.fn || null,
         noHandle: !!spec.no_handle, handle: spec.no_handle ? null : (handle || null),
+        // WHY the handle is absent, when the data tried to give one. A by_choice block
+        // whose current choice is unlisted is a different gap from no entry at all, and
+        // "add codegen.periph_handle.USBFS" would be wrong advice for it - the key is
+        // already there.
+        handleMissing: spec.no_handle ? null : hs.missing,
         fields: [], missing: [],
       });
     }
@@ -980,7 +1049,10 @@ function sdkCalls(pid, d, handle) {
     for (const a of args) {
       const token = String(a);
       if (token === '$VALUE') filled.push(lit.text);
-      else if (token === '$HANDLE') { if (!handle) missing = `codegen.periph_handle.${pid}`; else filled.push(handle); }
+      else if (token === '$HANDLE') {
+        if (!handle) missing = periphHandle(pid).missing || `codegen.periph_handle.${pid}`;
+        else filled.push(handle);
+      }
       else if (token === '$CHANNEL') { if (!r) missing = '$CHANNEL without sdk_repeat: channels'; else filled.push(r.macro); }
       else if (token === '$RANK') { if (!r) missing = '$RANK without sdk_repeat: channels'; else filled.push(String(r.rank)); }
       else if (token === '$INDEX') { if (!r) missing = '$INDEX without sdk_repeat: channels'; else filled.push(String(r.index)); }
@@ -1081,7 +1153,11 @@ function periphBlock(pid) {
     } else {
       L.push('        /* TODO: nothing applies this struct. The MCU file needs');
       if (!b.fn) L.push(`           codegen.init_structs.${b.struct}.fn — the SDK function that takes a ${b.struct}`);
-      if (!b.handle) L.push(`           codegen.periph_handle.${pid} — the SPL name of ${pid}'s register block`);
+      if (!b.handle) {
+        L.push(b.handleMissing
+          ? `           ${b.handleMissing}`
+          : `           codegen.periph_handle.${pid} — the SPL name of ${pid}'s register block`);
+      }
       L.push('           This generator does not derive a function name from a struct name. */');
     }
     L.push(`    }`);
