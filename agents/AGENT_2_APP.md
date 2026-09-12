@@ -217,77 +217,79 @@ against the shape, and if the shape is wrong say so in the same cycle rather tha
 
 ## Current
 
-**Round 5, cycle 1 — deliverable A's three consumers are wired, to the DOCUMENTED schema.**
+**CH32H417 push, cycle 1 — all three P0 mechanisms landed, and nothing in AGENT-1's brief is
+blocked on me any more.** Each is read from the data; `grep -riE "h417|x035|ch32v00|l103"
+app/engine/ app/template.html` is still comments only.
 
-`data/FORMAT.md` `## constraints` is the contract (AGENT-1 posted it 22:02Z) and
-`app/engine/constraints.js` is the only place it is interpreted. All three consumers read the
-same `constraintFor(pin, field, choice)`:
+**P0.3 + P1 — an analog pad is not an alternate function (`15c3fd3`).** For an ADC/OPA/CMP/DAC
+pad there is no AF code, so *"Add `af:` to the signal_pins entry"* was advice nobody can
+follow. `afPlan()` now splits its no-`af:` list by what the data already states — the
+peripheral's `category` and whether the pin is analog-capable, the same two facts
+`analogClaim()`'s fallback reads — and the analog half gets the exact `codegen.analog_signals`
+line to write, the pads under it, the missing pin flag, and the consequence out loud. The
+`af:` message survives where it is right, proven by a Connectivity pad in the same test.
+Two new refusals: a signal that is BOTH declared analog and given an `af:`, and a signal whose
+`af:` is real but whose PAD is analog because another claim on it is.
 
-- **the GPIO table** reduces the option list **per row** and puts the constraint's `reason` and
-  `source` in that row's tooltip — never a greyed column;
-- **the conflict engine** reports a violating claim as an issue carrying the author's reason and
-  the constraint id (`E.constraintIssues`, plus the owning peripheral's issue list);
-- **codegen** declines and emits the TODO the strict gate looks for.
+Then the three consumers, which did not agree. **The GPIO table carried a THIRD copy of the
+mode derivation** — "any peripheral claims it, therefore alternate function" — and on every
+part × every package with every signal claimed, **175 rows** read `Alternate Function Push
+Pull` for a pad the generator puts in `GPIO_Mode_AIN`. It calls `gpioEffectiveMode()` now. Two
+more the same rule fixed: the pull column is a control only on an **Input** row (`modeMacro()`
+reads the pull only for Input; the SPL has no standalone pull bit — the stored value is kept,
+not cleared), and a pad whose every claim `GPIO_Init` must not touch offers **no** control,
+with the reason, instead of a mode nothing writes. The engine reports analog-vs-AF on one pad
+from ONE owner (`E.analogIssues`) and stays quiet for two owners, which is already a conflict
+said by name — without that guard it fired on 2 pads of a fully-enabled CH32V006.
 
-`normaliseGpioConstraints()` is called from `projectApply()`, so a `.wchproj` that violates a
-constraint opens with no console error and says what it dropped. **`gpioEffectiveMode()` is now
-shared** — the engine used to look only at what the user stored while the generator derives a
-mode for a peripheral's pin, which was one rule with two answers; it was moved, not copied, and
-the generated C is byte-identical to the baseline.
+**P0.1 — one init struct applied once PER INSTANCE (`03b8cef`).** `channel_params` generalised,
+not a second mechanism beside it: the FUNCTION and the HANDLE both vary per instance and they
+vary independently (`TIM_OC1Init(TIM1, &s)` varies the function; `LTDC_LayerInit(LTDC_Layer1,
+&s)` varies the handle), so one `instances:` map names both plus the setting that decides
+whether the instance is live. Both old spellings still read and normalise to identical rows.
+**Two holes it exposed the moment it existed:** `initPeripherals()` dropped any peripheral
+whose parameters live entirely in its per-instance block, so a real LTDC would have generated
+no init function at all; and the per-instance parameters had **no editor anywhere in the
+page** — a store since round 4 and not one control. Parameter Settings grows a band per live
+instance now, named from `applies_per`.
 
-Evidence: 510 tests ALL GREEN with no skips; `--strict` 0 on all four fixtures in both formats;
-all four fixtures' `.c`/`.h` byte-identical to the pre-change baseline; verified in browser at
-1280×720 and 1920×1080, light and dark, 100 % and 125 % zoom, no viewport overflow.
+**P0.2 — two register blocks, one peripheral (`6d87dd4`).** `USBFSD` and `USBFSH` are the same
+base address read as two struct types (`ch32h417.h:1810-1811`). `periph_handle` may now be
+`{ setting:, by_choice: }`, and a choice with no entry is **not** defaulted to either block —
+the device block in a host configuration writes host registers through device field names,
+which compiles and is wrong on the board.
 
-**Two things I got wrong and the gates caught, both worth remembering:**
+**The `const:` question from the brief is answered: it already covered it, through both routes**
+— the struct member AND an `sdk_call` argument (`OPA_CMP_Cmd(CMP1, ENABLE)`). The test that
+proves it is in HEAD.
 
-1. My first consumer read a shape I invented (`gpio.constraints` with `field:`/`deny:`/`allow:`)
-   because DATA's post was 20 minutes old and I had not seen it. The documented shape was
-   already in `FORMAT.md` and already gated by `tests/constraints.test.js`. **Read the board and
-   the data document before designing a schema, not after** — the whole point of shape-first is
-   that the second mover does not re-design it.
-2. I had `only_on`/`not_on` inverted. `only_on` is an allow-list, so the refused region is the
-   **complement**; `not_on` is the exact deny-list. Inverted, it refused outputs on PA0 because
-   PA0 was not in a `not_on` list — a mechanism that looked like it worked and was exactly
-   backwards. QA's one-sided-check control ("an unshorted pin keeps the output mode") is what
-   caught it.
+**Evidence, and the standard did not move.** 703 tests green, no skips; 33 new tests, all
+against SYNTHETIC parts so a mechanism cannot pass by being right about one chip; **eleven
+planted breaks run, each reddening exactly the test that should catch it**; the only change to
+generated C across all 8 fixtures is **+4 comment lines and 0 changed** vs the HEAD engine on
+the same frozen data; `--strict` 0 on every fixture in both formats; `pio run` SUCCESS on
+CH32H417QEU6 (with and without four analog pads claimed) and CH32V006K8U6.
 
-**Next in my area, in order:** the USBFS/`classes: [out]` question I sent to AGENT-1
-(2026-09-12T01:22Z) — if it is unanswered for two of my cycles it becomes my call, and the
-least-invasive call is a `choices:`-based entry, which needs a DATA commit, not an APP one. Then
-deliverable B's remaining evidence: `--strict` is already 0 on every fixture and every part ×
-package, so what is left there is the tracked CH32X035 `params:` gaps arriving from DATA and
-being consumed without an engine change — and if one needs one, that is a finding. Then the
-`when: {peripheral}` shape is only used by two entries; a third consumer of it (a peripheral's
-own state making another pin illegal) is where a part with a different coupling would prove the
-mechanism was not built for one chip.
+**Browser verification is a real Chromium now, not jsdom.** Node 24 has a built-in `WebSocket`,
+so the driver is CDP over it and needs no npm dependency. 1280 and 1920 wide × light and dark ×
+100 % and 125 % zoom = 8 configurations, each loading **every part × every package** (28 combos,
+1792 loads): zero console errors or warnings, zero elements past the viewport edge. Plus the
+measurements that are the point — on CH32L103/V003/V005/V006 a claimed ADC pad reads mode
+"Analog" with an inert pull cell and generates `GPIO_Mode_AIN` with no AF write; and the
+per-layer editor was driven end to end through a real change event.
 
-### The audit that followed, and it paid twice
+**Two findings posted to AGENT-1, neither acted on by me.** `gpio.modes[].class:` is stated on
+4 of 6 parts and **disagrees between them for the same mode** (`Alternate Function Push Pull` is
+`class: out` on H417/L103/V003 and `class: af` on X035), so I did **not** build the speed column
+on it — the SPL writes `GPIO_Speed` only for an output mode (`ch32h417_gpio.c:99,114`) and that
+column is the one remaining place the same rule would apply. And
+`tools/verify_sdk_names.py:417-419` assumes every `periph_handle` value is a string, so a
+`by_choice` block's macros would go unchecked.
 
-Same cycle, after the three consumers were green: read `app/engine/codegen.js` end to end for an
-assumption that only holds for the parts that exist today — the exercise that found
-`ch32v00x.h` in round 3 and `GPIO_Speed_50MHz` in round 4. Then a machine pass: on every part ×
-every package, switch each peripheral on **one at a time** and list any complaint that is not a
-pin conflict. Two real findings, both fixed in this cycle:
-
-1. **`assignSignal()` stored this app's mode vocabulary, not the part's.** The literals
-   `"Output Push Pull"` / `"Analog"` / `"Input"` went into `S.gpio[pin].mode`, while the macro is
-   looked up in that part's `gpio.modes` — so a part that spells its plain output mode
-   differently would store a name its own file does not carry and emit a TODO for a mode the
-   silicon does have. Latent, because every shipped part spells it the same way. Now
-   `gpioModeForSignal()`, with the literal kept as the **fallback**.
-2. **CH32X035 TSSOP20 and QSOP28 emitted a spurious remap TODO on every configuration with a pin
-   assigned** — a live defect: `--strict` exited 2 for `genericCH32X035F7P6`. `SYS`'s reset pin
-   is bonded to PC3 on those packages (`remap_by_package`), its table carries no `macro:` because
-   the reset pin is an option-byte setting and not a remap, and the "the data cannot apply the
-   selected remap" filter asked only "is a non-zero index selected". QFN28 was unaffected, which
-   is why the compile fixture never caught it. My first fix was too broad and broke two existing
-   tests; the right rule came out of that, and it is data-driven: **does any signal this
-   peripheral requires actually reach a GPIO register** (`codegen.skip_signals`). A check now
-   assigns a pin on every part × every package and demands zero complaints.
-
-Lessons worth keeping: a **default** configuration never reaches the remap section (no GPIOs
-means an early return), so "the fixtures are green" is not evidence about that code path — the
-package you did not put in the fixture is the one that is broken. And when a fix breaks two
-existing tests, the tests are usually telling you the rule you actually want.
-
+**Next:** P2 — the app itself on the biggest part in the repo, all three packages, in the real
+browser. The sweep above already says console and overflow are clean on all 28 combinations, so
+what is left there is the per-tab work: the picker on a pad with dozens of functions, ports E
+and F, the search across ~950 AF assignments, 125 NVIC vectors at 4 priority bits, and the
+clock tab's four secondary PLLs and eight peripheral muxes — which is a schema decision with
+AGENT-1, not a rendering one, and the thing it must not do is show a derived frequency that
+ignores a mux the silicon has.
