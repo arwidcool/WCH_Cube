@@ -677,10 +677,16 @@ CH32V003 3 open; suite 721 green; CI never executed.
 
 ## Deliverable F — CH32L103 and CH32V003 at 0 open  (AGENT-1)
 
-- [ ] `python tools/coverage.py CH32L103` → 0 open, `status: complete`
-- [ ] `python tools/coverage.py CH32V003` → 0 open, `status: complete` (needs `USART_ClockInit`
-      in codegen — AGENT-2)
-- [ ] `python tools/coverage.py --quiet` prints **six zeros**
+- [x] `python tools/coverage.py CH32L103` -> 0 open, `status: complete`
+      -> AGENT-1, 12 -> 0. The twelve CMP2/CMP3 pads modelled once `const:` landed.
+- [x] `python tools/coverage.py CH32V003` -> 0 open, `status: complete`
+      -> AGENT-1, 3 -> 0. The three USART1_CK rows.
+- [x] `python tools/coverage.py --quiet` prints **six zeros**
+      -> verified in a clean clone at origin/main: every part `complete`, `coverage gate:
+         6 of 6 part(s) meet their declared status`. DELIVERABLE F IS COMPLETE.
+         What it does NOT mean, and PROGRESS.md says so beside the numbers: the ledger asks
+         whether every DATASHEET fact is accounted for. It does not ask what the app does
+         with them - CH32H417 still has 39 of 78 peripherals without `params:`.
 
 ## Round-6 housekeeping
 

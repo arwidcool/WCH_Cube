@@ -21,17 +21,17 @@ statement here stops being true, change it here first.
   every part to its declared status. `validate_mcu.py` gained the reverse-direction check (a
   routed signal no choice claims is an ERROR) and the `pins: { none | open }` declaration a
   routing-less peripheral must make. **Coverage, quoted from `python tools/coverage.py --quiet`
-  at 2026-09-12T16:52Z** — the numbers move as rows close, so read the tool rather than this
-  line, and treat what follows as a dated snapshot. On CH32H417 this figure moved
-  **113 → 104 → 58 → 50 → 0 in a single afternoon**, which is the reason it is dated:
+  at 2026-09-12T22:38Z** — the numbers move as rows close, so read the tool rather than this
+  line. On CH32H417 this figure went **113 → 104 → 58 → 50 → 0 in a single afternoon**, and
+  CH32L103 and CH32V003 followed. **All six parts now read `status: complete`:**
 
   ```
-    CH32H417   OPEN 0  (modelled 1252, absent 23, disagreements 45)
-    CH32L103   OPEN 12  (modelled 260, absent 11, disagreements 1)
-    CH32V003   OPEN 3  (modelled 113, absent 10, disagreements 0)
-    CH32V005   OPEN 0  (modelled 214, absent 14, disagreements 0)
-    CH32V006   OPEN 0  (modelled 218, absent 11, disagreements 0)
-    CH32X035   OPEN 0  (modelled 278, absent 11, disagreements 0)
+    CH32H417   OPEN 0  (modelled 1256, absent 23, disagreements 45)
+    CH32L103   OPEN 0  (modelled 272,  absent 11, disagreements 1)
+    CH32V003   OPEN 0  (modelled 116,  absent 10, disagreements 0)
+    CH32V005   OPEN 0  (modelled 214,  absent 14, disagreements 0)
+    CH32V006   OPEN 0  (modelled 218,  absent 11, disagreements 0)
+    CH32X035   OPEN 0  (modelled 278,  absent 11, disagreements 0)
   ```
 
   CH32V006, CH32V005, CH32X035 and now **CH32H417** are `complete`; CH32V003 and CH32L103 are
