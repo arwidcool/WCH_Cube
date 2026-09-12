@@ -104,6 +104,19 @@ IO_PIN = re.compile(r'P[A-F]\d+$')
 #  rule would have - and `--audit` still reports any disagreement it cannot repair.
 SPLIT_NAME = re.compile(r'([A-Z][A-Za-z0-9_]*) ([A-Z][A-Za-z0-9_]*)\((AF\d+)\)')
 
+#  ...and the same break landing inside the AF CODE rather than the name:
+#
+#      ## DFSDM_CKOUT(AF6)/SDRAM_DQM3(A
+#      ## F7)/USART6_CTS(AF8)/LTDC_R3(AF9)/
+#
+#  which accumulates to `SDRAM_DQM3(A F7)`. `AF` matches neither half, so the assignment
+#  is simply GONE - no wrong name to notice, just a pad the generator never emits. One
+#  row of Table 2-1-1 is torn this way, PB0's SDRAM_DQM3(AF7), and it showed up as a pad
+#  Table 2-2-15 lists and this one did not. (CH32H416's Table 2-1-2 is torn twice more,
+#  at DS lines 5659 and 5782; that part is not extracted here.) No repair dictionary is
+#  needed: `(A` ends no signal name and `F<digits>)` begins none, so the join is forced.
+SPLIT_AF = re.compile(r'\(A\s+F(\d+)\)')
+
 
 def known_signal_names(text: str) -> set:
     """Every signal name the DS uses, from its own peripheral-first tables 2-2-x.
@@ -197,6 +210,16 @@ def parse(ds_path):
     # Rejoin signal names the page break split (`I2` + `C4_SMBA` -> `I2C4_SMBA`). Done
     # BEFORE anything reads the text, so every consumer downstream sees whole names.
     all_text = ds_path.read_text(encoding="utf-8", errors="replace")
+    af_repairs = []
+    for r in rows:
+        fixed = SPLIT_AF.sub(lambda m: f"(AF{m.group(1)})", r["text"])
+        if fixed != r["text"]:
+            af_repairs.append((r["name"], fixed))
+            r["text"] = fixed
+    if af_repairs:
+        print(f"  rejoined {len(af_repairs)} AF code(s) split by a line break:", file=sys.stderr)
+        for pin, _ in af_repairs:
+            print(f"    {pin}", file=sys.stderr)
     repairs = repair_split_names(rows, known_signal_names(all_text))
     if repairs:
         print(f"  rejoined {len(repairs)} signal name(s) split by a line break:", file=sys.stderr)

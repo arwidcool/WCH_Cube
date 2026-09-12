@@ -427,6 +427,16 @@ def _glue(tokens: list[tuple[str, int]], dictionary: set[str]) -> list[tuple[str
             if prev.endswith("-") and prev != "-" and not CELL.match(t):
                 out[-1] = (prev + t, pn)
                 continue
+            # `SDRAM_DQM3(A` + `F7)`: the conversion tore the AF CODE across the line
+            # break, not the name. No name ends in `(A` and none begins `F<digits>)`, so
+            # this join needs no dictionary and can never be ambiguous. Left torn, the
+            # function is invisible to the pin-first reading and the signal-first table's
+            # copy of it reads as a disagreement the silicon has not got: that is how
+            # PB0's SDRAM_DQM3(AF7) went missing on CH32H417. (Table 2-1-1 is torn this
+            # way once; CH32H416's Table 2-1-2 twice more, for whoever reads it next.)
+            if prev.endswith("(A") and re.match(r"^F\d+\)$", t):
+                out[-1] = (prev + t, pn)
+                continue
             if prev == "V" and SUBSCRIPT.match(t):               # `V` + `SS` = VSS
                 out[-1] = (prev + t, pn)
                 continue
@@ -537,6 +547,26 @@ def parse_pin_table(text: str, cfg: dict, pin_aliases: dict, dictionary: set[str
             if f:
                 row.funcs.append((f[0], None, None, ln))
                 row.own.add(f[0])
+        # THE NAME CELL WRAPS. `PC13(4)-RTC` arrives as `PC13` `(4)` `-RT` `C`,
+        # `PC14(4)-OSC32_IN` as `PC14` `(4)` `-` `OSC32_IN`, `PC15(4)-OSC32_OUT` as
+        # `PC15` `(4)` `-` `OSC32_OU` `T`. Everything between the anchor and the type
+        # column is the rest of that ONE cell, and a cell has no meaningful internal
+        # whitespace, so it is joined and read as the pad's own datasheet name. Read
+        # token by token instead, `-RT` `C` `I` `O` becomes the functions `C`, `I` and
+        # `O` - two halves of the type column and half a torn name, three facts the
+        # silicon has not got. The lookahead is the same four tokens the anchor test
+        # used, and a fragment carrying a bare number is a wrapped package cell rather
+        # than a name, so it is left alone.
+        k, limit = i + 1, min(n, i + 5)
+        while k < limit and not is_type(toks[k][0], pin_types):
+            k += 1
+        if i + 1 < k < limit and not any(re.match(r"^\d+$", x) for x, _ in toks[i + 1:k]):
+            for part in "".join(x for x, _ in toks[i + 1:k]).split("-"):
+                f = _split_func(part)
+                if f and f[0] != base:
+                    row.funcs.append((f[0], f[1], f[2], toks[i + 1][1]))
+                    row.own.add(f[0])
+            i = k - 1                       # the consume loop below starts at the type run
         # consume type tokens, dashes and the main-function repeat of the pin name
         j = i + 1
         while j < n:
@@ -607,14 +637,30 @@ def parse_signal_rows(text: str, cfg: dict) -> dict[str, set[tuple[str, int | No
     port pins (temperature sensor, Vrefint) are skipped. Returns pin -> {(base, af)}."""
     lines, first = _region(text, cfg["start"], cfg["end"], f"signal table `{cfg['start']}`")
     cell = re.compile(r"\b(P[A-Z]\d{1,2})\s*(?:\(\s*AF(\d{1,2})\s*\))?")
-    sigre = re.compile(r"^([A-Z][A-Za-z0-9]*_[A-Za-z0-9_/]+)")
+    # A signal cell: one or more `/`-separated upper-case names. NOT every signal name
+    # has an underscore, and requiring one hid four rows: `MCO PB0(AF0)` (Table 2-2-30),
+    # `CC1 PB3(AF4)` / `CC2 PB4(AF4)` (2-2-17) and `SWCLK PB8` / `SWDIO/SWIO PB9`
+    # (2-2-10). A skipped row leaves `cur` on the PREVIOUS signal, so their pins were
+    # then filed under it - PB3/PB4 under UHSIF_CLK, PB8/PB9 under USART8_CTS, PB0
+    # under DFSDM_CKOUT - which is fourteen open ledger rows and wrong in both
+    # directions at once: a phantom where the pin landed, a missing row where it came
+    # from. So a cell that is FOLLOWED BY PIN CELLS needs no underscore: the pins
+    # anchor it, and a column heading (`SPI4 function Optional pins`) cannot match.
+    # A cell ALONE on its line - the conversion wraps `SPI2_NSS/I2S2_WS` away from its
+    # pins - has no such anchor, so there the underscore rule still stands.
+    _CELLNAME = r"[A-Z][A-Z0-9]*(?:_[A-Za-z0-9]+)*(?:/[A-Z][A-Za-z0-9_]*)*"
+    sig_pins = re.compile(rf"^({_CELLNAME})\s+(?=P[A-Z]\d|-)")
+    sig_alone = re.compile(rf"^({_CELLNAME})\s*$")
     out: dict[str, set[tuple[str, int | None]]] = collections.defaultdict(set)
     cur: list[str] = []
     for raw in lines:
         line = _strip_hash(raw)
         if not line or NOISE_LINE.search(line) or re.search(r"function|pin$|_RM=", line):
             continue
-        m = sigre.match(line)
+        m = sig_pins.match(line)
+        if not m:
+            solo = sig_alone.match(line)
+            m = solo if solo and "_" in solo.group(1) else None
         rest = line
         if m and not PIN_TOKEN.match(m.group(1).split("/")[0]):
             cur = [s for s in m.group(1).split("/") if s]
@@ -859,6 +905,20 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
                 return a
         return None
 
+    # ---- declared disagreements, keyed (pin, token). Read here rather than only in the
+    # two-readings section below because ONE declaration answers BOTH rows a difference
+    # produces. A token only the signal-first table carries opens two: "the DS puts this
+    # function on this pin and the file does not route it there" (check 3) and "the two
+    # readings differ" (check 7). They are the same fact. Closing them separately would
+    # mean an `absent:` entry beside every `disagreements:` entry - and `absent:` is
+    # consulted FIRST, so the pair would report the row as absent and the disagreement
+    # would never be printed at all. The conflict would be recorded in a file and invisible
+    # in the ledger, which is the failure this whole tool exists to stop. So a declaration
+    # that cites both readings closes both rows, and both are printed as `disagreement`
+    # with its reason - declared and counted, never silent, and never "modelled".
+    declared_dis = {(str(d.get("pin")), str(d.get("token"))): d for d in disagreements}
+    used_dis: set[tuple[str, str]] = set()
+
     # ---- forward: every DS function on every pin
     canon_on_pin: dict[str, set[tuple[str, str]]] = collections.defaultdict(set)
     seen_abs: set[int] = set()
@@ -873,7 +933,20 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
                 seen_abs.add(id(a))
                 res.add("pin", key, "absent", str(a["reason"]), str(a["source"]))
                 continue
+            def declared_here() -> bool:
+                """Report this row as the declared disagreement it is. Called only where
+                the row would otherwise be OPEN, never where the file routes the signal
+                correctly: a declaration explains a row, it does not un-route a pin."""
+                d = declared_dis.get((pin, base))
+                if not d:
+                    return False
+                used_dis.add((pin, base))
+                res.add("pin", key, "disagreement", str(d["reason"]), str(d["source"]))
+                return True
+
             cands, how = aliaser.resolve(base)
+            if not cands and declared_here():
+                continue
             if not cands:
                 if not is_io and pin not in model.pins:
                     res.add("pin", key, "unread", "a pad the file does not declare as a pin", cite)
@@ -892,10 +965,13 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
                 pid, sig = hit[0]
                 file_af = model.af.get((pid, sig, pin))
                 if af is not None and file_af is not None and file_af != af:
-                    res.add("pin", key, "open", f"{pid}_{sig} is on {pin} in the file with "
-                            f"af: {file_af}, the DS says AF{af}", cite)
+                    if not declared_here():
+                        res.add("pin", key, "open", f"{pid}_{sig} is on {pin} in the file "
+                                f"with af: {file_af}, the DS says AF{af}", cite)
                 else:
                     res.add("pin", key, "modelled", f"{pid}_{sig} ({how})", cite)
+                continue
+            if declared_here():
                 continue
             # resolved to a name, but not on this pin
             pid, sig = cands[0]
@@ -1067,8 +1143,7 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
     # for `OPA3_OUT0`) counts as agreement. What is left is the silicon read two ways
     # with different answers, and that is recorded, never averaged.
     if second:
-        declared = {(str(d.get("pin")), str(d.get("token"))): d for d in disagreements}
-        used: set[tuple[str, str]] = set()
+        declared, used = declared_dis, used_dis
         first_only, second_only = [], []
 
         def canon(tok: str) -> str:
@@ -1128,11 +1203,12 @@ def build(part: str, cov: dict | None = None, doc: dict | None = None) -> Result
                         f"the DS's two readings differ ({side}); record it in `disagreements:` "
                         "with a source, or fix the parse with `corrections:`",
                         f"{ds_rel}")
-        for key, d in declared.items():
-            if key not in used:
-                res.add("declaration", f"disagreement {key[0]} {key[1]}", "open",
-                        "declared, but the two readings agree on it now; delete the entry",
-                        f"data/coverage/{part}.yaml")
+
+    for key, d in declared_dis.items():
+        if key not in used_dis:
+            res.add("declaration", f"disagreement {key[0]} {key[1]}", "open",
+                    "declared, but the two readings agree on it now; delete the entry",
+                    f"data/coverage/{part}.yaml")
 
     res.inventory = {
         # Every row, io or not. The dedicated pads are the ones worth having here: a

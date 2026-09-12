@@ -196,6 +196,95 @@ def main() -> int:
         return False
     plants.append(("ledger: a parse that cannot see a bonded pin refuses to report", p_parse_misses_pins))
 
+    def p_torn_name_cell():
+        # The shape CH32H417's conversion produced for `PC13(4)-RTC` and
+        # `PC15(4)-OSC32_OUT`: the pin-NAME cell wrapped mid-name, and the type column
+        # (`I/O`, `I/O/A`) landed on the line after it. Read token by token that is the
+        # functions `C`, `I`, `O`, `A`, `OSC32_OU` and `T` - half a torn name plus the
+        # type column spelled out - and 13 such rows sat open on CH32H417. Read as one
+        # cell it is RTC and OSC32_OUT, which is what the silicon has. The dictionary is
+        # EMPTY here on purpose: the join must come from the cell boundary, not from
+        # `_glue` recognising a name it has seen elsewhere.
+        text = "\n".join([
+            "Table Z Pin definitions",
+            "## - - 8", "## PA1", "## (4)", "## -RT", "## C", "## I/O - PA1", "## (5)", "",
+            "## RTC(AF1)", "",
+            "## - - 9", "## PA2", "## (4)", "## -", "## OSC32_OU", "## T",
+            "## I/O/A - PA2", "## (5)", "",
+            "## OSC32_OUT", "",
+            "Table Z-end",
+        ])
+        cfg = {"start": "Table Z Pin definitions", "end": "Table Z-end"}
+        rows = C.parse_pin_table(text, cfg, {}, set(), {"PA1", "PA2"}, [])
+        got = {r.pin: sorted({f[0] for f in r.funcs}) for r in rows}
+        return got == {"PA1": ["RTC"], "PA2": ["OSC32_OUT"]}
+    plants.append(("parser: a name cell torn across lines is one name, never the type column",
+                   p_torn_name_cell))
+
+    def p_signal_row_no_underscore():
+        # The signal-first tables 2-2-x do not put an underscore in every name, and the
+        # parser used to require one. A skipped row does not merely go missing: it leaves
+        # the reader on the PREVIOUS signal, so its pins are filed under that one. On
+        # CH32H417 `SWCLK PB8` and `SWDIO/SWIO PB9` (Table 2-2-10) landed on USART8_CTS,
+        # `CC1`/`CC2` (2-2-17) on UHSIF_CLK and `MCO PB0` (2-2-30) on DFSDM_CKOUT - a
+        # phantom pad where each one landed AND a missing row where it came from.
+        text = "\n".join([
+            "Table 2-2-9 USART Pin functions",
+            "USART8 function Optional pins",
+            "## USART8_CTS PE10(AF11), PF9(AF7)",
+            "## Table 2-2-10 Debug Pin Functions",
+            "Debug pin function Default pin",
+            "## SWCLK PB8",
+            "## SWDIO/SWIO PB9",
+            "## Chapter 3",
+        ])
+        got = C.parse_signal_rows(text, {"start": "Table 2-2-9 USART Pin functions",
+                                         "end": "## Chapter 3"})
+        return (got.get("PB8") == {("SWCLK", None)}
+                and got.get("PB9") == {("SWDIO", None), ("SWIO", None)}
+                and got.get("PE10") == {("USART8_CTS", 11)}
+                and got.get("PF9") == {("USART8_CTS", 7)})
+    plants.append(("parser: a signal-first row whose name has no underscore is still a row",
+                   p_signal_row_no_underscore))
+
+    def p_disagreement_closes_pin_row():
+        # ONE declaration answers BOTH rows a difference between the two readings produces:
+        # "the DS puts this function here and the file does not route it there" and "the
+        # two readings differ". Closing them separately would need an `absent:` entry
+        # beside every `disagreements:` one - and `absent:` wins, so the conflict would be
+        # recorded in a file and never printed. The row must come back as `disagreement`,
+        # never as `modelled` and never silent.
+        d = copy.deepcopy(doc0)
+        del d["peripherals"]["SPI1"]
+        # `PA1 SPI_SCK_5`: the row KEY carries the remap index the DS writes on the token,
+        # the declaration is keyed by the token itself. Naming both here is the point -
+        # a declaration keyed by the printed row would never match anything.
+        pin, tok, key = "PA1", "SPI_SCK", "PA1 SPI_SCK_5"
+        first = next((r for r in open_rows(d, cov0) if r.kind == "pin" and r.key == key), None)
+        if first is None:
+            return False
+        cv = copy.deepcopy(cov0)
+        cv["disagreements"] = [{"pin": pin, "token": tok,
+                                "reason": "the two readings differ here", "source": "x"}]
+        res = C.build(PART, cov=cv, doc=d)
+        closed = not any(r.kind == "pin" and r.key == first.key for r in res.open)
+        named = any(r.kind == "pin" and r.key == first.key and r.status == "disagreement"
+                    for r in res.rows)
+        return closed and named
+    plants.append(("ledger: a declared disagreement closes the pin row it explains",
+                   p_disagreement_closes_pin_row))
+
+    def p_dead_disagreement():
+        # ...and one that explains nothing is dead, and reported - the same guard the
+        # `absent:` declarations have, now that a disagreement can close a row on its own.
+        cv = copy.deepcopy(cov0)
+        cv["disagreements"] = [{"pin": "PA0", "token": "NOSUCHTOKEN",
+                                "reason": "nothing matches this", "source": "x"}]
+        return any(r.kind == "declaration" and "NOSUCHTOKEN" in r.key
+                   for r in open_rows(doc0, cv))
+    plants.append(("ledger: a `disagreements:` entry nothing matches is dead, and reported",
+                   p_dead_disagreement))
+
     # ---------------------------------------------------------------- the gate
     def p_gate_complete_with_open():
         cv = copy.deepcopy(cov0)

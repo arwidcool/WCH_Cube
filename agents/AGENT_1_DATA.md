@@ -130,51 +130,66 @@ Ordered by what unblocks the most. Each one is a `TODO` in the generated C today
 
 ## Current
 
-**Cycle 2 — first cycle on the coverage ledger. CH32L103 33 -> 12 open rows, committed
-`f105682`.** Queue is what `python tools/coverage.py --quiet` prints; the counts today are
-CH32H417 113, CH32L103 12, CH32V003 3, and CH32V005/CH32V006/CH32X035 at **0, status:
-complete**.
+**Cycle 3 - CH32H417's coverage ledger is CLOSED: 104 -> 0 open rows, `status: complete`.**
+Measured, not remembered: `python tools/coverage.py --quiet` reads CH32H417 **OPEN 0**
+(modelled 1252, absent 23, disagreements 45), CH32L103 12, CH32V003 3, and
+CH32V005/V006/X035 at 0. Validator **0 errors / 99 warnings** repo-wide, down from 166.
+`verify_sdk_names.py` 0. `coverage gate: 6 of 6`. `python build.py && node tests/run.js`
+**ALL GREEN, 682 tests, 0 skipped**. Compiled `CH32H417_QFN128_full.wchproj` -> `pio run`
+SUCCESS. (BOARD 2026-09-12T16:55Z.)
 
-**Done this cycle** (BOARD 2026-09-12T12:01Z, 12:20Z).
+**The finding worth carrying to the next part: four of the hundred rows were a missing
+pad. The other ninety-six were the reader.** Three parser defects, each now with a planted
+break in `tools/coverage_selftest.py` (25/25, every one shown red first):
 
-- **CH32L103's four `pins: open` peripherals are gone.** BKP TAMPER on PC13 (RM 4.2.2, DS
-  Note 2), PWR WKUP on PA0 (RM 2.4.2 EWUP), RTC output on PC13 plus RCC LSE on PC14/PC15
-  (RM 10.2.11.1: LSEON decides whether those pads are LSE or GPIO), USBPD CC1/CC2 on PB6/PB7
-  (RM Table 10-10).
-- **MCO on PA8**, and **I2C1/I2C2 SMBA** on PB5/PB12 as a second `Mode` choice - SMBus alert
-  is optional, so folding it into `I2C` would take a pad a plain I2C user does not need.
-- **EXTEN modelled** (RM ch.25, `ch32l103.h:511/:792/:851`), which is what closes chapters 13
-  and 25 and the `EXTEN` instance. `LDOTRIM`/`ULLDOTRIM`/`HSIPRE` are deliberately not
-  offered: HSIPRE is a **clock** choice and belongs in `clock:`, where it is not modelled yet.
-- **ch.13 (TKEY) maps to ADC1** - `TKENABLE` is an `ADC_CTLR1` bit, the detection channels ARE
-  the ADC channels, and `ch32l103.h` defines `TKey1` as an `ADC_TypeDef` at `ADC1_BASE`. Same
-  shape as CH32V006, settled in round 4.
-- **BOOT1 on PB2 declared absent**: a strap sampled at reset (RM Table 1-1), no AFIO field, no
-  register, so there is nothing to offer.
-- **The PD1 OSC_OUT disagreement recorded** with both readings; the file follows pin-first
-  because DS Note 4 and RM 10.2.11.2 both describe PD0/PD1 that way.
-- **A parser-input fix worth remembering**: the CH32L103 pin table's `end:` ran to the *next
-  table*, so DS Notes 1-5 sat inside the range and the parser read the final `VDD` row's name
-  together with `OSC_IN`/`OSC_OUT` out of the note **prose** - two DS functions that do not
-  exist. The range now ends at `Note 1:`. When a row looks wrong, read the range's endpoints
-  before doubting the data.
+1. **The pin-NAME cell wraps.** `PC13(4)-RTC` arrives as `PC13` / `(4)` / `-RT` / `C` with
+   the type column `I/O` on the line after it, so PC13/PC14/PC15 acquired the "functions"
+   `C`, `I`, `O`, `A`, `T`. Everything between the pin name and the type column is the rest
+   of ONE cell; joined, it reads `RTC`, `OSC32_IN`, `OSC32_OUT`.
+2. **The AF code itself wraps.** `SDRAM_DQM3(A` + `F7)` on PB0. This one is the dangerous
+   shape: the assignment simply disappears - no wrong name to notice - and then reads as a
+   disagreement with the table that has it. `tools/extract_h417_pins.py` needed the same
+   repair, which is how `FMC_DQM3` got its PB0 pad.
+3. **A signal name without an underscore was not a signal name.** `MCO PB0(AF0)`,
+   `CC1`/`CC2`, `SWCLK`/`SWDIO/SWIO` were skipped - and a skipped row leaves the reader on
+   the PREVIOUS signal, so their pins were filed under it. Fourteen rows wrong in both
+   directions at once: a phantom pad where each landed, a missing row where it came from.
+
+**Two mechanisms changed, both mine, both documented and both with planted breaks.**
+(a) A declared `disagreements:` entry closes BOTH rows a difference produces
+(`docs/COVERAGE.md`) - the `absent:`-as-well alternative would have hidden the conflict it
+was recording, because `absent:` is consulted first. It must not touch a row the file
+routes correctly: getting that ordering wrong cost CH32L103 a row on the first attempt.
+(b) `--splice --refresh` reads its own output back and **refuses a write that drops a
+fact** (`_losses()`), because a file that says less is still internally consistent and no
+gate notices.
+
+**Also landed.** `codegen.analog_signals` - PA4/PA5/PB0/PB1/PC4 now generate
+`GPIO_Mode_AIN` (`--strict` 0, 0 codegen complaints, `pio run` SUCCESS), with two
+corrections to the brief from the EVT: `CMP_OUT` is a digital AF, not analog, and SERDES
+takes no GPIO configuration at all so it went to `skip_signals`. And the default-pad
+collisions, 26/20/17 -> **4/0/0**, with the order in `order_defaults()`/`_repair()` in the
+generator where a regeneration reproduces it.
+
+**The mistake, recorded because the shape recurs.** I ran `--refresh` to add one pad
+before reading what it would replace, and it took ~200 lines of cited fact with it - PWR's
+supply rails, LTDC's reasoning, three USB controllers' pads. I noticed only because the
+file got smaller. Restored, then verified structurally against `git show HEAD:` rather than
+by eye. A generated section is not a place to check a diff afterwards; it is a place to
+make the generator refuse. The facts now live where it can put them back:
+`dedicated_pins.yaml` for pads, a new `peripheral_extras.yaml` for the prose.
 
 **Next cycle, in order.**
 
-1. **The CH32H417 `af:` gap**, which is red in the tree and was red before I got there:
-   `DAC_OUT1`/PA4, `OPA_P01`/PB0, `OPA_N01`/PB1, `OPA_OUT01`/PC4 have a pin and no AF code, so
-   codegen refuses to guess and `tests/strict.test.js` exits 2. **They may take no AF code at
-   all** (analog pads) - read the DS/RM before writing one, and if they are analog the fix is
-   `codegen.analog_signals`, not a made-up `af:`.
-2. **CMP2/CMP3 on CH32L103** (12 rows) as soon as AGENT-3's four `ABSENT` entries land -
-   paste-ready text is on the board. **If they have not landed by the next cycle it becomes my
-   decision** and I add the four lines myself with a DECISION entry.
-3. Then **CH32H417's 113 rows**, which is the bulk of what is left.
-
-**Two things not to lose.** (a) `const:` is now a **second part's** need: `OPA_CMP_Init`
-branches on `CMP_NUM` (`ch32l103_opa.c:172,178,184`), so CH32L103's CMP1 is already
-half-modelled in the way CH32X035's OPA is - and `codegen.init_structs` has no
-`CMP_InitTypeDef` and `periph_handle` no `CMP1`, so its four params emit field values with a
-TODO rather than `OPA_CMP_Init`. (b) The generic `EXTEN.nvic`/`EXTEN.clock` keys now excuse
-CH32L103 too, and their citation names CH32V006's header; the fact is true on both parts but
-the key should be filed per part next time that table is touched.
+1. **CH32H417 `params:` for the ~66 peripherals that have none** - claimed `[~]` on
+   TASKS.md. Every parameter traced to `data/sources/H417/Evt/**/ch32h417_*.h` by file and
+   line; never generated wholesale from a sibling part. The four blocked shapes (LTDC layer
+   format, TIM channel params, USBFS's two handles, CMP/OPA `const:`) are posted to AGENT-2
+   as a REQUEST and I write none of them until the board says the mechanism landed.
+2. **UHSIF's 62 and SDMMC's 32 missing `af:` codes** - the whole of what is left of the
+   validator's 99 warnings on this part, and genuinely digital pads. They need reading off
+   DS Table 2-1-1 / the 2-2-x tables, which is where the ledger's dedicated-pin path got
+   them without AF codes in the first place.
+3. **CH32L103's 12 open rows**, then CH32V003's 3.
+4. **Split FMC's static and SDRAM name spaces** - the one fact the single-`FMC` model
+   loses is PB6's `SDRAM_A5(AF11)`, declared absent with its reason today.

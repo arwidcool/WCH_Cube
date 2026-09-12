@@ -374,6 +374,21 @@ def check_peripherals(doc: dict, r: Report) -> None:
         rule = skip.get(pid)
         return rule is True or (isinstance(rule, list) and str(sig) in rule)
 
+    # `codegen.analog_signals` names the pads whose function IS analog: an ADC channel, a
+    # DAC output, an OPA or comparator input. They have no `af:` and never will, because
+    # the pad is selected by a GPIO MODE (`GPIO_Mode_AIN`) and not by a four-bit field in
+    # GPIOx_AFRy - the vendor's own examples set exactly that and call no
+    # GPIO_PinAFConfig. Warning "codegen will not guess an AF code and emits a TODO
+    # instead" for them tells the reader to go and invent a number that does not exist,
+    # which is the one thing this repository's TODO discipline is meant to prevent. 67 of
+    # CH32H417's 161 such warnings were these pads. Mirrors analogClaim() in
+    # app/engine/constraints.js.
+    analog = ((doc.get("codegen") or {}).get("analog_signals") or {})
+
+    def is_analog(pid, sig):
+        listed = analog.get(pid)
+        return isinstance(listed, list) and str(sig) in listed
+
     for pid, P in periphs.items():
         where = f"peripherals.{pid}"
         if not isinstance(P, dict):
@@ -434,7 +449,7 @@ def check_peripherals(doc: dict, r: Report) -> None:
                     if af is None:
                         # No AF code is CORRECT for a pad the generator must not touch;
                         # it is a gap only for a pin codegen will try to mux.
-                        if not skipped(pid, signal):
+                        if not skipped(pid, signal) and not is_analog(pid, signal):
                             r.warn(ow, f"`{pin}` has no `af:`; codegen will not guess an AF code "
                                        f"and emits a TODO instead")
                     elif not isinstance(af, int) or not (0 <= af <= 15):

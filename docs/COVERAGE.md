@@ -197,6 +197,17 @@ that does is a review flag.
   (CH32H417's SerDes pairs, USART8's CTS/RTS pins), both readings are kept, the difference is a
   row, and the row is closed by a `disagreements:` entry that cites both — never by picking one
   quietly.
+
+  **One entry closes both rows the difference produces.** A token only one reading carries
+  opens a check-3 row ("the DS puts this function on this pin and the file does not route it
+  there") *and* a check-7 row ("the two readings differ"). They are the same fact, so a
+  `disagreements:` entry keyed `{pin, token}` answers both, and both print as `disagreement`
+  with its reason — declared and counted, never `modelled` and never silent. It does **not**
+  touch a row the file routes correctly: a declaration explains a row, it does not un-route a
+  pin. The alternative — an `absent:` entry beside every `disagreements:` one — is worse than
+  verbose: `absent:` is consulted first, so the pair would report the row as absent and the
+  conflict would never be printed at all. And an entry that explains nothing is **dead** and
+  reported, the same guard `absent:` has.
 - **Pass on silence.** A source that cannot be read, a coverage file that is missing, a part
   with no coverage file at all: exit 2, named, never a green tick.
 

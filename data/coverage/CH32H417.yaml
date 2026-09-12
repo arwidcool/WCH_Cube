@@ -1,13 +1,15 @@
 # Coverage ledger declarations for CH32H417 - docs/COVERAGE.md is the rule, the schema and
-# the loop. This part is IN EXTRACTION: its open rows are counted in `open_rows:` below,
-# the count may only go down, and the part is not done while it is above zero.
+# the loop.
 #
-#   python tools/coverage.py CH32H417        # the open rows, with the datasheet line to read
+#   python tools/coverage.py CH32H417        # every open row, with the datasheet line to read
+#
+# Every ledger row on this part is now modelled by a named signal, declared absent with a
+# citation, or recorded as a difference between the datasheet's two readings with both
+# sides cited. That is what `status: complete` claims and what `tools/coverage.py --gate`
+# re-checks against the sources on every run; it is NOT a claim that every peripheral is
+# fully parameterised (see TASKS.md for `params:` and `codegen.analog_signals`).
 part: CH32H417
-status: in_extraction
-owner: AGENT-1
-task: "CH32H417: close the coverage ledger"
-open_rows: 104
+status: complete
 
 sources:
   ds: data/sources/H417/Datasheets/CH32H417DS0.md
@@ -40,6 +42,19 @@ aliases:
   RGMII_TD*: ETH_TXD*
   RGMII_*: ETH_*
   SWP_*: SWPMI_*
+  # PC6 is the I2S2 master clock under both readings; only the spelling differs (Table
+  # 2-1-1 `SPI2_MCK(AF5)`, Table 2-2-8 `I2S2_MCK PC6(AF5), PB5(AF8)`). SPI has no
+  # master-clock output on this family - MCK belongs to the I2S mode of the SPI block
+  # (RM ch.23) - so the file routes it under I2S2 and this maps the other spelling onto it.
+  # tools/gen_h417_peripherals.py SIGNAL_FIX does the same on the generator's side.
+  SPI2_MCK: I2S2_MCK
+  # The I2S data line, same pad and same AF in both readings, spelled `I2S2_SD` in Table
+  # 2-1-1 and `SPI2_MOSI/I2S2_SDO` in Table 2-2-8 (PB15, PC1, PC3, all AF5). The file uses
+  # `SD`, which is what CH32V006 and CH32L103 call it and what the tree's I2S settings
+  # name; the SPL settles nothing here, because I2S on this family has no pin-level names
+  # at all - it drives the SPI registers (ch32h417_spi.h: I2S_InitTypeDef, I2S_Mode_*).
+  # So this is a spelling, not a second pad.
+  I2S2_SDO: I2S2_SD
   SWDIO: SYS_SWIO
   # Both ADCs sample the same sixteen pads (CH32H417.notes.md), so one DS token stands for two.
   ADC_IN*: [ADC1_IN*, ADC2_IN*]
@@ -68,8 +83,120 @@ corrections:
     replace_with: [SDRAM_CS_N0]
     reason: "letter O for digit 0 in the conversion; Table 2-2-15 prints SDRAM_CS_N0 on PC2"
     source: "CH32H417DS0.md Table 2-1-1 PC2 row (vs Table 2-2-15)"
-absent: []
-disagreements: []
+absent:
+  # PB6 carries A5 TWICE: `FSMC_A5(AF1)` and `SDRAM_A5(AF11)` on the same row of Table
+  # 2-1-1, and Table 2-2-15 confirms `SDRAM_A5 PB6(AF11), PC13(AF12), PB10(AF0)`. Both are
+  # real, and they are different pads-worth of silicon reached through the same wire: RM
+  # ch.40 has one controller with a static-memory interface and an SDRAM interface, and
+  # this file models it as ONE peripheral `FMC` (the SPL header is ch32h417_fmc.h), so the
+  # aliases `FSMC_*` and `SDRAM_*` both land on `FMC_A5`. `signal_pins:` is keyed by PIN
+  # and takes one AF code per pin, so PB6 keeps AF1 and the AF11 reading has nowhere to go.
+  # NOT a disagreement - the two readings agree - and not a wrong pin: it is the one place
+  # the single-name-space model loses a fact. Splitting FMC's static and SDRAM interfaces
+  # into two name spaces is the fix, and it is a TASKS.md line, not a declaration.
+  - { token: SDRAM_A5, pin: PB6, reason: "FSMC_A5(AF1) and SDRAM_A5(AF11) are the same address line on one pad through the two interfaces of one controller (RM ch.40); the file models FMC as one name space and signal_pins takes one AF per pin, so PB6 keeps FSMC's AF1", source: "CH32H417DS0.md:5386 and :5391 (Table 2-1-1 PB6), Table 2-2-15 SDRAM_A5" }
+  # DMAMUX is not a peripheral a user configures: it is the request router that sits
+  # between the peripherals and the two DMA controllers, inside RM ch.10 (already mapped to
+  # DMA1/DMA2 in `chapters:` below). RM 10.2.3 (CH32H417RM.md:12513): "The DMA controller
+  # provides 16 channels, where DMAMUX channels 1 through 8 are connected to DMA1 channels
+  # 1 through 8, and DMAMUX channels 9 through 16 are connected to DMA2 channels 1 through
+  # 8." One register block serving both, so mapping the instance onto either controller
+  # alone would be half true. What a user picks is a REQUEST per channel, and this part has
+  # no `dma.request_defaults` yet - that is the TASKS.md line, not a peripheral.
+  - { instance: DMAMUX, reason: "the DMA request multiplexer: one register block routing peripheral requests into DMA1's and DMA2's channels (RM 10.2.3), not a peripheral of its own. The per-channel request selection it configures is not modelled on this part yet", source: "CH32H417RM.md:12508-12514 and Table 10-6 (:12678)" }
+# The DS reads the same silicon twice - Table 2-1-1 pin-first, Tables 2-2-x
+# signal-first - and where the two answers differ, BOTH are recorded here and
+# neither is averaged. Every entry names the line of each reading. One entry closes
+# both rows a difference produces: "the DS puts this function on this pin and the
+# file does not route it there" and "the two readings differ" are the same fact.
+disagreements:
+  - { pin: PE3, token: SERDES_TXP,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3791 (Table 2-1-1 PE3 row: SERDES_TXP) vs CH32H417DS0.md:7341 (Table 2-2-20: SERDES_RXP on PE3)" }
+  - { pin: PE3, token: SERDES_RXP,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3791 (Table 2-1-1 PE3 row: SERDES_TXP) vs CH32H417DS0.md:7341 (Table 2-2-20: SERDES_RXP on PE3)" }
+  - { pin: PE4, token: SERDES_TXN,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3802 (Table 2-1-1 PE4 row: SERDES_TXN) vs CH32H417DS0.md:7342 (Table 2-2-20: SERDES_RXN on PE4)" }
+  - { pin: PE4, token: SERDES_RXN,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3802 (Table 2-1-1 PE4 row: SERDES_TXN) vs CH32H417DS0.md:7342 (Table 2-2-20: SERDES_RXN on PE4)" }
+  - { pin: PE5, token: SERDES_RXP,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3813 (Table 2-1-1 PE5 row: SERDES_RXP) vs CH32H417DS0.md:7343 (Table 2-2-20: SERDES_TXP on PE5)" }
+  - { pin: PE5, token: SERDES_TXP,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3813 (Table 2-1-1 PE5 row: SERDES_RXP) vs CH32H417DS0.md:7343 (Table 2-2-20: SERDES_TXP on PE5)" }
+  - { pin: PE6, token: SERDES_RXN,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3825 (Table 2-1-1 PE6 row: SERDES_RXN) vs CH32H417DS0.md:7349 (Table 2-2-20: SERDES_TXN on PE6)" }
+  - { pin: PE6, token: SERDES_TXN,
+      reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
+      source: "CH32H417DS0.md:3825 (Table 2-1-1 PE6 row: SERDES_RXN) vs CH32H417DS0.md:7349 (Table 2-2-20: SERDES_TXN on PE6)" }
+  - { pin: PE5, token: SDRAM_CKE0,
+      reason: "Table 2-1-1 gives SDRAM_CKE0 four pads (PC3, PC5, PE5, PF3) and Table 2-2-15 four others (PC5, PC3, PB8, PF3): they agree on PC3 and PC5 and differ on PE5 against PB8. The file follows pin-first",
+      source: "CH32H417DS0.md:3816 and CH32H417DS0.md:7177 - Table 2-1-1's PE5 row against Table 2-2-15's SDRAM_CKE0 row (the other reading puts it on PB8)" }
+  - { pin: PB8, token: SDRAM_CKE0,
+      reason: "Table 2-1-1 gives SDRAM_CKE0 four pads (PC3, PC5, PE5, PF3) and Table 2-2-15 four others (PC5, PC3, PB8, PF3): they agree on PC3 and PC5 and differ on PE5 against PB8. The file follows pin-first",
+      source: "CH32H417DS0.md:7177 and CH32H417DS0.md:3816 - Table 2-1-1's PB8 row against Table 2-2-15's SDRAM_CKE0 row (the other reading puts it on PE5)" }
+  - { pin: PE6, token: SDRAM_CKE1,
+      reason: "Table 2-1-1 gives SDRAM_CKE1 PB5, PC14, PE6, PF4 and Table 2-2-15 gives PB5, PC14, PF4, PB9: they agree on three and differ on PE6 against PB9. The file follows pin-first",
+      source: "CH32H417DS0.md:3829 and CH32H417DS0.md:7178 - Table 2-1-1's PE6 row against Table 2-2-15's SDRAM_CKE1 row (the other reading puts it on PB9)" }
+  - { pin: PB9, token: SDRAM_CKE1,
+      reason: "Table 2-1-1 gives SDRAM_CKE1 PB5, PC14, PE6, PF4 and Table 2-2-15 gives PB5, PC14, PF4, PB9: they agree on three and differ on PE6 against PB9. The file follows pin-first",
+      source: "CH32H417DS0.md:7178 and CH32H417DS0.md:3829 - Table 2-1-1's PB9 row against Table 2-2-15's SDRAM_CKE1 row (the other reading puts it on PE6)" }
+  - { pin: PB9, token: SDRAM_DQM2,
+      reason: "Table 2-1-1 puts SDRAM_DQM2 on PA0, PA6, PB9, PC10 and Table 2-2-15 on PC10, PA6, PA0, PC11, PE6: they agree on three and differ on PB9 against PC11 and PE6. The file follows pin-first",
+      source: "CH32H417DS0.md:5450 and CH32H417DS0.md:7184 - Table 2-1-1's PB9 row against Table 2-2-15's SDRAM_DQM2 row (the other reading puts it on PC11 and PE6)" }
+  - { pin: PC11, token: SDRAM_DQM2,
+      reason: "Table 2-1-1 puts SDRAM_DQM2 on PA0, PA6, PB9, PC10 and Table 2-2-15 on PC10, PA6, PA0, PC11, PE6: they agree on three and differ on PB9 against PC11 and PE6. The file follows pin-first",
+      source: "CH32H417DS0.md:7184 and CH32H417DS0.md:5450 - Table 2-1-1's PC11 row against Table 2-2-15's SDRAM_DQM2 row (the other reading puts it on PB9)" }
+  - { pin: PE6, token: SDRAM_DQM2,
+      reason: "Table 2-1-1 puts SDRAM_DQM2 on PA0, PA6, PB9, PC10 and Table 2-2-15 on PC10, PA6, PA0, PC11, PE6: they agree on three and differ on PB9 against PC11 and PE6. The file follows pin-first",
+      source: "CH32H417DS0.md:7184 and CH32H417DS0.md:5450 - Table 2-1-1's PE6 row against Table 2-2-15's SDRAM_DQM2 row (the other reading puts it on PB9)" }
+  - { pin: PF11, token: SDRAM_RAS_N,
+      reason: "Table 2-2-15 gives SDRAM_RAS_N five pads (PF11, PC15, PF3, PC10, PE5) and Table 2-1-1 only the last four - PF11's pin-first row carries I2C4_SMBA, OPA2_P1 and UHSIF_CLK and no SDRAM function at all. The file follows pin-first",
+      source: "CH32H417DS0.md:7179 and CH32H417DS0.md:3818 - Table 2-1-1's PF11 row against Table 2-2-15's SDRAM_RAS_N row (the other reading puts it on PC10, PC15, PE5 and PF3)" }
+  - { pin: PB13, token: QSPI2_SIOX0,
+      reason: "Table 2-1-1 CONTRADICTS ITSELF here and Table 2-2-25 does not: pin-first gives QSPI2_SIOX1(AF11) to BOTH PB12 (:4530) and PB14 (:4558) and SIOX0(AF11) to PB13 (:4545), leaving SIOX2 and SIOX3 on no pad at AF11 at all; signal-first reads PB11/PB12/PB13/PB14 = SIOX0/1/2/3, four consecutive pins in order. The file follows pin-first, because the whole AF map is derived from Table 2-1-1 and reading one signal from the other table would make the map incoherent. Recorded, not averaged: this one needs the vendor or a board to settle",
+      source: "CH32H417DS0.md:4545 (Table 2-1-1 PB13 row: QSPI2_SIOX0) vs CH32H417DS0.md:7452 (Table 2-2-25: QSPI2_SIOX2 on PB13)" }
+  - { pin: PB13, token: QSPI2_SIOX2,
+      reason: "Table 2-1-1 CONTRADICTS ITSELF here and Table 2-2-25 does not: pin-first gives QSPI2_SIOX1(AF11) to BOTH PB12 (:4530) and PB14 (:4558) and SIOX0(AF11) to PB13 (:4545), leaving SIOX2 and SIOX3 on no pad at AF11 at all; signal-first reads PB11/PB12/PB13/PB14 = SIOX0/1/2/3, four consecutive pins in order. The file follows pin-first, because the whole AF map is derived from Table 2-1-1 and reading one signal from the other table would make the map incoherent. Recorded, not averaged: this one needs the vendor or a board to settle",
+      source: "CH32H417DS0.md:4545 (Table 2-1-1 PB13 row: QSPI2_SIOX0) vs CH32H417DS0.md:7452 (Table 2-2-25: QSPI2_SIOX2 on PB13)" }
+  - { pin: PB14, token: QSPI2_SIOX1,
+      reason: "Table 2-1-1 CONTRADICTS ITSELF here and Table 2-2-25 does not: pin-first gives QSPI2_SIOX1(AF11) to BOTH PB12 (:4530) and PB14 (:4558) and SIOX0(AF11) to PB13 (:4545), leaving SIOX2 and SIOX3 on no pad at AF11 at all; signal-first reads PB11/PB12/PB13/PB14 = SIOX0/1/2/3, four consecutive pins in order. The file follows pin-first, because the whole AF map is derived from Table 2-1-1 and reading one signal from the other table would make the map incoherent. Recorded, not averaged: this one needs the vendor or a board to settle",
+      source: "CH32H417DS0.md:4558 (Table 2-1-1 PB14 row: QSPI2_SIOX1) vs CH32H417DS0.md:7453 (Table 2-2-25: QSPI2_SIOX3 on PB14)" }
+  - { pin: PB14, token: QSPI2_SIOX3,
+      reason: "Table 2-1-1 CONTRADICTS ITSELF here and Table 2-2-25 does not: pin-first gives QSPI2_SIOX1(AF11) to BOTH PB12 (:4530) and PB14 (:4558) and SIOX0(AF11) to PB13 (:4545), leaving SIOX2 and SIOX3 on no pad at AF11 at all; signal-first reads PB11/PB12/PB13/PB14 = SIOX0/1/2/3, four consecutive pins in order. The file follows pin-first, because the whole AF map is derived from Table 2-1-1 and reading one signal from the other table would make the map incoherent. Recorded, not averaged: this one needs the vendor or a board to settle",
+      source: "CH32H417DS0.md:4558 (Table 2-1-1 PB14 row: QSPI2_SIOX1) vs CH32H417DS0.md:7453 (Table 2-2-25: QSPI2_SIOX3 on PB14)" }
+  - { pin: PF9, token: USART8_RTS,
+      reason: "USART8's AF11 flow-control pads differ between the readings: Table 2-1-1 puts USART8_RTS(AF11) on PF9 (:3969) and USART8_CTS(AF11) on PF10 (:4009), Table 2-2-9 puts them on PE9 and PE10 (:7027-:7028). The two agree on the AF7 pads (RTS PF8, CTS PF9) and on USART8_CK, so this is the AF11 column alone. The file follows pin-first",
+      source: "CH32H417DS0.md:3969 and CH32H417DS0.md:4009 (Table 2-1-1, PF9 and PF10) against CH32H417DS0.md:7027-7028 (Table 2-2-9, USART8_RTS and USART8_CTS)" }
+  - { pin: PE9, token: USART8_RTS,
+      reason: "USART8's AF11 flow-control pads differ between the readings: Table 2-1-1 puts USART8_RTS(AF11) on PF9 (:3969) and USART8_CTS(AF11) on PF10 (:4009), Table 2-2-9 puts them on PE9 and PE10 (:7027-:7028). The two agree on the AF7 pads (RTS PF8, CTS PF9) and on USART8_CK, so this is the AF11 column alone. The file follows pin-first",
+      source: "CH32H417DS0.md:3969 and CH32H417DS0.md:4009 (Table 2-1-1, PF9 and PF10) against CH32H417DS0.md:7027-7028 (Table 2-2-9, USART8_RTS and USART8_CTS)" }
+  - { pin: PF10, token: USART8_CTS,
+      reason: "USART8's AF11 flow-control pads differ between the readings: Table 2-1-1 puts USART8_RTS(AF11) on PF9 (:3969) and USART8_CTS(AF11) on PF10 (:4009), Table 2-2-9 puts them on PE9 and PE10 (:7027-:7028). The two agree on the AF7 pads (RTS PF8, CTS PF9) and on USART8_CK, so this is the AF11 column alone. The file follows pin-first",
+      source: "CH32H417DS0.md:3969 and CH32H417DS0.md:4009 (Table 2-1-1, PF9 and PF10) against CH32H417DS0.md:7027-7028 (Table 2-2-9, USART8_RTS and USART8_CTS)" }
+  - { pin: PE10, token: USART8_CTS,
+      reason: "USART8's AF11 flow-control pads differ between the readings: Table 2-1-1 puts USART8_RTS(AF11) on PF9 (:3969) and USART8_CTS(AF11) on PF10 (:4009), Table 2-2-9 puts them on PE9 and PE10 (:7027-:7028). The two agree on the AF7 pads (RTS PF8, CTS PF9) and on USART8_CK, so this is the AF11 column alone. The file follows pin-first",
+      source: "CH32H417DS0.md:3969 and CH32H417DS0.md:4009 (Table 2-1-1, PF9 and PF10) against CH32H417DS0.md:7027-7028 (Table 2-2-9, USART8_RTS and USART8_CTS)" }
+  - { pin: PB12, token: LPTIM2_CH2,
+      reason: "Table 2-2-5 gives LPTIM2_CH2 two pads, PD11(AF3) and PB12(AF13); Table 2-1-1's PB12 row lists eighteen functions and none of them is an LPTIM (AF13 there is CMP_OUT). The file follows pin-first and routes CH2 on PD11 only",
+      source: "CH32H417DS0.md:6911 (Table 2-2-5) against CH32H417DS0.md:4522-4534 (Table 2-1-1, the whole PB12 row)" }
+  - { pin: PA15, token: LTDC_B4,
+      reason: "Table 2-1-1's PA15 row carries LTDC_B4(AF10); Table 2-2-28's LTDC_B4 row lists PD4, PA10, PC11, PE12, PE0 and PE1 and not PA15. PA15's AF10 is otherwise unclaimed in the signal-first reading. The file follows pin-first and keeps the pad",
+      source: "CH32H417DS0.md:4942 (Table 2-1-1, PA15) against CH32H417DS0.md:7507-7509 (Table 2-2-28, LTDC_B4)" }
+  - { pin: PC6, token: SWPMI_IO,
+      reason: "One wire, two names. Table 2-1-1 calls PC6 `SWPMI_IO(AF11)` - a single bidirectional pad - and Table 2-2-26 lists PC6 in its \"Optional pins (1-wire mode)\" column for BOTH SWP_RX and SWP_TX. The silicon is the same either way and the readings do not contradict each other so much as describe it from two ends; the file routes the pad once, as SWPMI_IO, which is what its `Single wire` mode claims",
+      source: "CH32H417DS0.md:4751 (Table 2-1-1, PC6: SWPMI_IO(AF11)) against CH32H417DS0.md:7461-7462 (Table 2-2-26, SWP_RX and SWP_TX 1-wire column)" }
+  - { pin: PC6, token: SWP_RX,
+      reason: "One wire, two names. Table 2-1-1 calls PC6 `SWPMI_IO(AF11)` - a single bidirectional pad - and Table 2-2-26 lists PC6 in its \"Optional pins (1-wire mode)\" column for BOTH SWP_RX and SWP_TX. The silicon is the same either way and the readings do not contradict each other so much as describe it from two ends; the file routes the pad once, as SWPMI_IO, which is what its `Single wire` mode claims",
+      source: "CH32H417DS0.md:4751 (Table 2-1-1, PC6: SWPMI_IO(AF11)) against CH32H417DS0.md:7461-7462 (Table 2-2-26, SWP_RX and SWP_TX 1-wire column)" }
+  - { pin: PC6, token: SWP_TX,
+      reason: "One wire, two names. Table 2-1-1 calls PC6 `SWPMI_IO(AF11)` - a single bidirectional pad - and Table 2-2-26 lists PC6 in its \"Optional pins (1-wire mode)\" column for BOTH SWP_RX and SWP_TX. The silicon is the same either way and the readings do not contradict each other so much as describe it from two ends; the file routes the pad once, as SWPMI_IO, which is what its `Single wire` mode claims",
+      source: "CH32H417DS0.md:4751 (Table 2-1-1, PC6: SWPMI_IO(AF11)) against CH32H417DS0.md:7461-7462 (Table 2-2-26, SWP_RX and SWP_TX 1-wire column)" }
 
 chapters:
   1: "memory map and bus matrix - the architecture, not a unit"

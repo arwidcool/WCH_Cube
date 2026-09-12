@@ -938,7 +938,7 @@ bits, and a clock tree that models what the schema can hold.
       writing no enable for the USB clock.
 - [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
       SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
-- [ ] **(AGENT-1) CH32H417: `params:` for the peripherals that have none.**
+- [~] **(AGENT-1) CH32H417: `params:` for the peripherals that have none.**
       The part's peripheral SET is complete - 78 entries from the DS + the 41 SPL headers -
       along with its pins (950 AF assignments, mechanical), its clock tree, its 125 NVIC
       vectors and its 73 clock-enable bits, but ~70 peripherals have no `params:` block, so
@@ -991,10 +991,28 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       from AGENT-3 on the board; if they do not land by the next cycle I add them myself as a
       recorded DECISION. Also recorded on the board: `const:` is now needed by CH32L103's CMP1
       too, because `OPA_CMP_Init` branches on `CMP_NUM` (`ch32l103_opa.c:172,178,184`).
-- [ ] (AGENT-1) **CH32H417: close the coverage ledger** - `python tools/coverage.py CH32H417`.
-      The USB controllers' pads (DS Tables 2-2-18/19), MCO, the OPA/DAC naming, the two DS
-      readings' recorded disagreements (SerDes RX/TX, USART8 CTS/RTS, QSPI2 SIOX, SDMMC), DMAMUX.
-- [ ] (AGENT-1) **CH32H417: default pins collide** - found by `tests/h417_packages.test.js`,
+- [x] (AGENT-1) **CH32H417: close the coverage ledger** - `python tools/coverage.py CH32H417`
+      prints **0 open**, and `data/coverage/CH32H417.yaml` says `status: complete`. 104 -> 0.
+      Four of those rows were data; the other hundred were the READER. Three parser defects,
+      each with a planted break in `tools/coverage_selftest.py` (25/25 caught):
+      the pin-NAME cell wraps (`PC13(4)-RTC` arrives as `PC13` `-RT` `C`, and read token by
+      token the type column becomes the functions `C`, `I`, `O`); the AF code itself wraps
+      (`SDRAM_DQM3(A` + `F7)`, which made PB0's DQM3 invisible to the pin-first reading and a
+      phantom disagreement in the signal-first one); and `parse_signal_rows` required an
+      underscore in a signal name, so `MCO PB0(AF0)`, `CC1`/`CC2` and `SWCLK`/`SWDIO/SWIO`
+      were skipped AND their pins filed under whatever signal came before them - PB3/PB4 under
+      UHSIF_CLK, PB8/PB9 under USART8_CTS, PB0 under DFSDM_CKOUT.
+      Modelled: MCO on PB0 (the generator dropped it - `NOT_A_PERIPHERAL` ran before `MERGE`),
+      the LSE pads OSC32_IN/OSC32_OUT on PC14/PC15, I2S2_MCK's second pad PC6, FMC_DQM3's PB0,
+      and the USB controllers' pads moved into `dedicated_pins.yaml` where a refresh keeps them.
+      Declared: 29 `disagreements:` citing both readings (SerDes TX/RX swapped, USART8's AF11
+      CTS/RTS, QSPI2 SIOX0-3 where Table 2-1-1 contradicts ITSELF, SDRAM CKE0/CKE1/DQM2/RAS_N,
+      LPTIM2_CH2, LTDC_B4, SWPMI's 1-wire pad), TKEY as an ADC mode (RM 13.1), DMAMUX as the
+      two DMAs' request router (RM 10.2.3), and PB6's SDRAM_A5 as the one fact the
+      single-FMC-name-space model loses. A declared disagreement now closes BOTH rows a
+      difference produces (`docs/COVERAGE.md`), because the `absent:`-beside-every-entry
+      alternative would have hidden the conflict it was recording.
+- [~] (AGENT-1) **CH32H417: default pins collide** - found by `tests/h417_packages.test.js`,
       which sweeps all 419 mode choices on each of the three packages and asks what the app
       does when a user does nothing but switch a peripheral ON. On **QFN68 26, QFN88 20,
       QFN128 17** of those choices put two signals on ONE PAD although the signal had another
@@ -1003,17 +1021,25 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       SAME OWNER, which is how the four LTDC pads (`tests/h417_ltdc.test.js`) stayed broken
       through a green suite; DVP, FMC, I2C4, PIOC, SDIO, UHSIF and USART6 were never looked at.
       **The fix is not the YAML.** The default is the first bonded option in `signal_pins:`, and
-      `tools/gen_h417_peripherals.py:1086` emits that list in DATASHEET order with no notion of
-      which pad becomes the default - so the 2026-09-12 hand-reordering of LTDC's lists lives in
-      the generator's OUTPUT and every regeneration discards it. Measured: at HEAD QFN68 is 26;
-      with the in-flight regeneration in the working tree it is 38, LTDC's nine back again.
-      The order belongs in the generator. `COLLISION_CEILING` in `tests/h417_packages.test.js`
-      ratchets the three counts - they may only go DOWN, a rise fails as a regression and a fall
-      fails until the number is lowered. Retire the exemption and this line together at 0.
+      the generator used to emit that list in DATASHEET order with no notion of which pad becomes
+      the default - so the 2026-09-12 hand-reordering of LTDC's lists lived in the generator's
+      OUTPUT and every regeneration discarded it.
+      **DONE 2026-09-12, 26/20/17 -> 4/0/0.** `order_defaults()` in
+      `tools/gen_h417_peripherals.py` chooses them now: a greedy over the signal sets each
+      CHOICE turns on together (two signals collide only if some configuration claims both -
+      FMC's address bus and its data bus never do), with the debug pads PB8/PB9 seeded as
+      already taken (SYS holds them out of reset, and PB9 was the single most common
+      casualty: DVP_D7, FMC_A4, FMC_DQM2, I2C4_SDA, LTDC_B7, PIOC_IO1, SDIO_D5 all defaulted
+      onto it), a weaker whole-peripheral tiebreak for rows that are live at once (LTDC's
+      colour depth AND its sync row), and then `_repair()`, a deterministic hill-climb that
+      keeps a move only when it strictly lowers the count. `tests/h417_ltdc.test.js` is green.
+      **Four are left, all on QFN68**, where the signal has no free pad the package bonds.
+      `COLLISION_CEILING` in `tests/h417_packages.test.js` still ratchets; retire the exemption
+      and this line together at 0.
       Separately: `SYS_SWIO` (PB9) is the pad most of these land on, so the debug port is the
       most common casualty; on QFN68 I2C1 has no other option and THAT one is the silicon.
 
-- [ ] (AGENT-1) **CH32H417 declares no `codegen.analog_signals`, so an analog pad is not
+- [x] (AGENT-1) **CH32H417 declares no `codegen.analog_signals`, so an analog pad is not
       recognised** — found by AGENT-3 extending the CH32H417 fixture to claim OPA1 P0/N0/OUT0 and
       DAC OUT1, pads the coverage ledger made reachable that no fixture had ever configured.
       `analogClaim()` (`app/engine/constraints.js:255`) reads `codegen.analog_signals` and falls
@@ -1025,6 +1051,21 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       defect class this round exists to remove. The TODO codegen emits beside it also tells the
       reader to add an `af:` to a pad that has none, which is unfollowable advice (that half is
       AGENT-2's). Evidence and the generated C: `tests/evidence/round5/2026-09-12-analog-pads.md`.
+      **DONE 2026-09-12.** `codegen.analog_signals` now lists ADC1/ADC2 IN0-15, HSADC IN0-6,
+      DAC OUT1/OUT2, OPA's eighteen and CMP's four INPUTS - each traced to the vendor's own
+      example rather than to the category: `EXAM/ADC/ADC_DMA/Common/hardware.c:64-65`,
+      `EXAM/HSADC/.../hardware.c:31`, `EXAM/DAC/DAC_DMA/Common/hardware.c:35`,
+      `EXAM/OPA/OPA/Common/hardware.c:27,31`, `EXAM/OPA/CMP/Common/hardware.c:34-35`, all
+      `GPIO_Mode_AIN`. **CMP_OUT is deliberately NOT in the list**: the same file gives PB12
+      `GPIO_AF13` and `GPIO_Mode_AF_PP`, so the comparator's inputs are analog and its output
+      is a digital alternate function - the distinction the category fallback cannot make.
+      SERDES went to `codegen.skip_signals` instead, not to this list: `sds_initial()` in
+      `EXAM/SerDes/FullDuxTrans/Common/hardware.c:65-67` enables the SerDes and the GPIOE
+      clock and then calls no `GPIO_Init` for PE3-PE6 at all, so those pads take no GPIO
+      configuration of any kind. `validate_mcu.py` now exempts an analog signal from the
+      "has no `af:`" warning the way it already exempted a skipped one, which is why the
+      repo-wide count went 166 -> 99; what is left on this part is UHSIF 62 and SDMMC 32,
+      digital pads that genuinely want an AF code read off the DS.
 
 - [ ] (AGENT-3) **CH32H417 LTDC: make the layer pixel format selectable, including the 8-bit
       ones.** `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18) offers ARGB8888, RGB888, RGB565, ARGB1555,

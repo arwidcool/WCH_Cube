@@ -47,6 +47,183 @@ MCU = ROOT / "data" / "mcus" / "CH32H417.yaml"
 MARK_START = "\n  # " + "=" * 73 + "\n  #  Everything below this line was GENERATED"
 
 
+# {package: {every pin name that package bonds}}, filled by af_map() from the same parse.
+# The ordering pass below needs it: "the default" is the first option BONDED on the
+# package being drawn, so an option nothing bonds is not a default anywhere.
+BONDED: dict[str, set[str]] = {}
+
+
+def _claim_groups(pid: str, sigs: dict) -> list[set[str]]:
+    """The signal sets that are ever claimed AT ONCE, from the peripheral's own settings.
+
+    Two signals collide only if some choice turns both on. `FMC_A5` and `FMC_D20` share a
+    pad and never share a configuration - the address bus and the data bus are separate
+    rows - so pulling them apart buys nothing and costs a pad that another address line
+    needed. A `type: checkboxes` row is different: every box is independently tickable, so
+    the whole row is one group. A signal no choice names falls back to a group of its own.
+    """
+    settings = MODES.get(pid) or (SETTINGS.get(TYPE_OF.get(pid) or "") or [])
+    short = {(s[len(pid) + 1:] if s.startswith(pid + "_") else s): s for s in sigs}
+    groups: list[set[str]] = []
+    for row in settings:
+        if row.get("type") == "checkboxes":
+            whole = {short[x] for c in row.get("choices") or []
+                     for x in (c.get("signals") or []) if x in short}
+            if len(whole) > 1:
+                groups.append(whole)
+            continue
+        for c in row.get("choices") or []:
+            g = {short[x] for x in (c.get("signals") or []) if x in short}
+            if len(g) > 1:
+                groups.append(g)
+    return groups
+
+
+def order_defaults(merged: dict[str, dict[str, list]]) -> int:
+    """Order each signal's pin list so the DEFAULTS of one configuration do not collide.
+
+    `defaultSignalPin()` in the engine takes the FIRST option bonded on the package, so the
+    order of `signal_pins:` is not cosmetic - it decides what a user gets by switching a
+    peripheral on and touching nothing else. Emitted in datasheet order, four LTDC signals
+    shared a default pad with another LTDC signal on every package (PA8 was R6 and B3, PA15
+    R3 and CLK, PA6 G2 and HSYNC, PA10 B1 and B4), and `tests/h417_packages.test.js` found
+    dozens more across DVP, FMC, I2C4, PIOC, SDIO, UHSIF and USART6. The conflict engine
+    cannot report any of them: it compares the OWNERS of two claims, and here both claims
+    belong to the same peripheral. One pad drives one bit, so each is a configuration the
+    silicon cannot honour, reached by doing nothing.
+
+    The lists were hand-reordered once, in the generator's OUTPUT, and the next `--refresh`
+    threw all of it away. That is the reason this lives here.
+
+    Greedy, and deliberately not clever: within each group of signals some choice turns on
+    together, the ones with the fewest options choose first - they have the least room to
+    move - and each then prefers a pad no earlier signal of that group has taken, breaking
+    ties towards the pad the most packages bond and then towards datasheet order. It cannot
+    always win: a signal whose only bonded pad on QFN68 is already taken has nowhere to go,
+    and that is silicon, not data. It returns how many it could not place, and the ratchet
+    in `tests/h417_packages.test.js` is what holds the number down.
+    """
+    if not BONDED:
+        return 0
+    # THE DEBUG PADS ARE ALREADY SPOKEN FOR. SYS routes SWCLK/SWIO to PB8/PB9 and holds
+    # them out of reset - DS Table 2-1-1 spells the rows `SWCLK/USBHS_DP/...` and
+    # `SWIO/SWDIO/USBHS_DM/...`, with no AF code, because the reset multiplexer selects
+    # them. So a signal whose default lands on PB9 costs the user their debug port for
+    # switching a peripheral on, and PB9 was the single most common casualty: DVP_D7,
+    # FMC_A4, FMC_DQM2, I2C4_SDA, LTDC_B7, PIOC_IO1 and SDIO_D5 all defaulted onto it.
+    # Seeded as taken everywhere, so every other signal steps around them where it can.
+    reserved = {pin for sigs in (SUPPLEMENT.get("SYS") or {}).values()
+                for pin, _af, _note in sigs}
+    stuck = 0
+    for pid in sorted(merged):
+        sigs = merged[pid]
+        groups = _claim_groups(pid, sigs) or [set(sigs)]
+        seed = set() if pid == "SYS" else reserved
+        taken: dict[tuple[str, int], set[str]] = {
+            (pk, gi): set(seed) for pk in BONDED for gi in range(len(groups))}
+        # A SECOND, WEAKER preference: distinct across the WHOLE peripheral. Two rows of
+        # one peripheral are both live at once - LTDC's `Colour depth` and `Sync and
+        # clock` are separate rows and a panel needs both - so R2 and HSYNC sharing a pad
+        # is just as unbuildable as two colour lines sharing one, even though no single
+        # choice names them together. It is a TIEBREAK, not a rule: forcing every signal
+        # of FMC apart would spend pads on pairs (an address line and a data line) that no
+        # configuration ever turns on together, and take them from pairs that do.
+        wide: dict[str, set[str]] = {pk: set(seed) for pk in BONDED}
+        members: dict[str, list[int]] = {}
+        for i, g in enumerate(groups):
+            for sig in g:
+                members.setdefault(sig, []).append(i)
+        for sig in sorted(sigs, key=lambda x: (len(sigs[x]), x)):
+            gs = members.get(sig) or []
+            opts = list(sigs[sig])
+            if len(opts) > 1:
+                pos = {e[0]: i for i, e in enumerate(opts)}
+
+                def rank(e):
+                    pin = e[0]
+                    clash = sum(1 for pk, bond in BONDED.items() for gi in gs
+                                if pin in bond and pin in taken.get((pk, gi), ()))
+                    also = sum(1 for pk, bond in BONDED.items()
+                               if pin in bond and pin in wide[pk])
+                    width = sum(1 for pk, bond in BONDED.items() if pin in bond)
+                    return (clash, also, -width, pos[pin])
+
+                opts.sort(key=rank)
+                sigs[sig] = opts
+            for pk, bond in BONDED.items():
+                d = next((e[0] for e in opts if e[0] in bond), None)
+                if d is None:
+                    continue
+                wide[pk].add(d)
+                for gi in gs:
+                    if d in taken.setdefault((pk, gi), set()):
+                        taken[(pk, gi)].add(d)
+                    taken[(pk, gi)].add(d)
+        stuck += _repair(sigs, groups, members, seed)
+    return stuck
+
+
+def _cost(sigs: dict, groups: list, members: dict, seed: set) -> tuple[int, int]:
+    """(collisions inside a single choice, collisions anywhere in the peripheral).
+
+    Both counted on every package, because "the default" is per package. The first number
+    is the one `tests/h417_packages.test.js` sweeps - a configuration a user reaches by
+    switching one row on - and the second is the weaker one two live rows can still
+    produce (LTDC's colour depth and its sync row). Lexicographic, so a repair never buys
+    a same-peripheral pair at the price of a same-choice one.
+    """
+    grp = wide = 0
+    order = sorted(sigs)
+    for bond in BONDED.values():
+        seen_wide = set(seed)
+        seen_g: dict[int, set[str]] = {gi: set(seed) for gi in range(len(groups))}
+        for sig in order:
+            d = next((e[0] for e in sigs[sig] if e[0] in bond), None)
+            if d is None:
+                continue
+            if d in seen_wide:
+                wide += 1
+            seen_wide.add(d)
+            for gi in members.get(sig, ()):
+                if d in seen_g[gi]:
+                    grp += 1
+                seen_g[gi].add(d)
+    return grp, wide
+
+
+def _repair(sigs: dict, groups: list, members: dict, seed: set, rounds: int = 6) -> int:
+    """Hill-climb the greedy's result: move one option to the front of one list and keep
+    the move only if it strictly lowers the cost.
+
+    The greedy is order-dependent - a signal that takes a pad early can be the only reason
+    a later one has nowhere to go - and one pass cannot see that. This does: it tries each
+    alternative of each signal, in a fixed order, and stops when no single move helps.
+    Deterministic, so the generated file is stable across runs.
+    """
+    if not BONDED:
+        return 0
+    best = _cost(sigs, groups, members, seed)
+    for _ in range(rounds):
+        if best == (0, 0):
+            break
+        moved = False
+        for sig in sorted(sigs):
+            opts = sigs[sig]
+            if len(opts) < 2:
+                continue
+            for i in range(1, len(opts)):
+                trial = [opts[i]] + opts[:i] + opts[i + 1:]
+                sigs[sig] = trial
+                c = _cost(sigs, groups, members, seed)
+                if c < best:
+                    best, moved, opts = c, True, trial
+                else:
+                    sigs[sig] = opts
+        if not moved:
+            break
+    return best[0] + best[1]
+
+
 def af_map() -> dict[str, dict[str, list[tuple[str, int, str | None]]]]:
     """{peripheral: {signal: [(pin, af, note), ...]}} from the AF parser, via its JSON.
 
@@ -60,6 +237,9 @@ def af_map() -> dict[str, dict[str, list[tuple[str, int, str | None]]]]:
     subprocess.run([sys.executable, str(PINS), "--json", str(out)], check=True,
                    stdout=subprocess.DEVNULL)
     doc = json.loads(out.read_text(encoding="utf-8"))
+    BONDED.clear()
+    for pk, table in (doc.get("packages") or {}).items():
+        BONDED[pk] = {n for names in table.values() for n in names}
     groups: dict[str, dict[str, list[tuple[str, int, str | None]]]] = collections.defaultdict(dict)
     for sig, opts in doc["signals"].items():
         sig = SIGNAL_FIX.get(sig, sig)
@@ -121,8 +301,13 @@ MERGE = {
     # showed no CAN function at all. Found by `tools/audit_h417_af.py`.
     "CAN": "CAN1",
 }
-# Headings that are a signal of an existing peripheral rather than a peripheral of its own.
-NOT_A_PERIPHERAL = {"MCO"}
+# Headings dropped outright - not a peripheral and not a signal of one. Empty today.
+# `MCO` used to be in here AND in MERGE above, and this check runs first, so the clock
+# output was discarded instead of being merged into RCC: DS Table 2-1-1 and Table 2-2-30
+# both put `MCO(AF0)` on PB0 and the file offered four MCO sources with no pin behind any
+# of them. A heading that belongs to another peripheral goes in MERGE; this set is for a
+# heading that belongs to nothing.
+NOT_A_PERIPHERAL: set[str] = set()
 
 # The datasheet's own spelling slips in Table 2-1-1, normalised to what it MEANS.
 #
@@ -138,7 +323,15 @@ NOT_A_PERIPHERAL = {"MCO"}
 #
 # There is no `CS_O` in the datasheet and no SDRAM signal spelled that way, so this is a
 # typo and not a second signal. Keyed by the parsed name, applied before grouping.
-SIGNAL_FIX = {"SDRAM_CS_NO": "SDRAM_CS_N0"}
+SIGNAL_FIX = {
+    "SDRAM_CS_NO": "SDRAM_CS_N0",
+    # PC6 is the I2S master clock. Table 2-1-1 writes it `SPI2_MCK(AF5)` and Table 2-2-8
+    # writes it `I2S2_MCK PC6(AF5), PB5(AF8)` - one pad, two spellings, and SPI has no
+    # master-clock output at all (RM ch.23: MCK belongs to the I2S mode of the block). Left
+    # as parsed it created a signal `SPI2_MCK` that no SPI2 setting claims, and left I2S2's
+    # MCK a one-pin signal where the datasheet gives it two.
+    "SPI2_MCK": "I2S2_MCK",
+}
 
 # Which tree section each peripheral appears under. Matches the categories the other four
 # parts use, so the UI needs no new heading.
@@ -392,6 +585,9 @@ SETTINGS: dict[str, list[dict]] = {
             {"name": "RGB888", "signals": ["R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
                                            "G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7",
                                            "B0", "B1", "B2", "B3", "B4", "B5", "B6", "B7"]},
+            {"name": "RGB666", "signals": ["R2", "R3", "R4", "R5", "R6", "R7",
+                                           "G2", "G3", "G4", "G5", "G6", "G7",
+                                           "B2", "B3", "B4", "B5", "B6", "B7"]},
             {"name": "RGB565", "signals": ["R3", "R4", "R5", "R6", "R7",
                                            "G2", "G3", "G4", "G5", "G6", "G7",
                                            "B3", "B4", "B5", "B6", "B7"]},
@@ -576,12 +772,36 @@ SETTINGS: dict[str, list[dict]] = {
     }, {
         # RM 3.4.2 MCO[3:0]: 00xx none, 0100 SYSCLK, 0101 HSI, 0110 HSE, 0111 PLL/2,
         # 1000 UTMI, 1001 USBSS_PLL/2, 1010 ETH_PLL/8, 1011 SERDES_PLL/16.
+        # Every source drives the SAME pad, PB0(AF0) - DS Table 2-2-30 "MCO Pin Functions"
+        # gives the clock output one pin and DS Table 2-1-1's PB0 row says `MCO(AF0)`. The
+        # choices carry it so picking a source claims the pin; without `signals:` the row
+        # offered four clocks and reserved no pad, and any other peripheral could take PB0
+        # out from under it.
         "name": "Master Clock Output (MCO)",
         "choices": [
             {"name": "Disable", "default": True},
-            {"name": "SYSCLK"}, {"name": "HSI"}, {"name": "HSE"}, {"name": "PLLCLK/2"},
-            {"name": "UTMI clock"}, {"name": "USBSS_PLL/2"}, {"name": "ETH_PLL/8"},
-            {"name": "SERDES_PLL/16"},
+            {"name": "SYSCLK", "signals": ["MCO"]}, {"name": "HSI", "signals": ["MCO"]},
+            {"name": "HSE", "signals": ["MCO"]}, {"name": "PLLCLK/2", "signals": ["MCO"]},
+            {"name": "UTMI clock", "signals": ["MCO"]},
+            {"name": "USBSS_PLL/2", "signals": ["MCO"]},
+            {"name": "ETH_PLL/8", "signals": ["MCO"]},
+            {"name": "SERDES_PLL/16", "signals": ["MCO"]},
+        ],
+    }, {
+        # RM 9.2.11.1 (CH32H417RM.md:11038): "When LSEON=0, the LSE oscillator pin
+        # OSC32_IN/OSC32_OUT can be used as PC14/PC15 of GPIO respectively. When LSEON=1,
+        # it is used as LSE pin." So the pads are a mode choice exactly like the HSE
+        # crystal above, and the row lives on RCC because RCC_BDCTLR.LSEON is the bit that
+        # decides it (RM 3.2, :1685). BYPASS feeds the clock in on OSC32_IN alone and
+        # suspends OSC32_OUT (RM :1698), so it claims one pad, not two.
+        # Same shape as CH32L103's `Low Speed Clock (LSE)`, and it is what makes PC14 and
+        # PC15 claimable at all: DS Table 2-1-1 names those two rows `PC14(4)-OSC32_IN`
+        # and `PC15(4)-OSC32_OUT`, and nothing in the file answered to either.
+        "name": "Low Speed Clock (LSE)",
+        "choices": [
+            {"name": "Disable", "default": True},
+            {"name": "BYPASS clock source", "signals": ["OSC32_IN"]},
+            {"name": "Crystal / ceramic resonator", "signals": ["OSC32_IN", "OSC32_OUT"]},
         ],
     }],
 }
@@ -885,9 +1105,53 @@ MODES: dict[str, list[dict]] = {
     # RM ch.25/26/27 each give the controller "USB Host functionality and USB Device
     # functionality". CH32X035's `USBFS` spells its choices "(FS)"; these keep the speed
     # in the name because H417 has all three controllers at once.
-    "USBFS": _mode(["Disable", "Device (FS)", "Host (FS)"]),
-    "USBHS": _mode(["Disable", "Device (HS)", "Host (HS)"]),
-    "USBSS": _mode(["Disable", "Device (SS)", "Host (SS)"]),
+    #
+    # Each role drives the controller's own data pair, which is why the choices carry
+    # `signals:`. Without them the three controllers were "holds no pin on any package"
+    # while DS Tables 2-2-18/2-2-19 and 2-1-1 give every one of them pads.
+    #
+    # USBFS is the only OTG part - RM ch.26: "OTG_FS is a dual-role USB controller
+    # supporting both host and device functionality ... Additionally, this controller can
+    # be configured as a host-only or device-only controller" - so it gets a third role.
+    "USBFS": [
+        {"name": "Mode", "choices": [
+            {"name": "Disable"},
+            {"name": "Device (FS)", "signals": ["DP", "DM"]},
+            {"name": "Host (FS)", "signals": ["DP", "DM"]},
+            {"name": "Dual-role (OTG FS)", "signals": ["DP", "DM"]},
+        ]},
+        # VBUS and ID are offered separately rather than tied to a role, because NEITHER
+        # source says which role requires them: the DS lists all four under one "Optional
+        # pin" column and RM ch.26 calls On-The-Go support "an optional feature in the
+        # OTG_FS controller's physical layer". Inferring "host needs VBUS" from general
+        # USB knowledge is the family-not-a-citation move this repo bans - so the board
+        # decides, and both pads are reachable.
+        {"name": "OTG pins", "type": "checkboxes", "choices": [
+            {"name": "VBUS (bus voltage sense)", "signals": ["VBUS"]},
+            {"name": "ID (role detect)", "signals": ["ID"]},
+        ]},
+    ],
+    # DS Table 2-2-19 gives USBHS two pads and no VBUS or ID - it is not an OTG part.
+    # THOSE TWO ARE THE DEBUG PADS: Table 2-1-1 spells PB8 `SWCLK/USBHS_DP/...` and PB9
+    # `SWIO/SWDIO/USBHS_DM/...`, and SYS routes SWCLK/SWIO to exactly those two, so
+    # enabling USBHS while the 2-wire debug port is on is a real conflict on silicon and
+    # the conflict engine reports it instead of the file hiding it.
+    "USBHS": [{"name": "Mode", "choices": [
+        {"name": "Disable"},
+        {"name": "Device (HS)", "signals": ["DP", "DM"]},
+        {"name": "Host (HS)", "signals": ["DP", "DM"]},
+    ]}],
+    # The USB 3.0 SuperSpeed pairs, DEDICATED pads with no alternate function of any kind
+    # (DS Table 2-1-1, pin type USB3.0; all three packages bond all four). The pads are
+    # named A/B rather than P/N deliberately - DS Note 7: "USB3.0 pin signals support
+    # positive and negative identification and exchange ... SSRXA/SSRXB default connection
+    # to each other TXP/TXN, support cross-connect TXN/TXP". The polarity is swappable, so
+    # the signal names follow the pad names exactly and invent no P/N.
+    "USBSS": [{"name": "Mode", "choices": [
+        {"name": "Disable"},
+        {"name": "Device (SS)", "signals": ["TXA", "TXB", "RXA", "RXB"]},
+        {"name": "Host (SS)", "signals": ["TXA", "TXB", "RXA", "RXB"]},
+    ]}],
 }
 
 
@@ -944,13 +1208,54 @@ def _load_dedicated_pins() -> dict[str, dict[str, list[tuple[str, int | None, st
     return out
 
 
-SUPPLEMENT.update(_load_dedicated_pins())
+# MERGE per peripheral, never `dict.update`: the loaded file and the table above both
+# carry an `RCC` key (XI/XO here, OSC32_IN/OSC32_OUT there), and a plain update would keep
+# only the second - taking the HSE crystal pads out from under `clock.hse_signals` and
+# `validate_mcu.py`'s coupling check, for a one-line edit in a data file.
+for _pid, _sigs in _load_dedicated_pins().items():
+    SUPPLEMENT.setdefault(_pid, {}).update(_sigs)
+
+
+def _load_extras() -> dict[str, dict[str, str]]:
+    """Hand-written additions to GENERATED blocks, from `peripheral_extras.yaml`.
+
+    `--refresh` rewrites every generated block, so a fact hand-added to one is deleted the
+    next time anybody regenerates - silently, with every gate green. That is not a
+    hypothetical: PWR's eight supply rails, LTDC's colour-depth reasoning and the three
+    USB controllers' pads all sat in generated blocks, and the refresh that added one pad
+    to FMC would have taken all of them out. The USB pads moved to `dedicated_pins.yaml`
+    (they are pads, and that file is for pads the AF parser cannot see); the prose that
+    is not a pad lives here, where the generator can put it back every time.
+    """
+    path = pathlib.Path(__file__).resolve().parent.parent / "data/sources/H417/peripheral_extras.yaml"
+    if not path.exists():
+        return {}
+    import yaml as _yaml
+    doc = _yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {str(pid): {str(k): str(v) for k, v in (e or {}).items()}
+            for pid, e in (doc.get("extras") or {}).items()}
+
+
+EXTRAS = _load_extras()
+
+# What a peripheral says when it routes nothing. `validate_mcu.py` makes the declaration
+# mandatory and `tools/coverage.py` checks the claim against the datasheet, so a generated
+# block that emits only the `notes:` sentence is a validator ERROR the moment it lands -
+# which is how fourteen of these came to be typed in by hand, into a section a refresh
+# rewrites. The generator states it, once, for every block it writes.
+PINLESS_SOURCE = ("CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a "
+                  "function of this peripheral (checked by tools/coverage.py)")
 
 
 def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]], out=print) -> None:
     cat = CATEGORY.get(pid, "Connectivity")
+    extra = EXTRAS.get(pid) or {}
+    # a top-level key the extras fragment defines replaces the generator's own version
+    extra_keys = set(re.findall(r"^([A-Za-z_][A-Za-z0-9_]*):", extra.get("yaml", ""), re.M))
     out(f"  {pid}:")
     out(f"    category: {cat}")
+    for line in (extra.get("comment") or "").rstrip("\n").splitlines():
+        out(("    # " + line).rstrip())
 
     tpl = TYPE_OF.get(pid)
     settings = MODES.get(pid) or (SETTINGS.get(tpl) if tpl else None)
@@ -1022,11 +1327,19 @@ def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]]
                 parts.append(entry + " }")
             out(f"      {yaml_scalar(short)}: [{', '.join(parts)}]")
     else:
-        out("    notes: This peripheral holds no pin on any package; it is configured")
-        out("      through its own registers and the clock tree only.")
+        # A peripheral that routes nothing DECLARES it - `validate_mcu.py` rejects the
+        # silence and `tools/coverage.py` checks the claim against the datasheet.
+        if "pins" not in extra_keys:
+            out(f"    pins: {{ none: true, source: {yaml_scalar(PINLESS_SOURCE)} }}")
+        if "notes" not in extra_keys:
+            out("    notes: This peripheral holds no pin on any package; it is configured")
+            out("      through its own registers and the clock tree only.")
+    for line in (extra.get("yaml") or "").rstrip("\n").splitlines():
+        out(("    " + line).rstrip())
 
 
-def splice(add: list[str], *, dry_run: bool = False, refresh: bool = False) -> int:
+def splice(add: list[str], *, dry_run: bool = False, refresh: bool = False,
+           allow_loss: bool = False) -> int:
     """Insert the generated blocks into the MCU file, keeping the hand-written ones.
 
     Text surgery rather than a YAML round-trip, deliberately: `PyYAML` would drop every
@@ -1083,6 +1396,18 @@ def splice(add: list[str], *, dry_run: bool = False, refresh: bool = False) -> i
     else:
         head = text[:pend]
     new = head + banner + "".join(add) + text[pend:]
+    lost = _losses(text, new)
+    if lost and not allow_loss:
+        print("REFUSING to write: the new peripherals block DROPS facts the file already "
+              "holds. A generated block is the generator's output, so the fix is to teach "
+              "the generator (data/sources/H417/dedicated_pins.yaml for pads, "
+              "peripheral_extras.yaml for everything else) - not to accept the loss.",
+              file=sys.stderr)
+        for line in lost:
+            print(f"    {line}", file=sys.stderr)
+        print(f"  {len(lost)} loss(es). --allow-loss overrides, and needs a reason in the "
+              "commit message.", file=sys.stderr)
+        return 2
     if dry_run:
         print(f"would write {len(new)} bytes (was {len(text)}), "
               f"{len(add)} peripheral block(s) written")
@@ -1091,6 +1416,50 @@ def splice(add: list[str], *, dry_run: bool = False, refresh: bool = False) -> i
     print(f"wrote {MCU.relative_to(ROOT).as_posix()}: {len(new)} bytes (was {len(text)}), "
           f"{len(add)} peripheral block(s) written")
     return 0
+
+
+
+def _losses(before: str, after: str) -> list[str]:
+    """What the new `peripherals:` block no longer says that the old one did.
+
+    A `--refresh` rewrites 65 blocks at once, and anything hand-added to one of them is
+    deleted in the same stroke - with every gate still green, because a file that says
+    LESS is still internally consistent. That is not hypothetical: on 2026-09-12 a refresh
+    whose only intended effect was adding PB0 to `FMC_DQM3` would also have removed PWR's
+    eight supply rails, LTDC's colour-depth reasoning and its notes, and the pads of
+    USBFS, USBHS and USBSS - re-declaring three USB controllers as holding no pin while
+    the datasheet gives all three of them pads. 200 lines of cited fact, silently.
+
+    So the splice reads its own output back and refuses a write that loses a peripheral,
+    a key of one, or a (signal, pin) the file routed. Additions and CHANGES pass: a
+    changed AF code is the generator correcting itself, which is the point of a refresh.
+    """
+    import yaml as _yaml
+
+    def periphs(text: str) -> dict:
+        try:
+            return (_yaml.safe_load(text) or {}).get("peripherals") or {}
+        except _yaml.YAMLError as e:
+            sys.exit(f"the spliced file is not valid YAML, so nothing was written: {e}")
+
+    A, B = periphs(before), periphs(after)
+    out: list[str] = []
+    for pid in sorted(set(A) - set(B)):
+        out.append(f"{pid}: the whole peripheral is gone")
+    for pid in sorted(set(A) & set(B)):
+        x, y = A[pid] or {}, B[pid] or {}
+        for k in sorted(set(x) - set(y)):
+            out.append(f"{pid}.{k}: dropped")
+        for sig, opts in (x.get("signal_pins") or {}).items():
+            had = {o["pin"] for o in opts or [] if isinstance(o, dict) and o.get("pin")}
+            now = {o["pin"] for o in (y.get("signal_pins") or {}).get(sig, []) or []
+                   if isinstance(o, dict) and o.get("pin")}
+            if had - now:
+                out.append(f"{pid}.{sig}: no longer routed to {', '.join(sorted(had - now))}")
+        for rm in x.get("remaps") or []:
+            if rm not in (y.get("remaps") or []):
+                out.append(f"{pid}.remaps: `{(rm or {}).get('name', '?')}` is gone")
+    return out
 
 
 def check_merge_keys(groups: dict) -> list[str]:
@@ -1116,6 +1485,9 @@ def main() -> int:
                     help="which peripherals the MCU file does not have yet")
     ap.add_argument("--splice", action="store_true",
                     help="insert the missing blocks into data/mcus/CH32H417.yaml")
+    ap.add_argument("--allow-loss", action="store_true",
+                    help="write even though the new block drops a fact the file holds "
+                         "(say why in the commit message)")
     ap.add_argument("--refresh", action="store_true",
                     help="with --splice: REPLACE the generated section instead of adding to it")
     ap.add_argument("--dry-run", action="store_true", help="with --splice: show, do not write")
@@ -1172,6 +1544,13 @@ def main() -> int:
             full = sig if sig.startswith(pid + "_") else f"{pid}_{sig}"
             merged[pid][full] = list(entries)
 
+    # LAST, once every pin a peripheral has is in one place: choose the defaults.
+    collisions = order_defaults(merged)
+    if collisions:
+        print(f"  default pads: {collisions} signal(s) across all three packages still share "
+              f"a default with another signal of the same peripheral (no free pad on that "
+              f"package)", file=sys.stderr)
+
     if a.missing:
         text = MCU.read_text(encoding="utf-8")
         have = set(re.findall(r"^  ([A-Z][A-Za-z0-9]*):$", text, re.M))
@@ -1214,7 +1593,8 @@ def main() -> int:
                 add.append("\n".join(buf) + "\n")
             print(f"refresh: rewriting {len(add)} generated peripheral(s); "
                   f"{len(hand)} hand-written block(s) kept: {', '.join(sorted(hand))}")
-            return splice(add, dry_run=a.dry_run, refresh=True)
+            return splice(add, dry_run=a.dry_run, refresh=True,
+                          allow_loss=a.allow_loss)
         add = []
         for pid in sorted(merged):
             if pid in own:
@@ -1224,7 +1604,7 @@ def main() -> int:
             add.append("\n".join(buf) + "\n")
         print(f"{len(own)} modelled by hand (kept): {', '.join(sorted(own))}")
         print(f"{len(add)} to add")
-        return splice(add, dry_run=a.dry_run)
+        return splice(add, dry_run=a.dry_run, allow_loss=a.allow_loss)
 
     for pid in sorted(merged):
         emit_peripheral(pid, merged[pid])

@@ -1116,8 +1116,26 @@ codegen:
     fields:
       SPI1: [{ lsb: 0, bits: 3 }]
       TIM2: [{ lsb: 14, bits: 2 }, { lsb: 16, bits: 1, from: 2 }]   # split field
-  analog_signals:
+  analog_signals:             # signals whose FUNCTION is analog: GPIO_Mode_AIN, never an AF
     ADC1: [IN0, IN1]
+`analog_signals` is the authoritative list, per peripheral, of the signals whose pad is an
+analog one: an ADC or HSADC channel, a DAC output, an OPA or comparator **input**. Two
+things read it, and they must agree:
+
+* `analogClaim()` (`app/engine/constraints.js`) uses it to pick `GPIO_Mode_AIN` over the
+  alternate-function branch. Without an entry it falls back to "an `Analog`-category
+  peripheral on a pin flagged `analog:`", and says in the generated code that it inferred
+  it — a part that declares neither (CH32H417 until 2026-09-12) gets the fallback's
+  `false` and emits `GPIO_Mode_AF_PP` for an analog pad. Wrong, and it compiles.
+* `validate_mcu.py` uses it to stay quiet about `af:`. An analog pad has no AF code and
+  never will, so "codegen will not guess an AF code and emits a TODO instead" is advice
+  nobody can follow; the same exemption `codegen.skip_signals` already had.
+
+List only the analog members. A comparator's inputs are analog and its **output** is a
+digital alternate function on the same peripheral (CH32H417's `CMP`: `P0/P1/N0/N1` are
+listed, `OUT` is not, and `OUT` carries seven real AF codes) — which is precisely the
+distinction the category fallback cannot make.
+
   rcc:
     register: "RCC->CFGR0"
     sw:     { lsb: 0,  bits: 2, values: { HSI: 0, HSE: 1, PLLCLK: 2 } }

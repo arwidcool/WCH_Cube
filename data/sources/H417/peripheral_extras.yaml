@@ -1,0 +1,175 @@
+# CH32H417 hand-written peripheral additions, for tools/gen_h417_peripherals.py
+#
+# WHY THIS FILE EXISTS. The `peripherals:` block of data/mcus/CH32H417.yaml below the
+# GENERATED marker is rewritten wholesale by
+#
+#     python tools/gen_h417_peripherals.py --splice --refresh
+#
+# so anything hand-added to a generated block is destroyed the next time anybody runs it.
+# On 2026-09-12 a refresh would have deleted PWR's eight supply rails, LTDC's colour-depth
+# reasoning and its notes, and re-declared USBFS/USBHS/USBSS as holding no pin - roughly
+# two hundred lines of cited fact, silently, with every gate still green. The generator
+# is the authority for that section, so the facts belong where the generator can read
+# them, the way dedicated_pins.yaml already holds the pads its AF parser cannot see.
+#
+# Per peripheral, two optional keys:
+#   comment:  prose emitted as a `#` comment block between `category:` and `settings:`
+#   yaml:     a YAML fragment emitted verbatim (indented) at the end of the block. Any
+#             top-level key it defines suppresses the generator's own version of that key
+#             - which is how PWR's `pins:` replaces the plain `pins: { none: true }`.
+#
+# Every statement here cites the datasheet or the reference manual, same rule as anywhere
+# else in data/: a citation is a file:line or a table number, never a family.
+
+extras:
+
+  LTDC:
+    comment: |
+      THE OUTPUT WIDTH IS A WIRING CHOICE, NOT A REGISTER, and that is the whole reason
+      this row exists. RM 43.4.5: the global control register `R32_LTDC_GCR` carries four
+      polarity bits and an enable, and bits [27:1] are reserved - there is no field that
+      narrows the bus. The controller always drives a 24-bit parallel RGB port; a 16- or
+      18-bit panel is wired to the HIGH bits of each channel and the low ones are simply
+      not connected. So the choice below is "how many lines did you wire", and every line
+      it does not claim stays an ordinary pin that any other peripheral may take.
+
+      The subsets are the standard panel wiring (panel MSB to controller MSB), which is
+      also how the datasheet numbers the pads: R7/G7/B7 are the most significant.
+
+        RGB888  24 lines  R0-R7  G0-G7  B0-B7      frees nothing
+        RGB666  18 lines  R2-R7  G2-G7  B2-B7      frees 6: R0-R1, G0-G1, B0-B1
+        RGB565  16 lines  R3-R7  G2-G7  B3-B7      frees 8: R0-R2, G0-G1, B0-B2
+
+      NOT the same thing as an "8-bit mode", which is a question people ask of this
+      controller and which has a different answer: `LTDC_LxPFCR.PF[2:0]` (RM 43.4.18)
+      offers L8, AL44 and AL88 - eight bits per pixel - but those describe the LAYER'S
+      FRAME BUFFER IN MEMORY. The pixel format converter expands every one of them to
+      ARGB8888 before the blender, so an 8-bit format saves RAM and frees no pin at all.
+      It is not selectable here yet; see `notes:` below and TASKS.md.
+    yaml: |
+      notes: >
+        Parallel RGB output, always 24 bits wide at the pad - the width you pick here is
+        how many lines you WIRED, not a mode the silicon has (RM 43.4.5 gives the global
+        control register no width field). A 16-bit panel takes the top five red, top six
+        green and top five blue lines; an 18-bit panel the top six of each. Every line the
+        chosen depth does not claim is released and can be assigned to another peripheral
+        or used as GPIO - picking RGB565 hands back eight pins, RGB666 six.
+        An "8-bit mode" is a different thing and does not free pins: L8, AL44 and AL88
+        (RM 43.4.18) are eight-bit-per-pixel FRAME BUFFER formats, and the pixel format
+        converter expands them to ARGB8888 before the output stage. Choosing one saves
+        memory and changes no pin. Selecting it is not modelled yet - the generator has no
+        way to fill the per-layer init struct - so it is an open item rather than a gap.
+
+  TKEY:
+    comment: |
+      TKEY HAS NO PAD OF ITS OWN, and this is the citation rather than an assumption from
+      a sibling part. RM ch.13 "Touch Key Detection (TKEY)" (CH32H417RM.md:15745): "The
+      detection channel reuses 16 external channels of the ADC, and the touch key
+      detection is realized through the single conversion mode of the ADC module", and
+      RM 13.1 (:15752): "For TKEY detection, the ADC module is needed. To enable TKEY,
+      ensure that ADC is powered on (ADON=1), then set the TKENABLE bit in the ADC_CTLR1
+      register to 1." The SPL agrees: ch32h417.h:1760-1761 defines TKey1 and TKey2 as
+      `ADC_TypeDef *` at ADC1_BASE and ADC2_BASE, and :1880 defines ADC_TKENABLE as an
+      ADC_CTLR1 bit. So the pads a touch design claims are ADC1/ADC2's IN0-IN15, and the
+      user claims them on the ADC's `Channels` row - the same pad offered twice would be
+      a conflict the silicon has not got. DS 1.4.13 and the model table's `ADC/TKey ...
+      Channels 16+2` row say the same thing from the datasheet side.
+    yaml: |
+      pins:
+        none: true
+        source: "CH32H417RM.md:15745 (RM ch.13: the detection channels reuse the ADC's 16 external channels) and CH32H417DS0.md Table 2-1-1, which carries no TKEY function on any pin row"
+      notes: >
+        Touch-key capacitance detection: an operating mode of the two ADCs rather than a
+        block with pads. Enabling it sets ADC_CTLR1.TKENABLE (ch32h417.h:1880) on an ADC
+        that is already powered on, and the channel converted is the first of that ADC's
+        regular sequence. Pick the pads on ADC1's or ADC2's `Channels` row; up to 16
+        detection channels, one conversion at a time (RM 13.1).
+
+  PWR:
+    yaml: |
+      pins:
+        none: true
+        source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)"
+        # Seven rails, and the DS states an ORDER between four of them once at the end of
+        # 1.4.3 rather than in a table: VDD33 >= VDD33A >= VDDIO >= VIO18. Two more
+        # (VDD12A, VDDK) are normally OUTPUTS of internal LDOs and only become inputs if
+        # the designer moves the heat off the chip, and VBAT stands outside the ordering
+        # because it is switched in only when the others are gone. Modelling that as flat
+        # rows would lose the part a designer most needs: which rail may be above which.
+        supplies:
+          - name: VDD33
+            pins: [VDD33]
+            range: "2.4-3.6 V (3.15-3.45 V with USB2.0 or Ethernet)"
+            note: >
+              Main supply, and the highest rail. Powers some I/O pins, the system LDO and the
+              built-in USB2.0 and Ethernet PHYs. Must not fall below 2.7 V in Stop mode or
+              while VIO18 is switched from low to high. Decouple 0.1 uF per pin plus 10 uF at
+              the main pin, next to the Ethernet signals.
+            source: "CH32H417DS0.md 1.4.3"
+          - name: VDD33A
+            pins: [VDD33A]
+            range: "1.8-3.6 V (>= 3.0 V for HSADC, >= 2.4 V for ADC and DAC)"
+            note: >
+              Analog supply for the ADC, temperature sensor, HSADC, OPA, CMP, DAC and PLL.
+              Match it to VDDIO when the OPA or DAC is used; otherwise it may be higher. Must
+              not exceed VDD33.
+            source: "CH32H417DS0.md 1.4.3"
+          - name: VDDIO
+            pins: [VDDIO]
+            range: "1.65-3.6 V"
+            note: >
+              I/O supply: sets the output high level of the regular I/O pins and feeds the I/O
+              LDO that produces VIO18. Must not exceed VDD33 or VDD33A. When VIO18 rises from
+              low to high, VDDIO's capacitance must be much larger than VIO18's or the inrush
+              pulls VDDIO down. 0.1 uF per pin plus 10 uF at the main pin.
+            source: "CH32H417DS0.md 1.4.3"
+          - name: VIO18
+            pins: [VIO18]
+            range: "1.1-3.6 V"
+            note: >
+              Supply for the high-speed I/O pins. Normally GENERATED by the I/O LDO from
+              VDDIO and set by software to 1.2, 1.8, 2.5 or 3.3 V, or switched off. The level
+              after power-up is chosen by the pull-down resistor on the XO pin. Short it to
+              VDDIO when low-voltage I/O is not needed. 0.1 uF per pin plus 2.2 uF at the
+              main pin.
+            source: "CH32H417DS0.md 1.4.3, Table 3-2"
+          - name: VDD12A
+            pins: [VDD12A]
+            range: "1.17-1.27 V"
+            note: >
+              For the USB 3.0 module and the TH PHY. Normally an LDO OUTPUT derived from
+              VDD33, so the pin is a decoupling node: 0.1 uF + 2.2 uF. May be fed from an
+              external DC-DC instead to move the LDO's heat off the chip - then the external
+              voltage must sit slightly above the LDO's output, and the LDO must be off.
+            source: "CH32H417DS0.md 1.4.3"
+          - name: VDDK
+            pins: [VDDK]
+            range: "1.17-1.27 V"
+            note: >
+              Core supply, with the same double role as VDD12A: normally an LDO output from
+              VDD33 and a decoupling node (0.1 uF per pin plus 2.2 uF at the main pin), or fed
+              externally at a voltage slightly above the LDO's output.
+            source: "CH32H417DS0.md 1.4.3"
+          - name: VREFP
+            pins: [VREFP]
+            range: "2.4-3.6 V"
+            note: >
+              Reference input for the ADC, HSADC and DAC. Must not exceed VDD33A. Tie it to
+              VDD33A for ratiometric conversions, or drive it from a reference - there is no
+              internal reference pad.
+            source: "CH32H417DS0.md 1.4.3"
+          - name: VBAT
+            pins: [VBAT]
+            range: "1.8-3.6 V"
+            note: >
+              Optional backup supply, outside the VDD33 >= VDD33A >= VDDIO >= VIO18 ordering:
+              it is only switched in when VDD33 and VDD33A are off, to run the RTC and the
+              external 32 kHz oscillator.
+            source: "CH32H417DS0.md 1.4.3"
+          - name: VSS / VSSA
+            pins: [VSS, VSSA]
+            range: "0 V"
+            note: >
+              Ground, and the analog return for VDD33A and VREFP. Star VSSA to VSS at the pin
+              rather than along the digital ground path.
+            source: "CH32H417DS0.md Table 2-1-1"
