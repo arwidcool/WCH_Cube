@@ -256,8 +256,16 @@ test('a part with no signal_pins is untouched by any of this', () => {
       if (sel) assert.equal(eng.signalPins(pid), sel, `${name}.${pid}: not the same remap object`);
       else assert.deepEqual(eng.signalPins(pid), { pins: {} }, `${name}.${pid}: no remaps means no pins`);
     }
-    assert.deepEqual(eng.afPlan(), { style: null, fn: null, calls: [], missing: [] },
-      `${name} must produce no AF plan at all`);
+    // Asserted by NAME rather than by deep-equal on the whole object. `afPlan()` grew two
+    // more keys (`analog`, `contradictory`) with the analog-pad work, and a deep-equal
+    // calls an additive key a regression - so the assertion says what "no AF plan at all"
+    // MEANS: no style, no function, nothing to emit and nothing missing. Those four are
+    // the whole claim, and each still has to be empty.
+    const plan = eng.afPlan();
+    assert.equal(plan.style, null, `${name} must declare no AF style`);
+    assert.equal(plan.fn, null, `${name} must name no AF function`);
+    assert.deepEqual(plan.calls, [], `${name} must emit no AF call`);
+    assert.deepEqual(plan.missing, [], `${name} must have nothing missing`);
     assert.ok(!/GPIO_PinAFConfig/.test(eng.cSource()), `${name} must emit no AF call`);
   }
 });
