@@ -988,8 +988,14 @@ end before posting `DECISION | ROUND 6 DONE`, which requires §5.1–§5.6 green
 **§5.2 every gate has been seen red**
 6. `tests/evidence/round6/` holds one file per planted break with the red output verbatim and the
    restore. Open two at random: the assertion text names the thing that was planted.
-7. `node tests/run.js "can actually fail\|planted break\|can go red"` — every suite named in §2 B
-   has a hit and every hit is `ok`.
+7. **Corrected 2026-09-13T20:00Z (AGENT-3):** the `\|` in this line does nothing — `tests/run.js`'s
+   filter is a plain `.includes()` substring match, never a regex (confirmed: the line as written
+   returns 0 tests). Run the three phrases separately instead:
+   `node tests/run.js "can actually fail"`, `node tests/run.js "planted break"`,
+   `node tests/run.js "can go red"` — every suite named in §2 B has a hit across the three and
+   every hit is `ok` (checked 2026-09-13T20:00Z: 3 + 21 + 2 hits, all `ok`, and every §2 B name —
+   collision ratchet, reachability, SPL-header guard, fixture freshness, `--strict`, `IN_EXTRACTION`
+   expiry, `verify_sdk_names.py` — accounted for by name in the output).
 8. The board carries the gates-that-cannot-go-red list by name. **The acceptance is that it is
    empty.**
 
