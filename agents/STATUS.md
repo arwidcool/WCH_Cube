@@ -303,17 +303,75 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — nothing. Worst-first batch landed: SERDES, QSPI1/QSPI2, SDMMC, SAI; PIOC
-found to be a different shape and correctly left unmodelled. `params:` **40 → 45 of 78**.
+**IN FLIGHT** — nothing. `verify_sdk_names_selftest.py`'s bitfield gap closed (44/44), PIOC
+handed to AGENT-3 as a declared ABSENT, FMC's NOR/SRAM controller landed via AGENT-2's
+`embed:` contract, and D's USBHS_PLL/USBFS shipped. `params:` **45 → 46 of 78**.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: FMC via AGENT-2's new `embed:` contract (board post, `448b628`),
-  then the parked USBHS_PLL block now that the clock tab fits it, then CAN1-3/DAC/LPTIM1-2/
-  GPHA/RTC (RTC's gate is TWO bits — do not let `BKP` alone tick it).
+- Next step if I stop here: `pio run` once for the whole SERDES/QSPI/SDMMC/SAI/FMC batch
+  (authorised, not yet run), then CAN1-3/DAC/LPTIM1-2/GPHA/RTC worst-first (RTC's gate is
+  TWO bits — do not let `BKP` alone tick it). ETH/ECDC/FMC_NAND/FMC_SDRAM are unblocked by
+  the same `embed:` contract but not started — each is its own struct, not FMC's.
 - Gates last run: `validate_mcu` 0 errors/99 warnings · `verify_sdk_names` 0/0 ·
-  `coverage.py CH32H417` complete, 0 open · `validate_params_selftest` 5/5 ·
-  `validate_clock_selftest` 11/11 · `verify_sdk_names_selftest` 35/35 · `--strict` exits 0 on
-  all 8 shipped fixtures · `node tests/run.js "H417"` 64/64 · `"codegen_compile"` 18/18
-  (fixtures refreshed via `make_fixtures.js`, both CH32H417 ones) · `"params"` 52/52.
+  `coverage.py --gate` 6 of 6 · `coverage.py CH32H417` complete, 0 open ·
+  `validate_params_selftest` 5/5 · `validate_clock_selftest` 11/11 ·
+  `verify_sdk_names_selftest` **44/44** (was 35/35 + 3; now the bitfield case is counted
+  in the same tally) · `--strict` exits 0 on all 8 shipped fixtures ·
+  `node tests/run.js "H417"` 64/64 · `"codegen_compile"` 18/18 (fixtures refreshed twice
+  this sub-cycle, once per data change) · `"nested_structs"` 8/8 (AGENT-2's mechanism,
+  now exercised by real FMC data, not only the synthetic fixture) ·
+  `"clock"` 97/98 (the one failure is AGENT-2's own `clockmux.test.js:64`, stale by
+  design now that CH32H417 legitimately has `plls:`/`preSrc:` — REQUEST posted).
+
+**Current — 2026-09-13T19:39Z. The manager's three follow-ups, in the order asked.**
+
+- **The bitfield gate fix got the selftest case it was missing.** `bitfield_cases()` in
+  `tools/verify_sdk_names_selftest.py`: four checks against a synthetic header exercise
+  `Index.add_header()` directly (named bitfield captured, plain+array member still
+  captured, anonymous padding contributes nothing, a name the header never wrote is
+  still rejected in isolation), plus a fifth END TO END against the real
+  `CH32H417.yaml` — SERDES's `clear_all` `sdk_field` mutated to `ClearALLNotAField` and
+  confirmed REJECTED by the full `verify_file()` pipeline, not just the parser. Folded
+  into the main tally rather than a side count like `driver_header_cases`: selftest now
+  reads **44/44** (35 + 4 driver-header + 5 bitfield), not 35/35 with an unlisted extra.
+- **PIOC declared, not silently absorbed.** Checked whether the `SYS.params`-style
+  `ABSENT` map in `tests/completeness.test.js` (`:86-89`, QA-owned) was mine to touch —
+  it is not — and posted the exact line as a REQUEST instead of guessing at an edit in
+  a file I do not own: `agents/BOARD.md` 2026-09-13T19:23Z, citing
+  `CH32H417RM.md:49360-49399`. Until AGENT-3 lands it, the peripheral-count script still
+  reads PIOC as one of the open cells; owed is **28 once staged, 29 until then** (32
+  peripherals without a block, minus SYS/RCC/EXTI/DMA1/PIOC).
+- **FMC's NOR/SRAM controller, through AGENT-2's `embed:` contract, verified two ways.**
+  `FMC_NORSRAMInitTypeDef` (13 fields) + `FMC_NORSRAMTimingInitTypeDef` embedded twice
+  (`rw`/`wr`, one call each) — 25 params, all cited to `ch32h417_fmc.h` and RM ch.40's
+  BCRx/BTRx tables. `FMC_Bank` is fixed to NE1/`FMC_Bank1_NORSRAM1` rather than offered,
+  because "Chip select" above is a CHECKBOX (more than one of NE1-4 selectable at once)
+  and one scalar bank id cannot answer "which bank" for a multi-bank design — the same
+  `channel_params.instances` shape SERDES/SAI use, keyed to a checkbox instead of a
+  channel number, not built this cycle (TASKS.md line). Verified past the schema: built
+  a throwaway `.wchproj` enabling `Bus mode: 8080 LCD, 8-bit` and toggled `Extended
+  Mode` both ways through `node tools/wchcube_cli.js --format c --strict` — Enable
+  emits BOTH `FMC_NORSRAMTimingInitStructure_rw`/`_wr` blocks and both pointer
+  assignments exactly as AGENT-2's worked example shows; Disable emits only `_rw` and
+  leaves `FMC_WriteTimingStruct` at its `{0}` NULL, which is what the SDK reads under
+  Disable. `--strict` exits 0 both ways. Every timing default is the SLOWEST value the
+  header's own range allows — CH32H417's EVT ships no FMC example to check a real
+  number against, unlike every other peripheral this cycle. ETH, ECDC, FMC_NAND,
+  FMC_SDRAM are separate structs behind the same contract, not started.
+- **USBHS_PLL/USBFS shipped**, unchanged from the parked proposal: `clock.plls.USBHS_PLL`
+  (480 MHz off HSI, one input, the other three declared with the RM line that blocks
+  each) and `clock.prescalers.USBFS` (the 48 MHz tap, sixteen dividers including the
+  7.5 a first draft omitted). `agents/proposals/CH32H417_usbhs_pll.yaml`'s own numbers,
+  spliced verbatim. Confirmed AGENT-2's row-packing fix holds for the real file, not
+  only their copy-in-memory measurement: `node tests/run.js "clock"` 97/98,
+  `layout`/`legibility` both green. The one red is `clockmux.test.js` hardcoding
+  CH32H417 as a part with neither key — correct when written, stale now, REQUEST posted
+  to AGENT-2 rather than edited (`app/tests/**`).
+
+Red, and who owns it: `app/tests/clockmux.test.js:64`, AGENT-2's, REQUEST posted above —
+everything else green. Fixtures refreshed twice (once per data change,
+`node tests/fixtures/make_fixtures.js`) and both re-confirmed 18/18 before this commit.
+`pio run` for this whole batch (SERDES/QSPI/SDMMC/SAI/FMC) is authorised and not yet run —
+next action.
 
 **Current — 2026-09-13, cycle 7. Four peripherals landed clean, one correctly refused.**
 

@@ -269,7 +269,35 @@ peripherals:
       Optional FSMC signals: []
       Clock: Disable
       SDRAM control: Disable
+      Extended Mode: Disable
     remap: 0
+    params:
+      data_address_mux: false
+      memory_type: SRAM
+      memory_data_width: 8-bit
+      burst_access_mode: false
+      asynchronous_wait: false
+      wait_signal_polarity: Low
+      wait_signal_active: Before wait state
+      write_operation: true
+      wait_signal: false
+      write_burst: false
+      cpsize: None
+      bmp: Mode 0
+      rw_addrset: 15
+      wr_addrset: 15
+      rw_addrhold: 15
+      wr_addrhold: 15
+      rw_datasetup: 255
+      wr_datasetup: 255
+      rw_busturnaround: 15
+      wr_busturnaround: 15
+      rw_clkdivision: 1
+      wr_clkdivision: 1
+      rw_datalatency: 0
+      wr_datalatency: 0
+      rw_accessmode: A
+      wr_accessmode: A
   GPHA:
     settings:
       Mode: Disable
@@ -731,7 +759,13 @@ clock:
   pllMul: 4
   sys: HSI
   pre:
+    USBFS: 10
     HB: 1
     FPRE: 1
     HB2: 1
     ADC: 2
+  preSrc:
+    USBFS: USBHS_PLL_CLK
+  plls:
+    USBHS_PLL:
+      in: 0

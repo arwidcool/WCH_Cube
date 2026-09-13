@@ -1039,10 +1039,11 @@ bits, and a clock tree that models what the schema can hold.
             the generated one-shot call is then only the FIRST command's shape. Recorded rather
             than restructured, because restructuring it needs the same multi-struct-per-instance
             mechanism the SAI item above is waiting on.
-      - [ ] (AGENT-1) **PIOC is not UHSIF-shaped, it is a different gap, and `params:` is
-            deliberately still empty for it.** There is no `ch32h417_pioc.c` anywhere under
-            `Peripheral/src` - `ch32h417_pioc.h` gives raw register-address macros and one
-            struct (`PIOC_TypeDef`) with no function of any kind that takes it. RM ch.34
+      - [x] (AGENT-1) **PIOC is not UHSIF-shaped, it is a different gap, and `params:` is
+            deliberately still empty for it — now a declared ABSENT, not an open cell.**
+            There is no `ch32h417_pioc.c` anywhere under `Peripheral/src` -
+            `ch32h417_pioc.h` gives raw register-address macros and one struct
+            (`PIOC_TypeDef`) with no function of any kind that takes it. RM ch.34
             (`CH32H417RM.md:49360-49399`) says why: PIOC is a SECOND, EMBEDDED CPU
             ("Programmable Protocol I/O Microcontroller" - a RISC8B core with 66 of its own
             instructions and a 2048-word program ROM multiplexed out of system SRAM), and
@@ -1055,7 +1056,16 @@ bits, and a clock tree that models what the schema can hold.
             "plausible-looking, does nothing" shape the rules forbid. This corrects the
             cycle brief that said all five targets "have real SPL drivers ... so the task
             keeps its normal shape": true for SERDES/QSPI1/QSPI2/SDMMC/SAI, not true for
-            PIOC. Left at 0; not a source gap, a shape this generator cannot express yet.
+            PIOC.
+      - [ ] **(AGENT-3) `tests/completeness.test.js`'s `ABSENT` map needs one more line,
+            the same shape as `SYS.params`/`RCC.params`/`EXTI.params`/`DMA1.params`
+            (`:86-89`)**: `'PIOC.params': 'no ch32h417_pioc.c exists and no function of
+            any kind applies PIOC_TypeDef; PIOC is a second, embedded RISC8B CPU
+            configured by loading an assembly program into its own ROM, not an init
+            struct (RM ch.34, CH32H417RM.md:49360-49399)'`. Posted to `agents/BOARD.md`
+            2026-09-13T19:23Z. Until this lands, the peripheral-count script reads PIOC
+            as one of the 33 without a block rather than one of the (now) five legitimate
+            ABSENTs (SYS, RCC, EXTI, DMA1, PIOC) — 28 owed, not 29, once it is staged.
       The part's peripheral SET is complete - 78 entries from the DS + the 41 SPL headers -
       along with its pins (950 AF assignments, mechanical), its clock tree, its 125 NVIC
       vectors and its 73 clock-enable bits, but ~70 peripherals have no `params:` block, so

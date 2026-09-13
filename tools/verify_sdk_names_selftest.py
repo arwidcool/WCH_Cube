@@ -288,13 +288,15 @@ def main() -> int:
                 print("              got: " + (
                     "; ".join(Report_safe(p) for p in problems) or "nothing at all"))
 
-        missed += driver_header_cases(tmp, verbose=args.verbose)
-
-        print(f"\n{len(cases)} planted break(s), {caught} caught, {missed} missed")
+        dh_total, dh_missed = driver_header_cases(tmp, verbose=args.verbose)
+        bf_total, bf_missed = bitfield_cases(tmp, verbose=args.verbose)
+        missed += dh_missed + bf_missed
+        total = len(cases) + dh_total + bf_total
+        print(f"\n{total} planted break(s), {total - missed} caught, {missed} missed")
         return 1 if missed else 0
 
 
-def driver_header_cases(tmp: pathlib.Path, verbose: bool = False) -> int:
+def driver_header_cases(tmp: pathlib.Path, verbose: bool = False) -> tuple[int, int]:
     """The headers that ship OUTSIDE Peripheral/inc, and the rule that admits them.
 
     Not every peripheral has an SPL driver. CH32H417's UHSIF ships as a prebuilt
@@ -319,7 +321,7 @@ def driver_header_cases(tmp: pathlib.Path, verbose: bool = False) -> int:
     part = ROOT / "data" / "mcus" / "CH32H417.yaml"
     if not evt.is_dir() or not part.is_file():
         print("  SKIP      driver-header cases: the H417 drop is not present")
-        return 0
+        return (0, 0)
 
     missed = 0
     found = V.evt_include_dirs(evt)
@@ -361,14 +363,95 @@ def driver_header_cases(tmp: pathlib.Path, verbose: bool = False) -> int:
         planted = opts[-1]["sdk"]
     except Exception as exc:                                          # noqa: BLE001
         print(f"  MISSED    UHSIF end-to-end: could not plant it ({exc})")
-        return missed + 1
+        return (4, missed + 1)
     rep = run(doc, tmp.parent / "CH32H417.yaml")
     hit = next((p for p in rep.errors + rep.warns if planted in p), None)
     print(f"{'  caught  ' if hit else '  MISSED  '}a bad macro in the library driver's "
           f"namespace is named")
     if hit and verbose:
         print("              " + Report_safe(hit))
-    return missed + (0 if hit else 1)
+    return (4, missed + (0 if hit else 1))
+
+
+def bitfield_cases(tmp: pathlib.Path, verbose: bool = False) -> tuple[int, int]:
+    """A C bitfield member (`NAME : N;`) must read as a field; padding must not.
+
+    Found modelling CH32H417's SERDES: `SDS_CFG_TypeDef` (ch32h417_serdes.h:62-79) is
+    packed entirely out of `uint32_t NAME : 1;` rows, and `add_header()`'s field
+    extraction required a comma or end-of-string right after the name - which `: 1` is
+    neither - so every one of twelve real, correct fields read as "not a member of its
+    own struct" before the fix (`BITFIELD_WIDTH_RE`, stripping `: <width>` ahead of
+    `FIELD_RE` rather than teaching that regex a second terminator). This is the case
+    that fix never had: the gate changed and `verify_sdk_names_selftest.py` stayed at
+    35/35, which means the new code path had never been seen to go red. Four checks
+    against a synthetic header exercise `Index.add_header()` directly - named bitfield,
+    plain member, array member, anonymous padding - and a fifth runs the change
+    END TO END against the real CH32H417.yaml, because the synthetic checks alone would
+    not have caught a regression in how `verify_file()` WIRES field lookups together.
+
+    The negative half is the one that matters, twice over: an anonymous bitfield must
+    contribute no field name (a looser fix that also swallowed `uint32_t : 5;` would
+    hide the next FMC/SAI-shaped struct's genuinely absent member the same way this bug
+    hid twelve genuinely present ones), and a bogus field name inside a real bitfield
+    struct must still be REJECTED by the full pipeline, not just parsed.
+    """
+    missed = 0
+    src = (
+        "typedef struct\n"
+        "{\n"
+        "    uint32_t RealOne : 1;\n"
+        "    uint32_t RealTwo : 1;\n"
+        "    uint32_t : 5;\n"
+        "    uint16_t Plain;\n"
+        "    uint8_t ArrA[4];\n"
+        "} SELFTEST_BitfieldTypeDef;\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        hp = pathlib.Path(td) / "selftest_bitfield.h"
+        hp.write_text(src, encoding="utf-8")
+        idx = V.Index("selftest")
+        idx.add_header(hp)
+        fields = idx.fields.get("SELFTEST_BitfieldTypeDef", set())
+
+    for label, ok in (
+        (f"named bitfield members are captured ({sorted(fields)})",
+         {"RealOne", "RealTwo"} <= fields),
+        ("a plain member and an array member are still captured (no regression)",
+         {"Plain", "ArrA"} <= fields),
+        ("anonymous bitfield padding contributes no field name",
+         len(fields) == 4),
+        ("a name the header never wrote is still rejected (negative half, in isolation)",
+         "NotARealField" not in fields),
+    ):
+        print(f"{'  caught  ' if ok else '  MISSED  '}{label}")
+        if not ok:
+            missed += 1
+
+    # End to end, negative: a bogus field name inside a REAL bitfield struct, run
+    # through verify_file() exactly as the command line would. The four checks above
+    # would not by themselves have caught a wiring defect where add_header()'s result
+    # is parsed correctly but never actually consulted for `params.*.sdk_field`.
+    part = ROOT / "data" / "mcus" / "CH32H417.yaml"
+    if not part.is_file():
+        print("  SKIP      bitfield end-to-end: CH32H417.yaml is missing")
+        return (4, missed)
+    doc = yaml.safe_load(part.read_text(encoding="utf-8"))
+    try:
+        cp = doc["peripherals"]["SERDES"]["channel_params"]["params"]
+        row = next(p for p in cp if p.get("key") == "clear_all")
+        assert row["sdk_field"] == "ClearALL"
+        row["sdk_field"] = "ClearALLNotAField"
+    except Exception as exc:                                          # noqa: BLE001
+        print(f"  MISSED    bitfield end-to-end: could not plant it ({exc})")
+        return (5, missed + 1)
+    rep = run(doc, tmp.parent / "CH32H417.yaml")
+    hit = next((p for p in rep.errors + rep.warns
+                if "ClearALLNotAField" in p and "SDS_CFG_TypeDef" in p), None)
+    print(f"{'  caught  ' if hit else '  MISSED  '}a bogus field name inside a real "
+          f"bitfield struct is rejected end to end")
+    if hit and verbose:
+        print("              " + Report_safe(hit))
+    return (5, missed + (0 if hit else 1))
 
 
 def Report_safe(text: str) -> str:

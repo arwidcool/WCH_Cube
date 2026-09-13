@@ -2255,6 +2255,334 @@ extras:
           choices:
             - { name: Disable }
             - { name: Enabled, signals: [BA0, BA1, CAS_N, RAS_N, WE_N, CKE0, CKE1, CS_N0, CS_N1, DQM0, DQM1, DQM2, DQM3] }
+        # A REGISTER CHOICE, NOT A PIN CLAIM - EXTMOD (R32_FMC_BCRx[14]) decides whether a
+        # second, WRITE-ONLY timing block applies (`FMC_WriteTimingStruct`); no signal list
+        # because nothing here claims a pad. It is what `embed: wr`'s params below key off,
+        # the same shape `FMC_ExtendedMode` itself uses as a `const:`-per-choice pair.
+        - name: "Extended Mode"
+          choices:
+            - { name: Disable }
+            - { name: Enable }
+      params:
+        # FMC_NORSRAMInitTypeDef (ch32h417_fmc.h:60-116), applied by FMC_NORSRAMInit()
+        # (:425, no handle - the bank is a struct member, not an argument). Covers the
+        # NOR/PSRAM/SRAM controller this peripheral's own worked example (the 8080 LCD
+        # wiring above) is: async or muxed-async NOR/SRAM/PSRAM on Bank1. Two structs
+        # nest through ONE pointer each - AGENT-2's `embed:` contract, `agents/BOARD.md`
+        # 2026-09-13T19:07Z - so `struct: FMC_NORSRAMTimingInitTypeDef` rows below carry
+        # `embed: rw` or `embed: wr` matching which of the SDK's two timing sets they set.
+        #
+        # `FMC_Bank` is FIXED to NORSRAM1 (NE1) rather than offered: "Chip select" above is
+        # a CHECKBOX row, so more than one of NE1-4 can be ticked at once for a multi-bank
+        # design, and one scalar `FMC_Bank` value cannot answer "which bank" for all of
+        # them - each additional bank needs its OWN `FMC_NORSRAMInit()` call with its own
+        # bank id and its own timing, the same `channel_params.instances` shape SERDES and
+        # SAI use, keyed to which checkbox is ticked rather than a channel number. Not
+        # built this cycle; TASKS.md line. NE1 is what this peripheral's own "how to wire
+        # an 8080 parallel display" note above already assumes.
+        - key: bank
+          name: Bank
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_Bank
+          const: FMC_Bank1_NORSRAM1
+          help: "ch32h417_fmc.h:63-64. Fixed to NE1/Bank1 - see the comment above for why the other three banks are not independently configurable yet."
+        - key: data_address_mux
+          name: Multiplex address/data bus
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_DataAddressMux
+          sdk_enabled: FMC_DataAddressMux_Enable
+          sdk_disabled: FMC_DataAddressMux_Disable
+          type: bool
+          default: false
+          help: "ch32h417_fmc.h:66-68, R32_FMC_BCRx MUXE bit 1 (Table 40-17, CH32H417RM.md:56978). Enable only for a multiplexed-bus NOR Flash; needs NADV (Optional FSMC signals above)."
+        - key: memory_type
+          name: Memory type
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_MemoryType
+          type: enum
+          default: SRAM
+          options:
+            - { name: SRAM,  value: 0, sdk: FMC_MemoryType_SRAM }
+            - { name: PSRAM, value: 1, sdk: FMC_MemoryType_PSRAM }
+            - { name: NOR,   value: 2, sdk: FMC_MemoryType_NOR }
+          help: "ch32h417_fmc.h:70-72, R32_FMC_BCRx MTYP[3:2] (Table 40-17, CH32H417RM.md:56978)."
+        - key: memory_data_width
+          name: Memory data width
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_MemoryDataWidth
+          type: enum
+          default: 8-bit
+          options:
+            - { name: 8-bit,  value: 0, sdk: FMC_MemoryDataWidth_8b }
+            - { name: 16-bit, value: 1, sdk: FMC_MemoryDataWidth_16b }
+            - { name: 32-bit, value: 2, sdk: FMC_MemoryDataWidth_32b }
+          help: >
+            ch32h417_fmc.h:74-76, R32_FMC_BCRx MWID[5:4] (Table 40-17, CH32H417RM.md:56978,
+            already the reasoning behind the `Bus mode`/width rows above). NOT derived from
+            those rows - keep this the SAME width as whichever `Bus mode`/`Memory bus`
+            choice you picked; a mismatch compiles and drives the wrong-width bus.
+        - key: burst_access_mode
+          name: Burst access mode
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_BurstAccessMode
+          sdk_enabled: FMC_BurstAccessMode_Enable
+          sdk_disabled: FMC_BurstAccessMode_Disable
+          type: bool
+          default: false
+          help: "ch32h417_fmc.h:77-79, R32_FMC_BCRx BURSTEN bit 8 (Table 40-17). Only meaningful with a synchronous burst NOR Flash."
+        - key: asynchronous_wait
+          name: Asynchronous wait signal
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_AsynchronousWait
+          sdk_enabled: FMC_AsynchronousWait_Enable
+          sdk_disabled: FMC_AsynchronousWait_Disable
+          type: bool
+          default: false
+          help: "ch32h417_fmc.h:81-83, R32_FMC_BCRx ASYNCWAIT bit 15 (Table 40-17: \"set to 1 if the memory supports this feature\"). Needs NWAIT (Optional FSMC signals above)."
+        - key: wait_signal_polarity
+          name: Wait signal polarity
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_WaitSignalPolarity
+          type: enum
+          default: Low
+          options:
+            - { name: Low,  value: 0, sdk: FMC_WaitSignalPolarity_Low }
+            - { name: High, value: 1, sdk: FMC_WaitSignalPolarity_High }
+          help: "ch32h417_fmc.h:85-87. Only makes sense with burst mode's wait signal active (Table 40-17, bit 9 WAITPOL)."
+        - key: wait_signal_active
+          name: Wait signal timing
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_WaitSignalActive
+          type: enum
+          default: Before wait state
+          options:
+            - { name: Before wait state, value: 0, sdk: FMC_WaitSignalActive_BeforeWaitState }
+            - { name: During wait state, value: 1, sdk: FMC_WaitSignalActive_DuringWaitState }
+          help: "ch32h417_fmc.h:89-92. Whether the memory asserts NWAIT one cycle early or during the wait cycle itself; burst mode only."
+        - key: write_operation
+          name: Write operation
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_WriteOperation
+          sdk_enabled: FMC_WriteOperation_Enable
+          sdk_disabled: FMC_WriteOperation_Disable
+          type: bool
+          default: true
+          help: "ch32h417_fmc.h:94-95, R32_FMC_BCRx WREN bit 12 (Table 40-17: \"make the settings as needed\"). Disabling makes the bank read-only to the FMC."
+        - key: wait_signal
+          name: Wait-state insertion
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_WaitSignal
+          sdk_enabled: FMC_WaitSignal_Enable
+          sdk_disabled: FMC_WaitSignal_Disable
+          type: bool
+          default: false
+          help: "ch32h417_fmc.h:97-99, R32_FMC_BCRx WAITEN bit 13 (Table 40-17: no effect outside burst mode)."
+        - key: extended_mode_enable
+          name: Extended mode
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_ExtendedMode
+          const: FMC_ExtendedMode_Enable
+          depends_on: { setting: "Extended Mode", equals: Enable }
+          help: "ch32h417_fmc.h:101-102, R32_FMC_BCRx EXTMOD bit 14 (Table 40-17/40-19, CH32H417RM.md:56978,57064). Fixed by the Extended Mode row - it is what decides whether the `wr` timing block below applies at all."
+        - key: extended_mode_disable
+          name: Extended mode
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_ExtendedMode
+          const: FMC_ExtendedMode_Disable
+          depends_on: { setting: "Extended Mode", equals: Disable }
+          help: "ch32h417_fmc.h:101-102. Fixed by the Extended Mode row."
+        - key: write_burst
+          name: Write burst
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_WriteBurst
+          sdk_enabled: FMC_WriteBurst_Enable
+          sdk_disabled: FMC_WriteBurst_Disable
+          type: bool
+          default: false
+          help: "ch32h417_fmc.h:104-106. Synchronous burst NOR Flash only, and needs Extended mode + Burst access mode both enabled."
+        - key: cpsize
+          name: CRAM page size
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_CPSIZE
+          type: enum
+          default: "None"
+          options:
+            - { name: "None",     value: 0, sdk: FMC_CPSIZE_None }
+            - { name: 128 bytes,  value: 1, sdk: FMC_CPSIZE_128Bytes }
+            - { name: 256 bytes,  value: 2, sdk: FMC_CPSIZE_256Bytes }
+            - { name: 512 bytes,  value: 3, sdk: FMC_CPSIZE_512Bytes }
+            - { name: 1024 bytes, value: 4, sdk: FMC_CPSIZE_1024Bytes }
+          help: "ch32h417_fmc.h:107-108, R32_FMC_BCRx CPSIZE[18:16] (Table 40-17: no effect on asynchronous mode). External CRAM page size, PSRAM only."
+        - key: bmp
+          name: Address mapping
+          struct: FMC_NORSRAMInitTypeDef
+          sdk_field: FMC_BMP
+          type: enum
+          default: Mode 0
+          options:
+            - { name: Mode 0, value: 0, sdk: FMC_BMP_Mode0 }
+            - { name: Mode 1, value: 1, sdk: FMC_BMP_Mode1 }
+          help: "ch32h417_fmc.h:110-111, R32_FMC_BCR1 BMP[25:24] (RM 40.4, CH32H417RM.md:56373: \"the FMC memory area mapping can be modified via the BMP[1:0] bits in R32_FMC_BCR1\")."
+        # THE TIMING STRUCT, applied per pointer member - one call, up to two blocks. Every
+        # row's DEFAULT is the maximum value the header's own range allows (the slowest,
+        # safest timing an unknown memory can be driven at) - not a guess at a real
+        # memory's numbers, which only that memory's own datasheet has. Narrow every one
+        # of these once the attached device is known; the header's own worked constants
+        # (CH32H417 EVT ships none for FMC - unlike SDIO/SDMMC, no EXAM/FMC folder exists
+        # to check a value against) do not exist to check against here.
+        - key: rw_addrset
+          name: "Address setup time (read/write)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: rw
+          sdk_field: FMC_AddressSetupTime
+          type: int
+          default: 15
+          min: 0
+          max: 15
+          help: "ch32h417_fmc.h:25-28, R32_FMC_BTRx ADDSET[3:0] (Table 40-18, CH32H417RM.md:57094-57112). Not used with synchronous NOR."
+        - key: wr_addrset
+          name: "Address setup time (write, extended mode)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: wr
+          sdk_field: FMC_AddressSetupTime
+          type: int
+          default: 15
+          min: 0
+          max: 15
+          when: { "Extended Mode": Enable }
+          help: "Same field, the write-only timing set that applies when Extended mode is enabled (ch32h417_fmc.h:115)."
+        - key: rw_addrhold
+          name: "Address hold time (read/write)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: rw
+          sdk_field: FMC_AddressHoldTime
+          type: int
+          default: 15
+          min: 0
+          max: 15
+          help: "ch32h417_fmc.h:30-33, R32_FMC_BTRx ADDHLD[7:4] (Table 40-18). Not used with synchronous NOR."
+        - key: wr_addrhold
+          name: "Address hold time (write, extended mode)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: wr
+          sdk_field: FMC_AddressHoldTime
+          type: int
+          default: 15
+          min: 0
+          max: 15
+          when: { "Extended Mode": Enable }
+          help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+        - key: rw_datasetup
+          name: "Data setup time (read/write)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: rw
+          sdk_field: FMC_DataSetupTime
+          type: int
+          default: 255
+          min: 0
+          max: 255
+          help: "ch32h417_fmc.h:35-38, R32_FMC_BTRx DATAST[15:8] (Table 40-18). SRAMs, ROMs and asynchronous muxed NOR Flash."
+        - key: wr_datasetup
+          name: "Data setup time (write, extended mode)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: wr
+          sdk_field: FMC_DataSetupTime
+          type: int
+          default: 255
+          min: 0
+          max: 255
+          when: { "Extended Mode": Enable }
+          help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+        - key: rw_busturnaround
+          name: "Bus turnaround duration (read/write)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: rw
+          sdk_field: FMC_BusTurnAroundDuration
+          type: int
+          default: 15
+          min: 0
+          max: 15
+          help: "ch32h417_fmc.h:40-43, R32_FMC_BTRx BUSTURN[19:16] (Table 40-18). Multiplexed NOR Flash only."
+        - key: wr_busturnaround
+          name: "Bus turnaround duration (write, extended mode)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: wr
+          sdk_field: FMC_BusTurnAroundDuration
+          type: int
+          default: 15
+          min: 0
+          max: 15
+          when: { "Extended Mode": Enable }
+          help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+        - key: rw_clkdivision
+          name: "CLK output division (read/write)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: rw
+          sdk_field: FMC_CLKDivision
+          type: int
+          default: 1
+          min: 1
+          max: 15
+          help: "ch32h417_fmc.h:45-47, R32_FMC_BTRx CLKDIV[23:20] (Table 40-18). Synchronous NOR Flash only - not used for asynchronous NOR/SRAM/ROM, which is why the minimum legal value (1) is the default rather than 0."
+        - key: wr_clkdivision
+          name: "CLK output division (write, extended mode)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: wr
+          sdk_field: FMC_CLKDivision
+          type: int
+          default: 1
+          min: 1
+          max: 15
+          when: { "Extended Mode": Enable }
+          help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+        - key: rw_datalatency
+          name: "Data latency (read/write)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: rw
+          sdk_field: FMC_DataLatency
+          type: int
+          default: 0
+          min: 0
+          max: 15
+          help: "ch32h417_fmc.h:49-56, R32_FMC_BTRx DATLAT[27:24] (Table 40-18). 0 for CRAM and for asynchronous NOR/SRAM/ROM; only synchronous burst NOR Flash needs a nonzero value."
+        - key: wr_datalatency
+          name: "Data latency (write, extended mode)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: wr
+          sdk_field: FMC_DataLatency
+          type: int
+          default: 0
+          min: 0
+          max: 15
+          when: { "Extended Mode": Enable }
+          help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+        - key: rw_accessmode
+          name: "Access mode (read/write)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: rw
+          sdk_field: FMC_AccessMode
+          type: enum
+          default: A
+          options:
+            - { name: A, value: 0, sdk: FMC_AccessMode_A }
+            - { name: B, value: 1, sdk: FMC_AccessMode_B }
+            - { name: C, value: 2, sdk: FMC_AccessMode_C }
+            - { name: D, value: 3, sdk: FMC_AccessMode_D }
+          help: "ch32h417_fmc.h:57-59, R32_FMC_BTRx ACCMOD[29:28] (Table 40-18). Mode A is the common asynchronous SRAM/PSRAM/NOR waveform (RM 40.5.4, Figures 40-5/40-6)."
+        - key: wr_accessmode
+          name: "Access mode (write, extended mode)"
+          struct: FMC_NORSRAMTimingInitTypeDef
+          embed: wr
+          sdk_field: FMC_AccessMode
+          type: enum
+          default: A
+          options:
+            - { name: A, value: 0, sdk: FMC_AccessMode_A }
+            - { name: B, value: 1, sdk: FMC_AccessMode_B }
+            - { name: C, value: 2, sdk: FMC_AccessMode_C }
+            - { name: D, value: 3, sdk: FMC_AccessMode_D }
+          when: { "Extended Mode": Enable }
+          help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
       notes: >
         Flexible memory controller. The data and address buses are picked by WIDTH rather
         than switched on whole, because the width is a real register field
@@ -2267,10 +2595,17 @@ extras:
         strobes` for the panel's RD and WR. That is eleven pins; switching the whole
         controller on used to claim 103. The panel's RESET and backlight are ordinary
         GPIO outputs and are not FSMC signals.
-        The generator emits no FMC init struct yet - `FMC_NORSRAMInit()` needs the timing
-        block (address setup, data setup, bus turnaround) which is a property of the panel
-        and not of the pin plan - so this peripheral configures pins and the clock enable,
-        and the timings go in your own code. Nothing here guesses a number.
+        `FMC_NORSRAMInit()` now emits, through AGENT-2's `embed:` mechanism
+        (`agents/BOARD.md` 2026-09-13T19:07Z) for the two pointer-nested
+        `FMC_NORSRAMTimingInitTypeDef` blocks. It covers Bank1/NE1 only (see the `bank`
+        param's own comment - the "Chip select" row above is a checkbox, so more than one
+        bank can be wired at once and this generator does not yet emit one call per bank),
+        and it covers the NOR/PSRAM/SRAM controller only: `ETH`, `FMC_NAND` and
+        `FMC_SDRAM` (SDRAM control above) are separate structs behind the same `embed:`
+        contract, not modelled this cycle. Every timing default is the SLOWEST value the
+        header's own range allows, not a real memory's number - CH32H417's own EVT ships
+        no FMC example to check one against, unlike SDIO/SDMMC. Narrow every timing once
+        the attached device's own datasheet is in hand.
 
   TKEY:
     comment: |
