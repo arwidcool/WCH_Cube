@@ -3185,11 +3185,93 @@ peripherals:
           operations"). Default matches ECDC_StructInit() (ch32h417_ecdc.c:83); the
           EVT's own RAM_Block example overrides it to Big regardless of that note
           (hardware.c) - this row lets a project match either.
+      - key: key_31_0
+        name: "Key[31:0] - REPLACE before use"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_31T0
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:73. ZERO IS A PLACEHOLDER, NOT A KEY - ECDC_Init() dereferences this struct unconditionally (ch32h417_ecdc.c:49), so it must be embedded with SOME value to avoid a NULL-pointer hard fault; the real key is the application's, set before first use."
+      - key: key_63_32
+        name: "Key[63:32] - REPLACE before use"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_63T32
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:74. Placeholder only, see Key[31:0]."
+      - key: key_95_64
+        name: "Key[95:64] - REPLACE before use"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_95T64
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:75. Placeholder only, see Key[31:0]."
+      - key: key_127_96
+        name: "Key[127:96] - REPLACE before use"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_127T96
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:76. Placeholder only, see Key[31:0]."
+      - key: key_159_128
+        name: "Key[159:128] - REPLACE before use (192/256-bit only)"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_159T128
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:77. Placeholder only. ECDC_SetKey() only writes this word when Key length is 192-bit or wider (ch32h417_ecdc.c:118-122)."
+      - key: key_191_160
+        name: "Key[191:160] - REPLACE before use (192/256-bit only)"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_191T160
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:78. Placeholder only, see Key[159:128]."
+      - key: key_223_192
+        name: "Key[223:192] - REPLACE before use (256-bit only)"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_223T192
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:79. Placeholder only. ECDC_SetKey() only writes this word when Key length is 256-bit (ch32h417_ecdc.c:123-126)."
+      - key: key_255_224
+        name: "Key[255:224] - REPLACE before use (256-bit only)"
+        struct: ECDC_KEY_TypeDef
+        embed: key
+        sdk_field: KEY_255T224
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_ecdc.h:80. Placeholder only, see Key[223:192]."
     notes: >
-      `Key`/`IV` are not modelled - see the peripheral comment above: they are
-      application-supplied secret material, not a hardware constant with a safe
-      default. `ECDC_SetKey()`/`ECDC_CTR_SetCounter()` are not modelled either, for
-      the same reason.
+      `IV` is not modelled - see the peripheral comment above: `ECDC_Init()` null-checks
+      it before use, so leaving it unset is the SDK's own safe "not using CTR yet"
+      state, unlike `Key` (embedded above, all placeholder zeros). `ECDC_SetKey()`
+      is applied automatically by the embed; `ECDC_CTR_SetCounter()` is not modelled,
+      for the same reason `IV`'s VALUE is not - real material, supplied by the
+      application.
   ETH:
     category: Connectivity
     settings:
@@ -3798,6 +3880,368 @@ peripherals:
           - { name: D, value: 3, sdk: FMC_AccessMode_D }
         when: { "Extended Mode": Enable }
         help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+      # FMC_NANDInitTypeDef (ch32h417_fmc.h:147-175), applied by FMC_NANDInit()
+      # (:426). Only one NAND bank is defined on this part (FMC_Bank3_NAND, :262 -
+      # no Bank2/Bank4), so `FMC_Bank` is a `const:`, not a choice, unlike NOR/SRAM's
+      # four. Its two embedded `FMC_NAND_PCCARDTimingInitTypeDef*` members
+      # (`FMC_CommonSpaceTimingStruct`/`FMC_AttributeSpaceTimingStruct`, :172-174) are
+      # BOTH dereferenced unconditionally by `FMC_NANDInit()`
+      # (ch32h417_fmc.c:174-182, no null check) - the same null-pointer shape ECDC's
+      # `Key` has, so both are embedded via AGENT-2's contract (`common`/`attribute`)
+      # rather than left NULL, or every generated NAND init would hard-fault.
+      - key: nand_bank
+        name: Bank
+        struct: FMC_NANDInitTypeDef
+        sdk_field: FMC_Bank
+        const: FMC_Bank3_NAND
+        help: "ch32h417_fmc.h:149, :262. Only NAND bank this part defines."
+      - key: nand_waitfeature
+        name: Wait feature
+        struct: FMC_NANDInitTypeDef
+        sdk_field: FMC_Waitfeature
+        sdk_enabled: FMC_Waitfeature_Enable
+        sdk_disabled: FMC_Waitfeature_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:152-153. Needs NWAIT (Optional FSMC signals above)."
+      - key: nand_width
+        name: Memory data width
+        struct: FMC_NANDInitTypeDef
+        sdk_field: FMC_MemoryDataWidth
+        type: enum
+        default: 8-bit
+        options:
+          - { name: 8-bit,  value: 0, sdk: FMC_MemoryDataWidth_8 }
+          - { name: 16-bit, value: 1, sdk: FMC_MemoryDataWidth_16 }
+        help: "ch32h417_fmc.h:155-156. NAND's own width macros (`_8`/`_16`), distinct from NOR/SRAM's `_8b`/`_16b`/`_32b` above - keep this matching the Data bus width row."
+      - key: nand_ecc
+        name: ECC
+        struct: FMC_NANDInitTypeDef
+        sdk_field: FMC_ECC
+        sdk_enabled: FMC_ECC_Enable
+        sdk_disabled: FMC_ECC_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:158-159."
+      - key: nand_eccpagesize
+        name: ECC page size
+        struct: FMC_NANDInitTypeDef
+        sdk_field: FMC_ECCPageSize
+        type: enum
+        default: 256 bytes
+        options:
+          - { name: 256 bytes,  value: 0, sdk: FMC_ECCPageSize_256Bytes }
+          - { name: 512 bytes,  value: 1, sdk: FMC_ECCPageSize_512Bytes }
+          - { name: 1024 bytes, value: 2, sdk: FMC_ECCPageSize_1024Bytes }
+          - { name: 2048 bytes, value: 3, sdk: FMC_ECCPageSize_2048Bytes }
+          - { name: 4096 bytes, value: 4, sdk: FMC_ECCPageSize_4096Bytes }
+          - { name: 8192 bytes, value: 5, sdk: FMC_ECCPageSize_8192Bytes }
+        help: "ch32h417_fmc.h:161-162."
+      - key: nand_tclr
+        name: TCLR setup time
+        struct: FMC_NANDInitTypeDef
+        sdk_field: FMC_TCLRSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:164-166. HCLK cycles between CLE low and RE low. Default is the header's own maximum - the slowest, safest starting point."
+      - key: nand_tar
+        name: TAR setup time
+        struct: FMC_NANDInitTypeDef
+        sdk_field: FMC_TARSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:168-170. HCLK cycles between ALE low and RE low. Default is the header's own maximum."
+      - key: nand_common_setup
+        name: "Common space: setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: common
+        sdk_field: FMC_SetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:118-124, applied via FMC_CommonSpaceTimingStruct (embedded - FMC_NANDInit() dereferences it unconditionally, ch32h417_fmc.c:174-177)."
+      - key: nand_common_wait
+        name: "Common space: wait setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: common
+        sdk_field: FMC_WaitSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:126-131."
+      - key: nand_common_hold
+        name: "Common space: hold setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: common
+        sdk_field: FMC_HoldSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:132-137."
+      - key: nand_common_hiz
+        name: "Common space: HiZ setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: common
+        sdk_field: FMC_HiZSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:139-144."
+      - key: nand_attr_setup
+        name: "Attribute space: setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: attribute
+        sdk_field: FMC_SetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:118-124, applied via FMC_AttributeSpaceTimingStruct (embedded - same unconditional dereference, ch32h417_fmc.c:179-182)."
+      - key: nand_attr_wait
+        name: "Attribute space: wait setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: attribute
+        sdk_field: FMC_WaitSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:126-131."
+      - key: nand_attr_hold
+        name: "Attribute space: hold setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: attribute
+        sdk_field: FMC_HoldSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:132-137."
+      - key: nand_attr_hiz
+        name: "Attribute space: HiZ setup time"
+        struct: FMC_NAND_PCCARDTimingInitTypeDef
+        embed: attribute
+        sdk_field: FMC_HiZSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:139-144."
+      # FMC_SDRAM_InitTypeDef (ch32h417_fmc.h:202-244), applied by FMC_SDRAM_Init()
+      # (:427). Two banks exist (FMC_Bank5_SDRAM/FMC_Bank6_SDRAM, :265-266) and
+      # `FMC_Bank` selects which bank's SDCR/SDTR this ONE call programs - the same
+      # multi-bank shape as NOR/SRAM's `FMC_Bank` above (the "SDRAM control" setting
+      # is one checkbox claiming both banks' CKE0/CKE1/CS_N0/CS_N1 at once, so one
+      # scalar bank id cannot answer "which bank" for both) - fixed to Bank5, the
+      # other bank a REQUEST to AGENT-2 same as NOR/SRAM's. `FMC_SDRAM_Timing`
+      # (:244) is dereferenced unconditionally by FMC_SDRAM_Init()
+      # (ch32h417_fmc.c:222-229, no null check) so it is embedded, not left NULL.
+      - key: sdram_bank
+        name: Bank
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_Bank
+        const: FMC_Bank5_SDRAM
+        help: "ch32h417_fmc.h:205, :265-266. Fixed to Bank5 - see the comment above; Bank6 needs the same per-bank instances: mechanism NOR/SRAM's other banks do."
+      - key: sdram_columnbits
+        name: Column bits
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_ColumnBitsNumber
+        type: enum
+        default: "8"
+        options:
+          - { name: "8",  value: 0, sdk: FMC_ColumnBitsNumber_8 }
+          - { name: "9",  value: 1, sdk: FMC_ColumnBitsNumber_9 }
+          - { name: "10", value: 2, sdk: FMC_ColumnBitsNumber_10 }
+          - { name: "11", value: 3, sdk: FMC_ColumnBitsNumber_11 }
+        help: "ch32h417_fmc.h:207-208."
+      - key: sdram_rowbits
+        name: Row bits
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_RowBitsNumber
+        type: enum
+        default: "11"
+        options:
+          - { name: "11", value: 0, sdk: FMC_ROWBitsNumber_11 }
+          - { name: "12", value: 1, sdk: FMC_ROWBitsNumber_12 }
+          - { name: "13", value: 2, sdk: FMC_ROWBitsNumber_13 }
+        help: "ch32h417_fmc.h:210-211."
+      - key: sdram_width
+        name: Memory data width
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_MemoryDataWidth
+        type: enum
+        default: 8-bit
+        options:
+          - { name: 8-bit,  value: 0, sdk: FMC_MemoryDataWidth_8 }
+          - { name: 16-bit, value: 1, sdk: FMC_MemoryDataWidth_16 }
+          - { name: 32-bit, value: 2, sdk: FMC_MemoryDataWidth_32 }
+        help: "ch32h417_fmc.h:213-214."
+      - key: sdram_internalbanks
+        name: Internal banks
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_InternalBankNumber
+        type: enum
+        default: "2"
+        options:
+          - { name: "2", value: 0, sdk: FMC_InternalBankNumber_2 }
+          - { name: "4", value: 1, sdk: FMC_InternalBankNumber_4 }
+        help: "ch32h417_fmc.h:216-217. The SDRAM chip's own internal bank count, not this controller's Bank5/Bank6."
+      - key: sdram_caslatency
+        name: CAS latency
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_CASLatency
+        type: enum
+        default: "2"
+        options:
+          - { name: "1", value: 1, sdk: FMC_CASLatency_1CLk }
+          - { name: "2", value: 2, sdk: FMC_CASLatency_2CLk }
+          - { name: "3", value: 3, sdk: FMC_CASLatency_3CLk }
+        help: "ch32h417_fmc.h:219-220. No 0-cycle option in the header - 1 is the minimum."
+      - key: sdram_writeprotection
+        name: Write protection
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_WriteProtection
+        sdk_enabled: FMC_WriteProtection_Enable
+        sdk_disabled: FMC_WriteProtection_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:222-223."
+      - key: sdram_clockperiod
+        name: SDRAM clock period
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_SDClockPeriod
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: FMC_SDClockPeriod_Disable }
+          - { name: "2 HCLK", value: 2, sdk: FMC_SDClockPeriod_2HCLK }
+          - { name: "3 HCLK", value: 3, sdk: FMC_SDClockPeriod_3HCLK }
+        help: "ch32h417_fmc.h:225-226. No code 1 in the header - 0, 2 and 3 only."
+      - key: sdram_readburst
+        name: Read burst
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_ReadBurst
+        sdk_enabled: FMC_ReadBurst_Enable
+        sdk_disabled: FMC_ReadBurst_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:228-229."
+      - key: sdram_readpipedelay
+        name: Read pipe delay
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_ReadPipeDelay
+        type: enum
+        default: None
+        options:
+          - { name: None,    value: 0, sdk: FMC_ReadPipeDelay_none }
+          - { name: 1 HCLK,  value: 1, sdk: FMC_ReadPipeDelay_1HCLK }
+          - { name: 2 HCLK,  value: 2, sdk: FMC_ReadPipeDelay_2HCLK }
+        help: "ch32h417_fmc.h:231-232."
+      - key: sdram_nrfscnt
+        name: NRFS count
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_NRFS_CNT
+        type: int
+        default: 0
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:234-235."
+      - key: sdram_phasesel
+        name: Phase shift
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_PHASE_SEL
+        type: int
+        default: 0
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:237-238."
+      - key: sdram_enhancereadmode
+        name: Enhanced read mode
+        struct: FMC_SDRAM_InitTypeDef
+        sdk_field: FMC_ENHANCE_READ_MODE
+        sdk_enabled: FMC_ENHANCE_READ_MODE_Enable
+        sdk_disabled: FMC_ENHANCE_READ_MODE_Disable
+        type: bool
+        default: true
+        help: "ch32h417_fmc.h:240-241. Enable is value 0 and Disable is 0x8000 in this header (ch32h417_fmc.h:381-382) - inverted from the usual sense, so Enabled is the default to match the macro named for it."
+      - key: sdram_loadtoactive
+        name: Load to active delay
+        struct: FMC_SDRAM_TimingTypeDef
+        embed: timing
+        sdk_field: FMC_LoadToActiveDelay
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:180-181, applied via FMC_SDRAM_Timing (embedded - FMC_SDRAM_Init() dereferences it unconditionally, ch32h417_fmc.c:222-229). Default is the header's own maximum."
+      - key: sdram_exitselfrefresh
+        name: Exit self-refresh delay
+        struct: FMC_SDRAM_TimingTypeDef
+        embed: timing
+        sdk_field: FMC_ExitSelfRefreshDelay
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:183-184."
+      - key: sdram_selfrefreshtime
+        name: Self-refresh time
+        struct: FMC_SDRAM_TimingTypeDef
+        embed: timing
+        sdk_field: FMC_SelfRefreshTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:186-187."
+      - key: sdram_rowcycledelay
+        name: Row cycle delay
+        struct: FMC_SDRAM_TimingTypeDef
+        embed: timing
+        sdk_field: FMC_RowCycleDelay
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:189-190."
+      - key: sdram_writerecoverytime
+        name: Write recovery time
+        struct: FMC_SDRAM_TimingTypeDef
+        embed: timing
+        sdk_field: FMC_WriteRecoveryTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:192-193."
+      - key: sdram_rpdelay
+        name: Row precharge delay
+        struct: FMC_SDRAM_TimingTypeDef
+        embed: timing
+        sdk_field: FMC_RPDelay
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:195-196."
+      - key: sdram_rcddelay
+        name: Row to column delay
+        struct: FMC_SDRAM_TimingTypeDef
+        embed: timing
+        sdk_field: FMC_RCDDelay
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:198-199."
     notes: >
       Flexible memory controller. The data and address buses are picked by WIDTH rather
       than switched on whole, because the width is a real register field
@@ -8123,6 +8567,13 @@ codegen:
     # register-block pointer is passed (ch32h417_sdmmc.h:250).
     SDMMC_InitTypeDef:       { fn: SDMMC_Init, no_handle: true }   # ch32h417_sdmmc.h:250
     ECDC_InitTypeDef:        { fn: ECDC_Init, no_handle: true }    # ch32h417_ecdc.h:115
+    # ECDC_Init() dereferences ->Key unconditionally with no null check
+    # (ch32h417_ecdc.c:49, ECDC_SetKey() :112-118) - embedded so a generated call never
+    # passes NULL, not because a placeholder key is meaningful (peripheral_extras.yaml
+    # says so, loudly, on every field).
+    ECDC_KEY_TypeDef:
+      embed:
+        key: { into: ECDC_InitTypeDef, member: Key }
     # FMC_NORSRAMInit takes the struct ALONE - the bank is a member, not an argument
     # (ch32h417_fmc.h:425). The two `FMC_NORSRAMTimingInitTypeDef*` members are reached
     # only by being pointed at from here, which is AGENT-2's `embed:` contract
@@ -8133,6 +8584,18 @@ codegen:
       embed:
         rw: { into: FMC_NORSRAMInitTypeDef, member: FMC_ReadWriteTimingStruct }   # ch32h417_fmc.h:113
         wr: { into: FMC_NORSRAMInitTypeDef, member: FMC_WriteTimingStruct }       # ch32h417_fmc.h:115
+    FMC_NANDInitTypeDef:     { fn: FMC_NANDInit, no_handle: true }   # ch32h417_fmc.h:426
+    # FMC_NANDInit() dereferences both unconditionally (ch32h417_fmc.c:174-182, no null
+    # check) - the same shape as FMC_NORSRAM's timing pointers.
+    FMC_NAND_PCCARDTimingInitTypeDef:
+      embed:
+        common:   { into: FMC_NANDInitTypeDef, member: FMC_CommonSpaceTimingStruct }     # ch32h417_fmc.h:172
+        attribute: { into: FMC_NANDInitTypeDef, member: FMC_AttributeSpaceTimingStruct }  # ch32h417_fmc.h:174
+    FMC_SDRAM_InitTypeDef:   { fn: FMC_SDRAM_Init, no_handle: true }   # ch32h417_fmc.h:427
+    # FMC_SDRAM_Init() dereferences this unconditionally too (ch32h417_fmc.c:222-229).
+    FMC_SDRAM_TimingTypeDef:
+      embed:
+        timing: { into: FMC_SDRAM_InitTypeDef, member: FMC_SDRAM_Timing }   # ch32h417_fmc.h:244
 
   periph_handle:
     USART1: USART1
