@@ -52,5 +52,13 @@ python build.py && node tests/run.js                                 # everythin
 ```
 
 `python`, never `python3`, on this box. Run the suite serially: two at once corrupt each other.
+**Do not run the full suite on a loop.** `node tests/run.js` is ~6.5 minutes and is the gate for
+a **commit**, not a step after every edit. While working, run the narrow thing —
+`node tests/run.js "<pattern>"`, `validate_mcu.py`, a `*_selftest.py`. Run `python build.py`
+only when `app/**` or `data/**` changed; a markdown, `tools/`, `tests/` or `agents/` edit does
+not reach `dist/index.html`. On a shared tree a needless rebuild also makes **another** agent's
+run report failures that are not real. If a full run goes red, re-run the failing suites by name
+before believing them.
+
 Never hand-edit `dist/index.html`; never edit `data/firmware/lib/wchcube_generated/`; never delete
 a data file or a test; never lower a threshold to make something pass.

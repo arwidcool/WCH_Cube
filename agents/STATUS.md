@@ -29,7 +29,7 @@ lines there only in the commit that retires what cites them.
 | **Biggest open item** | CH32H417 `params:` — **35 cells owed, 23 routing pins** (§2 C, AGENT-1) |
 | **Blocked on one change** | 5 H417 peripherals wait on the nested-struct shape (§3, AGENT-2) |
 | **Unverified** | `src-tauri` in a window; **nothing has ever been flashed** (§6) |
-| **Next per agent** | 1: UHSIF · 2: the nested struct · 3: `app/tests/**` planted breaks (§4) |
+| **Next per agent** | 1: UHSIF · 2: **the clock tree cannot draw a second PLL** (§3, blocks all of D) · 3: `app/tests/**` planted breaks (§4) |
 
 ---
 
@@ -53,6 +53,7 @@ node tests/run.js                    ALL GREEN — 780 tests, 0 skipped  (381.8 
 | CH32H417 collisions | **QFN68 4 · QFN88 0 · QFN128 0** (450 claiming choices swept per package) | `COLLISION_CEILING`, `tests/h417_packages.test.js:228` |
 | CI | green on all three jobs: run **34723740365** on `b5a654f` | the run page; URL in `PROGRESS.md` §1 |
 | CI vs HEAD | pushed through `2b1967d`; **CI has not yet reported on it** | `git status -sb` |
+| CH32H417 clock | still **1 of 5 PLLs, 0 of 8 muxes** in the shipped file. The USBHS_PLL block computes `USBFS = 48 MHz` and is parked in `agents/proposals/CH32H417_usbhs_pll.yaml` — blocked on a layout defect, not on facts | `clockCalc()` with the block spliced in |
 | Hardware | **builds, not flashed** — every green result here is a compile | §6 item 8 |
 
 > **What six zeros does not mean.** The ledger asks whether every fact the **datasheet** states is
@@ -69,7 +70,7 @@ node tests/run.js                    ALL GREEN — 780 tests, 0 skipped  (381.8 
 | **A** | CI executes and is read green | 3 | done; one line withheld |
 | **B** | every gate proven able to fail | 3 | done for `tests/**`; `app/tests/**` not swept |
 | **C** | CH32H417's Parameter Settings stop being empty | 1 | **open — 35 cells owed** |
-| **D** | clock schema holds a second PLL and a per-peripheral mux | 2 schema, 1 data | schema landed; **data open** |
+| **D** | clock schema holds a second PLL and a per-peripheral mux | 2 schema, 1 data | schema + validator landed; **the data is PROVEN and NOT SHIPPED — the tab cannot draw a second PLL** |
 | **E** | the per-instance init struct | 2 mechanism, 1 data | mechanism landed; three consumers emit |
 | **F** | CH32L103 and CH32V003 at 0 open rows | 1 | **COMPLETE** |
 
@@ -134,20 +135,36 @@ a null read at init. §3, REQUEST 19:33Z.
 
 ### D — a second PLL and a per-peripheral mux  (2 schema, 1 data)
 
-**Schema landed** (`13b948a`): `clock.plls:` as a map of named PLLs, a list-valued `source:` as a
-mux, `sysclk.sources` naming a PLL output, PLL-to-PLL inputs resolved in dependency order,
-`codegen.rcc.extra:`, and a **named gap in the C** for any mux or PLL the file does not encode.
+**Schema landed** (AGENT-2 `13b948a`, engine; AGENT-1 `90dadb5`, `data/FORMAT.md` +
+`validate_mcu.py` + `validate_clock_selftest.py`): `clock.plls:` as a map of named PLLs, a
+list-valued `source:` as a mux, `sysclk.sources` naming a PLL output, PLL-to-PLL inputs resolved
+in dependency order, `default:`/`default_source:`, and a **named gap in the C** for any mux or PLL
+the file does not encode. All eleven validator checks have been seen red, plus the positive half.
 
-**Data open.** CH32H417 declares no `plls:` and no list `source:`, so USB, LTDC and ETH compute
-nothing on the part that has them.
-
-- [ ] the four secondary PLLs (USBHS 480, ETH 500, USBSS 125, SerDes) and the eight `RCC_CFGR2`
-      muxes of RM 3.4.13, modelled and cited by line
-- [ ] **USBFS 48 MHz computed from USBHS_PLL / 10 on a shipped part**, read in a real browser — the
-      acceptance number (`CH32H417RM.md:4048` USBFSSRC=1, `:4055-4067` USBFSDIV=0111)
-- [ ] every new number checked against the RM's worked example. **A computed number that is wrong
-      is worse than a missing one** — not ticked on "it computes something"
-- [ ] `sysclk.sources` listing all seven `SYSPLL_SEL` allows (it lists three)
+- [ ] **USBFS 48 MHz on a shipped part** — the number is **proven and not shipped.** With the
+      block spliced in, `clockCalc()` reads `USBHS_PLL 25 → 480 MHz`, `USBFS 48 MHz`, `over:
+      (none)`, and it **moves**: `/7.5 → 64`, `/8 → 60`, the other mux leg `PLLCLK/10 → 10`, each
+      flagged against `target_mhz: 48`. **It is not in `data/mcus/` because the clock tab cannot
+      draw a second PLL**: `legibility.test.js` measures 1095px painted into a 1024px viewport at
+      1280×720 @125%. Measured three ways — with the tap, with shorter labels (no change: it is a
+      structural column, not text), and with the tap removed and only the PLL left (still 1095px).
+      No data-side edit avoids it. The block is parked, with its measurements, in
+      `agents/proposals/CH32H417_usbhs_pll.yaml`; §3 REQUEST to AGENT-2
+- [x] every number checked against the RM's own worked example (`:4048` USBFSSRC, `:4055-4077`
+      USBFSDIV=0111 → /10). All **sixteen** dividers are modelled, including the 7.5 the board's
+      block omitted
+- [ ] the remaining three PLLs (ETH 500, USBSS 125, SerDes) and seven muxes (RNG, I2S2, I2S3,
+      LTDC, UHSIF, HSADC, ETH1G)
+- [ ] **USBHS_PLL's other three inputs** — blocked, and this is the interesting one. The 480 MHz
+      is conditional on `USBHSPLL_REFSEL[1:0]` (`:4266-4274`) matching the real input, and
+      `clock.js` returns `output_mhz` unconditionally, so HSE (editable 4–25 MHz, no REFSEL code
+      below 20) and SYS_PLL/N would print a number the silicon may not produce. Only HSI is
+      shipped, because it is `fixed: true` at 25 MHz and REFSEL=00 is then always right. §3
+      REQUEST to AGENT-2
+- [ ] **a mux entry that carries its own divider** — LTDC's choice 01 is "SERDES_PLL clock
+      divided by 2" (`:4085-4089`), not a bare source. Four of the seven remaining muxes need it
+- [ ] `sysclk.sources` listing all seven `SYSPLL_SEL` allows (it lists three; USBHS_PLL could be
+      added now that it computes)
 - [ ] `tests/clock_ui.test.js`'s sweep and planted breaks cover the new controls on all five parts
 
 ### E — the per-instance init struct  (2 mechanism, 1 data)
@@ -247,28 +264,63 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — D's data half, CH32H417's secondary PLLs and `RCC_CFGR2` muxes. Started
-2026-09-13T01:14Z. Taken ahead of P0 because §3 carries two REQUESTs addressed to me about it
-(09-12T19:38Z) and the work cycle answers those first; it is also D's whole acceptance number.
-- TASKS.md line: `CH32H417: fill the four secondary PLLs and the eight RCC_CFGR2 muxes in.`
-- Doing: **the schema half is DONE and committed** — `tools/validate_mcu.py` (five new checks),
-  `tools/validate_clock_selftest.py` (11 planted breaks + the positive half), `data/FORMAT.md`
-  (`### plls:`). **The CH32H417 data itself is NOT written**, on purpose: finding 3 below says
-  `output_mhz: 480` alone would make the tab print 48 MHz for configurations the silicon cannot
-  produce, and that needs AGENT-2's answer on where the condition lives.
-- Files touched: `tools/validate_mcu.py`, `tools/validate_clock_selftest.py`, `data/FORMAT.md`,
-  `TASKS.md` (claim). **No `data/mcus/*.yaml` touched.**
-- Next step if I stop here: read the board for AGENT-2's answer on finding 3. If it has not come
-  within two cycles, take the decision myself per README §3.8 and implement the least-invasive
-  version — most likely `output_mhz:` plus a `requires:` naming REFSEL, so the tab can refuse
-  rather than compute. Then the USBHS_PLL + USBFS block, then the other three PLLs and seven
-  muxes (LTDC's mux takes `SERDES_PLL_CLK` **divided by 2**, `:4085-4089`, so it needs a
-  per-choice divider the schema does not yet have — check before writing).
+**IN FLIGHT** — nothing. D's schema is committed; D's DATA is written, measured and parked.
+- TASKS.md line: — · Doing: — · Files touched: —
+- Next step if I stop here: **P0, C's 35 `params:` cells, UHSIF first** (49 routed signals),
+  through `data/sources/H417/peripheral_extras.yaml`, never the generated block. **Do not restart
+  D without reading §3 first** — all of it is blocked in `app/`, and the block itself is already
+  written and measured in `agents/proposals/CH32H417_usbhs_pll.yaml`, so the data work is done
+  and only the paste-back remains. Three blockers, all AGENT-2's: the clock tree cannot draw a
+  second PLL at all; a fixed `output_mhz:` cannot be made conditional on its input; a mux entry
+  cannot carry its own divider.
 - Gates last run: `validate_mcu` 0 · `verify_sdk_names` 0 · `coverage --gate` 6 of 6 ·
-  `validate_clock_selftest` 11/11 · `build.py` OK · suite ALL GREEN 780.
+  `validate_clock_selftest` 11/11 · `ledger --write` no change · `build.py` OK · suite ALL GREEN.
 
-**Verified against the RM before writing, and three things are wrong with the request as posted.
-All three are in my 01:14Z board FINDING with the lines:**
+**Current — 2026-09-13T01:14Z and 01:52Z, two cycles. D's schema, then D's number.**
+
+- **The schema half** (`90dadb5`): `validate_mcu.py` takes `plls:`, a list `source:`,
+  `default:`/`default_source:` and refuses a PLL input cycle; `data/FORMAT.md` gains `### plls:`;
+  `tools/validate_clock_selftest.py` plants eleven breaks, all caught, **plus the positive half**
+  the sibling self-tests do not have — a correct block that must validate clean first, because a
+  check that refuses everything passes a planted-break sweep exactly as well as one that works.
+- **The number, and why it is not shipped** (this cycle): `USBFS = 48 MHz`, from `clockCalc()`
+  with the block in the real file, and it moves when either axis of the mux moves — so the data
+  is right. **The clock TAB cannot draw a second PLL**: `legibility.test.js` measures 1095px
+  painted into a 1024px viewport at 1280×720 @125%. I measured it three ways before believing
+  it — with the tap, with shorter labels (no change; it is a structural column, not text), and
+  with the tap removed and only the PLL left (still 1095px). **No data-side edit avoids it**, so
+  I reverted rather than ship a red `main`, and parked the proven block in
+  `agents/proposals/CH32H417_usbhs_pll.yaml` with all three measurements on it.
+- **The thing worth keeping:** AGENT-2 verified this schema in a browser at exactly these eight
+  combinations and reported it green — on a SYNTHETIC part. `legibility.test.js` sweeps only
+  SHIPPED parts, so the first real consumer of the schema is the first thing to test it, and it
+  did not fit. A gate that covers six parts and not the seventh you are actually developing
+  against is the round's own rule, one file over.
+- **I read every RM line the 19:38Z request cited before writing any of it, and three things were
+  wrong with it.** The USBFSDIV list was short by one — sixteen codes, sixteen *distinct*
+  dividers, **7.5 (code 1110)** missing, which would have shipped an unreachable divider. The RM
+  contradicts *itself* on USBFSSRC=1 (prose `:1811-1813` "USBFS_PLL" vs register table
+  `:4048-4050` "USBHS_PLL"; no USBFS_PLL exists elsewhere) — register table followed, both
+  recorded. And **`USBHSPLL_REFSEL[1:0]` makes the 480 MHz conditional**, which is why USBHS_PLL
+  ships with one input instead of four.
+- **The decision worth recording:** the request was pasteable and I did not paste it. `output_mhz:
+  480` with all four inputs would have printed 48 MHz for an HSE the user set to 8 MHz — legal on
+  this part, no REFSEL code for it, PLL will not lock. Shipping only HSI is round 5's rule applied
+  literally: *every choice the app offers must be one the silicon can honour.* The other three are
+  declared beside the block with the line that blocks each.
+- **And one about our own tooling** (FINDING to AGENT-3): a find/replace self-test anchor with no
+  line boundary matches *inside* a longer line — `"  prescalers:"` inside `codegen.rcc`'s
+  four-space one, `"      default: 10"` inside `"        default: 100000"`. Both mutated something
+  unrelated, left the real target untouched, and the case printed **OK** over a file that was
+  never broken. My runner now requires each anchor to occur exactly once and the mutation to
+  change the text, and I planted a non-unique anchor to watch that guard fire before trusting it.
+  `validate_constraints_selftest.py` and `validate_afmux_selftest.py` have the same shape and
+  neither guard; they are AGENT-3's and I did not touch them.
+
+Red, and who owns it: **nothing.** Numbers: §1, unchanged except the clock row — ledger still
+0/0/0/0/0/0, `params:` still 35 owed, collisions still 4/0/0. Nothing closed by lowering anything.
+
+**The three findings in full, with the lines, as posted to the board at 01:14Z:**
 1. **The USBFSDIV option list is short by one.** `CH32H417RM.md:4055-4077` gives sixteen codes and
    **sixteen distinct dividers** — 0000:1 0001:2 0010:3 0011:4 0100:5 0101:6 0110:8 0111:10, then
    1000:1.5 1001:2.5 1010:3.5 1011:4.5 1100:5.5 1101:6.5 **1110:7.5** 1111:9.5. The request lists

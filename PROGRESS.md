@@ -387,7 +387,7 @@ Where the six deliverables stand, in one line each (measured, `agents/STATUS.md`
 | A | CI executes and is read green | QA | done; `worktrees ON` deliberately withheld until three consecutive commits from different agents are green |
 | B | every gate proven able to fail | QA | done for `tests/**` — the list of gates that cannot go red is **empty**; `app/tests/**` not yet swept |
 | C | CH32H417's Parameter Settings stop being empty | DATA | **open — 35 cells owed, 23 of them routing pins** |
-| D | the clock schema holds a second PLL and a per-peripheral mux | APP schema, DATA data | schema landed; CH32H417 still declares no `plls:`, so USB/LTDC/ETH compute nothing on a shipped part |
+| D | the clock schema holds a second PLL and a per-peripheral mux | APP schema, DATA data | schema and validator landed. **The CH32H417 data is proven and not shipped**: it computes USBFS 48 MHz, but the clock tab cannot draw a second PLL at 1280x720 @125% (1095px into a 1024px viewport), so shipping it would put `main` red. Parked in `agents/proposals/` |
 | E | the per-instance init struct | APP mechanism, DATA data | mechanism landed; TIM PWM, the LTDC layers and CH32L103's comparators all emit |
 | F | CH32L103 and CH32V003 at 0 open rows | DATA | **complete** — the ledger reads zero on all six parts |
 
@@ -401,9 +401,16 @@ version, ordered by what blocks the most.
    PIOC, then CAN1–3, DAC, LPTIM1/2, GPHA, RTC. Five of them — FMC, ETH, ECDC, FMC_NAND,
    FMC_SDRAM — are blocked behind one APP change: a struct whose member is a **pointer** to a
    second struct that no SDK function takes alone.
-2. **CH32H417's clock data** (DATA, behind APP's schema, which has landed). Four secondary PLLs
-   and eight `RCC_CFGR2` muxes. Until they are modelled the app computes nothing for the USB
-   48 MHz, LTDC pixel or ETH clocks on the part that has them.
+2. **CH32H417's clock data** (DATA, blocked on APP). **The USBHS_PLL + USBFS block is written,
+   measured and NOT shipped**: it computes 48 MHz and the number moves with both axes of the mux,
+   but the clock tab cannot draw a second PLL at 1280x720 @125% zoom - 1095px painted into a
+   1024px viewport - so committing it puts `main` red. It is parked in
+   `agents/proposals/CH32H417_usbhs_pll.yaml` with the measurements. Three more PLLs and seven
+   muxes are behind it, and behind **two further engine changes, not facts**: a fixed PLL output that is
+   conditional on its *input* (`USBHSPLL_REFSEL[1:0]` makes 480 MHz true only when the
+   reference selection matches the real input - so USBHS_PLL ships with its one input whose
+   frequency the file fixes, and the other three are declared), and a mux entry that carries
+   its own divider (LTDC's choice is "SERDES_PLL clock divided by 2", not a bare source).
 3. **The four default pin collisions left on QFN68** (DATA). They have waited three rounds.
    `COLLISION_CEILING` is a ratchet: it may only go down.
 4. **The planted-break sweep over `app/tests/**`** (QA). 17 files with almost none. `tests/**`

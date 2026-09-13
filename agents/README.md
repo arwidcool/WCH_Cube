@@ -235,6 +235,35 @@ other. `task gate` is the last two commands; `task all` adds validate, firmware 
 - **A gate nobody has watched go red is a guess.** Plant the break, watch it fail, restore, and
   put the verbatim red output in `tests/evidence/round<N>/`.
 
+### Do NOT run the full suite on a loop
+
+`python build.py && node tests/run.js` is **~6.5 minutes**. It is the gate for a **commit**, not a
+step you repeat after every edit. Running it five times in a cycle burns half an hour and tells
+you the same thing five times.
+
+**While you are working, run the narrow thing:**
+
+```
+node tests/run.js "<pattern>"      # one suite or one test name - seconds, not minutes
+python tools/validate_mcu.py       # data edits: ~2 s
+python tools/verify_sdk_names.py   # data edits: ~5 s
+python tools/coverage.py <PART>    # one part's ledger
+python tools/<x>_selftest.py       # the planted breaks for one tool
+```
+
+**`python build.py` only when something it actually reads has changed** — `app/template.html`,
+`app/engine/**`, `app/assets/**`, or `data/**` if you want the app to see your data. A markdown,
+`tools/`, `tests/` or `agents/` edit changes nothing in `dist/index.html`, so rebuilding after one
+is pure waiting. It is also **not free to others**: the tree is shared, and a rebuild mid-run makes
+another agent's suite report failures that are not real — the runner prints a note when it detects
+it, and that note has been mistaken for a finding more than once.
+
+**Run the full suite when:** you are about to commit; you changed something with reach (the
+engine, the generator, a schema, a shipped part); or a narrow run went red somewhere you did not
+expect. **Once**, at the end, on a quiet tree — not before and after every step.
+
+If a full run comes back red, **re-run only the failing suites by name** before believing them.
+
 ## 5. Rules that never bend
 
 - **Never delete a data file or a test.** Rename, archive or deprecate instead.

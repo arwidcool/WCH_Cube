@@ -1,0 +1,72 @@
+# CH32H417's USBHS_PLL and its USBFS 48 MHz tap - PROVEN, and NOT shipped.
+#
+# Written and measured by AGENT-1 on 2026-09-13. `clockCalc()` on the shipped MCU file with
+# this block spliced in reads:
+#
+#     USBHS_PLL  25 -> 480 MHz        USBFS  48 MHz        over: (none)
+#     /7.5 -> 64 MHz   /8 -> 60 MHz   PLLCLK/10 -> 10 MHz   (each flagged vs target_mhz: 48)
+#
+# That is deliverable D's whole acceptance number, and it is correct.
+#
+# WHY IT IS NOT IN data/mcus/CH32H417.yaml: the clock tab cannot DRAW a second PLL at
+# 1280x720 @125% zoom. `tests/legibility.test.js` measures h5, select, div.val and div.lim
+# painting to 1095px in a 1024px viewport - 71px past the right edge. Measured three ways:
+# with the PLL and the tap, with shorter labels (no change - it is a structural column, not
+# text), and with the tap removed and only the PLL left (still 1095px). So the second PLL box
+# alone is what overflows, and no data-side edit avoids it.
+#
+# Paste both blocks back into `clock:` the cycle the tab can hold them - `plls:` after
+# `sysclk:`, the tap as the first entry under `prescalers:` - then regenerate the fixtures
+# (`node tests/fixtures/make_fixtures.js`, 12 added lines across the two H417 projects, nothing
+# removed) and update the clock `notes:`, which currently says all five PLLs are unmodelled.
+#
+# FINDING to AGENT-2, board 2026-09-13T02:10Z.
+
+  # ---- the secondary PLLs (RM 3.3.4) ----------------------------------------------
+  # One of the five is modelled. The other four are declared below the `notes:` key with
+  # the line that blocks each, because modelling them needs a thing the schema cannot
+  # say yet - see USBHS_PLL's own note.
+  plls:
+    USBHS_PLL:
+      # Kept SHORT on purpose: the clock tree has no horizontal headroom at 1280x720
+      # @125% - see the FINDING to AGENT-2 of 2026-09-13T02:10Z. The RM name and the
+      # 480 MHz are in `notes:` and in the comment below, where length costs nothing.
+      label: USBHS PLL
+      output: USBHS_PLL_CLK
+      # FIXED by the silicon, not a multiplier the user picks: RM:1733 and :1806-1811.
+      output_mhz: 480
+      # ONE input, and the reason is USBHSPLL_REFSEL[1:0] (RM:4266-4274), which tells the
+      # PLL what frequency its reference actually is: 00=25MHz 01=20MHz 10=24MHz 11=32MHz.
+      # RM:1808 - "the clock frequency MUST MATCH the USBHS_PLL input clock". So 480 MHz
+      # is CONDITIONAL on the reference selection agreeing with the real input, and the
+      # three inputs left out are exactly the three where the file cannot guarantee it:
+      #
+      #   HSE       - editable 4..25 MHz (`sources.HSE`), and REFSEL encodes only
+      #               20/24/25/32. HSE at 8 MHz is a legal setting on this part and
+      #               there is no REFSEL code for it, so the PLL would not lock while
+      #               the tab printed 480.
+      #   SYS_PLL/N - USBHSPLL_IN_DIV[4:0] /1../32 of PLLCLK (RM:4227). PLLCLK moves
+      #               with the user's own SYS PLL settings, so the same problem, one
+      #               level further down.
+      #   ETHCLK_20M- 20 MHz and would satisfy REFSEL=01, but it comes off the ETH PLL
+      #               (RM:1392-1394), which this file does not model yet. It lands with
+      #               the ETH PLL, not before.
+      #
+      # HSI is `fixed: true` at 25 MHz, so REFSEL=00 is correct for it unconditionally
+      # and 480 MHz is simply true. Round 5's rule, applied literally: every choice the
+      # app offers must be one the silicon can honour - so the app offers the one choice
+      # it can honour, and the rest are declared here rather than shipped as a number
+      # that is right only by luck.
+      inputs:
+        - { name: HSI, source: HSI, div: 1 }
+
+
+  prescalers:
+    USBFS:
+      label: USBFS 48M
+      source: [USBHS_PLL_CLK, PLLCLK]
+      options: [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7.5, 8, 9.5, 10]
+      default: 10
+      default_source: USBHS_PLL_CLK
+      target_mhz: 48
+

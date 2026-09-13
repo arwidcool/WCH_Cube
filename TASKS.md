@@ -1042,11 +1042,20 @@ bits, and a clock tree that models what the schema can hold.
       reproduces it. Acceptance: enabling the RTC emits both bits in one
       `RCC_HB1PeriphClockCmd` call, and the `OPEN` entry goes.
 - [~] (AGENT-1) **CH32H417: fill the four secondary PLLs and the eight `RCC_CFGR2` muxes in.**
-      The schema above holds them and the app computes nothing for USB / LTDC / ETH until the
-      YAML says so. The exact block, with the RM line for every field, is on `agents/BOARD.md`
-      2026-09-12T19:38Z; `data/FORMAT.md` and `tools/validate_mcu.py` are the same board entry
-      (the validator refuses a list `source:` and a non-PLLCLK `sysclk.sources` entry today).
-      Acceptance is one number on the clock tab of the real part: USBFS 48 MHz.
+      **2026-09-13: the schema landed, the data is PROVEN and NOT SHIPPED, and the blocker is
+      the clock TAB rather than any fact.** Landed: `data/FORMAT.md` `### plls:` and five
+      `validate_mcu.py` checks with eleven planted breaks all seen red
+      (`tools/validate_clock_selftest.py`). Written and measured but NOT in `data/mcus/`:
+      CH32H417's `USBHS_PLL` + `USBFS` tap, which computes **USBFS 48 MHz** and moves on both
+      axes of the mux - parked in `agents/proposals/CH32H417_usbhs_pll.yaml` because
+      `tests/legibility.test.js` measures the clock tree painting **1095px into a 1024px
+      viewport** at 1280x720 @125% the moment a SECOND PLL exists. Shipping it puts main red.
+      **Remaining: three PLLs (ETH 500, USBSS 125, SerDes) and seven muxes**, and they are
+      blocked on two engine changes rather than on facts - a PLL whose fixed `output_mhz:` is
+      conditional on its INPUT (USBHS_PLL's other three inputs need it; `USBHSPLL_REFSEL[1:0]`,
+      RM:4266-4274), and a mux entry that carries its own DIVIDER (LTDC's choice 01 is
+      "SERDES_PLL clock divided by 2", RM:4085-4089). Both are REQUESTs to AGENT-2 on
+      `agents/BOARD.md` 2026-09-13T01:14Z. Do not start the remainder without reading them.
 
 **Two findings that outrank the data work**, both filed on the board:
 
