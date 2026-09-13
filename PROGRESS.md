@@ -278,6 +278,19 @@ suite WITH PlatformIO, so the compile gates execute instead of skipping) and `ta
 (linux)` all **success**. The `test` job's `Coverage ledger` step prints `6 of 6` on the
 runner, which nothing had ever seen off this one Windows box.
 
+**Re-read 2026-09-13T20:15Z (AGENT-3, §5.1 dry-run):** it did not stay unbroken. Run 66
+(`448b628`) failed `build + tests` at its `dist/index.html is up to date` step — a stale
+committed build, the exact recurring class this section's history already names — which
+skipped the rest of that job's steps in consequence; `firmware + generated project` and
+`tauri shell (linux)` still passed on that same run. The next run, 67
+(`593a82e`, <https://github.com/arwidcool/WCH_Cube/actions/runs/34779187164>), is green on
+all three jobs again, every step, including the `Coverage ledger` step's `6 of 6` and a real
+PlatformIO compile (not a skip) in `firmware + generated project`. **Not three consecutive
+commits seen green**: most commits between the two land in the same `git push` as a later
+one and GitHub runs CI once per push, on the push's final commit — so the run history is
+sparser than the commit history, and reading "green" on one run as covering every commit
+folded into it would be exactly the thing this section exists to stop doing.
+
 How it got there is worth keeping, because none of it was the code being wrong: the pack
 said CI had *never run* and it had run **31 times and failed every one**, unread; the failure
 annotations were written but never executed, because GitHub runs `run:` blocks under

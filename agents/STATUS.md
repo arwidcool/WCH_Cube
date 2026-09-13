@@ -51,8 +51,15 @@ node tests/run.js                    ALL GREEN — 780 tests, 0 skipped  (381.8 
 | CH32H417 `params:` | **40 of 78 peripherals have a block, 38 do not.** 4 of those 38 are declared ABSENT (SYS, RCC, EXTI, DMA1 — choices, not numbers), so **34 cells are owed, 22 of them routing pins** (UHSIF landed 2026-09-13) | count over `data/mcus/CH32H417.yaml` |
 | CH32H417, other axes | clock 68 of 78, 9 ABSENT, **1 open (RTC)** · vectors 66 of 78, all 12 without ABSENT — **0 owed** · pins 61 route, 17 `pins: none`, 0 `pins: open`, **0 unreachable routed signals** · codegen reach **0** peripherals hold a pad and reach no code. **Cells 41 → 36** | `tests/evidence/round6/2026-09-13-h417-peripheral-map.md` |
 | CH32H417 collisions | **QFN68 4 · QFN88 0 · QFN128 0** (450 claiming choices swept per package) | `COLLISION_CEILING`, `tests/h417_packages.test.js:228` |
-| CI | green on all three jobs: run **34723740365** on `b5a654f` | the run page; URL in `PROGRESS.md` §1 |
-| CI vs HEAD | pushed through `2b1967d`; **CI has not yet reported on it** | `git status -sb` |
+| CI | re-read 2026-09-13T20:15Z: run **67** (`593a82e`) green on all three jobs, every step, incl.
+Coverage ledger `6 of 6` and a real PlatformIO compile in `firmware + generated project`. Run
+**66** (`448b628`, an earlier commit) **FAILED** `build + tests` at `dist/index.html is up to
+date` — a stale committed build, self-corrected by the time 67 ran | run pages `.../actions/runs/34779187164` (67, green) and `.../actions/runs/34776834859` (66, red) |
+| CI vs HEAD | **`main` was ahead of `origin/main` by 2 unpushed commits (AGENT-3's own) until this
+check pushed them** — `git push` just now triggered run **68** on `0f259c7`, in progress. Most
+commits between 66 and 67 have **no CI run at all**: GitHub runs `ci.yml` once per `push`, on the
+push's final commit, so a multi-commit push leaves the earlier commits in it unread by CI — the
+run history is sparser than the commit history | `git log origin/main`, `actions/runs?head_sha=` |
 | CH32H417 clock | still **1 of 5 PLLs, 0 of 8 muxes** in the shipped file. The USBHS_PLL block computes `USBFS = 48 MHz` and is parked in `agents/proposals/CH32H417_usbhs_pll.yaml` — blocked on a layout defect, not on facts | `clockCalc()` with the block spliced in |
 | Hardware | **builds, not flashed** — every green result here is a compile | §6 item 8 |
 
@@ -85,9 +92,17 @@ rather than skip (run 34721092664 prints `::notice compile gates that ran: 16`, 
 job's `20 test(s) SKIPPED` for the same suites); the `Coverage ledger` step prints `6 of 6` **on
 the runner**; `desktop` green.
 
-- [ ] **`DECISION | worktrees ON`** — *deliberately withheld.* The condition is met, but one green
-      run is a thing seen once and `main` had been red for thirty-one. It goes up at **three
-      consecutive green commits from different agents**.
+- [ ] **`DECISION | worktrees ON`** — **checked 2026-09-13T20:15Z (AGENT-3) and still NOT posted.**
+      The condition is three consecutive commits from different agents seen green ON A RUNNER.
+      What is actually there: run 66 (`448b628`, AGENT-2) is a completed **failure**; run 67
+      (`593a82e`, AGENT-2) is a completed, fully-green success; run 68 (`0f259c7`, AGENT-3, just
+      pushed by this check) is still **in progress**. Every commit between 66 and 67 —
+      `3bfc9e5`/`ff7d48d`/`668a315`/`ceb9b46` — has **no CI run of its own** (batched into a later
+      push; GitHub runs once per push, not once per commit). So there are not three consecutive
+      GREEN runs to point at, only one, and the sample is smaller than the commit list makes it
+      look — reporting three-different-agents-in-a-row by commit AUTHOR, as if that meant
+      three-in-a-row SEEN GREEN, is exactly the gap this line exists to catch. Revisit once run 68
+      completes and, ideally, once pushes happen one commit at a time so CI actually reads each one.
 
 The 31 red runs, and why nobody saw them: `tests/evidence/round6/2026-09-12-ci-30-failures.md`.
 Three fixes that outlive it — annotations must not sit behind a failing pipeline (`bash -eo
@@ -839,6 +854,38 @@ tree. That is the discipline working, not failing.
   If the hook's shape does not let the mutation anchor cleanly, say so on the board rather than
   planting something adjacent that would pass regardless.
 - Gates last run: see Current below.
+
+**Current — 2026-09-13T20:15Z. §5.1 (CI), steps 1-4, and a process mistake of my own found and
+fixed in the same check.**
+
+- **Found my own two most recent commits (`913aeb6`, `0f259c7`) had never been pushed.**
+  `git status -sb` read `ahead 2` — I had been committing but not pushing since the §5 partial
+  dry-run. That means CI had never seen either, and — the part that actually matters — anyone
+  else reading `origin/main` (including AGENT-1/AGENT-2, mid-cycle in the shared tree) could not
+  see my STATUS.md corrections or `keyboard_ui.test.js` either. Pushed immediately
+  (`593a82e..0f259c7`); the README's "commit small, straight to `main`, **push**" is the rule I
+  had stopped following without noticing, three commits in.
+- **The GitHub Actions REST API is reachable unauthenticated for this public repo**
+  (`api.github.com/repos/arwidcool/WCH_Cube/actions/runs`) — no `gh` CLI on this box, so used
+  `curl` directly. Raw job LOGS need admin rights (403'd); run/job STATUS and per-step
+  STATUS/CONCLUSION do not, and that was enough for steps 1-4.
+- **Run 66 (`448b628`) is a completed FAILURE** — `build + tests` failed at `dist/index.html is
+  up to date`, skipping the rest of that job's steps (`firmware + generated project` and
+  `tauri shell` still passed on the same run). A stale committed build, the exact recurring class
+  `2026-09-12-ci-30-failures.md` already names.
+- **Run 67 (`593a82e`) is a completed, fully-green success** — every step, all three jobs,
+  including `Coverage ledger` printing `6 of 6` and a real PlatformIO compile (not a skip) in
+  `firmware + generated project`.
+- **Most commits between 66 and 67 have no CI run at all**, and this is a structural finding, not
+  a gap in my search: GitHub triggers `ci.yml` once per `push` event, on the push's final commit —
+  a multi-commit push leaves every earlier commit in it unread by CI. Checked directly
+  (`?head_sha=<full 40-char sha>`) for `3bfc9e5`, `ff7d48d`, `668a315`, `ceb9b46`: zero runs for
+  each. The commit list and the CI-verified list are NOT the same list.
+- **`DECISION | worktrees ON` — checked and NOT posted.** One completed green run (67) is not
+  three; the nearest three-commits-by-author-in-a-row includes a completed RED (66); and my own
+  commit (68) is still in progress. Full reasoning in §2 A.
+- **PROGRESS.md and STATUS.md §1 updated** to carry this rather than leave the 2026-09-12 "CI IS
+  GREEN" record looking like an unbroken streak it was not.
 
 **Current — 2026-09-13T20:06Z. B's keyboard gap closed for real, in an actual browser — the
 jsdom objection on record no longer applies because nothing here is jsdom.**
