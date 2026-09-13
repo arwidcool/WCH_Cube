@@ -705,14 +705,81 @@ RM's worked example, or it does not ship.
   unblocked; three of the other six remaining muxes may need the identical shape.
 - **`data-test="pin-user-label"` hook** — ~~deliverable B's last gates-that-cannot-go-red entry~~
   **done.**
-- **Idle** — §7 APP; USBHS_PLL's other three inputs (§2 D REQUEST from AGENT-1, 01:14Z), item 7
-  and item 2's data halves (both on AGENT-1/AGENT-3), once anyone answers.
+- **§7 APP P0 — the peripheral tree reachable by keyboard alone, and AA contrast both themes** —
+  **done.** Roving-tabindex arrow-key navigation landed; two real contrast failures found and
+  fixed (the SELECTED row was WORSE contrast than unselected — 3.54:1/2.81:1, now 5.14/5.49:1;
+  a dark-theme-only badge combo at 2.37:1, now 6.08:1). Contract for AGENT-3's planted-break
+  sweep posted to `agents/BOARD.md` 20:45Z — not written by me, `tests/**` is not mine.
+- **Next (manager's order)** — §7 P1: project diff between two `.wchproj` files.
+- **Idle-after-P1** — §7 P2 (pinout SVG export, print view, KiCad CSV); USBHS_PLL's other three
+  inputs (§2 D REQUEST from AGENT-1, 01:14Z), item 7 and item 2's data halves (AGENT-1/AGENT-3),
+  once anyone answers.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: §7 APP backlog, or whichever REQUEST/FINDING addressed to AGENT-1 (item
-  7, item 2, USBHS_PLL inputs) gets answered first.
+- Next step if I stop here: §7 P1, the project diff between two `.wchproj` files.
 - Gates last run: see Current below, at the tree's HEAD this cycle produced.
+
+**Current — 2026-09-13, cycle 4. §7's first item: the tree by keyboard, and two contrast bugs
+nobody had measured.**
+
+- **The peripheral tree, keyboard alone.** Every row was already individually tabbable
+  (`role="button" tabindex="0"` on all ~80 of them on CH32H417) — operable per WCAG 2.1.1, but
+  not USABLE: a keyboard-only user had to press Tab up to 80 times to get past the tree to reach
+  anything else. Converted to the ARIA APG "tree view" pattern — a roving tabindex, same idea the
+  chip canvas already uses its own version of (one tab-stop, arrow keys move), but built on the
+  tree's REAL per-row DOM elements rather than the chip's virtual-focus model, since the tree
+  already had real, individually-focusable rows to roving-manage rather than a single canvas to
+  paint a fake cursor onto.
+  `TREE.focus` (the one row key with `tabindex="0"`) and `TREE.rows` (the flat, ordered,
+  currently-VISIBLE row list — headers plus un-collapsed children, rebuilt every `renderTree()`)
+  are new state beside the existing `TREE.sort`/`TREE.enabledOnly`. `#cats`'s keydown handler
+  (extended, Enter/Space on an item unchanged) adds ArrowUp/Down (move), Home/End, ArrowRight
+  (expand a collapsed category or step into its first child), ArrowLeft (collapse — focus stays
+  on the header — or step out to the parent header from an item). `paintTree()`'s existing
+  "restore focus after innerHTML" guard is widened to recognise a category header too, and still
+  only fires when focus was ALREADY in the tree before the render — typing in the search box
+  must never yank focus into the tree, and did not before this either.
+  Verified live in Chrome (`tests/lib/browser.js`) on CH32H417: exactly one `tabIndex===0`
+  element at rest; ArrowDown/Up walk `TREE.rows` in order (GPIO → NVIC → CRC → back to NVIC,
+  checked); Enter sets `S.sel`; ArrowLeft/Right (un)collapse with focus staying on the header;
+  console silent. `node tests/run.js "tree"` 16/16, `"features"` 7/7, `app/tests` full 524/524,
+  `"legibility"` 8/8, `"layout"` 20/20 — all unaffected, none of them needed to change.
+  **Not written: the permanent regression test.** The manager's instruction was explicit —
+  coordinate with AGENT-3, do not write `tests/**`. Full contract (the exact state shape, the key
+  bindings, a planted-break recipe mirroring the chip's own `ARROWS`-emptying plant) posted to
+  `agents/BOARD.md` 20:45Z, addressed to AGENT-3.
+  **Deliberately not done**: no ARIA role rewrite (`.item` keeps `role="button"`, headers stay
+  plain `<button>`s rather than becoming `role="treeitem"`/`"group"`). That is a bigger, riskier
+  semantic change than "make it keyboard-operable without 80 tab-stops," and I did not read the
+  ask as asking for it — said so on the board rather than guessing either way.
+
+- **AA contrast, both themes, measured — not asserted — and two real failures found.** Built a
+  real-browser contrast probe (same relative-luminance/composited-background maths
+  `tests/legibility.test.js`'s own SVG contrast check uses, applied to the tree's plain HTML
+  instead of SVG text) and ran it over every `.item`/category-header/badge class combination in
+  both themes on CH32H417.
+  **`.item.selected`** (white text on `var(--blue)`) — **3.54:1 light / 2.81:1 dark**, both under
+  AA's 4.5:1. The SELECTED peripheral — the single most important state in the tree — had WORSE
+  contrast than an ordinary unselected row (7.21/6.88:1). Fixed by switching to `var(--blue-hdr)`,
+  which this app already uses everywhere else for exactly this "selected/active, white text"
+  pattern (`.treebar .seg button.on` sits right next to this rule in the same toolbar; so do
+  `.tab.active`, `.gen`, `.pmgen button`) — not a new colour, a dropped consistency. Now
+  **5.14:1 / 5.49:1**.
+  **`.item.selected .cnt.res`** (a shared-resource-conflict badge on a selected row, dark theme
+  only) — **2.37:1**. The rule forces the badge onto a literal white background but kept
+  `color:var(--res)`, and dark theme's `--res` (`#a79cff`) is calibrated for the dark PANEL, not
+  for white. Fixed with a theme-INDEPENDENT ink (`#5a4fcf`, light theme's own `--res` value,
+  which is what the background actually is here in both themes) — **6.08:1** now, confirmed by
+  injecting the real markup shape into a live page and measuring the actual cascade rather than
+  computing hex values by hand alone (I did both, and checked they agreed).
+  Everything else already measured well clear of 4.5:1 in both themes and none of it touched:
+  plain `.item` 7.21/6.88, `.st.ok` 5.48/6.87, category headers 17.04/12.06, the two badge
+  classes unselected 7.68/6.29 and 6.08/7.05.
+
+Red, and who owns it: **nothing.** `python build.py` run twice this sub-cycle (told on the board
+each time) — once after the keyboard mechanism, once after the two CSS contrast fixes, both
+verified in a real browser before moving on.
 
 **Current — 2026-09-13, cycle 3. The last engine piece of the round's exit criterion, plus a small
 hook for AGENT-3.**

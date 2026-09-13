@@ -1307,6 +1307,31 @@ bits, and a clock tree that models what the schema can hold.
       distinct from the styling class — a rename here is a breaking change to AGENT-3's planted
       break the way a public export would be. Verified present in a real browser after setting a
       label and re-rendering; `tests/features.test.js` unaffected (still green).
+- [x] (AGENT-2) **§7 APP: the peripheral tree reachable by keyboard alone, and two real AA-contrast
+      failures found and fixed.** Every tree row was already individually tabbable
+      (`role="button" tabindex="0"`) - operable, but 80 rows on CH32H417 meant up to 80 Tab presses
+      to get past the tree. Converted to a roving-tabindex tree (ARIA APG "tree view" pattern):
+      `TREE.focus` (the one row with `tabindex="0"`) and `TREE.rows` (the flat visible-row list,
+      rebuilt every render, respecting collapsed groups) drive ArrowUp/Down (move), Home/End
+      (first/last), ArrowRight (expand a collapsed category or step into its first child),
+      ArrowLeft (collapse an expanded category, keeping focus on it, or step out to the parent
+      header from an item) - `app/template.html` `renderTree()`/`paintTree()`/the `#cats`
+      keydown+click handlers. No ARIA role changes. Verified live in Chrome: exactly one
+      `tabIndex===0` element in the whole tree at rest; arrow keys walk `TREE.rows` in order;
+      Enter selects; Left/Right (un)collapse with focus staying put; console silent throughout.
+      Contract for AGENT-3's planted-break sweep (not written by me — `tests/**` is not mine)
+      posted to `agents/BOARD.md` 20:45Z.
+      Contrast, measured in a real browser both themes: `.item.selected` (white on `var(--blue)`)
+      was **3.54:1 light / 2.81:1 dark**, both failing AA's 4.5:1 - the SELECTED row had worse
+      contrast than the unselected one. Fixed with `var(--blue-hdr)`, the token this app already
+      uses everywhere else for "selected/active, white text" - now 5.14/5.49:1.
+      `.item.selected .cnt.res` (dark theme only) was **2.37:1** - `--res` calibrated for the dark
+      panel, forced onto a literal white badge background. Fixed with a fixed on-white ink
+      (light theme's own `--res`, `#5a4fcf`) - now 6.08:1 in both themes, confirmed by injecting
+      the real markup and measuring the actual cascade. Every other tree combination already
+      measured comfortably over 4.5:1; none of those touched.
+      Gates: `node tests/run.js "app/tests"` 524/524, `"tree"` 16/16, `"features"` 7/7,
+      `"legibility"` 8/8, `"layout"` 20/20. `python build.py` run twice (told on the board).
 
 **Two findings that outrank the data work**, both filed on the board:
 

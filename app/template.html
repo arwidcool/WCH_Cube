@@ -105,7 +105,12 @@
   .items{padding:0 0 8px 14px}
   .item{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:3px;cursor:pointer;color:var(--link)}
   .item:hover{background:var(--blue-pale)}
-  .item.selected{background:var(--blue);color:#fff}
+  /* --blue is 3.54:1 (light) / 2.81:1 (dark) against white - measured in a real browser,
+     both fail WCAG AA's 4.5:1 for normal text. --blue-hdr is the token this app already
+     uses everywhere else for "selected/active, white text" (.treebar .seg button.on
+     right above this in the same toolbar, .tab.active, .gen, .pmgen button) - .item.selected
+     was the one place still on the lighter --blue. Not a new colour, a dropped inconsistency. */
+  .item.selected{background:var(--blue-hdr);color:#fff}
   .item .st{width:14px;text-align:center;font-size:12px}
   /* the status glyphs are text: --ok/--warn are the CubeMX badge colours and are too
      light on a white panel (3.55:1 and 2.28:1), so the GLYPHS use an ink that passes. */
@@ -157,7 +162,12 @@
   .item .cnt{margin-left:auto}
   .item.selected .cnt{background:#fff;color:#c25100}
   .cnt.res{background:var(--res);color:var(--on-res)}
-  .item.selected .cnt.res{background:#fff;color:var(--res)}
+  /* A FIXED ink, not var(--res): this badge is always on the literal white background
+     above, in BOTH themes, and dark theme's --res (#a79cff, calibrated for the dark
+     panel) is 2.37:1 on white - failing WCAG AA the same way a bare var(--pin-conflict)
+     would have on .item.selected .cnt just above. #5a4fcf is light theme's own --res,
+     6.08:1 on white in both themes since the background never changes with the theme here. */
+  .item.selected .cnt.res{background:#fff;color:#5a4fcf}
   .cat>button .cnt{margin-left:8px}
   /* list options: sort toggle + gear, sitting under the search box */
   .treebar{display:flex;align-items:center;gap:6px;padding:4px 8px;border-bottom:1px solid var(--line);background:var(--bar)}
@@ -1928,7 +1938,14 @@ const periphOrder = (a, b) => String(a).localeCompare(String(b), undefined, { nu
 const synRank = p => (p === 'GPIO' ? 0 : p === 'NVIC' ? 1 : 2);
 const byPeripheral = (a, b) => synRank(a) - synRank(b) || periphOrder(a, b);
 // List options, UI-only: never part of S, never saved into a .wchproj.
-const TREE = { sort: 'cat', enabledOnly: false };
+// `focus:` is the ROVING TABINDEX key (a pid, or `'cat:'+category`) - the one row that
+// carries tabindex="0" right now, everything else -1. Before this, every `.item` (up to
+// 80 on CH32H417) carried tabindex="0" at once: technically reachable one Tab at a time,
+// but a keyboard-only user had to press Tab dozens of times to get PAST the tree, which
+// is the "can see the peripherals and not open one" finding this fixes. `rows:` is the
+// flat, ordered list of what is visible right now (built fresh each render) - the
+// keydown handler below walks it instead of re-deriving the same filter twice.
+const TREE = { sort: 'cat', enabledOnly: false, focus: null, rows: [] };
 const isEnabledPeriph = pid => pid === 'GPIO' ? Object.keys(S.manual).length > 0
   // NVIC has no on/off of its own: it is "enabled" while something that owns a vector is.
   : pid === 'NVIC' ? ((M.nvic || {}).vectors || []).some(v => v.peripheral && isEnabledPeriph(v.peripheral))
@@ -1956,6 +1973,32 @@ function renderTree() {
   const res = {};                     // pid -> shared resources it contends for (EXTI line, DMA channel)
   for (const r of E.resourceIssues || []) for (const who of new Set(r.owners)) res[who] = (res[who] || 0) + 1;
   const ST = { ok: '✔', warn: '⚠', na: '⊘', '': '' };
+  const shown = pid => (!q || pid.toLowerCase().includes(q) || peripheralLabel(M, pid).toLowerCase().includes(q)
+      || peripheralName(M, pid).what.toLowerCase().includes(q) || periphHasSignal(pid, q))
+    && (!TREE.enabledOnly || isEnabledPeriph(pid));
+
+  const rows = [];
+  if (TREE.sort === 'az') {
+    for (const pid of ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : []), ...Object.keys(M.peripherals)]
+      .filter(shown).sort(byPeripheral)) rows.push({ key: pid, kind: 'item' });
+  } else {
+    const cats0 = { 'System Core': ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : [])] };
+    for (const [pid, P] of Object.entries(M.peripherals)) (cats0[P.category || 'Other'] ||= []).push(pid);
+    for (const list of Object.values(cats0)) list.sort(byPeripheral);
+    const order0 = [...CAT_ORDER.filter(c => cats0[c]), ...Object.keys(cats0).filter(c => !CAT_ORDER.includes(c))];
+    for (const c of order0) {
+      const items = cats0[c].filter(shown);
+      if (!items.length) continue;
+      const catKey = 'cat:' + c;
+      rows.push({ key: catKey, kind: 'cat', cat: c });
+      if (collapsed.has(c) && !q) continue;
+      for (const pid of items) rows.push({ key: pid, kind: 'item', parentKey: catKey });
+    }
+  }
+  TREE.rows = rows;
+  if (!(TREE.focus && rows.some(r => r.key === TREE.focus))) TREE.focus = rows[0] ? rows[0].key : null;
+  const activeKey = TREE.focus;
+
   const itemHtml = pid => {
     const st = pid === 'GPIO' ? (Object.keys(S.manual).length ? 'ok' : '')
       : pid === 'NVIC' ? (isEnabledPeriph('NVIC') ? 'ok' : '') : E.status[pid];
@@ -1970,17 +2013,15 @@ function renderTree() {
     const aria = `${label}${st === 'ok' ? ', configured' : st === 'warn' ? ', has issues' : st === 'na' ? ', not available on this package' : ''}${cn ? `, ${cnTxt}` : ''}${rn ? `, ${rnTxt}` : ''}`;
     const badges = (cn ? `<span class="cnt" title="${attr(cnTxt)}">${cn}</span>` : '')
       + (rn ? `<span class="cnt res" title="${attr(rnTxt)}">${rn}</span>` : '');
-    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="0" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([label, cnTxt, rnTxt].filter(Boolean).join(' \u00b7 '))}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
+    const ti = pid === activeKey ? '0' : '-1';
+    return `<div class="item${S.sel === pid ? ' selected' : ''}${st === 'na' ? ' na' : ''}" data-p="${pid}" role="button" tabindex="${ti}" aria-label="${attr(aria)}" aria-current="${S.sel === pid}" title="${attr([label, cnTxt, rnTxt].filter(Boolean).join(' \u00b7 '))}"><span class="st ${st}" aria-hidden="true">${ST[st]}</span>${pid}${badges}</div>`;
   };
-  const shown = pid => (!q || pid.toLowerCase().includes(q) || peripheralLabel(M, pid).toLowerCase().includes(q)
-      || peripheralName(M, pid).what.toLowerCase().includes(q) || periphHasSignal(pid, q))
-    && (!TREE.enabledOnly || isEnabledPeriph(pid));
+
+  if (!rows.length) { paintTree(emptyTree(q)); return; }
 
   // A→Z: one flat list, no headings. Same items, same badges, different order.
   if (TREE.sort === 'az') {
-    const all = ['GPIO', ...(((M.nvic || {}).vectors || []).length ? ['NVIC'] : []), ...Object.keys(M.peripherals)]
-      .filter(shown).sort(byPeripheral);
-    paintTree(all.length ? `<div class="azlist">${all.map(itemHtml).join('')}</div>` : emptyTree(q));
+    paintTree(`<div class="azlist">${rows.map(r => itemHtml(r.key)).join('')}</div>`);
     return;
   }
 
@@ -2004,7 +2045,8 @@ function renderTree() {
     const rcnt = items.reduce((n, p) => n + (res[p] || 0), 0);
     const cbadge = (ccnt ? ` <span class="cnt" title="pin conflicts">${ccnt}</span>` : '')
       + (rcnt ? ` <span class="cnt res" title="shared-resource issues">${rcnt}</span>` : '');
-    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}"><span>${c}${cbadge}</span></button><div class="items">`;
+    const catTi = ('cat:' + c === activeKey) ? '0' : '-1';
+    h += `<div class="cat${collapsed.has(c) && !q ? ' collapsed' : ''}"><button data-cat="${c}" tabindex="${catTi}"><span>${c}${cbadge}</span></button><div class="items">`;
     for (const pid of items) h += itemHtml(pid);
     h += '</div></div>';
   }
@@ -2016,14 +2058,29 @@ function emptyTree(q) {
   return `<div class="treenone">No peripheral matches “${esc(q)}”.</div>`;
 }
 
+// True while DOM focus is somewhere in the tree - an `.item`, or a category header
+// `<button>` (the header is the button's PARENT's parent's parent... no: `.cat > button`,
+// so the button itself, matched by its own dataset).
+function treeElFocused(el) {
+  return !!(el && el.classList && (el.classList.contains('item')
+    || (el.tagName === 'BUTTON' && el.dataset && el.dataset.cat !== undefined)));
+}
 function paintTree(html) {
-  const hadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('item')
-    ? document.activeElement.dataset.p : null;
+  const hadFocus = treeElFocused(document.activeElement);
   document.getElementById('cats').innerHTML = html;
-  if (hadFocus) {                                   // innerHTML threw the focused item away
-    const back = document.querySelector(`.item[data-p="${window.CSS && CSS.escape ? CSS.escape(hadFocus) : hadFocus}"]`);
-    if (back) back.focus();
-  }
+  // Restore focus to TREE.focus, not to whatever the OLD active element happened to be
+  // - a keydown handler updates TREE.focus to the NEW target and only then calls
+  // renderTree(), so by the time innerHTML runs the old element is already gone. Only
+  // when focus was ALREADY in the tree before this render: a re-render triggered by
+  // typing in the search box, or by a peripheral picked from the system view, must
+  // never YANK focus into the tree out of nowhere.
+  if (!hadFocus || !TREE.focus) return;
+  const cssEsc = k => (window.CSS && CSS.escape ? CSS.escape(k) : k);
+  const sel = TREE.focus.startsWith('cat:')
+    ? `.cat > button[data-cat="${cssEsc(TREE.focus.slice(4))}"]`
+    : `.item[data-p="${cssEsc(TREE.focus)}"]`;
+  const back = document.querySelector(sel);
+  if (back) back.focus();
 }
 
 // ---- list options: sort toggle and the gear menu ----------------------------
@@ -2067,15 +2124,70 @@ window.addEventListener('mousedown', e => {
   closeTreeMenu();
 });
 window.addEventListener('keydown', e => { if (e.key === 'Escape') closeTreeMenu(); });
+// ---- keyboard: roving tabindex, arrow keys move, Left/Right (un)collapse a category
+// This is the tree's half of "reachable by keyboard alone" (round 6 §7 APP): the chip
+// canvas already had arrow-key movement (a single tabbable container plus a virtual
+// U.focus), and the tree's own rows were ALREADY real, individually-tabbable elements
+// - which is keyboard-OPERABLE but not keyboard-USABLE the moment a part has 80 of
+// them, since Tab is the only way to move and it has to visit every row on the way.
+// Arrow keys now do that instead, over `TREE.rows` (built fresh in renderTree(), so it
+// always matches what is actually on screen right now - collapsed children excluded).
 document.getElementById('cats').addEventListener('keydown', e => {
-  const it = e.target.closest && e.target.closest('.item');
-  if (!it || (e.key !== 'Enter' && e.key !== ' ')) return;
+  const it = e.target.closest && e.target.closest('.item, .cat > button[data-cat]');
+  if (!it) return;
+  const rows = TREE.rows || [];
+  const curKey = it.classList.contains('item') ? it.dataset.p : 'cat:' + it.dataset.cat;
+  const idx = rows.findIndex(r => r.key === curKey);
+  if (idx < 0) return;
+  const moveTo = i => {
+    if (i < 0 || i >= rows.length) return;
+    e.preventDefault();
+    TREE.focus = rows[i].key;
+    renderTree();
+  };
+  if (e.key === 'ArrowDown') { moveTo(idx + 1); return; }
+  if (e.key === 'ArrowUp') { moveTo(idx - 1); return; }
+  if (e.key === 'Home') { moveTo(0); return; }
+  if (e.key === 'End') { moveTo(rows.length - 1); return; }
+  // ArrowRight/Left follow the ARIA tree-view convention: Right opens a collapsed
+  // group or steps into its first child; Left closes an open group or steps out to
+  // its parent header. On an ITEM (which has no children of its own) Right/Left do
+  // nothing - there is no "further in" to go, and doing nothing beats guessing.
+  if (e.key === 'ArrowRight') {
+    const r = rows[idx];
+    if (r.kind !== 'cat') return;
+    e.preventDefault();
+    if (collapsed.has(r.cat)) { collapsed.delete(r.cat); renderTree(); }
+    else moveTo(idx + 1);
+    return;
+  }
+  if (e.key === 'ArrowLeft') {
+    const r = rows[idx];
+    e.preventDefault();
+    if (r.kind === 'cat') {
+      if (!collapsed.has(r.cat)) { collapsed.add(r.cat); renderTree(); }
+      return;
+    }
+    if (r.parentKey) moveTo(rows.findIndex(x => x.key === r.parentKey));
+    return;
+  }
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  if (!it.classList.contains('item')) return;   // a header is a real <button> - free Enter/Space
   e.preventDefault();
+  TREE.focus = it.dataset.p;
   selectPeripheral(it.dataset.p);
 });
 document.getElementById('cats').addEventListener('click', e => {
-  const cb = e.target.closest('button[data-cat]'); if (cb) { const c = cb.dataset.cat; collapsed.has(c) ? collapsed.delete(c) : collapsed.add(c); renderTree(); return; }
-  const it = e.target.closest('.item'); if (it) { S.sel = it.dataset.p; renderAll(); }
+  const cb = e.target.closest('button[data-cat]');
+  if (cb) {
+    const c = cb.dataset.cat;
+    collapsed.has(c) ? collapsed.delete(c) : collapsed.add(c);
+    TREE.focus = 'cat:' + c;               // a mouse click moves the roving tabindex too,
+    renderTree();                          // so a later Tab/arrow-key picks up from here
+    return;
+  }
+  const it = e.target.closest('.item');
+  if (it) { S.sel = it.dataset.p; TREE.focus = it.dataset.p; renderAll(); }
 });
 document.getElementById('tree-search').addEventListener('input', renderTree);
 
