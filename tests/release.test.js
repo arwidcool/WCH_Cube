@@ -1,8 +1,8 @@
 // =============================================================================
 //  tests/release.test.js — the release plumbing, checked like everything else.
 //
-//  `DONE.md` has carried "generated C compiles **in CI**" as an open line since
-//  round 3, and `agents/AGENT_3_QA_RELEASE.md` says what closes it: the remote
+//  The pack carried "generated C compiles **in CI**" as an open line from round 3,
+//  and `agents/STATUS.md` (deliverable A) says what closes it: the remote
 //  appears, then the workflow builds `data/firmware` **and** runs the
 //  generated-project gate. The repository had no remote, so `.github/workflows/`
 //  was the one part of this tree that nothing ever read — a workflow with a typo, a

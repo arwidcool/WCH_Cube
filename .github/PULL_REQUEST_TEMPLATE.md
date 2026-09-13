@@ -25,6 +25,8 @@ Tick what you actually ran. If you did not run one, leave it and say why below.
 - [ ] `node tests/run.js` — **ALL GREEN**, no unexplained skips
 - [ ] `python tools/validate_mcu.py` — no errors (if you changed any MCU file)
 - [ ] `python tools/verify_sdk_names.py` — no errors (if you changed any MCU file)
+- [ ] `python tools/coverage.py --gate` — every part meets its declared status (if you changed
+      any MCU file or any `data/coverage/` file). A part is `complete` only at **0 open rows**
 - [ ] **Compiled the generated C**, if what the generator emits changed:
       `node tools/wchcube_cli.js --project tests/fixtures/<f>.wchproj --new-project <tmp>/Proj && cd <tmp>/Proj && pio run`
 - [ ] **Verified in a real browser**, if the UI changed — 1280 and 1920 wide, light and dark, 100% and 125% zoom

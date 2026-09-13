@@ -38,10 +38,10 @@ sources disagree, record both, average neither. "The other CH32 parts have it" i
 |---|---|
 | `docs/COVERAGE.md` | the ledger: the seven checks, the two files per part, the loop, the definition of done |
 | `agents/README.md` | the working agreement if you are one of the agents: ownership, work cycle, gates |
-| `agents/PROJECT.md` | the current round's brief |
+| `agents/STATUS.md` | **the single source of truth**: what is done (measured), the open list with an owner per row, each agent's Current, the acceptance script, the human-only items |
 | `docs/ADDING-A-PART.md` | the whole process of adding a microcontroller |
 | `data/FORMAT.md` | the MCU file schema; `tools/validate_mcu.py` is the authority when they disagree |
-| `PROGRESS.md` | where the project actually stands, including each part's open count |
+| `PROGRESS.md` | the long-form public record of the same state, linked from the issue templates |
 
 ## Gates every commit passes
 

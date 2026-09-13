@@ -29,9 +29,11 @@ commit history, because it changes how you should read everything else here.
 The application code was written by AI coding agents — Claude Code sessions — running under a
 written working agreement (`agents/README.md`), three at a time, with a human setting direction
 and reviewing outcomes. The agents own disjoint parts of the tree, coordinate through an
-append-only message board (`agents/BOARD.md`), and are forbidden from asking the human a
-question: they make a decision, record it, and continue. Rounds 1 through 4 built the app this
-way; round 5 is open.
+append-only message board (`agents/BOARD.md`), read one shared state file
+(`agents/STATUS.md`), and are forbidden from asking the human a question: they make a
+decision, record it, and continue. Rounds 1 through 5 built the app this way; **round 6 is
+open**, and its rule is *a gate nobody has watched run is a guess* - every check in the suite
+has to have been seen to fail on the thing it is supposed to catch.
 
 What that means in practice, both ways:
 
@@ -365,7 +367,7 @@ runs `pio run -t upload` and reports what the serial output said.
 
 If you have any CH32V006, CH32V005, CH32V003, CH32X035, CH32L103 or CH32H417 board and a
 WCH-Link, that is a five-minute job and it is the single most valuable contribution you could make — see
-[`../agents/HUMAN_TODO.md`](../agents/HUMAN_TODO.md).
+[`../agents/STATUS.md`](../agents/STATUS.md) §6.
 
 ## Repository map
 
@@ -395,7 +397,8 @@ WCH-Link, that is a five-minute job and it is the single most valuable contribut
 │   ├── extract_*.py         re-derive facts from the PDFs/markdown and diff
 │   └── wchcube_cli.js       the whole engine, headless
 ├── src-tauri/               desktop shell (Tauri 2)
-├── agents/                  the AI agents' working agreement, briefs and board
+├── agents/                  README (the agreement) + STATUS (the single source of truth,
+│                         including what each agent has in flight) + BOARD (the log)
 ├── docs/                    this documentation
 ├── build.py                 inlines the engine and the data into dist/index.html
 ├── PROGRESS.md              where the project actually stands — read this first

@@ -2,7 +2,9 @@
 
 **Do not read this during a work cycle.** It is here so a decision can be looked up
 when it is genuinely in question, and so nothing was thrown away. The live pack is
-`../README.md`, `../PROJECT.md`, `../BOARD.md` and your own `../AGENT_n_*.md`.
+three files: `../README.md` (the agreement), `../STATUS.md` (the single source of
+truth) and `../BOARD.md` (the log). `round6-pack/` holds the eight files they replaced
+on 2026-09-13, including `DONE.md`'s rounds 1-5 evidence record.
 
 This folder replaced four top-level directories — `agents/`, `Agents Rounds 2/`,
 `Agents Rounds 3/`, `Agents Rounds 4/` — which had grown to five parallel copies of

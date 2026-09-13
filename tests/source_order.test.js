@@ -146,8 +146,7 @@ test('the rule is written down where the people and agents who extract a part re
   const mustSay = [
     POLICY_DOC,
     'agents/README.md',
-    'agents/AGENT_1_DATA.md',
-    'agents/PROMPT.txt',
+    'agents/STATUS.md',
     'docs/ADDING-A-PART.md',
     'docs/HOW-IT-WORKS.md',
     'data/FORMAT.md',

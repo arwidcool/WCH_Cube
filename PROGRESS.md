@@ -1,7 +1,13 @@
 # PROGRESS — WCHCube
 
-The ongoing source of truth for where this project stands. Keep it current: if a
-statement here stops being true, change it here first.
+The public record of where this project stands, and the file the issue templates point at.
+Keep it current: if a statement here stops being true, change it here first.
+
+> **Agents: `agents/STATUS.md` is the single source of truth for state** - the measured
+> numbers, the open list with an owner per row, each agent's Current, and what only a human
+> can do. This file is the long-form public write-up of the same thing; where the two
+> disagree, the one whose number names the command that printed it wins, and the other is
+> corrected in the same commit.
 
 - **Last updated:** 2026-09-13 (round 6, AGENT-1 — the CH32H417 per-peripheral mapping audit:
   one measured truth table on six axes, and every document that states a number about it made to
@@ -103,7 +109,9 @@ statement here stops being true, change it here first.
   `--format c` · `git archive` → 1.7 MB with no vendor material in it.
 - **New this pass: the repository is ready to publish, and getting it there found two real
   defects — one of them the class this repo exists to catch.** The workflows had never been
-  read by anything, because there is no remote. `ci.yml` did not install PlatformIO
+  read by anything, because at that date there was no remote. (**Corrected 2026-09-12:** a
+  remote arrived, the workflows ran 31 times, failed every one and nobody read them; §1 has
+  the green run.) `ci.yml` did not install PlatformIO
   anywhere, so `codegen_compile`, `generated_project` and `firmware_native` all **skipped**
   — and a skipped gate reads as a green job, which is how "the generated C compiles" stood
   unproven for a whole round once before. Its `desktop` job asked for
@@ -134,7 +142,7 @@ statement here stops being true, change it here first.
   elsewhere, and writes the recovered cells back into the repo so the page is opened once. It is
   implemented in `tools/source_docs.py` (both recovery scripts and the L103 markdown parser now
   resolve through it), stated in `data/sources/README.md`, carried into `agents/README.md`,
-  `agents/PROMPT.txt`, `agents/AGENT_1_DATA.md`, `docs/ADDING-A-PART.md`, `docs/HOW-IT-WORKS.md`,
+  `agents/STATUS.md`, `docs/ADDING-A-PART.md`, `docs/HOW-IT-WORKS.md`,
   `data/FORMAT.md` and the PR template, and enforced by `tests/source_order.test.js`: a PDF with
   no conversion beside it fails the build, and so does a script that opens a PDF without saying
   why. **Two stale claims went with it, and they are why the rule needed writing down:**
@@ -217,13 +225,10 @@ Related documents, none of which this file duplicates:
 | Read this | For |
 |---|---|
 | `TASKS.md` | the backlog, claimed and unclaimed |
-| `agents/PROJECT.md` | **the current round brief** and its definition of done |
-| `agents/AGENT_n_*.md` | the three agents' standing instructions |
+| `agents/README.md` | the working agreement: ownership, cycle, gates, rules, this box |
+| `agents/STATUS.md` | **the single source of truth** — the measured state, the round's deliverables and their evidence, the three agents' standing briefs and Currents, the acceptance script, the human-only items, the backlog |
 | `agents/BOARD.md` | the current message board — decisions, handoffs, QA results |
-| `agents/WALKTHROUGH.md` | the round-5 acceptance script |
-| `agents/README.md` | the working agreement: ownership, cycle, gates, rules |
-| `agents/HUMAN_TODO.md` | things only the human can do |
-| `agents/history/INDEX.md` | rounds 1–4, what each produced, and why they are archived |
+| `agents/history/INDEX.md` | rounds 1–5, what each produced, and why they are archived |
 | `data/FORMAT.md` | the MCU YAML schema — the DATA↔ENGINE contract |
 | `data/firmware/ARCHITECTURE.md` | firmware layering, seams and ownership |
 | `data/sources/README.md` | where hardware facts come from, and the EVT rule |
@@ -267,7 +272,7 @@ flashed.
 
 
 **CI IS GREEN, and this is the first time all three jobs have passed in this repository's
-history.** Run %s
+history.** Run <https://github.com/arwidcool/WCH_Cube/actions/runs/34723740365>
 on `b5a654f`: `build + tests` (ubuntu), `firmware + generated project` (windows, the whole
 suite WITH PlatformIO, so the compile gates execute instead of skipping) and `tauri shell
 (linux)` all **success**. The `test` job's `Coverage ledger` step prints `6 of 6` on the
@@ -347,7 +352,7 @@ Evidence: `tests/evidence/round6/2026-09-12-ci-30-failures.md`.
   V006 and X035 — section 5.
 - **Two defects in the generated C found by compiling it, and both now closed** —
   section 6.
-- **`agents/HUMAN_TODO.md` item 5 settled** — section 6.
+- **`agents/STATUS.md` §6 item 5 settled** — section 6.
 - **`tests/codegen_compile.test.js`, the compile gate** — section 7. Three
   configurations that assign pins, generated and built for their own
   environments.
@@ -361,69 +366,68 @@ Evidence: `tests/evidence/round6/2026-09-12-ci-30-failures.md`.
 
 ## 3. Current work
 
-**Round 5 — "every choice the app offers must be one the silicon can honour"** is open.
-Brief and per-agent instructions are in `agents/`; the launcher is
-`agents/run_agents.ps1`. Round 4's open lines carry over as E1–E9.
+**Round 6 — "a gate nobody has watched run is a guess"** is open. The brief, the six
+deliverables with an owner per row, the acceptance script and each agent's Current are all in
+[`agents/STATUS.md`](agents/STATUS.md). **That file is the single source of truth and this
+section does not duplicate it** — the reason it does not is that four documents once carried
+three different versions of the same `params:` count, and one of them was this one.
 
-**A wrong choice the app offers is worse than a missing feature.** A missing feature is
-a gap; an offered-but-impossible choice produces a configuration that compiles,
-exports, looks correct in the export and does not work on the board. Two deliverables,
-and they prove each other:
+The round exists because round 5 closed with four things that were green and not true: the
+coverage ledger at zero on the day 63 default pin collisions were found; three Python gates
+green over a file `js-yaml` refused to parse; header checks silently `continue`-ing past three
+of six parts; and a CI that the pack recorded as "never run" and which had in fact run 31 times
+and failed every one, unread. None of those was a *wrong* gate. Each was a gate that had never
+been **seen to fail on the thing it was supposed to catch**. So: mutate, watch it go red,
+restore, and keep the red output — `tests/evidence/round6/`.
 
-**A — the data can state a constraint.** One mechanism, three real instances on
-CH32X035 (the pull-down allow-list PA0–PA15/PC16–PC17; output functions prohibited on
-shorted pairs; PC10/PC11 floating only while USBFS is on), consumed by the **GPIO
-table** per row, the **conflict engine** and **codegen**, with CH32V006/CH32V005
-unchanged as the regression half. It landed, and so did the defect class it exists to
-remove: the data and the consumer were written against different schemas and the
-mechanism was inert on the shipped tree until the board entry at 22:11Z. Both halves
-now read `data/FORMAT.md` `## constraints`, and `tests/constraints.test.js` asserts it
-with no skip in between.
+Where the six deliverables stand, in one line each (measured, `agents/STATUS.md` §1 and §2):
 
-**B — every part generates C with no TODO and no `#error`.** `--strict` exited 2 at the
-start of the round, blocked on `codegen.nvic` and `channel_params.channels`. Both keys
-landed, and `node tools/wchcube_cli.js --project <fixture> --strict` now exits **0** on
-all four fixtures — asserted on the exit code, in the default format and with
-`--format c`, by `tests/strict.test.js`. What remains of B is the CH32X035 peripheral
-gaps and the ADC internal channel, listed in `agents/PROJECT.md` §B.
-
-| Agent | Round 5, in order |
-|---|---|
-| DATA | The constraint schema in `data/FORMAT.md` and the seven cited CH32X035 entries; the remaining CH32X035 peripheral gaps (OPA, CMP1/2/3, USBFS/USBPD params, TKEY), the ADC internal Vrefint channel on **both** families, USART LIN/SmartCard/IrDA; E6/E7. |
-| APP | Consume `constraints:` in the GPIO table, the conflict engine and codegen; E1 and E2; the `.wchproj` migration path. E1/E2 and all three consumers are in. |
-| QA | The constraint test that can fail; `--strict` as a gate; `verify_sdk_names.py` inside the runner; CH32X035 × 7 packages across every suite; the compile matrix; E8. |
+| | Deliverable | Owner | State |
+|---|---|---|---|
+| A | CI executes and is read green | QA | done; `worktrees ON` deliberately withheld until three consecutive commits from different agents are green |
+| B | every gate proven able to fail | QA | done for `tests/**` — the list of gates that cannot go red is **empty**; `app/tests/**` not yet swept |
+| C | CH32H417's Parameter Settings stop being empty | DATA | **open — 35 cells owed, 23 of them routing pins** |
+| D | the clock schema holds a second PLL and a per-peripheral mux | APP schema, DATA data | schema landed; CH32H417 still declares no `plls:`, so USB/LTDC/ETH compute nothing on a shipped part |
+| E | the per-instance init struct | APP mechanism, DATA data | mechanism landed; TIM PWM, the LTDC layers and CH32L103's comparators all emit |
+| F | CH32L103 and CH32V003 at 0 open rows | DATA | **complete** — the ledger reads zero on all six parts |
 
 ## 4. Remaining work
 
-Ordered by what blocks the most. The per-line list is `agents/DONE.md` Round 5 and the
-brief is `agents/PROJECT.md`; this is the short version.
+**The per-line list with its owner is `agents/STATUS.md` §2 and `TASKS.md`.** This is the short
+version, ordered by what blocks the most.
 
-1. **The CH32X035 peripheral gaps** (DATA). OPA (13 struct members, 3 modelled), CMP1/2/3
-   (5 members, 3 modelled), USBFS/USBPD `params:`, TKEY (no EVT header at all, so every
-   write is a raw register), the ADC internal Vrefint channel on **both** families, and
-   USART LIN / SmartCard / IrDA as `params:` with `sdk_call`. `tests/completeness.test.js`
-   prints the open cells on every run and guards each against its `TASKS.md` line.
-2. **E5 — CH32X035 × all 7 packages across every suite.** `smoke.js`, `data.test.js`,
-   `completeness.test.js` and `codegen_compile.test.js` cover it; `layout.test.js` and
-   `legibility.test.js` still need the seven packages named. LQFP64M at 60 I/O with names
-   like `USBPD_CC1` is the first real stress the legibility test has had.
-3. **E4 — the 16 known-missing cells** in `tests/completeness.test.js`, each filled or
-   declared ABSENT with an EVT citation. The two are different and must not be conflated.
-4. **E8 — `src-tauri` relinked.** `cargo build` is green and the Rust unit tests run in
-   the suite, but the round-4 changes to `write_project` have never been seen in a window:
-   the human had the old executable open. **Still unverified** — do not claim the desktop
-   path writes a project until somebody has watched it.
-5. **The remaining round-3/4 DONE lines**: the `.wchproj` round-trip for DMA and NVIC
-   (E9 — the engine test is green; the DONE line is unread), and the round-1 section of
-   `agents/DONE.md`, which still carries a "15 of 24" count from round 3.
-6. **`WALKTHROUGH.md` run end to end**, and the QA-PASS line posted with what failed.
-7. **More parts.** CH32V003, CH32V203 and CH32V307 have no DS/RM in `data/sources/`
-   (`HUMAN_TODO` 4). Adding a part is meant to be a data job; the constraint mechanism is
-   the newest place that claim is testable.
-8. **A human flashes one generated project.** `HUMAN_TODO` 6. It is the highest-value
-   open item in the repo and the only one nobody here can close.
+1. **CH32H417's `params:` — 35 cells, 23 of which route pins** (DATA). Worst-first by how many
+   pads a missing block strands: UHSIF (49 routed signals), SERDES, FMC, QSPI1/2, SDMMC, SAI,
+   PIOC, then CAN1–3, DAC, LPTIM1/2, GPHA, RTC. Five of them — FMC, ETH, ECDC, FMC_NAND,
+   FMC_SDRAM — are blocked behind one APP change: a struct whose member is a **pointer** to a
+   second struct that no SDK function takes alone.
+2. **CH32H417's clock data** (DATA, behind APP's schema, which has landed). Four secondary PLLs
+   and eight `RCC_CFGR2` muxes. Until they are modelled the app computes nothing for the USB
+   48 MHz, LTDC pixel or ETH clocks on the part that has them.
+3. **The four default pin collisions left on QFN68** (DATA). They have waited three rounds.
+   `COLLISION_CEILING` is a ratchet: it may only go down.
+4. **The planted-break sweep over `app/tests/**`** (QA). 17 files with almost none. `tests/**`
+   is done and its list of gates-that-cannot-go-red is empty; `app/` has not had the same pass.
+5. **CH32X035's remaining `params:`** (DATA) — OPA, CMP1/2/3, USBFS/USBPD, TKEY (no EVT header
+   at all, so every write is a raw register), the ADC internal Vrefint channel on **both**
+   families, and USART LIN / SmartCard / IrDA. Still an `IN_EXTRACTION` entry in
+   `tests/completeness.test.js` with a live `TASKS.md` line, which means those cells print with
+   an owner rather than failing a shared gate — and become hard failures the day the line is
+   ticked.
+6. **`src-tauri` relinked and seen in a window.** `cargo build` is green and the Rust unit tests
+   run in the suite, but the round-4 changes to `write_project` have never been relinked into a
+   running exe — the old one was open at the time. **Do not claim the desktop path writes a
+   project until somebody has watched it.** `agents/STATUS.md` §6 item 7.
+7. **The acceptance script run end to end**, `agents/STATUS.md` §5, with the QA-PASS line posted
+   saying what failed.
+8. **More parts.** CH32V203 and CH32V307 have no DS/RM in `data/sources/` yet
+   (`agents/STATUS.md` §6 item 4). CH32V003 **is** extracted and reads 0 open. Adding a part is
+   meant to be a data job; every part that needs an engine change is a finding worth recording.
+9. **A human flashes one generated project.** `agents/STATUS.md` §6 item 8. It is the
+   highest-value open item in the repository and the only one nobody here can close.
 
 ---
+
 
 ## 5. Hardware / MCU status
 
@@ -600,9 +604,9 @@ the assumption note in `CH32V006.notes.md` can be marked confirmed.
   defects were found by writing that file and preparing this: `ci.yml` never installed
   PlatformIO at all, so the compile suites **skipped**, and the `desktop` job asked for
   `libappindicator3-dev`, which does not exist on a current Ubuntu runner (Tauri 2 needs
-  `libayatana-appindicator3-dev` plus `libxdo-dev`). Both are fixed. **What remains
-  unproven is that the workflows run** — they have never executed, and no local check can
-  substitute for that.
+  `libayatana-appindicator3-dev` plus `libxdo-dev`). Both are fixed. **What remained
+  unproven at that date was that the workflows run.** (**Closed 2026-09-12:** they ran — 31
+  times, red and unread — and are green on all three jobs now; §1 has the run URL.)
 - **Case-sensitive filesystems, found by preparing the above.** `data/sources/V003/` had
   landed as `evt/` and `datasheets/` while the other two parts and the tools say `Evt/`
   and `Datasheets/`. Everything passed here, because this box is case-insensitive; on the
@@ -818,13 +822,14 @@ They are not repeated here. What is left, in order:
    `--strict` on a peripheral nobody has modelled yet.
 2. **QA: E5, the breadth pass.** Seven packages in `layout.test.js` and
    `legibility.test.js`; LQFP64M at 60 I/O is the first genuine stress either has had.
-3. **QA: run `agents/WALKTHROUGH.md` end to end** and post where it fails. It is
+3. **QA: run `agents/STATUS.md` §5 end to end** and post where it fails. It is
    written to be runnable by someone who did not write it, and it has not been run this
    round.
-4. **QA: the stale-documentation greps** in `AGENT_3_QA_RELEASE.md` item 11. This file's
+4. **QA: the stale-documentation greps** in `agents/STATUS.md` §4, AGENT-3's P2. This file's
    live pointers at `Agents Rounds 4/` are fixed in the same commit as this rewrite; the
    remaining hits are history or a comment about history.
-5. **AGENT-3: re-audit or explicitly supersede the round-1 section of `agents/DONE.md`.**
+5. **AGENT-3: re-audit or explicitly supersede the round-1 section of
+   `agents/history/round6-pack/DONE.md`.**
    It still carries a "15 of 24" count from round 3 and most of what it calls open has
    since closed. A status nobody has checked is worse than no status.
 6. **A human flashes one generated project.** `HUMAN_TODO` 6, the highest-value open item

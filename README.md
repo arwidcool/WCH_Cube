@@ -77,9 +77,10 @@ WCH_CubeMX/
 ├── tests/                   QA suites + the runner (npm test)
 ├── tools/validate_mcu.py    checks an MCU file before you trust it
 ├── src-tauri/               desktop shell (Tauri 2)
-├── PROGRESS.md              where the project stands - read this first
-├── TASKS.md                 what is done, in progress and next
-└── agents/                  the three-agent working agreement (see "How this repo is built")
+├── PROGRESS.md              where the project stands, long form - read this first
+├── TASKS.md                 what is claimed, done and next
+└── agents/                  README (the agreement) + STATUS (the single source of
+                            truth) + BOARD (the log). See "How this repo is built"
 ```
 
 ## Run it in a browser
@@ -256,12 +257,20 @@ the details and `data/firmware/ARCHITECTURE.md` has the layering and ownership r
 ## How this repo is built
 
 Three Claude Code agents work on it in parallel — **DATA**, **APP** and **QA + RELEASE** —
-each owning a part of the tree so they never edit the same file. They coordinate only through
-`agents/BOARD.md` (append-only) and claim work in `TASKS.md`. `agents/` is the single agent
-working directory: `README.md` has the rules, `PROJECT.md` is the current round brief,
-`DONE.md` is the definition of done, and QA is the only agent that ticks it. Rounds 1–4 are
-archived under `agents/history/`. If you are picking the project up by hand, read `TASKS.md`
-first.
+each owning a part of the tree so they never edit the same file. `agents/` is the single agent
+working directory and it is **three files**, which every agent reads every time:
+
+| | |
+|---|---|
+| [`agents/README.md`](agents/README.md) | the working agreement — what the product is, who owns what, the work cycle, the gates, the handoff protocol |
+| [`agents/STATUS.md`](agents/STATUS.md) | **the single source of truth** — the measured state with the command that printed each number, the open list with an owner per row, what each agent has in flight right now, the acceptance script, what only a human can do, the backlog |
+| [`agents/BOARD.md`](agents/BOARD.md) | the append-only log: decisions, findings, requests between agents |
+
+Work is claimed and ticked in [`TASKS.md`](TASKS.md), and QA is the only agent that ticks a
+line in `STATUS.md` §2 — on evidence, named on the line. Closed rounds are archived under
+[`agents/history/`](agents/history/) and are never read during a work cycle. **If you are
+picking the project up by hand, read `agents/STATUS.md` first**; it is written so that somebody
+who has never seen the repo can resume whatever was in flight when the last session ended.
 
 ## Contributing
 
@@ -269,7 +278,7 @@ The two things that would help most, in order:
 
 1. **Flash one generated project and report what happened.** It is a five-minute job with any
    CH32V003/CH32V005/CH32V006/CH32X035/CH32L103/CH32H417 board and a WCH-Link, and it is the
-   only claim in this repository that nobody here can close. See [`agents/HUMAN_TODO.md`](agents/HUMAN_TODO.md).
+   only claim in this repository that nobody here can close. See [`agents/STATUS.md`](agents/STATUS.md) §6.
 2. **Add a part.** If your microcontroller is missing, [`docs/ADDING-A-PART.md`](docs/ADDING-A-PART.md)
    is the whole process — it is a data job, not a programming job, and it does not require
    understanding the engine.

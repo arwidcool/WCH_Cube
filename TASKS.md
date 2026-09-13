@@ -1,5 +1,12 @@
 # WCHCube — task tracker
 
+> **The tracker, not the status.** `agents/STATUS.md` is the single source of truth for where
+> the project stands; this file is where work is claimed `[~] (AGENT-n)` and ticked `[x]`.
+> **Its line text is load-bearing**: `tests/completeness.test.js` and
+> `tests/codegen_compile.test.js` read this file by path and look exemptions up by the wording
+> of the task they cite, so an exemption dies the day its line is ticked or removed. Edit a line
+> that an exemption cites only in the commit that retires the exemption.
+
 CubeMX-style pinout / peripheral / clock configurator for WCH MCUs.
 Update this file every session. Newest notes at the bottom of each section.
 
@@ -19,14 +26,12 @@ Three autonomous agents — **DATA / APP / QA+RELEASE** — work this file. The 
 
 | File | What it is |
 |---|---|
-| `agents/PROJECT.md` | the round brief — read first, every cycle |
-| `agents/AGENT_n_*.md` | your standing instructions + your "Current" section |
+| `agents/README.md` | the working agreement — ownership, the cycle, the gates, this box |
+| `agents/STATUS.md` | **the single source of truth** — the measured state, the open list with an owner per row, your standing brief and your Current, the acceptance script, the human-only items, the backlog |
 | `agents/BOARD.md` | the message board (append-only) — the ONLY board |
-| `agents/WALKTHROUGH.md` | the round-5 acceptance script |
-| `agents/PROMPT.txt` | the launcher prompt; only the agent number differs |
-| `PROGRESS.md` | where the project actually stands (AGENT-3 keeps it true) |
+| `PROGRESS.md` | the long-form public write-up of the same state (AGENT-3 keeps it true) |
 
-Claim with `[~] (AGENT-n)`. Communicate only via the board. Done = all of `agents/DONE.md`.
+Claim with `[~] (AGENT-n)`. Communicate only via the board. Done = all of `agents/STATUS.md` §2.
 `agents/` is the single agent working directory; rounds 1–4 are archived under `agents/history/`
 (`INDEX.md` says what each produced) and are read only when a decision is genuinely in question.
 ENGINE and UI were merged into APP in round 5 — one owner of `app/`.
@@ -503,7 +508,11 @@ Both EVT packages have landed: `data/sources/V006/Evt/` (988 files) and `data/so
 - [x] `tests/features.test.js` — evidence for the DONE.md feature lines + an engine coverage gate
 - [x] `.github/workflows/ci.yml` — Node 22 + Python 3.12: validate → build → stale-dist → tests, plus a Linux Tauri build
 - [x] README — browser, desktop, adding an MCU, the file format, the tests, the agent workflow
-- [ ] CI has never actually run: the repo has no remote. Needs a human to add one.
+- [x] CI has never actually run: the repo has no remote. Needs a human to add one.
+      **2026-09-12: both halves closed.** `origin` exists, and CI is green on all three jobs -
+      run 34723740365. What the line did not anticipate: once a remote existed the workflows
+      ran **31 times and failed every one, unread**, because the failure annotations were
+      aborted by `bash -eo pipefail` and 15 of 20 runs were cancelled by the next push.
 - [x] Engine unit tests reach 100% of `app/engine/*` exports (AGENT-2 closed it with `app/tests/api.test.js`)
 - [x] (AGENT-1 + AGENT-3) QFN12→LQFP144 overflow: AGENT-1 added LQFP64/100/144 to the dummy part; AGENT-3 swept every part × package × 4 rotations × mirrored at 1280/1920/2560 — 384 combinations, no overflow, no label collisions, no console output. Test proposed to AGENT-4 in `agents/proposals/layout-orientation.test.js`
 
@@ -601,7 +610,7 @@ registers. Three tests are red and none needs a data change; verified fixes are 
 
 ## Round 5 - every choice the app offers must be one the silicon can honour  (CURRENT)
 
-Brief: `agents/PROJECT.md`. Standing instructions `agents/AGENT_n_*.md`; the ONLY board is `agents/BOARD.md`; acceptance script `agents/WALKTHROUGH.md`; launcher `agents/run_agents.ps1`.
+Brief, standing instructions and acceptance script are all `agents/STATUS.md` (§2, §4, §5); the ONLY board is `agents/BOARD.md`. Round 6's items are added under this heading rather than a new one - see `agents/STATUS.md` §2 for which round a line belongs to.
 
 Three agents: DATA / APP / QA+RELEASE. Since round 5 `agents/` is the single agent working
 directory - rounds 1-4 are archived under `agents/history/` and `INDEX.md` says what each
@@ -615,7 +624,8 @@ and codegen - with CH32V006/CH32V005 byte-identical as the regression half.
 **B - every part generates C with no TODO and no #error**, so `--strict` exits 0. It exits 2
 today, blocked on `codegen.nvic`, `channel_params.channels` and the CH32X035 params gaps.
 
-Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT.md`.
+Per-line acceptance list and full detail: `agents/STATUS.md` §2 (round 6) and
+`agents/history/round6-pack/DONE.md` (rounds 1-5, the evidence record).
 
 ### Round 5 — open lines
 
@@ -681,11 +691,13 @@ Per-line acceptance list: `agents/DONE.md` Round 5. Full detail: `agents/PROJECT
       `data/sources/<evt>/Evt` not existing (with the case the tool spells) is the difference
       between a part that was checked and a part that was not. `tests/source_paths.test.js` catches
       this from the outside now; the tool should catch it from the inside too.
-- [ ] (AGENT-3) **The workflows have never executed.** `ci.yml` (3 jobs) and `release.yml` are
+- [x] (AGENT-3) **The workflows have never executed.** `ci.yml` (3 jobs) and `release.yml` are
       written and checked structurally, but no local check can substitute for a run on a real
-      runner — expect the first one to shake out a package name or a cache path. Unblocks on
-      `HUMAN_TODO` item 1. Also deferred: `pio check` in CI, and `tests/perf.test.js`, both from
-      `agents/BACKLOG.md`.
+      runner — expect the first one to shake out a package name or a cache path.
+      **Closed 2026-09-12: all three jobs green, run 34723740365.** It shook out more than a
+      package name - see `agents/STATUS.md` §2 A and
+      `tests/evidence/round6/2026-09-12-ci-30-failures.md`. Still deferred: `pio check` in CI
+      and `tests/perf.test.js`, both now in `agents/STATUS.md` §7 QA/RELEASE.
 - [x] (AGENT-1) **The constraint mechanism, DATA half.** Schema posted on the board BEFORE any
       entry was filled; `data/FORMAT.md` gains `## constraints` (mechanism, key table, the rules
       the validator enforces, how the three consumers read it, and why "must be a floating input"

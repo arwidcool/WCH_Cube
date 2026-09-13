@@ -575,7 +575,7 @@ const TRACKED_TODOS = [
 ];
 
 test('generated C contains no TODO or #error that is not a tracked data gap', async () => {
-  // `agents/DONE.md` has asked for zero TODOs since round 1, and round 3 repeats
+  // The pack has asked for zero TODOs since round 1, and round 3 repeats
   // it. cComplaints() reads back what the generator just wrote, in the two
   // spellings it writes: `#error "..."` at the start of a line, and `/* TODO: `.
   const eng = await import('../app/engine/index.js');

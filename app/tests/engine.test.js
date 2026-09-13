@@ -250,10 +250,10 @@ test('compute() stays under 5 ms on the biggest bundled package', () => {
 });
 
 // A 144-pin part does not exist in data/ yet (the largest bundled package is 48
-// pins), so the performance budget in agents/AGENT_2_APP.md is checked against
-// a synthetic one built here: 9 ports of 16 pins, 24 peripherals, 6 remaps each.
-// (It cited AGENT_2_ENGINE.md until round 6; ENGINE and UI were merged into APP in
-// round 5 and that file no longer exists.)
+// pins), so the performance budget in agents/STATUS.md (AGENT-2's block) is checked
+// against a synthetic one built here: 9 ports of 16 pins, 24 peripherals, 6 remaps
+// each. (It cited AGENT_2_ENGINE.md, then AGENT_2_APP.md; ENGINE and UI merged into
+// APP in round 5, and the eight-file pack became three in round 6.)
 function bigPart() {
   const ports = 'ABCDEFGHI'.split('');
   const names = ports.flatMap(p => Array.from({ length: 16 }, (_, i) => `P${p}${i}`));

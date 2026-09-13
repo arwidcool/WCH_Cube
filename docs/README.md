@@ -15,6 +15,7 @@ Two more, if you are picking the project up rather than using it:
 |---|---|
 | **[../PROGRESS.md](../PROGRESS.md)** | The honest current state, kept current, including what is broken and what has never been tested. Read this before believing anything else. |
 | **[../agents/README.md](../agents/README.md)** | The written working agreement the AI agents run under — ownership, the work cycle, the gates, and this machine's environment gotchas. |
+| **[../agents/STATUS.md](../agents/STATUS.md)** | **The single source of truth for where the work stands** — measured numbers with the command that printed each, the open list with an owner per row, each agent's in-flight task and last cycle, the acceptance script, what only a human can do, and the backlog. If you are picking this up mid-stream, read this one. |
 
 ## About these documents, and the images in them
 

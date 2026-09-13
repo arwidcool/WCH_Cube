@@ -129,7 +129,7 @@ export function gpioPlan() {
       // in anyway, but a hand-written `.wchproj`, or a mode DERIVED for a signal
       // nobody chose a mode for, can still arrive here. It must never become
       // plausible-looking bits: it becomes a TODO naming the constraint, exactly as
-      // a missing `gpio.modes` entry does (PROJECT.md A.2).
+      // a missing `gpio.modes` entry does (round 5's constraint rule; agents/STATUS.md).
       //
       // The pull is only part of the mode when the mode is Input - the SPL ignores
       // the pull column for every other mode - so that is when it is checked.
