@@ -24,9 +24,22 @@
 //  row per signal, one column per remap, no suffix in the name. Structurally independent
 //  from Table 2-1-1, so agreeing with it is evidence rather than a restatement.
 //
-//  WHAT IS ASSERTED. That the audit runs, reads both tables, and finds NO difference —
-//  names and pin sets both. Unlike `h417_af.test.js` there is no recorded difference set
-//  here: Table 2-2-x and the file agree completely, and any new difference is a defect.
+//  WHAT IS ASSERTED. That the audit runs, reads both tables, and finds no UN-ACCOUNTED-FOR
+//  difference. "Unaccounted-for" carries real weight, and is not "any difference we felt
+//  like waving off": the ONE shape this file accepts as a legitimate difference is a
+//  signal whose modeled pin set is a SUBSET of the DS's — never a superset, never a
+//  substitution, never a signal added or dropped whole, never a torn name — and only for a
+//  peripheral named in `KNOWN_NARROWED` below, with a citation for WHY the rest of the
+//  DS's pin set can never be reached. That is `data/coverage/<PART>.yaml`'s own
+//  `absent:`/`disagreements:` shape (a citation, not a silent patch) applied to this
+//  audit: AGENT-1 found the SDMMC's DS Table 2-2-12 is a `SDMMC_RM[1:0]` remap table, this
+//  part's `codegen.remap.style: af` forbids the `codegen.remap.fields` that could ever
+//  write it (`data/FORMAT.md:654-657`), so only `SDMMC_RM=00` — the reset default — is
+//  reachable through anything the generator emits (`AFIO_PCFR1.SDMMC_RM[1:0]`,
+//  `CH32H417RM.md:11741-11768`, Table 9-32; `agents/BOARD.md` 2026-09-13T20:23Z). DS-
+//  completeness and "never offer a choice the generator cannot reach" are both real rules;
+//  this is where they are reconciled — by recording which one wins, for which peripheral,
+//  and why, rather than by silently relaxing the check for everyone.
 // =============================================================================
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,6 +52,41 @@ suite('CH32H417 dedicated signals');
 const TOOL = path.join(ROOT, 'tools', 'audit_h417_dedicated.py');
 const DS = path.join(ROOT, 'data', 'sources', 'H417', 'Datasheets', 'CH32H417DS0.md');
 const MCU = path.join(ROOT, 'data', 'mcus', 'CH32H417.yaml');
+
+// A peripheral this audit may find NARROWER than the DS's signal-first table without
+// that being a defect — every entry needs the citation for WHY the rest of the DS's pin
+// set is unreachable, the same discipline `data/coverage/<PART>.yaml`'s `absent:` entries
+// already carry. This does not exist yet: it is EMPTY until AGENT-1's narrowed
+// `signal_pins:` actually lands, at which point the classifier below accepts it — a
+// signal named here whose file pin set turns out NOT to be a subset of the DS's still
+// fails, so this cannot silently cover a genuinely wrong pin.
+const KNOWN_NARROWED = {
+  // SDMMC: 'AFIO_PCFR1.SDMMC_RM[1:0] (CH32H417RM.md:11741-11768, Table 9-32) selects the '
+  //   + 'pin set; codegen.remap.style: af forbids codegen.remap.fields '
+  //   + '(data/FORMAT.md:654-657), so no emitter can ever write it - only SDMMC_RM=00, '
+  //   + 'the reset default, is reachable. agents/BOARD.md 2026-09-13T20:23Z.',
+};
+
+/** Parse the audit's `== {pid}: ...` header lines and per-signal `{s}: DS [...] file [...]`
+ *  difference lines out of its text output. Returns
+ *  `[{ pid, signal, ds: Set, file: Set }, ...]` for every pin-set difference found — MISSING/
+ *  NOT-IN-THE-DS/TORN-NAMES lines are deliberately NOT matched here, because none of those
+ *  shapes is ever an acceptable narrowing (a whole missing/extra/torn signal is a defect no
+ *  matter what peripheral it is in). */
+function pinSetDifferences(out) {
+  const pins = s => new Set((s.match(/'([^']+)'/g) || []).map(m => m.slice(1, -1)));
+  let pid = null;
+  const found = [];
+  for (const line of out.split('\n')) {
+    const header = /^==\s+(\S+):/.exec(line);
+    if (header) { pid = header[1]; continue; }
+    const diff = /^\s+([A-Za-z0-9]+):\s+DS\s+(\[[^\]]*\])\s+file\s+(\[[^\]]*\])\s*$/.exec(line);
+    if (diff && pid) found.push({ pid, signal: diff[1], ds: pins(diff[2]), file: pins(diff[3]) });
+  }
+  return found;
+}
+
+const isSubset = (small, big) => small.size > 0 && [...small].every(p => big.has(p));
 
 function runAudit() {
   const tried = [];
@@ -74,16 +122,56 @@ test('SDMMC and UHSIF match DS Tables 2-2-12 and 2-2-16, signal for signal', () 
   assert.ok(/== UHSIF: DS names 49 signals/.test(out),
     `the audit no longer reads 49 signals out of DS Table 2-2-16:\n${out}`);
 
-  assert.equal(res.status, 0,
-    'CH32H417\'s dedicated-function signals no longer match the DS\'s own signal-first '
-    + 'tables.\n'
-    + '    MISSING / NOT IN THE DS means a signal name or pin set changed. A name carrying '
-    + 'a `_<digit>` suffix or a trailing underscore is the AFIO_PCFR1 remap value read as '
-    + 'part of the name (DS Note 3) — the signal is the stem, and the remap value is not '
-    + 'part of it.\n'
-    + '    Regenerate with:  python tools/gen_h417_dedicated_pins.py && '
-    + 'python tools/gen_h417_peripherals.py --splice --refresh\n'
-    + `\n${out}`);
+  if (res.status !== 0) {
+    // The tool's own tally: every difference group it counted, of EVERY kind (missing,
+    // extra, pin-set, torn names). This is the number that must fully reconcile with what
+    // gets accepted below - if it does not, something other than a cited pin-set narrowing
+    // contributed to the failure, and no classification of pin-set lines can excuse that.
+    const totalBad = Number((/^(\d+) difference group\(s\)/m.exec(out) || [])[1] || -1);
+
+    // Every pin-set difference the audit printed, classified: accepted only when its
+    // peripheral is named in KNOWN_NARROWED AND the file's pins are a genuine, non-empty
+    // SUBSET of the DS's — never equal-but-different, never a superset, never empty.
+    const diffs = pinSetDifferences(out);
+    const accepted = [];
+    const unaccepted = [];
+    for (const d of diffs) {
+      const reason = KNOWN_NARROWED[d.pid];
+      (reason && isSubset(d.file, d.ds) ? accepted : unaccepted).push({ ...d, reason });
+    }
+    if (accepted.length) {
+      console.log(`      accepted as a cited narrowing, not a defect: ${accepted.length} signal(s)`);
+      for (const a of accepted) console.log(`        ${a.pid}.${a.signal}: DS ${[...a.ds].sort()} -> file ${[...a.file].sort()} (${a.reason})`);
+    }
+
+    assert.equal(unaccepted.length, 0,
+      `${unaccepted.length} pin-set difference(s) are not accounted for by KNOWN_NARROWED ` +
+      `(each needs its peripheral cited there with a reason, or the file's pin set is not ` +
+      `actually a subset of the DS's — a genuinely wrong pin, not a narrowing):\n` +
+      unaccepted.map(u => `    ${u.pid}.${u.signal}: DS ${[...u.ds].sort()}  file ${[...u.file].sort()}`).join('\n'));
+
+    // Every difference group the tool counted must be one of the pin-set lines this loop
+    // just accepted — if `totalBad` is bigger than `accepted.length`, a MISSING / NOT IN
+    // THE DS / TORN NAMES line (or a pin-set line for a peripheral not in KNOWN_NARROWED)
+    // is hiding in the same run, and accepting the pin-set lines must not paper over it.
+    assert.equal(totalBad, accepted.length,
+      'CH32H417\'s dedicated-function signals differ from the DS\'s own signal-first tables '
+      + 'in a way KNOWN_NARROWED does not account for - the tool counted more difference '
+      + `group(s) (${totalBad}) than this file accepted (${accepted.length}).\n`
+      + '    MISSING / NOT IN THE DS means a signal name changed. A name carrying a '
+      + '`_<digit>` suffix or a trailing underscore is the AFIO_PCFR1 remap value read as '
+      + 'part of the name (DS Note 3) — the signal is the stem, and the remap value is not '
+      + 'part of it.\n'
+      + '    Regenerate with:  python tools/gen_h417_dedicated_pins.py && '
+      + 'python tools/gen_h417_peripherals.py --splice --refresh\n'
+      + `\n${out}`);
+  } else {
+    assert.equal(Object.keys(KNOWN_NARROWED).length, 0,
+      'KNOWN_NARROWED names a peripheral but the audit found no difference for it - either '
+      + 'the exception is stale (the file agrees with the DS again; remove the entry) or it '
+      + 'is not being exercised, which is the "guard nobody has seen fire" failure this '
+      + 'repo keeps finding. Either way, do not leave an unused exception on record.');
+  }
 });
 
 test('the audit can fail: a torn signal name is caught', () => {
