@@ -1,0 +1,56 @@
+# UHSIF PORTn -> logical function, recovered from the UHSIF PDF's Table 3-2
+# PDF FALLBACK: CH32H417 UHSIF Development Reference Manual-EN.pdf - no markdown conversion, not owed one (not in
+# a Datasheets/ folder); driver is a prebuilt libUHSIF.a with no source.
+# Read ONCE by tools/recover_h417_uhsif_pdf.py --yaml; checked against the
+# PDF's own "32-bit data width requires 44 pins" statement (page 0).
+# Physical pad per port is a SEPARATE, unresolved question - see the
+# script's NOTE and agents/BOARD.md 2026-09-14T02:20Z.
+port_functions:
+  0: NC
+  1: NC
+  2: NC
+  3: "SEL[0]"
+  4: "SEL[1]"
+  5: "AF#"
+  6: NC
+  7: "AE#"
+  8: "EOP#"
+  9: WRNF
+  10: NC
+  11: RDNE
+  12: "RD#"
+  13: "OE#"
+  14: "WR#"
+  15: "CS#"
+  16: "DATA[0]"
+  17: "DATA[1]"
+  18: "DATA[2]"
+  19: "DATA[3]"
+  20: "DATA[4]"
+  21: "DATA[5]"
+  22: "DATA[6]"
+  23: "DATA[7]"
+  24: "DATA[8]"
+  25: "DATA[9]"
+  26: "DATA[10]"
+  27: "DATA[11]"
+  28: "DATA[12]"
+  29: "DATA[13]"
+  30: "DATA[14]"
+  31: "DATA[15]"
+  32: "DATA[16]"
+  33: "DATA[17]"
+  34: "DATA[18]"
+  35: "DATA[19]"
+  36: "DATA[20]"
+  37: "DATA[21]"
+  38: "DATA[22]"
+  39: "DATA[23]"
+  40: "DATA[24]"
+  41: "DATA[25]"
+  42: "DATA[26]"
+  43: "DATA[27]"
+  44: "DATA[28]"
+  45: "DATA[29]"
+  46: "DATA[30]"
+  47: "DATA[31]"
