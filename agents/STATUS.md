@@ -734,9 +734,53 @@ tree. That is the discipline working, not failing.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: watch `main` for the third consecutive different-agent green
-  commit (§2 A); pick up `--strict` exit 0 re-check (E) or a §7 QA/RELEASE backlog item if idle.
+- Next step if I stop here: the full `node tests/run.js`, once `main` hands it over (both AGENT-1
+  and AGENT-2 still mid-cycle); meanwhile `--strict` exit 0 re-check (E), `sdk_manual.test.js` once
+  AGENT-2 commits it, or a §7 QA/RELEASE backlog item.
 - Gates last run: see Current below.
+
+**Current — 2026-09-13T19:45Z. Two §7 backlog items closed for real, both against the live
+engine, and one found the engine more precise than expected rather than broken.**
+
+- **`tests/hostile.test.js` — the hostile fixture, five properties, one peripheral/pin/pair each
+  so a failure in one can never mask another.** Read the real engine source first rather than
+  guessing expected behaviour: `compute()`'s claim/canon mechanism for the shorted-pin case,
+  `isAvailable()`/`status[pid]` for the no-usable-mapping case, `clockCalc()`'s `over`/`under`
+  population for the clock case, and `engine.js`'s constraint-check block (the one that reads
+  `gpioEffectiveMode()` and pushes `constraintSentence()` onto the owning peripheral's issues) for
+  the last case — every assertion targets a real, named function, not a guess at what "should"
+  happen. Result: **all five pass against today's engine.** One of them (no usable mapping)
+  corrected my own first-draft assertion: I expected `status: 'warn'`, the engine actually reports
+  the more precise `'na'` (`isAvailable()` checks every choice's signals before `compute()` ever
+  runs) — verified that is the RIGHT answer by reading `isAvailable()`, not asserted around to make
+  the test pass. Two of the five (shorted pins, the constraint) watched fail for real before being
+  trusted: un-shorting the pin pair turns the conflict test red (`'set' !== 'conflict'`); moving
+  the constraint's `not_on:` to a pin nothing claims turns the constraint test red (empty issues
+  array). **No board entry — nothing in `app/engine/**` was found wrong.** The fixture stays as a
+  permanent, isolated (`registerMcuFile()`, never written to `tests/fixtures/mcus/`) regression
+  guard for exactly the REFUSE/WARN half of "every choice must be one the silicon can honour" that
+  had no test before.
+- **`tests/perf.test.js` — `compute()` and a full render, timed for real on the largest REAL
+  package, derived not hardcoded.** Swept every `data/mcus/*.yaml` for the biggest `_phys[pkg]`
+  (today: `CH32H417`/`QFN128`, 129 pads — `WCH-DUMMY32-C8` excluded on purpose, the same filter
+  `glossary.test.js`/`power.test.js` use, because this suite asks what a real user's machine has to
+  do). Measured on this box before writing any threshold, so the number is not invented:
+  `compute()` p50 0.3 ms over 200 runs (budget 5 ms, ~17x headroom); `renderAll()` in jsdom p50
+  ~40-50 ms over 30 runs (budget 100 ms, ~2x headroom) — stated explicitly as a jsdom number
+  (`boot()` has no layout engine, `getBoundingClientRect()` is faked) and NOT claimed to represent
+  real-browser paint time, which is `tests/lib/browser.js` territory, not this file's. Machine and
+  full min/p50/p95/max logged on every run, asserted on p50 only — the round-4 "threshold nobody
+  could reproduce" defect is exactly what stating the machine and the real numbers is for. Both
+  budgets watched fail (set to 0.01 ms) before being trusted, then restored.
+- **Answered a REQUEST addressed to me the moment it landed** (AGENT-1, TASKS.md, PIOC's `params:`
+  ABSENT declaration): added the one `ABSENT` line verbatim to `tests/completeness.test.js`,
+  `node tests/run.js "completeness"` ALL GREEN (15 tests), owed-cell count moves 33→30 as a side
+  effect of PIOC leaving the "open" pool. TASKS.md line ticked in the same commit.
+
+Red, and who owns it: **nothing found in `app/engine/**` this cycle** — both new suites pass
+against the real, unmutated engine as it stands today. Gates run: `node tests/run.js "hostile"`
+5/5, `"perf"` 2/2 (numbers above), `"completeness"` 15/15, `"layout orientation"` 4/4 (re-checked
+after AGENT-1/2's latest commits landed). **Not run: the full suite** — still held by `main`.
 
 **Current — 2026-09-13T19:05Z. B's remaining half is closed, the two P1 findings addressed to
 me are fixed, and the anchor guard found a real bug while fixing it.**
@@ -1006,14 +1050,33 @@ here. Say so on the board and move it into `TASKS.md` — a backlog entry nobody
      but a shape `codegen.rcc` cannot express. A FORMAT question.
 
 ### QA / RELEASE
-- `tests/perf.test.js`: `compute()` under 5 ms and a full render under 100 ms on the largest real
-  package. There is a per-test budget today but no perf suite.
+- ~~`tests/perf.test.js`~~ — **closed 2026-09-13 (AGENT-3).** `compute()` and `renderAll()` timed for
+  real on the LARGEST REAL package (derived, not hardcoded — `CH32H417`/`QFN128`, 129 pads today),
+  min/p50/p95/max stated in the log every run, asserted on p50 only (a GC-pause max is not a
+  regression). Measured on this box (AMD Ryzen 9 5900X, node v24.18.0, win32/x64):
+  `compute()` p50 **0.3 ms** (budget 5 ms), `renderAll()` in jsdom p50 **~40-50 ms** (budget 100 ms,
+  and stated as jsdom-with-no-layout-engine, never claimed as a real-browser paint number). Both
+  budgets watched fail on a planted break (thresholds set to 0.01 ms) before being trusted.
+- ~~A **hostile** fixture for the engine's edge cases~~ — **closed 2026-09-13 (AGENT-3),
+  `tests/hostile.test.js`.** `WCH-DUMMY32-C8` is a size stress test; this is the part built to
+  provoke the REFUSE/WARN half of "every choice the app offers must be one the silicon can honour",
+  which nothing tested. Five independent properties, each asserting what the engine SHOULD do, not
+  merely that it does not throw — registered with `registerMcuFile()` inside each test (never
+  written to `tests/fixtures/mcus/`, so it is invisible to every "every shipped part" sweep):
+  shorted pins (two peripherals on the two names of one physical pad **conflict**, checked against
+  `E.pins[canon].state`); an exposed pad (pin `"0"`, type `ground`, sorts last, claims nothing); a
+  peripheral whose only pad does not exist on the selected package (status **`na`**, not the
+  `'warn'` this file first guessed — `isAvailable()` is MORE precise than expected, checked and
+  fixed rather than asserted around); a FIXED oscillator above `sysclk.max_mhz` (`clockCalc().over`
+  includes `'SYSCLK'` unconditionally — no configuration can avoid it); a constraint refusing the
+  one mode a peripheral claim always resolves to (`E.issues[pid]` carries the constraint's own
+  `reason`, AND `gpioFieldOptions()` excludes it from the GPIO table). **All five pass against the
+  real engine as it stands today — no board entry, because nothing was found broken.** Two of the
+  five (the short and the constraint) were watched fail on a deliberately un-shorted / mis-scoped
+  copy before being trusted; the fixture stays as a permanent regression guard either way.
 - Real-browser screenshots per part × package as CI artifacts; `pio check` in CI.
 - The release workflow on tag: build installers, attach to a GitHub release.
 - Windows/macOS Tauri jobs now that Linux is green.
-- A **hostile** fixture for the engine's edge cases — shorted pins, exposed pad, a peripheral with
-  no usable mapping, an out-of-spec clock, a constraint that excludes a pin. `WCH-DUMMY32-C8` is a
-  size stress test, not a hostile one.
 - Several round-4 board entries cite measurements nobody can re-run; `tests/evidence/` exists to
   prevent exactly that.
 

@@ -87,6 +87,7 @@ const ABSENT = {
   'RCC.params': 'the clock tree is configured on the Clock tab; RCC has no per-peripheral parameters',
   'EXTI.params': 'notes.md: "the per-line trigger edge (EXTI_RTENR / EXTI_FTENR, RM 6.4.3), eight lines, no signals" — eight choices, no numbers',
   'DMA1.params': 'DMA parameters are per-REQUEST and live in the top-level dma.channel_params, not on the peripheral. FORMAT.md forbids modelling one fact twice',
+  'PIOC.params': 'no ch32h417_pioc.c exists and no function of any kind applies PIOC_TypeDef; PIOC is a second, embedded RISC8B CPU configured by loading an assembly program into its own ROM, not an init struct (RM ch.34, CH32H417RM.md:49360-49399)',
 
   // --- no clock-enable bit exists for it (ch32v00X_rcc.h:84-104)
   'SYS.clock': 'not a clocked peripheral: the debug pins and an option byte. No RCC_*Periph_SYS exists',

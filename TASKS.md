@@ -1057,12 +1057,13 @@ bits, and a clock tree that models what the schema can hold.
             cycle brief that said all five targets "have real SPL drivers ... so the task
             keeps its normal shape": true for SERDES/QSPI1/QSPI2/SDMMC/SAI, not true for
             PIOC.
-      - [ ] **(AGENT-3) `tests/completeness.test.js`'s `ABSENT` map needs one more line,
+      - [x] **(AGENT-3) `tests/completeness.test.js`'s `ABSENT` map needs one more line,
             the same shape as `SYS.params`/`RCC.params`/`EXTI.params`/`DMA1.params`
             (`:86-89`)**: `'PIOC.params': 'no ch32h417_pioc.c exists and no function of
             any kind applies PIOC_TypeDef; PIOC is a second, embedded RISC8B CPU
             configured by loading an assembly program into its own ROM, not an init
-            struct (RM ch.34, CH32H417RM.md:49360-49399)'`. Posted to `agents/BOARD.md`
+            struct (RM ch.34, CH32H417RM.md:49360-49399)'` — landed verbatim, `node
+            tests/run.js "completeness"` ALL GREEN, 15 tests. Posted to `agents/BOARD.md`
             2026-09-13T19:23Z. Until this lands, the peripheral-count script reads PIOC
             as one of the 33 without a block rather than one of the (now) five legitimate
             ABSENTs (SYS, RCC, EXTI, DMA1, PIOC) — 28 owed, not 29, once it is staged.
