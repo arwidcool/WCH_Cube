@@ -145,6 +145,9 @@ absent:
 # both rows a difference produces: "the DS puts this function on this pin and the
 # file does not route it there" and "the two readings differ" are the same fact.
 disagreements:
+  - { pin: PB12, token: LPTIM2_CH2,
+      reason: "Table 2-2-5 gives LPTIM2_CH2 two pads, PD11(AF3) and PB12(AF13); PB12's own Table 2-1-1 row is a complete, gapless AF0-15 enumeration in which AF13 is CMP_OUT, not LPTIM2_CH2 - the two tables flatly disagree and there is no third source (EVT/RM register text) that names LPTIM2_CH2's pad to break the tie. Neither is averaged; the file follows pin-first (Table 2-1-1) as it does everywhere else on this part, so LPTIM2_CH2 has only PD11 and PB12(AF13) stays CMP_OUT's (CH32H417.yaml:2359). A board built to Table 2-2-5 instead would wire LPTIM2_CH2 onto the comparator output pad",
+      source: "CH32H417DS0.md:6911 (Table 2-2-5 LPTIM2_CH2 row) vs CH32H417DS0.md:4522-4533 (Table 2-1-1 PB12 row, AF13 = CMP_OUT)" }
   - { pin: PE3, token: SERDES_TXP,
       reason: "Table 2-1-1 and Table 2-2-20 SWAP the SerDes transmit and receive pairs: pin-first reads PE3/PE4 = TXP/TXN and PE5/PE6 = RXP/RXN, signal-first reads PE3/PE4 = RXP/RXN and PE5/PE6 = TXP/TXN. Neither is averaged; the file follows pin-first (Table 2-1-1), which is where every other pad on this part comes from. A board built to the wrong reading has both differential pairs crossed, so this one wants silicon to settle it",
       source: "CH32H417DS0.md:3791 (Table 2-1-1 PE3 row: SERDES_TXP) vs CH32H417DS0.md:7341 (Table 2-2-20: SERDES_RXP on PE3)" }
