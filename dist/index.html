@@ -20035,20 +20035,60 @@ function pllDefaultState(p) {
 //  Taps (prescalers)
 // ---------------------------------------------------------------------------
 
-/** The sources a tap offers when its `source:` is a LIST, else null. */
-const tapSources = v => (v && Array.isArray(v.source) ? v.source.filter(Boolean) : null);
+/**
+ * One entry of a tap's `source:` LIST, normalised. A plain string is a bare clock
+ * signal with no built-in divider (`div: 1`); an object `{ name, source, div }` — the
+ * SAME shape a PLL's own `inputs:` entries already use — names a MUX LEG that divides
+ * its source before the signal ever reaches this tap. CH32H417's LTDC choice 01,
+ * "SERDES_PLL clock divided by 2" (`CH32H417RM.md:4085-4089`), is not a bare source:
+ * the mux itself carries a divider on that one leg, so the entry has to be able to
+ * say so. `name` is what the UI shows and what `S.clock.preSrc` stores — for a plain
+ * string it is the source name itself, so nothing here changes for the six muxes that
+ * do not need this.
+ */
+const normSrcEntry = e => (typeof e === 'string' ? { name: e, source: e, div: 1 }
+  : { name: e.name, source: e.source, div: e.div || 1 });
+
+/** The sources a tap offers when its `source:` is a LIST, as display/stored names,
+ * else null. Every existing caller that used this as "the list of source names" is
+ * unaffected: a plain-string entry's name IS the source name. */
+const tapSources = v => (v && Array.isArray(v.source)
+  ? v.source.filter(Boolean).map(e => normSrcEntry(e).name) : null);
+
+/** The full `{ name, source, div }` entries of a tap's source LIST, else null. */
+const tapSourceEntries = v => (v && Array.isArray(v.source)
+  ? v.source.filter(Boolean).map(normSrcEntry) : null);
 
 /**
- * The source a tap is taking RIGHT NOW: its single `source:`, or the chosen entry
- * of its list. A chosen value the file no longer offers falls back to the first —
- * the same rule the GPIO speed follows, and for the same reason: state that names
- * something the part does not have must never reach a frequency or the generated C.
+ * The entry a tap is taking RIGHT NOW, resolved to `{ name, source, div }`. A chosen
+ * NAME the file no longer offers falls back to the first entry — the same rule the
+ * GPIO speed follows, and for the same reason: state that names something the part
+ * does not have must never reach a frequency or the generated C.
+ */
+function tapSourceEntry(v, name, k) {
+  const list = tapSourceEntries(v);
+  if (!list) return v.source ? { name: v.source, source: v.source, div: 1 } : null;
+  const chosen = ((k || {}).preSrc || {})[name];
+  return list.find(e => e.name === chosen) || list[0];
+}
+
+/**
+ * The underlying clock SIGNAL a tap is taking right now — never the mux leg's own
+ * divider, only what feeds it. This is what the tree graph and every frequency-base
+ * lookup already used before a leg could carry a divider, so every caller of this
+ * function is unchanged; `tapMuxDiv()` below is the new half.
  */
 function tapSource(v, name, k) {
-  const list = tapSources(v);
-  if (!list) return v.source || null;
-  const chosen = ((k || {}).preSrc || {})[name];
-  return list.includes(chosen) ? chosen : list[0];
+  const e = tapSourceEntry(v, name, k);
+  return e ? e.source : null;
+}
+
+/** The divider the CURRENTLY chosen mux leg itself carries, independent of the tap's
+ * own `options:`/`k.pre`. 1 for a bare source or a plain-string entry, so a tap that
+ * does not need this computes exactly as it did before this existed. */
+function tapMuxDiv(v, name, k) {
+  const e = tapSourceEntry(v, name, k);
+  return (e && e.div) || 1;
 }
 
 // Initial clock state for an MCU's `clock:` block (null when the file has none).
@@ -20163,8 +20203,17 @@ function clockSelectable(m = M) {
     sys: [...c.sysclk.sources],
     pllIn: sysPll ? inputsOf(sysPll.def) : [],
     pllMul: sysPll ? [...(sysPll.def.multipliers || [])] : [],
-    pre: Object.fromEntries(pre.map(([n, v]) => [n, [...v.options]])),
+    // `options:` is not required on a tap whose ONLY divider lives in its mux legs
+    // (LTDC's choice 01, "SERDES_PLL clock divided by 2" — RM 4085-4089 — needs no
+    // separate divider select at all). `[...v.options]` on an absent `options:` used
+    // to throw; a tap that never needed this stays byte-for-byte, since every one
+    // already declares `options:`.
+    pre: Object.fromEntries(pre.map(([n, v]) => [n, [...(v.options || [])]])),
     preSrc: Object.fromEntries(pre.filter(([, v]) => tapSources(v)).map(([n, v]) => [n, tapSources(v)])),
+    // The FULL entries behind `preSrc`'s plain names, `{ name, source, div }` each —
+    // the UI's tree needs `.source` to draw the right edge for a leg whose display
+    // name ("SERDES_PLL /2") is not itself a node the tree otherwise knows.
+    preSrcEntries: Object.fromEntries(pre.filter(([, v]) => tapSources(v)).map(([n, v]) => [n, tapSourceEntries(v)])),
     plls,
   };
 }
@@ -20269,10 +20318,16 @@ function clockCalc(m = M, s = S) {
 
   const baseOf = (name, v) => {
     const s = tapSource(v, name, k);
-    if (!s || s === fp) return out.HCLK;
-    if (s === 'SYSCLK') return out.SYSCLK;
-    if (src[s] !== undefined) return src[s];
-    return out[s];                                 // PLLCLK, a named PLL output, another tap
+    let base;
+    if (!s || s === fp) base = out.HCLK;
+    else if (s === 'SYSCLK') base = out.SYSCLK;
+    else base = src[s] !== undefined ? src[s] : out[s];  // PLLCLK, a named PLL output, another tap
+    if (base === undefined) return undefined;
+    // The MUX LEG's own divider, if the chosen entry carries one — applied here,
+    // before this tap's own `options:`/`k.pre`, because RM 4085-4089's "SERDES_PLL
+    // clock divided by 2" is a property of picking THAT leg, not a separate dial.
+    const md = tapMuxDiv(v, name, k);
+    return md !== 1 ? base / md : base;
   };
   const taps = Object.entries(p).filter(([n]) => n !== fp);
   const unresolved = [...taps];
@@ -23027,7 +23082,13 @@ function rccFill(w, spec, k) {
   for (const [name, sp] of Object.entries(spec.sources || {})) {
     const v = (M.clock.prescalers || {})[name];
     if (!v) continue;
-    w.put(sp, tapSource(v, name, k), `${name} clock source`);
+    // The register field selects a MUX LEG, not a bare clock signal — two legs can
+    // share the same underlying source with different built-in dividers (RM
+    // 4085-4089's "SERDES_PLL clock divided by 2"), and only the entry's own NAME
+    // tells them apart. Unchanged for every existing mux: a plain-string entry's
+    // name IS the source, so `values:` is still keyed exactly as it always was.
+    const chosen = tapSourceEntry(v, name, k);
+    w.put(sp, chosen ? chosen.name : null, `${name} clock source`);
   }
   for (const [name, sp] of Object.entries(spec.prescalers || {})) w.put(sp, (k.pre || {})[name], `${name} prescaler`);
   for (const [id, sp] of Object.entries(spec.plls || {})) {
@@ -23472,9 +23533,16 @@ function rccSection() {
   }
   for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
     if (name === fp) continue;
-    // A tap whose source is a mux says which side of it this configuration picked.
-    const from = tapSources(v) ? `${tapSource(v, name, k)} ` : '';
-    L.push(`    /* ${name} ${from}/${k.pre[name]} -> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
+    // A tap whose source is a mux says which side of it this configuration picked -
+    // the LEG's own name, so a divider the leg itself carries ("SERDES_PLL /2") reads
+    // in the comment rather than only the bare signal it divides.
+    const chosen = tapSourceEntry(v, name, k);
+    const from = tapSources(v) ? `${chosen.name} ` : '';
+    // A tap whose only divider lives in its mux legs (RM 4085-4089's shape) has no
+    // `k.pre[name]` to print - the "/<n>" is the tap's OWN options divider, and there
+    // is nothing to say when the file gives it none.
+    const div = k.pre[name] !== undefined ? `/${k.pre[name]} ` : '';
+    L.push(`    /* ${name} ${from}${div}-> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
       : v.target_mhz ? ` (must be ${v.target_mhz} MHz)` : ''} */`);
   }
   if (r.over.length) L.push(`    /* WARNING: out of specification: ${r.over.join(', ')} */`);
@@ -25684,9 +25752,16 @@ function renderChip() {
     // cannot collide with the neighbouring pin's label at any pitch.
     if ((info || ul) && !hidden) {
       const lc = 'siglabel' + (info && info.state === 'conflict' ? ' conflict' : '');
+      // `data-test="pin-user-label"` is a TEST CONTRACT, not a styling hook - QA plants
+      // a mutation against it (agents/BOARD.md 2026-09-13, "features > a user label set
+      // on a pin shows on the chip and in the export" was the one gate on the
+      // gates-that-cannot-go-red list with no anchor that survives a renderer refactor).
+      // `.userlabel` is free to be renamed or restyled; this attribute is not \u2014 treat a
+      // rename here as a breaking change to another agent's test, the same as a public
+      // export.
       const txt = (info ? esc(info.label) : '')
         + (info && ul ? `<tspan class="lsep">\u00a0\u00b7\u00a0</tspan>` : '')
-        + (ul ? `<tspan class="userlabel">${esc(ul)}</tspan>` : '');
+        + (ul ? `<tspan class="userlabel" data-test="pin-user-label">${esc(ul)}</tspan>` : '');
       const off = 22;
       if (p.side === 0) g.push(`<text class="${lc}" x="${p.x - off}" y="${cy + 4}" text-anchor="end">${txt}</text>`);
       if (p.side === 2) g.push(`<text class="${lc}" x="${p.x + w + off}" y="${cy + 4}" text-anchor="start">${txt}</text>`);
@@ -27498,9 +27573,15 @@ function renderClock() {
   const nodes = [], edges = [], byId = {};
   const node = (id, col, o) => { const n = Object.assign({ id, col, w: COLW[col] || 200 }, o); nodes.push(n); byId[id] = n; return n; };
   const edge = (from, to, active) => { if (byId[from] && byId[to]) edges.push({ from, to, active: !!active }); };
-  const preSel = n => `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
-    + (sel.pre[n] || c.prescalers[n].options)
-      .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  // A tap whose only divider lives in its mux legs (RM 4085-4089's "SERDES_PLL clock
+  // divided by 2" shape) needs no separate options: draws nothing, exactly like
+  // srcSel() below draws nothing for a tap with one fixed source.
+  const preSel = n => {
+    const opts = sel.pre[n] || c.prescalers[n].options || [];
+    if (!opts.length) return '';
+    return `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
+      + opts.map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  };
   // A tap whose `source:` is a LIST is a mux. The <select> is drawn from
   // clockCalc().selectable.preSrc - the file's whole list - and a tap with one source
   // draws nothing at all, so a part without muxes gains no control it cannot use.
@@ -27625,8 +27706,16 @@ function renderClock() {
   for (const [name, v] of Object.entries(c.prescalers || {})) {
     if (name === fp) continue;
     const list = (sel.preSrc || {})[name];
-    const chosen = list ? (((k.preSrc || {})[name] !== undefined && list.includes(k.preSrc[name])) ? k.preSrc[name] : list[0]) : v.source;
-    prebase[name] = { base: baseNodeOf(chosen), all: (list || [chosen]).map(s => ({ s, node: baseNodeOf(s) })) };
+    // A mux leg's DISPLAY name ("SERDES_PLL /2") is not itself a graph node when the
+    // leg carries its own divider (RM 4085-4089's shape) - only its `.source` is, so
+    // edges resolve through the full entries rather than the bare name list.
+    const entries = (sel.preSrcEntries || {})[name];
+    const chosenName = list ? (((k.preSrc || {})[name] !== undefined && list.includes(k.preSrc[name])) ? k.preSrc[name] : list[0]) : v.source;
+    const chosenSrc = entries ? (entries.find(e => e.name === chosenName) || entries[0]).source : chosenName;
+    prebase[name] = {
+      base: baseNodeOf(chosenSrc),
+      all: (entries || [{ name: chosenName, source: chosenSrc }]).map(e => ({ s: e.name, node: baseNodeOf(e.source) })),
+    };
     const lim = [v.min_mhz ? `min ${v.min_mhz}` : '', v.max_mhz ? `max ${v.max_mhz}` : '', v.target_mhz ? `must be ${v.target_mhz}` : ''].filter(Boolean).join(', ');
     node('pre:' + name, COL.tap, {
       title: v.label || `${name} prescaler`, body: srcSel(name) + preSel(name),

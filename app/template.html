@@ -1226,9 +1226,16 @@ function renderChip() {
     // cannot collide with the neighbouring pin's label at any pitch.
     if ((info || ul) && !hidden) {
       const lc = 'siglabel' + (info && info.state === 'conflict' ? ' conflict' : '');
+      // `data-test="pin-user-label"` is a TEST CONTRACT, not a styling hook - QA plants
+      // a mutation against it (agents/BOARD.md 2026-09-13, "features > a user label set
+      // on a pin shows on the chip and in the export" was the one gate on the
+      // gates-that-cannot-go-red list with no anchor that survives a renderer refactor).
+      // `.userlabel` is free to be renamed or restyled; this attribute is not \u2014 treat a
+      // rename here as a breaking change to another agent's test, the same as a public
+      // export.
       const txt = (info ? esc(info.label) : '')
         + (info && ul ? `<tspan class="lsep">\u00a0\u00b7\u00a0</tspan>` : '')
-        + (ul ? `<tspan class="userlabel">${esc(ul)}</tspan>` : '');
+        + (ul ? `<tspan class="userlabel" data-test="pin-user-label">${esc(ul)}</tspan>` : '');
       const off = 22;
       if (p.side === 0) g.push(`<text class="${lc}" x="${p.x - off}" y="${cy + 4}" text-anchor="end">${txt}</text>`);
       if (p.side === 2) g.push(`<text class="${lc}" x="${p.x + w + off}" y="${cy + 4}" text-anchor="start">${txt}</text>`);
@@ -3040,9 +3047,15 @@ function renderClock() {
   const nodes = [], edges = [], byId = {};
   const node = (id, col, o) => { const n = Object.assign({ id, col, w: COLW[col] || 200 }, o); nodes.push(n); byId[id] = n; return n; };
   const edge = (from, to, active) => { if (byId[from] && byId[to]) edges.push({ from, to, active: !!active }); };
-  const preSel = n => `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
-    + (sel.pre[n] || c.prescalers[n].options)
-      .map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  // A tap whose only divider lives in its mux legs (RM 4085-4089's "SERDES_PLL clock
+  // divided by 2" shape) needs no separate options: draws nothing, exactly like
+  // srcSel() below draws nothing for a tap with one fixed source.
+  const preSel = n => {
+    const opts = sel.pre[n] || c.prescalers[n].options || [];
+    if (!opts.length) return '';
+    return `<select data-pre="${attr(n)}" aria-label="${attr(c.prescalers[n].label || n + ' prescaler')}">`
+      + opts.map(o => `<option value="${o}"${String(o) === String(k.pre[n]) ? ' selected' : ''}>/${o}</option>`).join('') + '</select>';
+  };
   // A tap whose `source:` is a LIST is a mux. The <select> is drawn from
   // clockCalc().selectable.preSrc - the file's whole list - and a tap with one source
   // draws nothing at all, so a part without muxes gains no control it cannot use.
@@ -3167,8 +3180,16 @@ function renderClock() {
   for (const [name, v] of Object.entries(c.prescalers || {})) {
     if (name === fp) continue;
     const list = (sel.preSrc || {})[name];
-    const chosen = list ? (((k.preSrc || {})[name] !== undefined && list.includes(k.preSrc[name])) ? k.preSrc[name] : list[0]) : v.source;
-    prebase[name] = { base: baseNodeOf(chosen), all: (list || [chosen]).map(s => ({ s, node: baseNodeOf(s) })) };
+    // A mux leg's DISPLAY name ("SERDES_PLL /2") is not itself a graph node when the
+    // leg carries its own divider (RM 4085-4089's shape) - only its `.source` is, so
+    // edges resolve through the full entries rather than the bare name list.
+    const entries = (sel.preSrcEntries || {})[name];
+    const chosenName = list ? (((k.preSrc || {})[name] !== undefined && list.includes(k.preSrc[name])) ? k.preSrc[name] : list[0]) : v.source;
+    const chosenSrc = entries ? (entries.find(e => e.name === chosenName) || entries[0]).source : chosenName;
+    prebase[name] = {
+      base: baseNodeOf(chosenSrc),
+      all: (entries || [{ name: chosenName, source: chosenSrc }]).map(e => ({ s: e.name, node: baseNodeOf(e.source) })),
+    };
     const lim = [v.min_mhz ? `min ${v.min_mhz}` : '', v.max_mhz ? `max ${v.max_mhz}` : '', v.target_mhz ? `must be ${v.target_mhz}` : ''].filter(Boolean).join(', ');
     node('pre:' + name, COL.tap, {
       title: v.label || `${name} prescaler`, body: srcSel(name) + preSel(name),

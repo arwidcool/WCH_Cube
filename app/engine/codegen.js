@@ -41,7 +41,7 @@ import {
 import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
 import { E, compute } from './engine.js';
 import { generatorOption, userSection } from './export.js';
-import { clockCalc, firstPre, pllList, pllState, tapSource, tapSources } from './clock.js';
+import { clockCalc, firstPre, pllList, pllState, tapSource, tapSources, tapSourceEntry } from './clock.js';
 import { PROJECT } from './project.js';
 import {
   constraintFor, constraintSentence, skippedClaim, gpioEffectiveMode,
@@ -416,7 +416,13 @@ function rccFill(w, spec, k) {
   for (const [name, sp] of Object.entries(spec.sources || {})) {
     const v = (M.clock.prescalers || {})[name];
     if (!v) continue;
-    w.put(sp, tapSource(v, name, k), `${name} clock source`);
+    // The register field selects a MUX LEG, not a bare clock signal — two legs can
+    // share the same underlying source with different built-in dividers (RM
+    // 4085-4089's "SERDES_PLL clock divided by 2"), and only the entry's own NAME
+    // tells them apart. Unchanged for every existing mux: a plain-string entry's
+    // name IS the source, so `values:` is still keyed exactly as it always was.
+    const chosen = tapSourceEntry(v, name, k);
+    w.put(sp, chosen ? chosen.name : null, `${name} clock source`);
   }
   for (const [name, sp] of Object.entries(spec.prescalers || {})) w.put(sp, (k.pre || {})[name], `${name} prescaler`);
   for (const [id, sp] of Object.entries(spec.plls || {})) {
@@ -861,9 +867,16 @@ function rccSection() {
   }
   for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
     if (name === fp) continue;
-    // A tap whose source is a mux says which side of it this configuration picked.
-    const from = tapSources(v) ? `${tapSource(v, name, k)} ` : '';
-    L.push(`    /* ${name} ${from}/${k.pre[name]} -> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
+    // A tap whose source is a mux says which side of it this configuration picked -
+    // the LEG's own name, so a divider the leg itself carries ("SERDES_PLL /2") reads
+    // in the comment rather than only the bare signal it divides.
+    const chosen = tapSourceEntry(v, name, k);
+    const from = tapSources(v) ? `${chosen.name} ` : '';
+    // A tap whose only divider lives in its mux legs (RM 4085-4089's shape) has no
+    // `k.pre[name]` to print - the "/<n>" is the tap's OWN options divider, and there
+    // is nothing to say when the file gives it none.
+    const div = k.pre[name] !== undefined ? `/${k.pre[name]} ` : '';
+    L.push(`    /* ${name} ${from}${div}-> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
       : v.target_mhz ? ` (must be ${v.target_mhz} MHz)` : ''} */`);
   }
   if (r.over.length) L.push(`    /* WARNING: out of specification: ${r.over.join(', ')} */`);

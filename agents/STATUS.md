@@ -631,15 +631,60 @@ RM's worked example, or it does not ship.
   by shipping one shape (`pllsrc` cannot express CH32H417's source+divider PLL input).
 - **Font-fallback finding (§3, 23:04Z)** — partial: `#mcu-meta` text shortened, provably narrows
   the gap, not verified closed (no Linux box here).
-- **Idle** — §7 APP; USBHS_PLL's other three inputs and the mux-with-its-own-divider shape (§2 D,
-  REQUESTs from AGENT-1, 01:14Z) once AGENT-1 says whether they are still wanted now the layout
-  blocker is gone.
+- **P0 (round exit criterion)** — ~~a mux entry that carries its own divider~~ **done.** LTDC
+  unblocked; three of the other six remaining muxes may need the identical shape.
+- **`data-test="pin-user-label"` hook** — ~~deliverable B's last gates-that-cannot-go-red entry~~
+  **done.**
+- **Idle** — §7 APP; USBHS_PLL's other three inputs (§2 D REQUEST from AGENT-1, 01:14Z), item 7
+  and item 2's data halves (both on AGENT-1/AGENT-3), once anyone answers.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: §7 APP backlog, or AGENT-1's answer on item 7 (FORMAT question) /
-  the USBHS_PLL-inputs and mux-divider REQUESTs.
+- Next step if I stop here: §7 APP backlog, or whichever REQUEST/FINDING addressed to AGENT-1 (item
+  7, item 2, USBHS_PLL inputs) gets answered first.
 - Gates last run: see Current below, at the tree's HEAD this cycle produced.
+
+**Current — 2026-09-13, cycle 3. The last engine piece of the round's exit criterion, plus a small
+hook for AGENT-3.**
+
+- **P0 — a mux entry that carries its own divider.** The case: CH32H417's LTDC choice 01 is
+  "SERDES_PLL clock divided by 2" (RM:4085-4089), not a bare source; STATUS §2 D said four of the
+  seven remaining muxes need it. A `source:` LIST entry may now be an OBJECT `{ name, source, div }`
+  — the same shape a PLL's own `inputs:` entries already use — instead of a bare string. Provably
+  backward compatible, not merely argued: a plain string entry normalises to
+  `{ name: s, source: s, div: 1 }`, so USBFS (the only mux actually shipped) is unaffected, checked
+  directly in `app/tests/clock_mux_leg_div.test.js`'s last test and by the full 26-test
+  `clockmux`/`clockmux_ui` suite staying green throughout, including the real CH32H417 check.
+  `app/engine/clock.js` gained `tapSourceEntries()`/`tapSourceEntry()`/`tapMuxDiv()` beside the
+  existing `tapSources()`/`tapSource()` (whose return semantics did NOT change — still the
+  underlying source, never the leg's divider — so the tree's edge-drawing and topology code needed
+  no change, only `clockCalc()`'s frequency math gained the extra division). `codegen.js`'s
+  `rccFill()` now keys the RCC register value on the CHOSEN LEG'S OWN NAME rather than the bare
+  source, because two legs can share one source with different built-in dividers and only the name
+  tells them apart — for every existing mux this is the exact same string as before (name ===
+  source). `app/template.html`'s edge-drawing resolves through `.source` now, not the display name
+  (a leg's label, "SERDES_PLL /2", is not itself a graph node); `preSel()` draws nothing for a tap
+  whose only divider is its mux, rather than the actual bug this shape exposed — `[...v.options]`
+  on an absent `options:` THROWS, a real crash the old code had simply never been asked to survive.
+  6 tests, `node tests/run.js "clock_mux_leg_div"`. Planted break seen red on the pre-mechanism
+  engine: `git stash` `clock.js`/`codegen.js`/`template.html` to `913aeb6` — **5 of 6 fail**, one of
+  them the `v.options is not iterable` crash quoted above, not merely a wrong number. Restored, all
+  green. Verified in a real browser (this paints): a synthetic two-leg mux spliced in at runtime —
+  both legs draw, no empty divider select, switching legs recomputes the value live (48 MHz → 300
+  MHz on the same part), console silent. Full regression: `app/tests` 524/524, `strict` 25/25,
+  `codegen_compile` 18/18, `clockmux` 26/26, `legibility` 8/8, `layout` 20/20. Worked LTDC example
+  posted to `agents/BOARD.md` 20:10Z, with the caveat that only the muxes whose OWN RM table says
+  "divided by N" need the object shape — the rest of the seven may just be bare-source lists.
+- **`data-test="pin-user-label"` hook**, for AGENT-3's deliverable B gap
+  (`tests/evidence/round6/2026-09-13-gates-without-a-plant.md:22-28`): the pin-label renderer's
+  `<tspan class="userlabel">` (`app/template.html`, the chip SVG label pass) carries
+  `data-test="pin-user-label"` now, with a comment marking it a TEST CONTRACT distinct from the
+  styling class, so a future refactor renaming `.userlabel` does not silently break the anchor
+  again. Verified present in a real browser after setting a label and re-rendering.
+
+Red, and who owns it: **nothing.** `python build.py` run three times this cycle overall (told each
+time) — twice for the mux-divider work (before/after measuring), once more after the data-test
+hook to confirm it in a real browser.
 
 **Current — 2026-09-13, cycle 2. Six more items, and the round's own rule caught ME once
 mid-cycle: I made a decision, measured it, and it was wrong.**

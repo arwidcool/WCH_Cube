@@ -78,20 +78,60 @@ function pllDefaultState(p) {
 //  Taps (prescalers)
 // ---------------------------------------------------------------------------
 
-/** The sources a tap offers when its `source:` is a LIST, else null. */
-export const tapSources = v => (v && Array.isArray(v.source) ? v.source.filter(Boolean) : null);
+/**
+ * One entry of a tap's `source:` LIST, normalised. A plain string is a bare clock
+ * signal with no built-in divider (`div: 1`); an object `{ name, source, div }` — the
+ * SAME shape a PLL's own `inputs:` entries already use — names a MUX LEG that divides
+ * its source before the signal ever reaches this tap. CH32H417's LTDC choice 01,
+ * "SERDES_PLL clock divided by 2" (`CH32H417RM.md:4085-4089`), is not a bare source:
+ * the mux itself carries a divider on that one leg, so the entry has to be able to
+ * say so. `name` is what the UI shows and what `S.clock.preSrc` stores — for a plain
+ * string it is the source name itself, so nothing here changes for the six muxes that
+ * do not need this.
+ */
+const normSrcEntry = e => (typeof e === 'string' ? { name: e, source: e, div: 1 }
+  : { name: e.name, source: e.source, div: e.div || 1 });
+
+/** The sources a tap offers when its `source:` is a LIST, as display/stored names,
+ * else null. Every existing caller that used this as "the list of source names" is
+ * unaffected: a plain-string entry's name IS the source name. */
+export const tapSources = v => (v && Array.isArray(v.source)
+  ? v.source.filter(Boolean).map(e => normSrcEntry(e).name) : null);
+
+/** The full `{ name, source, div }` entries of a tap's source LIST, else null. */
+export const tapSourceEntries = v => (v && Array.isArray(v.source)
+  ? v.source.filter(Boolean).map(normSrcEntry) : null);
 
 /**
- * The source a tap is taking RIGHT NOW: its single `source:`, or the chosen entry
- * of its list. A chosen value the file no longer offers falls back to the first —
- * the same rule the GPIO speed follows, and for the same reason: state that names
- * something the part does not have must never reach a frequency or the generated C.
+ * The entry a tap is taking RIGHT NOW, resolved to `{ name, source, div }`. A chosen
+ * NAME the file no longer offers falls back to the first entry — the same rule the
+ * GPIO speed follows, and for the same reason: state that names something the part
+ * does not have must never reach a frequency or the generated C.
+ */
+export function tapSourceEntry(v, name, k) {
+  const list = tapSourceEntries(v);
+  if (!list) return v.source ? { name: v.source, source: v.source, div: 1 } : null;
+  const chosen = ((k || {}).preSrc || {})[name];
+  return list.find(e => e.name === chosen) || list[0];
+}
+
+/**
+ * The underlying clock SIGNAL a tap is taking right now — never the mux leg's own
+ * divider, only what feeds it. This is what the tree graph and every frequency-base
+ * lookup already used before a leg could carry a divider, so every caller of this
+ * function is unchanged; `tapMuxDiv()` below is the new half.
  */
 export function tapSource(v, name, k) {
-  const list = tapSources(v);
-  if (!list) return v.source || null;
-  const chosen = ((k || {}).preSrc || {})[name];
-  return list.includes(chosen) ? chosen : list[0];
+  const e = tapSourceEntry(v, name, k);
+  return e ? e.source : null;
+}
+
+/** The divider the CURRENTLY chosen mux leg itself carries, independent of the tap's
+ * own `options:`/`k.pre`. 1 for a bare source or a plain-string entry, so a tap that
+ * does not need this computes exactly as it did before this existed. */
+export function tapMuxDiv(v, name, k) {
+  const e = tapSourceEntry(v, name, k);
+  return (e && e.div) || 1;
 }
 
 // Initial clock state for an MCU's `clock:` block (null when the file has none).
@@ -206,8 +246,17 @@ export function clockSelectable(m = M) {
     sys: [...c.sysclk.sources],
     pllIn: sysPll ? inputsOf(sysPll.def) : [],
     pllMul: sysPll ? [...(sysPll.def.multipliers || [])] : [],
-    pre: Object.fromEntries(pre.map(([n, v]) => [n, [...v.options]])),
+    // `options:` is not required on a tap whose ONLY divider lives in its mux legs
+    // (LTDC's choice 01, "SERDES_PLL clock divided by 2" — RM 4085-4089 — needs no
+    // separate divider select at all). `[...v.options]` on an absent `options:` used
+    // to throw; a tap that never needed this stays byte-for-byte, since every one
+    // already declares `options:`.
+    pre: Object.fromEntries(pre.map(([n, v]) => [n, [...(v.options || [])]])),
     preSrc: Object.fromEntries(pre.filter(([, v]) => tapSources(v)).map(([n, v]) => [n, tapSources(v)])),
+    // The FULL entries behind `preSrc`'s plain names, `{ name, source, div }` each —
+    // the UI's tree needs `.source` to draw the right edge for a leg whose display
+    // name ("SERDES_PLL /2") is not itself a node the tree otherwise knows.
+    preSrcEntries: Object.fromEntries(pre.filter(([, v]) => tapSources(v)).map(([n, v]) => [n, tapSourceEntries(v)])),
     plls,
   };
 }
@@ -312,10 +361,16 @@ export function clockCalc(m = M, s = S) {
 
   const baseOf = (name, v) => {
     const s = tapSource(v, name, k);
-    if (!s || s === fp) return out.HCLK;
-    if (s === 'SYSCLK') return out.SYSCLK;
-    if (src[s] !== undefined) return src[s];
-    return out[s];                                 // PLLCLK, a named PLL output, another tap
+    let base;
+    if (!s || s === fp) base = out.HCLK;
+    else if (s === 'SYSCLK') base = out.SYSCLK;
+    else base = src[s] !== undefined ? src[s] : out[s];  // PLLCLK, a named PLL output, another tap
+    if (base === undefined) return undefined;
+    // The MUX LEG's own divider, if the chosen entry carries one — applied here,
+    // before this tap's own `options:`/`k.pre`, because RM 4085-4089's "SERDES_PLL
+    // clock divided by 2" is a property of picking THAT leg, not a separate dial.
+    const md = tapMuxDiv(v, name, k);
+    return md !== 1 ? base / md : base;
   };
   const taps = Object.entries(p).filter(([n]) => n !== fp);
   const unresolved = [...taps];

@@ -1253,6 +1253,32 @@ bits, and a clock tree that models what the schema can hold.
       ("960 KB flash · 896 KB SRAM" → "960K flash · 896K SRAM") - provably narrows the 181px-in-
       168px gap the finding measured, not provably closes it (no Linux box or fallback font here
       to re-measure against). Flagged as still open on STATUS §3, not claimed closed.
+- [x] (AGENT-2) **A mux entry that carries its own divider — the last engine piece of the round's
+      exit criterion** ("the app computing a USB **and an LTDC** clock"). CH32H417's LTDC choice
+      01 is "SERDES_PLL clock divided by 2" (RM:4085-4089), not a bare source; four of the seven
+      remaining muxes need the same shape. A tap's `source:` LIST entry may now be an OBJECT
+      `{ name, source, div }` — the same shape a PLL's own `inputs:` entries already use — instead
+      of a bare string; a plain string still normalises to `{ name: s, source: s, div: 1 }`, so
+      USBFS (the only mux shipped) is provably unaffected. `app/engine/clock.js`
+      (`tapSourceEntries()`/`tapSourceEntry()`/`tapMuxDiv()`), `codegen.js` (`rccFill()` now keys
+      the register value on the LEG's own name, not the bare source — two legs can share a
+      source), `app/template.html` (edge-drawing resolves `.source`, not the display name;
+      `preSel()` draws nothing for a tap whose only divider is its mux, instead of throwing on a
+      missing `options:` — a real pre-existing crash this shape exposed). 6 tests,
+      `app/tests/clock_mux_leg_div.test.js`, planted break seen red (`git stash` clock.js/
+      codegen.js/template.html to `913aeb6`: 5 of 6 fail, incl. the crash). Verified in a real
+      browser: two-leg mux draws, no empty divider select, switching legs recomputes live, console
+      silent. Full regression: `app/tests` 524/524, `strict` 25/25, `codegen_compile` 18/18,
+      `clockmux` 26/26, `legibility` 8/8, `layout` 20/20. Worked LTDC example on `agents/BOARD.md`
+      20:10Z; the remaining muxes (RNG, I2S2, I2S3, UHSIF, HSADC, ETH1G) get the same treatment
+      only where their own RM table says so.
+- [x] (AGENT-2) **`data-test="pin-user-label"` hook** — closes deliverable B's remaining gate
+      (`tests/evidence/round6/2026-09-13-gates-without-a-plant.md:22-28`, AGENT-3). The pin-label
+      renderer's `<tspan class="userlabel">` (`app/template.html`, the chip's SVG label pass) now
+      also carries `data-test="pin-user-label"`, documented in a comment as a TEST CONTRACT
+      distinct from the styling class — a rename here is a breaking change to AGENT-3's planted
+      break the way a public export would be. Verified present in a real browser after setting a
+      label and re-rendering; `tests/features.test.js` unaffected (still green).
 
 **Two findings that outrank the data work**, both filed on the board:
 
