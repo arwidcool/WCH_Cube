@@ -39,10 +39,26 @@ click when a choice would collide with something you have already set.
 | **[PROGRESS.md](PROGRESS.md)** | What is actually done, broken, and never tested. |
 | **[docs/](docs/)** | Index of all of the above. |
 
-Supported parts — the list is `data/mcus/`, and adding to it does not require touching `app/`:
-**CH32V006**, **CH32V005** (defined as a delta on CH32V006), **CH32V003** and **CH32X035** — a
-second, deliberately different family (24-bit ports, no HSE, named remap macros) that exists to
-prove the engine is data-driven rather than shaped around one chip.
+Supported parts — the list is `data/mcus/`, and adding to it does not require touching `app/`.
+**Six**, across three families:
+
+Peripheral and package counts below are what the engine reports after loading each file, not
+what a header says:
+
+| Part | Peripherals | Packages | Why it is in the list |
+|---|---|---|---|
+| **CH32V006** | 19 | 5 | the reference part; every other one is checked against it and none is copied from it |
+| **CH32V005** | 17 | 4 | defined as a delta on CH32V006 — its own file holds one peripheral and the rest is inherited |
+| **CH32V003** | 16 | 4 | the same family, a different die: no GPIOB at all, and no OPA interrupt where CH32V006 has one |
+| **CH32X035** | 27 | 7 | a deliberately different family (24-bit ports, no HSE, named remap macros) that exists to prove the engine is data-driven rather than shaped around one chip |
+| **CH32L103** | 33 | 5 | low-power, with USB PD and three comparators sharing one vector |
+| **CH32H417** | 78 | 3 | dual-core, with SerDes, Ethernet, LTDC and USB SS — the part that stops "it works on the small ones" being the whole claim |
+
+All six read `status: complete` in the coverage ledger (`python tools/coverage.py --quiet`): every
+function the datasheet puts on a pin is modelled, or declared absent with a `file:line`. That is
+not the same as every peripheral being configurable to the same depth — on CH32H417, 39 of its 78
+peripherals have a `params:` block and 39 do not. The per-peripheral table is
+[`tests/evidence/round6/2026-09-13-h417-peripheral-map.md`](tests/evidence/round6/2026-09-13-h417-peripheral-map.md).
 
 ```
 WCH_CubeMX/
@@ -212,8 +228,8 @@ Set `WCHCUBE_DEPS` to point somewhere else. The Rust in `src-tauri/` is compiled
 
 ## Build the firmware
 
-`data/firmware/` is a PlatformIO project that compiles for real CH32V006 / CH32V005 /
-CH32X035 silicon with the WCH EVT NoneOS SDK. It is where the configurator's generated
+`data/firmware/` is a PlatformIO project that compiles for real CH32V003 / CH32V005 /
+CH32V006 / CH32X035 / CH32L103 / CH32H417 silicon with the WCH EVT NoneOS SDK. It is where the configurator's generated
 `wchcube_init.c/.h` becomes an ELF — and the only place the claim "the generated C
 compiles" can be checked instead of asserted.
 
@@ -252,8 +268,8 @@ first.
 The two things that would help most, in order:
 
 1. **Flash one generated project and report what happened.** It is a five-minute job with any
-   CH32V006/CH32V005/CH32X035 board and a WCH-Link, and it is the only claim in this repository
-   that nobody here can close. See [`agents/HUMAN_TODO.md`](agents/HUMAN_TODO.md).
+   CH32V003/CH32V005/CH32V006/CH32X035/CH32L103/CH32H417 board and a WCH-Link, and it is the
+   only claim in this repository that nobody here can close. See [`agents/HUMAN_TODO.md`](agents/HUMAN_TODO.md).
 2. **Add a part.** If your microcontroller is missing, [`docs/ADDING-A-PART.md`](docs/ADDING-A-PART.md)
    is the whole process — it is a data job, not a programming job, and it does not require
    understanding the engine.

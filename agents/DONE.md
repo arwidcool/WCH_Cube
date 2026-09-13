@@ -649,12 +649,31 @@ CH32V003 3 open; suite 721 green; CI never executed.
 
 ## Deliverable C — CH32H417's Parameter Settings are not empty  (AGENT-1)
 
-- [ ] `params:` for every peripheral that routes pins (49 at the open); count posted per cycle
-- [ ] Every parameter traced to `ch32h417_*.h` — `verify_sdk_names.py` 0 errors
+- [ ] `params:` for every peripheral that routes pins (49 at the open; **23 at 2026-09-13**);
+      count posted per cycle. Measured, both conventions: **39 of 78 peripherals HAVE a
+      `params:` block and 39 DO NOT**; 4 of the 39 without are declared ABSENT, so **35 cells
+      are owed**, 23 of them routing pins. Peripheral by peripheral in
+      `tests/evidence/round6/2026-09-13-h417-peripheral-map.md`.
+- [ ] Every parameter traced to `ch32h417_*.h` — `verify_sdk_names.py` 0 errors.
+      **True of every parameter that exists today** (`verify_sdk_names.py` — 0 errors, 0
+      warnings, 100 EVT files, 2026-09-13), and not tickable until the line above is: the
+      claim is about all of them, not the ones written so far.
 - [ ] `FMC_NORSRAMInitTypeDef` timings, so the 8080 `Bus mode` generates `FMC_NORSRAMInit(...)`
 - [ ] The `IN_EXTRACTION` entry for CH32H417 is **gone** from `tests/completeness.test.js` and
       the TASKS.md line is ticked — every remaining cell fails hard from that commit on
-- [ ] All of it in `data/sources/H417/peripheral_extras.yaml`, none in the generated block
+- [ ] All of it in `data/sources/H417/peripheral_extras.yaml`, none in the generated block.
+      **Holding so far:** `--splice --refresh` on 2026-09-13 rewrote all 65 generated blocks
+      with no loss reported and a diff of exactly the lines added through the extras file.
+- [x] **NOT part of C as briefed, and found by auditing it: the clock cells this deliverable's
+      exemption was also covering.** Six `clock` cells printed with no explanation. Two were
+      real gaps and are modelled (`I2S2`/`I2S3` had no bit at all and generated an
+      `I2S_Init(SPI2, &s)` with no clock enable — it compiled and could not have run); three
+      are genuine absences, now declared with a `file:line` (`DBGMCU` a core CSR, `HSEM` and
+      `IPC` core-private); one (`RTC`) is a two-bit gate the one-bit schema cannot express and
+      is **deliberately left open** with its own TASKS.md line rather than half-written.
+      **Cells 41 -> 36.** Evidence:
+      `tests/evidence/round6/2026-09-13-h417-peripheral-map.md`; suite ALL GREEN, 780 tests,
+      0 skipped.
 
 ## Deliverable D — the clock schema holds a second PLL and a per-peripheral mux  (AGENT-2 schema, AGENT-1 data)
 

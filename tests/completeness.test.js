@@ -225,6 +225,32 @@ const ABSENT = {
     + 'op-amp/comparator block raises no modelled interrupt on this part',
   'CH32H417.PWR.nvic': 'no PVD or PWR entry in ch32h417.h\'s IRQn_Type - the power '
     + 'controller raises no interrupt here (RM ch.2 gives it no vector)',
+
+  // --- CH32H417 clock gates, from the round-6 peripheral-map audit. Six cells printed
+  //     `clock` with no explanation; three of them were real gaps and were MODELLED
+  //     (I2S2 and I2S3 now carry SPI2's and SPI3's bit; RTC is the OPEN entry below),
+  //     and these three are absences. The evidence is the same in all three: the
+  //     COMPLETE `RCC_*Periph_*` block in
+  //     data/sources/H417/Evt/EXAM/SRC/Peripheral/inc/ch32h417_rcc.h is lines 230-307
+  //     ("/* HB_peripheral */" through RCC_HB1Periph_SWPMI), 73 macros, and none of the
+  //     three appears in it. What makes them absences rather than gaps is WHERE the
+  //     silicon puts them: two are core-private and one is a CSR, so there is no bus
+  //     clock to gate. Read off the RM's own register addresses, not by analogy with a
+  //     sibling.
+  'CH32H417.DBGMCU.clock': 'Debug Support is a core CSR, not a bus peripheral: RM 45.2.1 '
+    + 'gives R32_DBGMCU_CR "Offset address: 0x7C0(CSR)" (CH32H417RM.md:66907), so it sits in '
+    + 'the CPU\'s control-and-status register file and never appears on HB, HB1 or HB2. There '
+    + 'is no RCC_*Periph_DBGMCU in ch32h417_rcc.h:230-307. Same shape as the bare FLASH.clock '
+    + 'and EXTI.clock entries above',
+  'CH32H417.HSEM.clock': 'the hardware semaphore is a CORE-PRIVATE peripheral, not a bus one: '
+    + 'RM 4.5 (CH32H417RM.md:6561) puts R32_HSEM_RX0 at 0xE000C000 (:6652), inside the '
+    + '0xE000_xxxx core space, and RM:4313 says so in words - "Private peripherals include '
+    + 'system timers, inter-core communication, and hardware semaphore modules". The RCC gates '
+    + 'HB/HB1/HB2 and there is no RCC_*Periph_HSEM in ch32h417_rcc.h:230-307',
+  'CH32H417.IPC.clock': 'inter-process communication is the other core-private block named at '
+    + 'CH32H417RM.md:4313: RM 4.4 (:6287) puts R32_IPC_CTLR at 0xE000D000 (:6332), beside HSEM '
+    + 'in the core space. No RCC_*Periph_IPC exists in ch32h417_rcc.h:230-307. Its generated C '
+    + 'correctly emits IPC_Init() with no clock line',
 };
 
 /**
@@ -239,6 +265,18 @@ const ABSENT = {
  */
 const OPEN = {
   'TIM3.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
+  // CH32H417's RTC clock gate is TWO bits and `codegen.periph_clock` holds one per
+  // peripheral, so the part deliberately carries no entry for it rather than writing half
+  // of one. Round-6 peripheral-map audit; the citation chain is on the TASKS.md line and in
+  // the RTC `notes:` in data/sources/H417/peripheral_extras.yaml.
+  //
+  // STAGED, and saying so because the file's CH32L103 CMP2/CMP3 entries above warn about
+  // exactly this: while CH32H417 is in IN_EXTRACTION below, a `clock` cell is a SOFT_CELL
+  // and takes that branch first, so this entry is NOT consulted today and would read like a
+  // working one. It becomes live - with the right owner on it, which AGENT-1's params line
+  // is not - the moment the IN_EXTRACTION entry retires. If the schema takes a list of bits
+  // before then, this goes in the same commit as the entry it excuses.
+  'CH32H417.RTC.clock': ['AGENT-2', 'CH32H417 RTC: a clock gate that is two bits'],
   'IWDG.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
   'WWDG.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],
   'TKEY.params': ['AGENT-1', '`params:` for TIM3, IWDG, WWDG, TKEY, OPA1'],

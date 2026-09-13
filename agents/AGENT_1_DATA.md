@@ -293,3 +293,79 @@ Next: LPTIM1/2 (one struct, but an anonymous union - `LPTIM_ClockPolarity` and
 CAN1-3, DAC, RTC, SAI. Then the four QFN68 default collisions, which have waited two rounds.
 FMC/ETH/ECDC/FMC_NAND/FMC_SDRAM stay blocked on the nested-struct shape (REQUEST 19:33Z) -
 five peripherals behind one change.
+
+**Cycle 6 - 2026-09-13T00:33Z. THE PERIPHERAL MAP IS MEASURED, AND MEASURING IT FOUND
+GENERATED C THAT COULD NOT HAVE RUN.**
+
+This cycle was an audit rather than an extraction: 78 peripherals, six axes each (pins,
+settings, params, clock, vector, codegen reach) plus fixture and compile, in
+`tests/evidence/round6/2026-09-13-h417-peripheral-map.md`. Every number in it came out of a
+command run for it; nothing was carried over.
+
+- **THE FINDING, and it is problem 8 in `CH32H417.notes.md` all over again two peripherals
+  over: `I2S2` and `I2S3` had NO bit in `codegen.periph_clock` at all.** Switching either on
+  emitted `I2S_Init(SPI2, &s)` under the comment "I2S2 has no clock enable bit in
+  codegen.periph_clock - none is written". It compiled, `--strict` exited 0, `validate_mcu`
+  and `verify_sdk_names` were at 0, and `coverage.py` said 0 open - because **not one of them
+  asks, peripheral by peripheral, whether the clock gets turned on.** The ledger reads the
+  datasheet's pin table; this is the other half of the same question and nothing was asking
+  it. The I2S is a MODE of the SPI block (RM ch.23 is "SPI/I2S", `I2S_Init()` takes a
+  `SPI_TypeDef *`, and `codegen.periph_handle` already said `I2S2: SPI2`), so it shares the
+  SPI's gate the way `OPA`/`CMP` already share `RCC_HB2Periph_OPCM` on this part. The EVT does
+  it one line above its own `I2S_Init`:
+  `data/sources/H417/Evt/EXAM/DFSDM/DFSDM_I2S_Audio/Common/hardware.c:103`, beside `:111`.
+  Modelled as `I2S2: 14` / `I2S3: 15` under `sdk: { I2S2: SPI2, I2S3: SPI3 }`.
+- **Three more clock cells are genuine absences and are now DECLARED, each by address rather
+  than by analogy.** The complete `RCC_*Periph_*` block is `ch32h417_rcc.h:230-307`, 73
+  macros, and none of the three is in it: `DBGMCU` is a core CSR (`R32_DBGMCU_CR`, "Offset
+  address: 0x7C0(CSR)", `CH32H417RM.md:66907`), `HSEM` is core-private at `0xE000C000` (RM 4.5,
+  `:6561`, register `:6652`), `IPC` core-private at `0xE000D000` (RM 4.4, `:6287`, register
+  `:6332`). The RM names both in words at `:4313`. The RCC gates HB/HB1/HB2; none of the three
+  sits on one.
+- **The sixth, `RTC`, I did NOT close, and that is the decision worth recording.** Its gate is
+  TWO bits - `RCC_HB1Periph_PWR | RCC_HB1Periph_BKP`, EVT
+  `.../RTC/RTC_Calendar/Common/hardware.c:94`, repeated :205 and :247; BKPEN bit 27, PWREN bit
+  28, `CH32H417RM.md:3538`/`:3535` - and `bits:` maps one peripheral to one bit.
+  **`BKP` alone would have ticked the cell and shipped a half-enable that reads exactly like a
+  whole one**, which is the shape of every defect in this part's notes. New TASKS.md line,
+  owner AGENT-2 for the schema half, reasoning in the RTC `notes:` in
+  `peripheral_extras.yaml` so a `--refresh` reproduces it rather than losing it once.
+- **Everything went through the generator.** The `notes:` are in
+  `data/sources/H417/peripheral_extras.yaml`; `--splice --refresh` rewrote 65 blocks with no
+  loss and a diff of exactly my 37 lines, so the fix survives the next regeneration. The
+  `periph_clock` change is in the hand-written `codegen:` section, which sits below the
+  generated block. No ad-hoc script touched `data/mcus/*.yaml`.
+
+Numbers, **both conventions spelled out, because reading one of them backwards is how four
+documents ended up disagreeing**: **39 of 78 peripherals HAVE a `params:` block and 39 DO
+NOT.** Of the 39 without, 4 are declared ABSENT (SYS, RCC, EXTI, DMA1 - choices, not numbers),
+so **35 cells are owed and 23 of those 35 route pins**. Clock: 68 of 78 have a bit; of the 10
+without, 9 are declared ABSENT and 1 is open (RTC). Vectors: 66 of 78, and **all 12 without
+are declared ABSENT - zero `nvic` cells owed**. Pins: 61 route, 17 declare `pins: none`, 0
+declare `pins: open`, and 0 routed signals are unreachable. Codegen reach: 0 peripherals hold
+a pad and reach no generated code. **Cells 41 -> 36.**
+
+Ledger **0 / 0 / 0 / 0 / 0 / 0**, unchanged. Collisions QFN68 **4** / QFN88 0 / QFN128 0,
+re-measured at 450 claiming choices per package and left at the ceiling.
+
+Nothing was closed by lowering anything: `COLLISION_CEILING` untouched, `SOFT_CELLS` still
+exactly `{params, clock}`, no test deleted, no threshold moved, `open_rows:` unchanged.
+
+Red, and who owns it: **nothing.** Gates watched rather than assumed - `validate_mcu` 0
+errors (94 warnings on this part, 91 of them UHSIF/SERDES dedicated pads with no `af:`, which
+is correct), `verify_sdk_names` 0 errors and 0 warnings, `coverage --gate` 6 of 6,
+`ledger --write` no change, `build.py` OK, `node tests/run.js` **ALL GREEN, 780 tests, 0
+skipped** in 389 s. Nothing has been flashed; every green above is a compile.
+
+Posted to the board: a FINDING to AGENT-3 (the `tests/h417_packages.test.js:222-227` comment
+names the four collisions by a setting label the data no longer uses - the count is right,
+the label is stale, and I did not edit `tests/**`), a NOTE that the expiry planted break's
+printed cell count is capped at 40 by `assert.empty` and was reading 40 where the header said
+41, and a REQUEST that AGENT-3 refresh `PROJECT.md`'s opening block, which is stale in all
+three of its numbers.
+
+Next, unchanged in substance: the 35 `params` cells, worst-first by how many pads they strand
+- UHSIF (49 routed signals), SERDES, FMC, QSPI1/2, SDMMC, SAI, PIOC. FMC/ETH/ECDC and FMC's
+NAND/SDRAM shapes stay blocked on the nested-struct REQUEST of 19:33Z, five peripherals
+behind one change. Then the four QFN68 default collisions, which have now waited three
+rounds, and the four secondary PLLs.

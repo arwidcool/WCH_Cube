@@ -5,8 +5,17 @@ microcontrollers** — pick a part and a package, click a pin, choose a signal. 
 which peripherals can reach which pins *on that exact package*, warns you before a choice
 collides with something you already set, and generates C that compiles against WCH's own SDK.
 
-It ships four parts — **CH32V006**, **CH32V005**, **CH32V003** and **CH32X035** — and which parts
-exist is simply what is in `data/mcus/`. Adding another does not require touching `app/`.
+It ships six parts — **CH32V006** (19 peripherals), **CH32V005** (17), **CH32V003** (16),
+**CH32X035** (27), **CH32L103** (33) and **CH32H417** (78) — and which parts exist is simply
+what is in `data/mcus/`. Adding another does not require touching `app/`.
+
+All six read `status: complete` in the coverage ledger, which means every function the datasheet
+puts on a pin is modelled, or declared absent with a `file:line`. **That is a different claim
+from "every peripheral is configurable to the same depth", and keeping the two apart is the
+point of the audit below.** On CH32H417, 39 of its 78 peripherals have a `params:` block and 39
+do not; 35 of those 39 are cells somebody owes, tracked in `TASKS.md` and printed on every suite
+run. The per-peripheral table, on six axes, is
+[`../tests/evidence/round6/2026-09-13-h417-peripheral-map.md`](../tests/evidence/round6/2026-09-13-h417-peripheral-map.md).
 
 ![The pinout view: CH32V006 on TSSOP20 with USART1 and SPI1 assigned](images/app-pinout.png)
 
@@ -354,8 +363,8 @@ has been attached to this project. `SystemCoreClock` is computed, not measured. 
 reads **"builds, not flashed"**, in exactly those words, and it stays that way until somebody
 runs `pio run -t upload` and reports what the serial output said.
 
-If you have any CH32V006, CH32V005, CH32V003 or CH32X035 board and a WCH-Link, that is a
-five-minute job and it is the single most valuable contribution you could make — see
+If you have any CH32V006, CH32V005, CH32V003, CH32X035, CH32L103 or CH32H417 board and a
+WCH-Link, that is a five-minute job and it is the single most valuable contribution you could make — see
 [`../agents/HUMAN_TODO.md`](../agents/HUMAN_TODO.md).
 
 ## Repository map

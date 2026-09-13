@@ -936,6 +936,14 @@ bits, and a clock tree that models what the schema can hold.
       and `OPA`/`CMP` -> `RCC_HB2Periph_OPCM`); the bit keys are peripheral names and the domain
       carries `sdk:` for the SPL spelling, so `clockBitOf('USBFS')` resolves instead of silently
       writing no enable for the USB clock.
+      **Round 6, the peripheral-map audit: two more, found in that same failure mode.** I2S2
+      and I2S3 had no bit at all, so switching either on emitted `I2S_Init(SPI2, &s)` under
+      the comment "I2S2 has no clock enable bit in codegen.periph_clock - none is written":
+      it compiled and would have done nothing on silicon. The I2S is a MODE of the SPI block
+      (RM ch.23 is "SPI/I2S"), so it shares the SPI's gate, which is what the EVT does one
+      line above its own `I2S_Init` -
+      `data/sources/H417/Evt/EXAM/DFSDM/DFSDM_I2S_Audio/Common/hardware.c:103`. So 75 bit
+      keys over 73 macros now, and three `sdk:` domains.
 - [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
       SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
 - [~] **(AGENT-1) CH32H417: `params:` for the peripherals that have none.**
@@ -979,6 +987,13 @@ bits, and a clock tree that models what the schema can hold.
       pad), SDIO's Mode is `SDIO_BusWide` (it is what claims D0-D7). HSADC ships 3 of its 11
       members as rows and DECLARES the other eight in `notes:` - they are a DMA transfer in
       flight, including two buffer addresses this tool cannot know.
+      **Still 39 of 78 at 2026-09-13, re-measured rather than carried over.** The
+      peripheral-map audit counted it two ways so the sentence cannot be read backwards:
+      **39 of 78 peripherals HAVE a `params:` block and 39 of 78 DO NOT**. Of those 39
+      without, four are declared ABSENT in `tests/completeness.test.js` (SYS, RCC, EXTI and
+      DMA1, each because its configuration is choices rather than numbers), so this line
+      owns **35 cells**, listed peripheral by peripheral in
+      `tests/evidence/round6/2026-09-13-h417-peripheral-map.md`. 23 of the 35 route pins.
 - [x] (AGENT-2) **The schema limit is gone: `clock.plls:` and a list-valued `source:`.**
       A part may now declare any number of PLLs - each with `inputs:`, either `multipliers:`
       (plus optional `dividers:`) or a fixed `output_mhz:`, and an `output:` name that other
@@ -992,6 +1007,23 @@ bits, and a clock tree that models what the schema can hold.
       comment and writing no bits. Proved on a synthetic part in a real browser: **USBHS_PLL
       480 MHz -> USBFS /10 = 48 MHz**, RM 3.4.13's own worked example, light and dark at 1280
       and 1920 wide, 100 % and 125 %. `app/tests/clockmux.test.js` + `clockmux_ui.test.js`.
+- [ ] (AGENT-2 schema, AGENT-1 data) **CH32H417 RTC: a clock gate that is two bits, and
+      `codegen.periph_clock` holds one per peripheral.** Found by the round-6 peripheral-map
+      audit. The EVT enables both in one call -
+      `RCC_HB1PeriphClockCmd(RCC_HB1Periph_PWR | RCC_HB1Periph_BKP, ENABLE);` then
+      `PWR_BackupAccessCmd(ENABLE);` - at
+      `data/sources/H417/Evt/EXAM/RTC/RTC_Calendar/Common/hardware.c:94-95`, repeated at
+      :205-206 and :247-248. BKPEN is bit 27 and PWREN bit 28 of RCC_HB1PCENR
+      (`CH32H417RM.md:3538` and `:3535`), and there is no `RCC_*Periph_RTC` macro anywhere in
+      `ch32h417_rcc.h` - its complete `RCC_*Periph_*` block is lines 230-307. `bits:` maps one
+      peripheral to one bit and `clockBitOf()` returns one macro, so RTC deliberately has NO
+      entry there: writing BKP alone is a half-enable that reads exactly like a whole one.
+      Until the schema takes a list, the generated C says "RTC has no clock enable bit in
+      codegen.periph_clock - none is written", which is true and visible. Held in
+      `tests/completeness.test.js`'s `OPEN` as `CH32H417.RTC.clock`; the reasoning is in the
+      RTC `notes:` in `data/sources/H417/peripheral_extras.yaml`, where a regeneration
+      reproduces it. Acceptance: enabling the RTC emits both bits in one
+      `RCC_HB1PeriphClockCmd` call, and the `OPEN` entry goes.
 - [ ] (AGENT-1) **CH32H417: fill the four secondary PLLs and the eight `RCC_CFGR2` muxes in.**
       The schema above holds them and the app computes nothing for USB / LTDC / ETH until the
       YAML says so. The exact block, with the RM line for every field, is on `agents/BOARD.md`

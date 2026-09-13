@@ -1237,6 +1237,29 @@ extras:
         alternates, which is why they live in data/sources/H417/dedicated_pins.yaml where
         the generator can see them.
 
+  # RTC's `notes:` record a clock gate this schema cannot express, found by the round-6
+  # peripheral-map audit. It is here rather than in the MCU file because `--splice
+  # --refresh` deletes hand-added notes from the GENERATED block; see the ETH entry above
+  # for the commit where that happened once already.
+  RTC:
+    yaml: |
+      notes: >
+        ITS CLOCK GATE IS TWO BITS, AND `codegen.periph_clock` HOLDS ONE PER PERIPHERAL,
+        so the RTC deliberately has no entry there and the generated C says so instead of
+        writing half of it. The EVT enables both in one call -
+        `RCC_HB1PeriphClockCmd(RCC_HB1Periph_PWR | RCC_HB1Periph_BKP, ENABLE);` followed by
+        `PWR_BackupAccessCmd(ENABLE);` - at
+        data/sources/H417/Evt/EXAM/RTC/RTC_Calendar/Common/hardware.c:94-95, and repeats it
+        at :205-206 and :247-248. Both bits are in RCC_HB1PCENR: BKPEN is bit 27 and PWREN
+        bit 28 (CH32H417RM.md:3538 and :3535). BKP alone would gate the backup unit and
+        leave the power interface off, which is a half-enable that reads exactly like a
+        whole one - the failure this file's ETH entry above also records. There is no
+        `RCC_*Periph_RTC` macro anywhere in ch32h417_rcc.h: its complete
+        `RCC_*Periph_*` block is lines 230-307, and the RTC appears there only as
+        `RCC_RTCCLKSource_*` (:226-228) and `RCC_RTCCLKCmd` (:646), which SELECT and run
+        the RTC clock rather than gate the bus interface. Tracked in TASKS.md, owner
+        AGENT-2 for the schema half.
+
   LTDC:
     comment: |
       THE OUTPUT WIDTH IS A WIRING CHOICE, NOT A REGISTER, and that is the whole reason

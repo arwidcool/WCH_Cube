@@ -3,9 +3,47 @@
 The ongoing source of truth for where this project stands. Keep it current: if a
 statement here stops being true, change it here first.
 
-- **Last updated:** 2026-09-12 (round 5, AGENT-3 cycle 2 — CI made publish-ready, the
+- **Last updated:** 2026-09-13 (round 6, AGENT-1 — the CH32H417 per-peripheral mapping audit:
+  one measured truth table on six axes, and every document that states a number about it made to
+  agree with the tool)
+- **New 2026-09-13: CH32H417 has a per-peripheral truth table, and building it found generated C
+  that could not have run.** `docs/COVERAGE.md`'s ledger asks whether every fact the DATASHEET
+  states is accounted for; it said **0 open** and still says so. It does not ask how far the APP
+  models each peripheral, and nothing did, so four documents quoted four different versions of
+  that. Now measured, peripheral by peripheral, on six axes — pins, settings, params, clock,
+  interrupt, codegen reach — plus whether a fixture exercises it and whether it compiles:
+  `tests/evidence/round6/2026-09-13-h417-peripheral-map.md`.
+
+  **The finding: I2S2 and I2S3 had no clock-enable bit at all.** Switching either on emitted
+  `I2S_Init(SPI2, &s)` under the comment "I2S2 has no clock enable bit in codegen.periph_clock —
+  none is written". It compiled, and on silicon it would have configured an I2S whose clock was
+  never turned on — the same shape as the `USBFS` → `RCC_HBPeriph_OTG_FS` miss this file already
+  records, one peripheral over. The I2S is a MODE of the SPI block (RM ch.23 is "SPI/I2S") and
+  shares its gate, which is what the EVT does one line above its own `I2S_Init`
+  (`data/sources/H417/Evt/EXAM/DFSDM/DFSDM_I2S_Audio/Common/hardware.c:103`). Modelled.
+
+  Of the six unexplained `clock` cells, three more are genuine absences and are now declared with
+  a `file:line`: **DBGMCU** is a core CSR (`R32_DBGMCU_CR`, "Offset address: 0x7C0(CSR)",
+  `CH32H417RM.md:66907`), **HSEM** and **IPC** are core-private at `0xE000C000` and `0xE000D000`
+  (`:6652`, `:6332`; the RM names them as private peripherals in words at `:4313`). The RCC gates
+  HB/HB1/HB2 and none of the three sits on one. The sixth, **RTC**, is left OPEN on purpose: its
+  gate is TWO bits — `RCC_HB1Periph_PWR | RCC_HB1Periph_BKP`
+  (`.../RTC/RTC_Calendar/Common/hardware.c:94`) — and `codegen.periph_clock` maps one peripheral
+  to one bit, so writing BKP alone would be a half-enable that reads exactly like a whole one.
+  TASKS.md carries it, owner AGENT-2 for the schema half.
+
+  **Cells: 41 → 36.** What remains is 35 `params` (23 of them routing pins) and that one `clock`,
+  every one with an owner and a live TASKS.md line. Nothing was closed by lowering anything: the
+  collision ceiling is untouched at QFN68 4 / QFN88 0 / QFN128 0, `SOFT_CELLS` is still exactly
+  `{params, clock}`, and the ledger still reads 0 open on all six parts.
+- **Verified 2026-09-13:** `python tools/validate_mcu.py` → **0 errors**, 99 warnings ·
+  `python tools/verify_sdk_names.py` → **0 errors, 0 warnings** · `python tools/coverage.py
+  --gate` → **6 of 6** · `python tools/ledger.py --write` → no change · `python build.py` → OK ·
+  `node tests/run.js` → **ALL GREEN, 780 tests, 0 skipped** (389 s). Nothing has been flashed;
+  every green above is a compile or a check against a document.
+- **Superseded (round 5, AGENT-3 cycle 2):** CI made publish-ready, the
   case-sensitivity defects that preparing it exposed, and one reading order for the data
-  sources: markdown first, PDF last, in `tools/source_docs.py` and `tests/source_order.test.js`)
+  sources: markdown first, PDF last, in `tools/source_docs.py` and `tests/source_order.test.js`
 - **Branch:** `main`, remote `origin https://github.com/arwidcool/WCH_Cube.git`. **One shared
   working tree**, three agents, one working directory (`agents/`); rounds 1–4 are archived under
   `agents/history/`.
@@ -34,9 +72,10 @@ statement here stops being true, change it here first.
     CH32X035   OPEN 0  (modelled 278,  absent 11, disagreements 0)
   ```
 
-  CH32V006, CH32V005, CH32X035 and now **CH32H417** are `complete`; CH32V003 and CH32L103 are
-  `in_extraction`, owned, and their counts may only go down — never reported as done while the
-  tool prints an open row.
+  **All six read `status: complete` as of 2026-09-12T21:05Z**, re-measured 2026-09-13; this
+  line previously still said CH32V003 and CH32L103 were `in_extraction`, which stopped being
+  true the cycle deliverable F closed. No part is owned, and no count may rise — never
+  reported as done while the tool prints an open row.
 
   **CH32H417 reaching 0 open rows is not the same as CH32H417 being finished, and the
   difference is the point of this round.** The ledger asks whether every fact the DATASHEET
@@ -45,7 +84,8 @@ statement here stops being true, change it here first.
   clearest: DS Table 2-1-1 line 3791 puts `SERDES_TXP` on PE3 and Table 2-2-20 line 7341 puts
   `SERDES_RXP` there; both are recorded, neither is picked). What the ledger does NOT ask is
   what the APP does with those facts, and asking that found a defect the same day the count
-  reached zero: `tests/h417_packages.test.js` sweeps all 428 mode choices on each package and
+  reached zero: `tests/h417_packages.test.js` sweeps every mode choice on each package (428 then,
+  **450** when re-measured 2026-09-13, the menu having grown) and
   found **26 / 20 / 17** choices that put two signals on one pad although the signal had another
   bonded pad free — reached by doing nothing but switching a peripheral on, and invisible to
   the conflict engine because both claims share an owner. Now **4 / 0 / 0**, ratcheted, owner
@@ -106,6 +146,7 @@ statement here stops being true, change it here first.
   markdown (which is correct in a fork and after a rename), and a check that fails if that
   placeholder ever comes back.
 - **Verified this pass (previous cycle):** `node tests/run.js` → **510 green, 0 skipped**.
+  (Superseded: the same command at 2026-09-13 is **ALL GREEN, 780 tests, 0 skipped**.)
 - **Also new (previous cycle): a FOURTH part arrived mid-cycle, and every gate it touched was
   already wide enough to catch it.** `data/mcus/CH32V003.yaml` landed (DATA, whose brief
   did not include it). `tests/strict.test.js`'s coverage check failed immediately, which is
@@ -195,14 +236,25 @@ Two halves, at very different maturities.
 
 **The configurator** — an STM32CubeMX-style pinout, clock, peripheral and code
 generator for WCH RISC-V parts, written as plain JS/SVG/YAML and built by
-`build.py` into one offline `dist/index.html`. It loads, it is tested by **510
-automated tests** across two harnesses, and it carries **three real parts** —
-CH32V006, CH32V005 and CH32X035 — with the synthetic part moved out of `data/mcus/`
-entirely. Every choice it offers is now supposed to be one the silicon can honour,
-which is round 5's rule and the constraint mechanism's job.
+`build.py` into one offline `dist/index.html`. It loads, it is tested by **780
+automated tests** across two harnesses (`node tests/run.js` at 2026-09-13,
+ALL GREEN, 0 skipped), and it carries **six real parts** — CH32V003, CH32V005,
+CH32V006, CH32X035, CH32L103 and CH32H417 — with the synthetic part moved out of
+`data/mcus/` entirely into `tests/fixtures/mcus/`. Every choice it offers is now
+supposed to be one the silicon can honour, which is round 5's rule and the
+constraint mechanism's job.
+
+**Six parts is not six equal parts, and the difference is measured rather than
+asserted.** The five small parts are complete on every axis. CH32H417 is a 78-peripheral
+part whose ledger reads 0 open — every fact the datasheet states is accounted for — while
+**39 of its 78 peripherals have a `params:` block and 39 do not**; 35 of those 39 are cells
+somebody still owes (the other four are declared ABSENT) and 23 of the 35 route pins, so
+their pads can be claimed and nothing about them configured. The per-peripheral table, on
+six axes, is `tests/evidence/round6/2026-09-13-h417-peripheral-map.md`.
 
 **The firmware** — `data/firmware/` is a PlatformIO project that compiles for real
-CH32V006 / CH32V005 / CH32X035 silicon with the WCH EVT NoneOS SDK. It exists to
+CH32V003 / CH32V005 / CH32V006 / CH32X035 / CH32L103 / CH32H417 silicon with the WCH EVT
+NoneOS SDK. It exists to
 turn the configurator's output into an ELF, and to make "the generated C compiles"
 a checkable claim rather than a hope. It builds today, for four environments.
 
