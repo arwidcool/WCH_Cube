@@ -118,6 +118,31 @@ dedicated_pins:
     P0: [{ pin: PB0 }]
     P1: [{ pin: PB2 }]
     OUT: [{ pin: PA6, af: 10 }, { pin: PA8, af: 12 }, { pin: PB12, af: 13 }, { pin: PC5, af: 13 }, { pin: PE12, af: 13 }, { pin: PE15, af: 13 }, { pin: PE6, af: 11 }]
+  # `af:` is correctly absent throughout, not merely unfilled - see this file's own
+  # header comment above ("A `None` AF means the DS gives no AF code: the pad function
+  # is dedicated"). Confirmed three ways while proving this cycle's `params:` batch:
+  # (1) DS Table 2-2-12 (signal-first) has no af column, unlike every ordinary `af:`
+  # peripheral's table; (2) `tools/extract_h417_pins.py --signals`/`--pins` (the
+  # mechanical per-pin AF parser that found all 418 real af codes) returns NOTHING for
+  # any `SDMMC_*` name; (3) the vendor's OWN `SD_GPIO_Init()`
+  # (`Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113`) calls `GPIO_Init(...,
+  # GPIO_Mode_AF_PP, ...)` for these pins and calls `GPIO_PinAFConfig()` NOWHERE in the
+  # file. The pad reaches SDMMC through `AFIO_PCFR1.SDMMC_RM[1:0]`
+  # (CH32H417RM.md:11741-11768, RM 9.2.11.5, Table 9-32) - a genuine THREE-state
+  # register remap moving EVERY SDMMC signal to a different pin set at once, the
+  # CH32V006-style `remaps:` shape (data/FORMAT.md:220-244), not the AFRL/AFRH nibble
+  # `GPIO_PinAFConfig` writes and not the per-pin `af:` mux every other signal on this
+  # part uses. All three pin sets are kept here (the full DS reading,
+  # `tests/h417_dedicated.test.js` checks it against DS Table 2-2-12 exactly) even
+  # though this part's `codegen.remap.style` is `af` for its other 417 signals and
+  # `style: af` FORBIDS `codegen.remap.fields` (data/FORMAT.md:654-657) - so today
+  # there is no emitter that could ever WRITE SDMMC_RM, and `--strict` exits 2 on any
+  # project that wires SDMMC. REQUEST to AGENT-2 (a `codegen.remap` capability that
+  # coexists with `style: af` for one peripheral, or a way to mark one pin set
+  # reachable) and AGENT-3 (whether the DS-completeness test and a reachability
+  # restriction can coexist), `agents/BOARD.md` 2026-09-13 - the same
+  # `remaps:`-on-an-`af:`-part gap as FMC's multi-bank `Chip select` checkbox and
+  # SAI's Frame/Slot structs.
   SDMMC:
     D0: [{ pin: PB13 }, { pin: PC8 }, { pin: PD0 }]
     D1: [{ pin: PC9 }, { pin: PD1 }]

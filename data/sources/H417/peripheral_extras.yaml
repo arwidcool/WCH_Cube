@@ -1335,6 +1335,28 @@ extras:
       (Evt/EXAM/SDMMC/SDMMC_SD, SDMMC_eMMC, SDMMC_eMMC_DDR) ever calls them, so there is no
       worked default to check eight raw 4-bit taps against. Left unmodelled rather than
       guessed; TASKS.md line.
+
+      `af:` IS DELIBERATELY ABSENT ON EVERY SDMMC PIN, and it is not a gap - see this
+      part's `dedicated_pins.yaml` for the finding in full: `AFIO_PCFR1.SDMMC_RM[1:0]`
+      (CH32H417RM.md:11741-11768, Table 9-32) is a genuine register remap moving EVERY
+      SDMMC signal to one of three pin sets at once, the `remaps:` shape
+      (data/FORMAT.md:220-244) - not the per-pin `af:` mux every other signal on this
+      part uses. `--strict` still exits 2 whenever a project wires SDMMC, because this
+      part's `codegen.remap.style` is `af` and `style: af` FORBIDS
+      `codegen.remap.fields` (data/FORMAT.md:654-657): no emitter exists that could
+      ever WRITE SDMMC_RM, and no key exists for "GPIO_Init runs, GPIO_PinAFConfig
+      deliberately does not, no TODO" either - confirmed against the vendor's own
+      `SD_GPIO_Init()` (`Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113`), which
+      calls `GPIO_Init(..., GPIO_Mode_AF_PP, ...)` and never `GPIO_PinAFConfig()`.
+      NOT narrowed to one pin set here: `tests/h417_dedicated.test.js` (QA-owned)
+      asserts this file's `signal_pins:` matches DS Table 2-2-12 completely, all three
+      remap sets, so the full extraction stays and the "only RM=00 is reachable"
+      finding is recorded rather than acted on unilaterally - it would need either a
+      new `codegen.remap` capability that coexists with `style: af` for one peripheral,
+      or the test learning that an unreachable remap alternative is correctly excluded.
+      REQUEST to AGENT-2 (and AGENT-3 for the test), `agents/BOARD.md` 2026-09-13 - the
+      same `remaps:`-on-an-`af:`-part gap as FMC's multi-bank `Chip select` checkbox
+      and SAI's Frame/Slot structs.
     yaml: |
       params:
         - key: width_1b

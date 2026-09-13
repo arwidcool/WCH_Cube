@@ -1031,19 +1031,47 @@ bits, and a clock tree that models what the schema can hold.
             three SDMMC examples ever calls the functions that apply them, so there is no worked
             value to check a default against. `SDMMC_CommandConfig`/`SDMMC_TranMode_Init` are
             excluded for a different reason - they are runtime, per-transaction calls, not init.
-      - [ ] (AGENT-1) **FOUND while proving the `pio run` batch: none of SDMMC's 13
-            `signal_pins` rows carry an `af:`** (`data/mcus/CH32H417.yaml`, SDMMC's
-            `signal_pins:` - CMD/D0-D7/SDCK/SLVCK/STR/STS, all bare `{ pin: ... }`).
-            Pre-existing, not caused by this cycle's `params:` work - `--strict` on a
-            project that wires SDMMC (`Mode: SD 4-bit` or wider) exits 2 with "these
-            signals have a pin but the MCU file states no `af:` for it", same class of
-            gap as the 91 UHSIF/SERDES warnings already tracked, but SDMMC was not
-            counted among them. `validate_mcu.py`'s 99 warnings do carry these (32 of
-            them, `peripherals.SDMMC.signal_pins.*` - one per pin ALTERNATIVE, several
-            signals list two or three); nobody had turned SDMMC on in a project before
-            to notice they make it uncompilable. Needs Table 2-2-x's SDMMC/eMMC AF
-            column read and the codes added - not attempted this cycle, since a guessed
-            AF code compiles and is wrong on the board.
+      - [ ] (AGENT-1 + AGENT-2, AGENT-3) **CORRECTING THE LINE ABOVE: SDMMC's missing
+            `af:` is not a source gap, it is a THIRD schema shape this part's `af`-style
+            remap cannot express, and no `af:` code exists to fill in.** Read Table
+            2-2-x as instructed and it settles the question the wrong way: **DS Table
+            2-2-12 "SDMMC Pin Functions" has no AF column at all** - it is a
+            SDMMC_RM=00/01/1x REMAP table, the CH32V006-style "one field, every signal"
+            shape (`data/FORMAT.md:220-244` `remaps:`), confirmed by RM 9.2.11.5
+            `AFIO_PCFR1.SDMMC_RM[1:0]` (`CH32H417RM.md:11741-11768`, Table 9-32) and by
+            `tools/extract_h417_pins.py --signals`/`--pins` (the mechanical per-pin AF
+            parser that found all 418 real `af:` codes on this part) returning NOTHING
+            for any `SDMMC_*` name. The vendor's own `SD_GPIO_Init()`
+            (`Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113`) confirms the shape:
+            `GPIO_Init(..., GPIO_Mode_AF_PP, ...)` for the pins, `GPIO_PinAFConfig()`
+            nowhere in the file - the pad reaches SDMMC through `SDMMC_RM`, not the
+            AFRL/AFRH nibble `GPIO_PinAFConfig` writes.
+            Two real blockers, not one, and both cross-agent:
+            (1) This part's `codegen.remap.style` is `af` for its other 417 signals,
+            and `style: af` FORBIDS `codegen.remap.fields` (`data/FORMAT.md:654-657`,
+            `tools/validate_mcu.py:1098-1100`) - no emitter exists that could ever
+            WRITE `SDMMC_RM`, and no key exists for "`GPIO_Init` runs,
+            `GPIO_PinAFConfig` deliberately does not, no TODO" either (`skip_signals`
+            is the wrong tool - it skips `GPIO_Init` entirely too, confirmed by reading
+            SERDES/USB's own generated C, and SDMMC's own vendor code needs
+            `GPIO_Init(Mode_AF_PP)`). REQUEST to AGENT-2.
+            (2) Narrowing `signal_pins:` to only the reachable RM=00 set (tried and
+            reverted this cycle - `data/coverage/CH32H417.yaml` briefly carried 19
+            `absent:` rows for it, gone again) breaks
+            `tests/h417_dedicated.test.js`, which asserts this file's SDMMC/UHSIF
+            `signal_pins:` match DS Table 2-2-12/2-2-16 COMPLETELY, all three remap
+            sets - correctly, by its own stated purpose. REQUEST to AGENT-3: whether a
+            reachability restriction and that completeness check can coexist (e.g. the
+            test learning "removed because unreachable" is a valid difference), once
+            AGENT-2's capability exists to make the removal meaningful.
+            A REAL, independent fix landed regardless:
+            `tools/gen_h417_peripherals.py`'s `signal_pins:` emission had NO
+            `extra_keys` guard (unlike `settings:`/`pins:`/`notes:`, which all check
+            it) - an extras `signal_pins:` override would have been silently emitted
+            TWICE, the exact `js-yaml`-throws-on-a-duplicate-key trap this generator's
+            settings-guard exists to prevent. Fixed, with the three-way branch
+            (override / mechanical / pinless-declaration) it needed; no shipped part
+            uses the override today, so nothing else changed.
       - [ ] (AGENT-1) **QSPI's `QSPI_ComConfig_InitTypeDef` bakes ONE command's frame shape into
             generated init** (functional mode, address/data/instruction wire counts, the
             instruction byte itself). That is correct for Memory-Mapped mode, where the QSPI

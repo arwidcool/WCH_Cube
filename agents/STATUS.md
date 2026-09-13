@@ -348,24 +348,72 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — nothing. `verify_sdk_names_selftest.py`'s bitfield gap closed (44/44), PIOC
-handed to AGENT-3 as a declared ABSENT, FMC's NOR/SRAM controller landed via AGENT-2's
-`embed:` contract, and D's USBHS_PLL/USBFS shipped. `params:` **45 → 46 of 78**.
+**IN FLIGHT** — nothing. `pio run` SUCCESS x2 posted, and the P0 SDMMC investigation is
+closed with a correction and two REQUESTs, not a forced fix. `params:` holds at **46 of
+78** — SDMMC's own params were already correct; this was a pin-mux question, not a
+params one.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: `pio run` once for the whole SERDES/QSPI/SDMMC/SAI/FMC batch
-  (authorised, not yet run), then CAN1-3/DAC/LPTIM1-2/GPHA/RTC worst-first (RTC's gate is
-  TWO bits — do not let `BKP` alone tick it). ETH/ECDC/FMC_NAND/FMC_SDRAM are unblocked by
-  the same `embed:` contract but not started — each is its own struct, not FMC's.
-- Gates last run: `validate_mcu` 0 errors/99 warnings · `verify_sdk_names` 0/0 ·
-  `coverage.py --gate` 6 of 6 · `coverage.py CH32H417` complete, 0 open ·
-  `validate_params_selftest` 5/5 · `validate_clock_selftest` 11/11 ·
-  `verify_sdk_names_selftest` **44/44** (was 35/35 + 3; now the bitfield case is counted
-  in the same tally) · `--strict` exits 0 on all 8 shipped fixtures ·
-  `node tests/run.js "H417"` 64/64 · `"codegen_compile"` 18/18 (fixtures refreshed twice
-  this sub-cycle, once per data change) · `"nested_structs"` 8/8 (AGENT-2's mechanism,
-  now exercised by real FMC data, not only the synthetic fixture) ·
-  `"clock"` 97/98 (the one failure is AGENT-2's own `clockmux.test.js:64`, stale by
-  design now that CH32H417 legitimately has `plls:`/`preSrc:` — REQUEST posted).
+- Next step if I stop here: CAN1-3/DAC/LPTIM1-2/GPHA/RTC worst-first (RTC's gate is TWO
+  bits — do not let `BKP` alone tick it), or ETH/ECDC/FMC_NAND/FMC_SDRAM under AGENT-2's
+  `embed:` contract if `main` wants those prioritised first. SDMMC's `af:`/remap gap
+  stays open pending AGENT-2 (a `codegen.remap` capability, or a `no_af:`-shaped marker)
+  and AGENT-3 (whether DS-completeness and reachability can coexist in
+  `h417_dedicated.test.js`) — REQUEST posted, not mine to close alone.
+- Gates last run: `validate_mcu` 0 errors/99 warnings (back to baseline) ·
+  `verify_sdk_names` 0/0 · `coverage.py --gate` 6 of 6 · `coverage.py CH32H417` complete,
+  0 open · `validate_params_selftest` 5/5 · `verify_sdk_names_selftest` 44/44 ·
+  `--strict` exits 0 on all 8 shipped fixtures · `node tests/run.js "H417"` 65/65 ·
+  `"h417_dedicated"` 2/2 · `"codegen_compile"` 18/18 · `pio run` **SUCCESS x2** (below).
+
+**Current — 2026-09-13T20:23Z. `pio run` posted; the SDMMC "P0" turned out to be two
+real schema gaps, and I closed the investigation rather than force either fix.**
+
+- **`pio run` SUCCESS on both halves of the batch**, verbatim to `main`: batch 1
+  (SERDES both controllers, QSPI1, QSPI2, SAI Block A, USBFS) `RAM 7.9% / Flash 0.9%`;
+  batch 2 (FMC `8080 LCD, 8-bit` + `Extended Mode: Enable`, exercising both `rw`/`wr`
+  timing blocks) `RAM 7.7% / Flash 0.8%`. SDMMC held `Disable` in batch 1 for exactly
+  the reason below — enabling it was HOW its own gap surfaced.
+- **The manager's P0 — read Table 2-2-x's AF column and fill SDMMC's 32 gaps — could
+  not be done as asked, because the premise was wrong, and I verified that three
+  independent ways before saying so.** Table 2-2-12 "SDMMC Pin Functions" has NO af
+  column: it is an `AFIO_PCFR1.SDMMC_RM[1:0]` REMAP table (RM 9.2.11.5,
+  `CH32H417RM.md:11741-11768`, Table 9-32) - the CH32V006-style "one field, every
+  signal" shape `remaps:` exists for, not the per-pin `af:` mux the other 417 signals
+  use. `tools/extract_h417_pins.py`'s own mechanical AF parser - which found all 418
+  real codes - returns NOTHING for any `SDMMC_*` name. The vendor's own
+  `SD_GPIO_Init()` (`sdmmc_sd.c:93-113`) calls `GPIO_Init(Mode_AF_PP)` and
+  `GPIO_PinAFConfig()` NOWHERE. No af code exists to fill in.
+- **Tried the honest partial fix, and reverted it rather than force it past a QA gate
+  I don't own.** Narrowed `signal_pins:` to the one reachable pin set (RM=00, needing
+  no register write since it's the reset default), declared the other 18 rows
+  `absent:` with citations, ledger held at 0 open. It broke
+  `tests/h417_dedicated.test.js`, which asserts CH32H417.yaml's SDMMC/UHSIF pins match
+  DS Table 2-2-12/2-2-16 COMPLETELY - correctly, by that test's own stated purpose
+  (extraction fidelity, not reachability). Two legitimate rules in genuine conflict for
+  this one peripheral; reverted all three files (`dedicated_pins.yaml`,
+  `peripheral_extras.yaml`, `data/coverage/CH32H417.yaml`) back to the pre-investigation
+  state rather than pick a winner that isn't mine to pick. Verified byte-for-byte:
+  `git diff --stat` shows `data/coverage/CH32H417.yaml` at zero net change.
+- **Found and fixed a real bug along the way, kept regardless of the revert**:
+  `tools/gen_h417_peripherals.py`'s `signal_pins:` emission had NO `extra_keys` guard -
+  unlike `settings:`/`pins:`/`notes:`, which all check it - so a peripheral extras
+  override would silently emit `signal_pins:` TWICE (PyYAML takes the last
+  duplicate key, `js-yaml` throws - the exact trap the settings-guard exists to
+  prevent). Fixed with a proper three-way branch; no shipped part uses the override
+  today, so this is a live landmine defused, not a visible change.
+- **Two REQUESTs posted, `agents/BOARD.md` 2026-09-13T20:23Z**: to AGENT-2, a
+  `codegen.remap` capability that coexists with `style: af` for one peripheral, or a
+  `no_af:`-shaped marker for "`GPIO_Init` runs, `GPIO_PinAFConfig` deliberately does
+  not, no TODO" (cited to the vendor evidence); to AGENT-3, whether
+  `h417_dedicated.test.js`'s completeness check and a reachability restriction can
+  coexist. Same underlying shape as FMC's multi-bank `Chip select` checkbox and SAI's
+  Frame/Slot structs - three real schema gaps this cycle surfaced, all needing
+  cross-agent design, none forced through.
+
+Red, and who owns it: **nothing of mine.** SDMMC's `--strict` failure is exactly where
+it was before this investigation - pre-existing, not a regression, now with the true
+cause on record instead of a wrong one. `app/tests/clockmux.test.js` (previous cycle's
+red) is AGENT-2's, already fixed on their side.
 
 **Current — 2026-09-13T19:39Z. The manager's three follow-ups, in the order asked.**
 

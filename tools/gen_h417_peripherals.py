@@ -1363,7 +1363,17 @@ def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]]
                 out(f"          - {{ name: {yaml_scalar(c['name'])} }}")
 
     # signal_pins: every pin/AF pair is the datasheet's, in signal-name order.
-    if sigs:
+    # An extras `signal_pins:` override REPLACES this block, same promise as `settings:`
+    # a few lines up - and until this guard existed, the promise was false for this ONE
+    # key: `sigs` being non-empty emitted the mechanical block regardless of `extra_keys`,
+    # so an override wrote `signal_pins:` TWICE. PyYAML's safe_load takes the LAST
+    # duplicate key silently (validate_mcu.py/verify_sdk_names.py/coverage.py all read
+    # the override and reported clean) while js-yaml THROWS on the same file - the exact
+    # trap this generator's own settings-guard was written to prevent, missed here.
+    # Found narrowing SDMMC's signal_pins to the RM=00 pin set, 2026-09-13.
+    if "signal_pins" in extra_keys:
+        pass  # the override supplies it whole; emitted below with the rest of `extra`
+    elif sigs:
         out("    signal_pins:")
         for sig in sorted(sigs):
             short = sig[len(pid) + 1:] if sig.startswith(pid + "_") else sig
