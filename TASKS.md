@@ -1332,6 +1332,33 @@ bits, and a clock tree that models what the schema can hold.
       measured comfortably over 4.5:1; none of those touched.
       Gates: `node tests/run.js "app/tests"` 524/524, `"tree"` 16/16, `"features"` 7/7,
       `"legibility"` 8/8, `"layout"` 20/20. `python build.py` run twice (told on the board).
+- [x] (AGENT-3) **`scripts/check_dist_fresh.js` rebuilt from the WORKING TREE, so on a shared
+      clone another agent's uncommitted edit could certify a `dist/index.html` that does not
+      match the commit being pushed — the hook said OK on `862f099` and CI was right to fail it
+      (runs 74/75). Rewritten (v2) to build from the COMMIT alone: every input read with
+      `git show <sha>:<path>` (the object database, never a path on disk), assembled into a
+      throwaway temp dir, built there with that same commit's own `build.py`, compared byte for
+      byte against that commit's own committed `dist/index.html`. `tests/check_dist_fresh.test.js`
+      proves it against this repo's own real history rather than a synthetic plant: `851e974`
+      (CI success) and `50cafdb` (CI success) read fresh; `862f099`/`3df6ebf`/`90d6ab1` (CI
+      failure, the exact uncommitted-data defect) all read STALE — 5/5 matching CI's completed
+      ground truth exactly.
+      **Robustness gap the first pass at v2 left open, closed here:** a commit whose own shape
+      predates a build input the assembler needs unconditionally (`app/vendor/js-yaml.js` did not
+      exist yet at this repo's very first commit, `7ae8ff1`) threw git's raw
+      `fatal: path '...' exists on disk, but not in '<sha>'` straight out of `execFileSync` —
+      correctly non-fatal to `main()` (already inside a try/catch) but an unreadable message, and
+      a bare, un-messaged exception to any direct caller. Added `requireGitShow()`: names the
+      commit and the missing path, states plainly that this is "not a staleness verdict." A
+      second gap in the SAME first pass: its "commit missing dist/index.html" test picked that
+      same first commit on the wrong premise — checked with
+      `git log --format=%H | while read c; do git cat-file -e $c:dist/index.html || echo MISSING
+      $c; done` over all 337 commits and NOTHING is missing it; `7ae8ff1` has always had one. Split
+      into two tests: the predates-a-build-input case against the real `7ae8ff1` (asserts the
+      thrown message names the commit and the missing path, not git's raw passthrough), and the
+      missing-dist case against a disposable scratch git repo built just for that test (never the
+      shared tree). Watched red before the fix (`1 FAILED, 5 passed`) and green after
+      (`node tests/run.js "check_dist_fresh"` → `ALL GREEN — 7 tests`).
 
 **Two findings that outrank the data work**, both filed on the board:
 
