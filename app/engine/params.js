@@ -94,6 +94,14 @@ export function normaliseParamDefs(list) {
     struct: d.struct, field: d.field, sdk_field: d.sdk_field,
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
     sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
+    // Default emission order is "every struct block, then every sdk_call:" - correct for
+    // an ordinary, order-independent call. `before_structs` says this ONE call is a
+    // PRECONDITION a struct write in this same peripheral depends on (CH32H417 LPTIM:
+    // `LPTIM_TimeBaseInit()` writes CNTSTRT/SNGSTRT/OUTEN into the same register as
+    // ENABLE, and the RM says those bits are write-only-when-ENABLE=1 — see codegen.js
+    // `sdkCalls()`). Carried through untouched like the other sdk_* keys above; nothing
+    // here interprets it.
+    sdk_call_order: d.sdk_call_order || null,
     sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
     // The SDK exposes a setter, but this generator's one-shot init function is not a
     // safe place to call it (LTDC's pixel format — the setter is unsafe before the

@@ -825,9 +825,14 @@ function gpioSection() {
     // peripheral requires actually reach a GPIO register?
     const configured = pid => [...requiredSignals(pid)]
       .some(sig => !skippedClaim({ who: pid, signal: sigName(pid, sig) }));
+    // `remap_unwritable:` peripherals are excluded here — they get their own, more
+    // specific TODO below (citing WHY, rather than suggesting a fix that does not
+    // exist for them), and reporting the same peripheral twice under two different
+    // explanations would be worse than either alone.
     const used = Object.keys(M.peripherals).filter(pid =>
       (M.peripherals[pid].remaps || []).length > 1
       && (S.periph[pid] || {}).remap
+      && !M.peripherals[pid].remap_unwritable
       && configured(pid));
     if (used.length) {
       L.push('    /* TODO: alternate function remap. The MCU file has neither a `macro:` on the');
@@ -839,6 +844,47 @@ function gpioSection() {
       L.push('       Add one or the other to the MCU YAML and generate again. */');
     }
   }
+
+  // `remap_unwritable:` — a peripheral whose SELECTED, non-default remap is a real
+  // silicon choice (offered for pin planning, claims its pads, exports correctly — all
+  // already true of any `remaps:` peripheral, nothing above this needed to change) but
+  // that THIS part's codegen has no way to write, permanently, not as an oversight.
+  // The block above already catches "nothing can be applied" and suggests "add a macro
+  // or a fields entry" — correct advice for a gap someone can close. That advice is
+  // WRONG for SDMMC on CH32H417: `AFIO_PCFR1.SDMMC_RM[1:0]` is a real register field,
+  // but this part's `codegen.remap.style: af` has no per-peripheral field to write it
+  // (`FORMAT.md`: "style: af forbids codegen.remap.fields") and the SDK exposes no
+  // macro for it either — there is no YAML key to add. Silently emitting nothing here
+  // (the previous behaviour, and the reason SDMMC's other two mappings were dropped
+  // from the file entirely rather than shipped this way) is the worse failure: a user
+  // plans RM=01, the generator writes nothing, and the board ships wired for a mux the
+  // firmware never sets. `remap_unwritable:` says so in the generated C instead, cited,
+  // so `--strict`/`cComplaints()` catches it exactly like any other TODO — visible, not
+  // an unexplained warning and not invisible either. Checked independently of every
+  // style and of the generic detection above, so a part that also has a macro- or
+  // fields-covered peripheral elsewhere cannot hide a cited gap behind its success.
+  const citedUnwritable = Object.keys(M.peripherals).filter(pid => {
+    const P = M.peripherals[pid];
+    if (!P.remap_unwritable) return false;
+    const remaps = P.remaps || [];
+    const idx = (S.periph[pid] || {}).remap || 0;
+    if (!idx || !remaps[idx]) return false;                          // index 0 needs no write
+    if (remaps[idx].macro) return false;                             // a macro covers THIS entry
+    if (((cfg().remap || {}).fields || {})[pid]) return false;       // a fields word covers it
+    return [...requiredSignals(pid)].some(sig => !skippedClaim({ who: pid, signal: sigName(pid, sig) }));
+  });
+  if (citedUnwritable.length) {
+    L.push('    /* TODO: alternate function remap. Selected for pin planning, but this MCU file');
+    L.push('       says this part\'s generator has no way to write it at all - not a gap to');
+    L.push('       close by adding a macro or a fields entry, see the citation. Configure this');
+    L.push('       register by hand to match the plan:');
+    for (const pid of citedUnwritable) {
+      const i = S.periph[pid].remap;
+      L.push(`         ${pid}: index ${i} — ${M.peripherals[pid].remaps[i].name}. ${M.peripherals[pid].remap_unwritable}`);
+    }
+    L.push('    */');
+  }
+
   L.push(...user('GPIO', '    '));
   L.push('}');
   return L.join('\n');
@@ -1305,7 +1351,24 @@ export function initPlan(pid) {
 function sdkCalls(pid, d, handle) {
   const lit = paramLiteral(pid, d);
   const args = Array.isArray(d.sdk_args) ? d.sdk_args : null;
-  const base = { key: d.key, name: d.name, fn: d.sdk_call, value: paramValue(pid, d.key), note: d.sdk_note || '' };
+  // `sdk_call_order: before_structs` — most `sdk_call:` rows are an ordinary
+  // "set this one thing", order-independent, so the default and the ONLY behaviour
+  // before this existed is unchanged: every call after every struct block. But some
+  // calls are a PRECONDITION for a struct write to take effect, not merely another
+  // thing to configure — LPTIM is the proven case (RM 3.4.13 neighbourhood aside; see
+  // CH32H417RM.md 17.5.5 LPTIMx_CR): `LPTIM_TimeBaseInit()` writes CNTSTRT/SNGSTRT/OUTEN
+  // into the SAME register as ENABLE, preserving whatever ENABLE already was
+  // (`ch32h417_lptim.c:54,76-77`, `temp2 = CR & 1` then `CR = temp2`) — and the RM says
+  // outright those bits are "write only when ENABLE=1". Emit `LPTIM_Cmd(.... ENABLE)`
+  // in this generator's usual (struct-then-call) order and the write lands while
+  // ENABLE is still 0: it compiles, the counter never starts, PWM output never enables,
+  // and nothing says so — the exact "plausible-looking wrong code" this file exists to
+  // refuse. `before_structs` says the call must run BEFORE any struct in this
+  // peripheral is filled and applied; anything else keeps today's order, unchanged.
+  const order = d.sdk_call_order === 'before_structs' ? 'before' : 'after';
+  const base = {
+    key: d.key, name: d.name, fn: d.sdk_call, value: paramValue(pid, d.key), note: d.sdk_note || '', order,
+  };
   if (!args) return [{ ...base, missing: 'the MCU file gives no sdk_args, so the argument list is unknown' }];
   if (lit.missing) return [{ ...base, missing: lit.missing }];
 
@@ -1445,6 +1508,19 @@ function structGroups(structs) {
   return groups;
 }
 
+/** One `plan.calls` entry, exactly as it read inline in `periphBlock()` before the
+ * before/after split — a helper now only so the same rendering runs from both call
+ * sites and cannot drift between them. */
+function emitCall(c, L) {
+  if (c.text) {
+    L.push(`    ${c.text}   /* ${c.name}: ${c.value}${c.channel ? ` on ${c.channel}` : ''} */`);
+    return;
+  }
+  L.push(`    /* TODO: ${c.name} = ${c.value} is applied by ${c.fn}(), not by an init struct,`);
+  L.push(`       and ${c.missing}. */`);
+  if (c.note) L.push(`    /* ${c.note} */`);
+}
+
 function periphBlock(pid) {
   const plan = initPlan(pid);
   const L = [];
@@ -1452,6 +1528,11 @@ function periphBlock(pid) {
   L.push(`    /* ---- ${pid} ${'-'.repeat(Math.max(0, 58 - pid.length))} */`);
   if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
   else if (cfg().periph_clock) L.push(`    /* ${pid} has no clock enable bit in codegen.periph_clock — none is written. */`);
+
+  // `sdk_call_order: before_structs` calls run here — before any struct in this
+  // peripheral is filled and applied, per the data's own declaration that a struct
+  // write in this block depends on one of these having already run. See `sdkCalls()`.
+  for (const c of plan.calls) if (c.order === 'before') emitCall(c, L);
 
   for (const group of structGroups(plan.structs)) {
     L.push(`    {`);
@@ -1493,15 +1574,10 @@ function periphBlock(pid) {
     L.push(`    }`);
   }
 
-  for (const c of plan.calls) {
-    if (c.text) {
-      L.push(`    ${c.text}   /* ${c.name}: ${c.value}${c.channel ? ` on ${c.channel}` : ''} */`);
-      continue;
-    }
-    L.push(`    /* TODO: ${c.name} = ${c.value} is applied by ${c.fn}(), not by an init struct,`);
-    L.push(`       and ${c.missing}. */`);
-    if (c.note) L.push(`    /* ${c.note} */`);
-  }
+  // Every OTHER call — today's original behaviour, unchanged: after every struct block,
+  // in declaration order. `order === 'before'` ones already ran above and are skipped
+  // here rather than repeated.
+  for (const c of plan.calls) if (c.order !== 'before') emitCall(c, L);
   for (const p of plan.problems) L.push(`    /* TODO: ${p}. */`);
   for (const n of plan.notes) L.push(`    /* ${n} */`);
   if (L.length === 1) L.push(`    /* nothing to configure */`);

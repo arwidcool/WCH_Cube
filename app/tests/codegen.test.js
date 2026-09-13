@@ -934,6 +934,83 @@ peripherals:
   ], '$RANK is 1-based, $INDEX is 0-based, and a non-placeholder is passed through literally');
 });
 
+// LPTIM ordering hazard (board, AGENT-2, RM 3.4.13/17.5.5 verified): LPTIM_TimeBaseInit()
+// writes CNTSTRT/SNGSTRT/OUTEN into the SAME register as ENABLE, preserving whatever
+// ENABLE already was — the RM says those three bits are "write only when ENABLE=1". The
+// default struct-then-call order would emit the enable call AFTER the struct write,
+// which compiles and silently never starts the counter. `sdk_call_order: before_structs`
+// is the fix; these two tests hold both directions so the default cannot regress either.
+test('sdk_call_order: before_structs emits the call before any struct block for that peripheral', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-CALLORDER
+  inherits: CH32V006
+peripherals:
+  ADC1:
+    params:
+      - key: enable
+        name: Peripheral enable
+        sdk_call: ADC_Cmd
+        sdk_call_order: before_structs
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: true
+      - key: sample
+        name: Sampling time
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_SomeField
+        type: enum
+        default: fast
+        options: [{ name: fast, value: 0, sdk: MY_FAST }]
+`);
+  e.loadMcu('CH32V006-CALLORDER');
+  e.toggleSetting('ADC1', 'Channels', 'IN0', true);
+  e.compute();
+  const c = e.cSource();
+  const callAt = c.indexOf('ADC_Cmd(');
+  const structAt = c.indexOf('ADC_InitTypeDef ');
+  assert.ok(callAt >= 0 && structAt >= 0, 'setup: both must actually be emitted:\n' + c);
+  assert.ok(callAt < structAt, `ADC_Cmd() must precede the struct block, not follow it:\n${c}`);
+});
+
+test('an ordinary sdk_call (no sdk_call_order) keeps the existing after-structs order', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-CALLORDER-DEFAULT
+  inherits: CH32V006
+peripherals:
+  ADC1:
+    params:
+      - key: enable
+        name: Peripheral enable
+        sdk_call: ADC_Cmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: true
+      - key: sample
+        name: Sampling time
+        struct: ADC_InitTypeDef
+        sdk_field: ADC_SomeField
+        type: enum
+        default: fast
+        options: [{ name: fast, value: 0, sdk: MY_FAST }]
+`);
+  e.loadMcu('CH32V006-CALLORDER-DEFAULT');
+  e.toggleSetting('ADC1', 'Channels', 'IN0', true);
+  e.compute();
+  const c = e.cSource();
+  const callAt = c.indexOf('ADC_Cmd(');
+  const structAt = c.indexOf('ADC_InitTypeDef ');
+  assert.ok(callAt >= 0 && structAt >= 0, 'setup: both must actually be emitted:\n' + c);
+  assert.ok(callAt > structAt, `default order must be unchanged - the struct still comes first:\n${c}`);
+});
+
 test('a placeholder the generator does not know is named, not written as text', () => {
   const e = fresh();
   e.registerMcuFile(`

@@ -462,6 +462,23 @@ sample time is the only one today: `ADC_RegularChannelConfig($HANDLE, $CHANNEL, 
 $VALUE)` runs once for each enabled channel. `verify_sdk_names.py` rejects a placeholder it
 does not define, so `$HANDEL` fails the gate instead of reaching generated C as literal text.
 
+**`sdk_call_order: before_structs`** — every `sdk_call:` row is emitted *after* every
+`struct:` block for the peripheral, by default, because that has been true of every case
+until now and most calls are order-independent (`TIM_ARRPreloadConfig` above does not
+care whether the time base was already applied). Some calls are a **precondition** for a
+struct write to take effect rather than an independent setting: CH32H417's LPTIM is the
+proven case (`CH32H417RM.md` 17.5.5, `LPTIMx_CR`) — `LPTIM_TimeBaseInit()` writes
+`CNTSTRT`/`SNGSTRT`/`OUTEN` into the SAME register as `ENABLE`, preserving whatever
+`ENABLE` already was (`ch32h417_lptim.c:54,76-77`), and the RM says outright those three
+bits are "write only when ENABLE=1". Emit `LPTIM_Cmd(handle, ENABLE)` in the default
+order (after `LPTIM_TimeBaseInit()`, as an ordinary `sdk_call` would be) and the write
+lands while `ENABLE` is still 0 — it compiles, `CNTSTRT`/`SNGSTRT`/`OUTEN` never latch,
+the counter never starts and PWM output never enables, and nothing says so. Marking that
+row `sdk_call_order: before_structs` moves it ahead of every struct block for that
+peripheral, matching the vendor's own EVT example (`LPTIM_Cmd` before `LPTIM_TimeBaseInit`,
+`hardware.c:55,95`). Leave it unset for the ordinary case; only add it when a call's
+own documentation says a struct write depends on it.
+
 `sdk_none` without an `sdk_note` is a warning: an unexplained gap reads as an oversight
 rather than a finding. And note ADC `sample`: it is `sdk_call: ADC_RegularChannelConfig`
 because sample time is an argument set **per channel**, not a property of the peripheral —

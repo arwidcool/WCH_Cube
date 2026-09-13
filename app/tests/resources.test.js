@@ -708,6 +708,80 @@ mcu:
   assert.ok(e.cComplaints().some(x => x.kind === 'todo'));
 });
 
+// `remap_unwritable:` — main's P0, forced by SDMMC on CH32H417: a remap that is a REAL
+// silicon choice (offered for planning) but that this part's generator has no way to
+// write, permanently — not a gap "add a macro or a fields entry" can close. The generic
+// TODO above gives exactly that (wrong, for this case) advice; this key replaces it with
+// the actual citation instead of silence.
+test('a remap the data says is permanently unwritable gets its own cited TODO, not the generic advice', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-UNWRITABLE-REMAP
+  inherits: CH32V006
+peripherals:
+  TESTPERIPH:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: On, signals: [SIG] }
+    remaps:
+      - { name: "00 Default", pins: { SIG: PD5 } }
+      - { name: "01", pins: { SIG: PD6 } }
+    remap_unwritable: "AFIO_PCFR1.TESTPERIPH_RM[1:0] (RM 9.9.9) - codegen.remap.style: af has no per-peripheral field to write it on this part"
+`);
+  e.loadMcu('CH32V006-UNWRITABLE-REMAP');
+  e.setPackage('TSSOP20');
+  e.setSetting('TESTPERIPH', 'Mode', 'On');
+  e.setRemap('TESTPERIPH', 1);
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /TODO: alternate function remap\. Selected for pin planning/);
+  assert.match(c, /not a gap to/);
+  assert.match(c, /TESTPERIPH: index 1 — 01\. AFIO_PCFR1\.TESTPERIPH_RM\[1:0\] \(RM 9\.9\.9\)/,
+    'the citation must reach the generated C verbatim, not be summarised away');
+  assert.equal(/neither a `macro:` on the/.test(c), false,
+    'the generic "add one or the other" advice must NOT also appear - it would be wrong advice here');
+  assert.ok(e.cComplaints().some(x => x.kind === 'todo' && /alternate function remap\. Selected for pin planning/.test(x.text)),
+    '--strict must see it: not invisible, and not an unexplained warning either');
+
+  // Pin planning is untouched by any of this: the choice is a real, exportable pin -
+  // the whole point of the P0 is that this and the C-generation gap are independent.
+  assert.equal(e.compute().pins.PD6.label, 'TESTPERIPH_SIG', 'the chosen pin is claimed exactly like any other remap choice');
+});
+
+test('index 0 of an unwritable remap needs no citation - nothing to write, so no TODO', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-UNWRITABLE-REMAP-DEFAULT
+  inherits: CH32V006
+peripherals:
+  TESTPERIPH:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: On, signals: [SIG] }
+    remaps:
+      - { name: "00 Default", pins: { SIG: PD5 } }
+      - { name: "01", pins: { SIG: PD6 } }
+    remap_unwritable: "AFIO_PCFR1.TESTPERIPH_RM[1:0] - not writable on this part"
+`);
+  e.loadMcu('CH32V006-UNWRITABLE-REMAP-DEFAULT');
+  e.setPackage('TSSOP20');
+  e.setSetting('TESTPERIPH', 'Mode', 'On');
+  // remap stays at its default, index 0 - the reset value, nothing to write
+  e.compute();
+  const c = e.cSource();
+  assert.equal(/TODO: alternate function remap/.test(c), false,
+    'the default mapping needs no register write and must not manufacture a TODO for one');
+  assert.equal(e.cComplaints().some(x => x.kind === 'todo' && /alternate function remap/.test(x.text)), false);
+});
+
 // ---- grouped NVIC vectors ----------------------------------------------------
 
 test('many EXTI lines map to one vector, and the lookup goes line -> vector', () => {
