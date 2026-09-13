@@ -294,13 +294,55 @@ If a rebase conflicts in a file you do not own: abort, post on `BOARD.md`, take 
 
 ## 7. Deploying an agent
 
-Start a Claude Code session per agent, pointed at this repo, with this prompt:
+Start a Claude Code session in this repo and paste **one** of these. Nothing else is needed —
+everything about where the project stands is in `STATUS.md`, everything about how to work here is
+in this file, and the agent reads both as its first act.
 
 ```
-You are AGENT-<n> on WCH_CubeMX. Read agents/README.md, then agents/STATUS.md (§1-§3 and your
-own block), then agents/BOARD.md from the last entry you have not seen. Follow the work cycle in
-README §3 exactly. Never stop to ask a human: decide, post the DECISION on the board, continue.
+You are AGENT-1 (DATA) on WCH_CubeMX.
+Read agents/README.md, then all of agents/STATUS.md, then agents/BOARD.md from the last entry
+you have not seen. Follow the work cycle in README section 3 exactly, starting at step 1.
+Never stop to ask a human: decide, post the DECISION on the board, and continue.
 ```
 
-That is the whole handover. Everything an agent needs to know where the project stands is in
-`STATUS.md`; everything it needs to know how to work here is in this file.
+```
+You are AGENT-2 (APP) on WCH_CubeMX.
+Read agents/README.md, then all of agents/STATUS.md, then agents/BOARD.md from the last entry
+you have not seen. Follow the work cycle in README section 3 exactly, starting at step 1.
+Never stop to ask a human: decide, post the DECISION on the board, and continue.
+```
+
+```
+You are AGENT-3 (QA + RELEASE) on WCH_CubeMX.
+Read agents/README.md, then all of agents/STATUS.md, then agents/BOARD.md from the last entry
+you have not seen. Follow the work cycle in README section 3 exactly, starting at step 1.
+Never stop to ask a human: decide, post the DECISION on the board, and continue.
+```
+
+**"All of `STATUS.md`" is deliberate** and is the one thing not to shorten. §4 carries every
+agent's IN FLIGHT block, and reading only your own is how two agents end up doing the same task.
+
+### One agent or three
+
+Both work, and the difference is the shared tree.
+
+- **One agent** is the simple case: it takes the top item in its area, finishes, commits, and
+  loops. Start with AGENT-1 if you want the biggest open item moving (`STATUS.md` §2 C, 35 cells),
+  AGENT-2 if you want the five peripherals unblocked that are waiting on one change (§3), AGENT-3
+  if you want the gates and the record kept honest.
+- **Three agents** is faster and has one hard constraint: **run the suite serially.** Two
+  `node tests/run.js` at once corrupt each other — one rebuilds `dist/index.html` while the other
+  reads it, and the compile gate builds into a shared drop zone. If you are running three, expect
+  occasional reds that pass on a re-run alone; the runner prints a note when it detects it.
+  The other shared-tree hazard is the index: `git commit` with no pathspec commits whatever is
+  staged, including somebody else's in-flight work. Commit by pathspec.
+
+Worktrees would remove both hazards and are **suspended** — the condition for turning them on is
+in `STATUS.md` §2 A, and it is not met yet.
+
+### Resuming a session that stopped
+
+There is nothing special to do: the same prompt. The agent reads §4, finds its own IN FLIGHT
+block, and picks up at `Next step if I stop here`. That is what the block is for (§2a). If the
+work was left uncommitted, say so when you start it — an agent cannot see what is in a closed
+session's head, only what is in the tree and in `STATUS.md`.
