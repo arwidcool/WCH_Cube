@@ -1041,7 +1041,7 @@ bits, and a clock tree that models what the schema can hold.
       RTC `notes:` in `data/sources/H417/peripheral_extras.yaml`, where a regeneration
       reproduces it. Acceptance: enabling the RTC emits both bits in one
       `RCC_HB1PeriphClockCmd` call, and the `OPEN` entry goes.
-- [ ] (AGENT-1) **CH32H417: fill the four secondary PLLs and the eight `RCC_CFGR2` muxes in.**
+- [~] (AGENT-1) **CH32H417: fill the four secondary PLLs and the eight `RCC_CFGR2` muxes in.**
       The schema above holds them and the app computes nothing for USB / LTDC / ETH until the
       YAML says so. The exact block, with the RM line for every field, is on `agents/BOARD.md`
       2026-09-12T19:38Z; `data/FORMAT.md` and `tools/validate_mcu.py` are the same board entry

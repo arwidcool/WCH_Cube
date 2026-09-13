@@ -623,6 +623,28 @@ def check_io_counts(doc: dict, tables: dict, r: Report) -> None:
                     f"(a shorted pair counts once) - datasheet and pin table disagree")
 
 
+# Names the clock tab and `clockCalc()` use for structure rather than for a node, so a
+# prescaler, a derived tap or a PLL `output:` may not take one. The list grew with the
+# `plls:` block: before it, only a prescaler could collide.
+RESERVED_CLOCK_NAMES = {
+    "sources", "pll", "plls", "feeding", "over", "under", "selectable", "sysclk", "hclk",
+}
+
+
+def _source_list(node) -> list:
+    """A `source:` is one name, or a LIST of names meaning a mux the user chooses from.
+
+    The list form is what CH32H417 needs: RM 3.4.13 gives eight peripheral clocks their own
+    source select. Before this, a list was merely truthy and never in `known`, so every mux
+    reported "source is not another prescaler or SYSCLK" - the check read as strict and was
+    checking nothing at all about the thing it named.
+    """
+    src = (node or {}).get("source")
+    if src is None:
+        return []
+    return list(src) if isinstance(src, list) else [src]
+
+
 def check_clock(doc: dict, r: Report) -> None:
     clock = doc.get("clock")
     if clock is None:
@@ -634,7 +656,32 @@ def check_clock(doc: dict, r: Report) -> None:
     sources = clock.get("sources") or {}
     if not sources:
         r.error("clock.sources", "no oscillators declared")
-    nodes = set(sources) | {"PLLCLK"}
+
+    # `pll:` is the alias for the single SYS PLL and keeps working unchanged; `plls:` is a
+    # map of named PLLs, each publishing an `output:` that other nodes may cite.
+    plls = clock.get("plls") or {}
+    if plls and not isinstance(plls, dict):
+        r.error("clock.plls", "must be a mapping of <ID>: { ... }")
+        plls = {}
+    pll_outputs = {}                      # output name -> the PLL id that publishes it
+    for pid, pl in plls.items():
+        pw = f"clock.plls.{pid}"
+        if not isinstance(pl, dict):
+            r.error(pw, "must be a mapping")
+            continue
+        out = pl.get("output")
+        if not out:
+            r.error(pw, "no `output:` - other taps cite a PLL by its output name")
+            continue
+        if out in pll_outputs:
+            r.error(pw, f"output `{out}` is already published by `{pll_outputs[out]}`")
+        elif out in sources:
+            r.error(pw, f"output `{out}` collides with the oscillator of the same name")
+        elif out in RESERVED_CLOCK_NAMES:
+            r.error(pw, f"output `{out}` is a reserved name")
+        pll_outputs[out] = pid
+
+    nodes = set(sources) | {"PLLCLK"} | set(pll_outputs)
 
     pll = clock.get("pll") or {}
     for i, inp in enumerate(pll.get("inputs") or []):
@@ -644,29 +691,108 @@ def check_clock(doc: dict, r: Report) -> None:
     if pll and not pll.get("multipliers"):
         r.error("clock.pll", "no `multipliers`")
 
+    # Each secondary PLL gets the checks the SYS PLL has had, plus the two the SYS PLL
+    # cannot need: an input naming another PLL, and therefore a cycle.
+    for pid, pl in plls.items():
+        if not isinstance(pl, dict):
+            continue
+        pw = f"clock.plls.{pid}"
+        has_mul = bool(pl.get("multipliers"))
+        has_fixed = pl.get("output_mhz") is not None
+        if has_mul and has_fixed:
+            r.error(pw, "has both `multipliers:` and `output_mhz:` - a PLL is one or the other")
+        elif not has_mul and not has_fixed:
+            r.error(pw, "has neither `multipliers:` nor a fixed `output_mhz:`")
+        for i, inp in enumerate(pl.get("inputs") or []):
+            src = (inp or {}).get("source")
+            if not src:
+                continue
+            if src not in sources and src != "PLLCLK" and src not in pll_outputs:
+                r.error(f"{pw}.inputs[{i}]",
+                        f"source `{src}` is not an oscillator, PLLCLK or another PLL's output")
+    _check_pll_cycles(plls, pll_outputs, r)
+
     for src in (clock.get("sysclk") or {}).get("sources") or []:
         if src not in nodes:
-            r.error("clock.sysclk.sources", f"`{src}` is neither an oscillator nor PLLCLK")
+            r.error("clock.sysclk.sources",
+                    f"`{src}` is neither an oscillator, PLLCLK, nor a `clock.plls` output")
 
     prescalers = clock.get("prescalers") or {}
-    # a prescaler may hang off SYSCLK, another prescaler, an oscillator, or the PLL directly
-    known = set(prescalers) | set(sources) | {"SYSCLK", "PLLCLK"}
+    # a prescaler may hang off SYSCLK, another prescaler, an oscillator, the PLL, or any
+    # secondary PLL's output
+    known = set(prescalers) | set(sources) | {"SYSCLK", "PLLCLK"} | set(pll_outputs)
     for name, p in prescalers.items():
         pw = f"clock.prescalers.{name}"
         if not isinstance(p, dict):
             r.error(pw, "must be a mapping")
             continue
-        if not p.get("options"):
+        if name in RESERVED_CLOCK_NAMES:
+            r.error(pw, f"`{name}` is a reserved name")
+        opts = p.get("options")
+        if not opts:
             r.error(pw, "no `options` (divider list)")
-        src = p.get("source")
-        if src and src not in known:
-            r.error(pw, f"source `{src}` is not another prescaler or SYSCLK")
+        srcs = _source_list(p)
+        for src in srcs:
+            if src not in known:
+                r.error(pw, f"source `{src}` is not an oscillator, a PLL output, "
+                            "another prescaler or SYSCLK")
+        # A `default:` the engine cannot find is SILENT - it falls back to the first entry -
+        # so a typo would ship a tab that looks deliberate and is not.
+        dflt = p.get("default")
+        if dflt is not None and opts and dflt not in opts:
+            r.error(pw, f"`default: {dflt}` is not one of its own `options:`")
+        dsrc = p.get("default_source")
+        if dsrc is not None:
+            if not srcs:
+                r.error(pw, "`default_source:` but no `source:` list to choose from")
+            elif dsrc not in srcs:
+                r.error(pw, f"`default_source: {dsrc}` is not one of its own `source:` entries")
     for i, d in enumerate(clock.get("derived") or []):
-        src = (d or {}).get("source")
-        if src and src not in known:
-            r.error(f"clock.derived[{i}]", f"source `{src}` is not a known clock node")
+        nm = (d or {}).get("name")
+        if nm in RESERVED_CLOCK_NAMES:
+            r.error(f"clock.derived[{i}]", f"`{nm}` is a reserved name")
+        for src in _source_list(d):
+            if src not in known:
+                r.error(f"clock.derived[{i}]", f"source `{src}` is not a known clock node")
 
     check_hse_coupling(doc, clock, sources, r)
+
+
+def _check_pll_cycles(plls: dict, pll_outputs: dict, r: Report) -> None:
+    """A PLL whose input is another PLL's output can, in a file, be its own ancestor.
+
+    `clockCalc()` resolves PLLs in dependency order, so a cycle is not a wrong number - it
+    is a tab that never finishes, or one that silently drops a PLL. Cheaper to refuse here.
+    """
+    feeds = {}                            # pll id -> the pll ids it takes an input from
+    for pid, pl in plls.items():
+        if not isinstance(pl, dict):
+            continue
+        upstream = set()
+        for inp in pl.get("inputs") or []:
+            src = (inp or {}).get("source")
+            if src in pll_outputs:
+                upstream.add(pll_outputs[src])
+        feeds[pid] = upstream
+
+    WHITE, GREY, BLACK = 0, 1, 2
+    colour = {pid: WHITE for pid in feeds}
+
+    def walk(pid, trail):
+        colour[pid] = GREY
+        for up in sorted(feeds.get(pid, ())):
+            if colour.get(up) == GREY:
+                at = trail.index(up) if up in trail else 0
+                loop = " -> ".join(trail[at:] + [up])
+                r.error(f"clock.plls.{pid}", f"PLL input cycle: {loop}")
+                continue
+            if colour.get(up) == WHITE:
+                walk(up, trail + [up])
+        colour[pid] = BLACK
+
+    for pid in sorted(feeds):
+        if colour[pid] == WHITE:
+            walk(pid, [pid])
 
 
 def _setting_named(periph: dict, name: str):

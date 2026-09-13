@@ -878,8 +878,64 @@ clock:
 ```
 
 A prescaler with no `source` hangs off SYSCLK. Otherwise `source` names another
-prescaler, an oscillator, `SYSCLK` or `PLLCLK`. `min_mhz` / `max_mhz` drive the red
-out-of-spec warnings.
+prescaler, an oscillator, `SYSCLK`, `PLLCLK` or a `plls:` output. `min_mhz` / `max_mhz`
+drive the red out-of-spec warnings.
+
+### `plls:` — more than one PLL, and a per-peripheral source mux
+
+`pll:` above is **one** PLL feeding SYSCLK, which is every part except CH32H417. That part
+has five (RM 3.3.4: SYS, USBHS 480 MHz, ETH 500 MHz, USBSS 125 MHz, SerDes) and eight
+peripheral clocks with their own source select (RM 3.4.13, `RCC_CFGR2`). `pll:` is
+**unchanged and still the alias for the SYS PLL** — the five single-PLL parts do not move.
+
+```yaml
+clock:
+  plls:
+    USBHS_PLL:
+      label: USB HS PLL            # optional; the tab falls back to the id
+      output: USBHS_PLL_CLK        # REQUIRED. the name other nodes cite
+      output_mhz: 480              # a FIXED output the silicon does not let you change
+      inputs:
+        - { name: HSE, source: HSE, div: 1 }
+        - { name: "SYS PLL /N", source: PLLCLK, div: 4 }
+    SERDES_PLL:
+      output: SERDES_PLL_CLK
+      multipliers: [25, 28, 30]    # ...or a multiplier list. EXACTLY ONE of the two.
+      inputs: [{ name: HSE, source: HSE, div: 1 }]
+  prescalers:
+    USBFS:
+      label: USBFS 48 MHz
+      source: [USBHS_PLL_CLK, PLLCLK]   # a LIST is a mux: the tab draws a <select>
+      options: [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+      default: 10                       # must be one of its own `options:`
+      default_source: USBHS_PLL_CLK     # must be one of its own `source:` entries
+      target_mhz: 48
+```
+
+| Key | Means |
+|---|---|
+| `plls.<ID>.output` | **required** — the node name other taps, `sysclk.sources` and other PLLs cite. It may not collide with an oscillator, another PLL's output, or a reserved name |
+| `output_mhz` / `multipliers` | **exactly one.** `output_mhz` is a PLL whose output the silicon fixes; `multipliers` is one the user picks. Both, or neither, is an error |
+| `inputs[].source` | an oscillator, `PLLCLK` (the SYS PLL), or another PLL's `output`. A cycle is an error |
+| `source:` as a **list** | a mux. `clockCalc()` computes from the chosen entry, the `.wchproj` round-trips it, undo/redo covers it |
+| `default:` / `default_source:` | the value and the mux entry the tab opens on. Each must be in its own list — **the engine falls back to the first entry silently**, so a typo would ship a tab that looks deliberate and is not, which is why the validator refuses it |
+
+`sysclk.sources` may name a PLL `output`, not just `PLLCLK`.
+
+**Reserved names.** A prescaler, a derived tap or a PLL `output` may not be called
+`sources`, `pll`, `plls`, `feeding`, `over`, `under`, `selectable`, `sysclk` or `hclk` —
+the clock tab uses those for structure rather than for a node.
+
+**A fixed `output_mhz:` is a claim about the silicon, not a convenience.** Where the part
+makes that output conditional — CH32H417's USBHS_PLL is 480 MHz *only* when
+`USBHSPLL_REFSEL[1:0]` matches the actual input frequency (RM `:4266-4274`) — the
+condition belongs in the file too, or the tab computes a number the hardware will not
+produce. A computed number that is wrong is worse than a missing one.
+
+**All of this is checked**, and every check has been seen to fail:
+`python tools/validate_clock_selftest.py` plants eleven breaks one at a time — plus the
+positive half, a correct block that must validate **clean**, because a check that refuses
+everything passes a planted-break sweep exactly as well as one that works.
 
 ### A part with no HSE at all
 

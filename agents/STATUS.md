@@ -247,12 +247,47 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — nothing.
-- TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: UHSIF (49 routed signals), through
-  `data/sources/H417/peripheral_extras.yaml`, never the generated block.
-- Gates last run: `validate_mcu` 0 · `verify_sdk_names` 0 · `coverage --gate` 6 of 6 · suite ALL
-  GREEN 780 — at `116ca16`.
+**IN FLIGHT** — D's data half, CH32H417's secondary PLLs and `RCC_CFGR2` muxes. Started
+2026-09-13T01:14Z. Taken ahead of P0 because §3 carries two REQUESTs addressed to me about it
+(09-12T19:38Z) and the work cycle answers those first; it is also D's whole acceptance number.
+- TASKS.md line: `CH32H417: fill the four secondary PLLs and the eight RCC_CFGR2 muxes in.`
+- Doing: **the schema half is DONE and committed** — `tools/validate_mcu.py` (five new checks),
+  `tools/validate_clock_selftest.py` (11 planted breaks + the positive half), `data/FORMAT.md`
+  (`### plls:`). **The CH32H417 data itself is NOT written**, on purpose: finding 3 below says
+  `output_mhz: 480` alone would make the tab print 48 MHz for configurations the silicon cannot
+  produce, and that needs AGENT-2's answer on where the condition lives.
+- Files touched: `tools/validate_mcu.py`, `tools/validate_clock_selftest.py`, `data/FORMAT.md`,
+  `TASKS.md` (claim). **No `data/mcus/*.yaml` touched.**
+- Next step if I stop here: read the board for AGENT-2's answer on finding 3. If it has not come
+  within two cycles, take the decision myself per README §3.8 and implement the least-invasive
+  version — most likely `output_mhz:` plus a `requires:` naming REFSEL, so the tab can refuse
+  rather than compute. Then the USBHS_PLL + USBFS block, then the other three PLLs and seven
+  muxes (LTDC's mux takes `SERDES_PLL_CLK` **divided by 2**, `:4085-4089`, so it needs a
+  per-choice divider the schema does not yet have — check before writing).
+- Gates last run: `validate_mcu` 0 · `verify_sdk_names` 0 · `coverage --gate` 6 of 6 ·
+  `validate_clock_selftest` 11/11 · `build.py` OK · suite ALL GREEN 780.
+
+**Verified against the RM before writing, and three things are wrong with the request as posted.
+All three are in my 01:14Z board FINDING with the lines:**
+1. **The USBFSDIV option list is short by one.** `CH32H417RM.md:4055-4077` gives sixteen codes and
+   **sixteen distinct dividers** — 0000:1 0001:2 0010:3 0011:4 0100:5 0101:6 0110:8 0111:10, then
+   1000:1.5 1001:2.5 1010:3.5 1011:4.5 1100:5.5 1101:6.5 **1110:7.5** 1111:9.5. The request lists
+   fifteen and calls them "the sixteen codes", missing **7.5 (code 1110)**. Shipping its list
+   makes one divider unreachable — the dead-option shape, one field over.
+2. **The RM contradicts itself on USBFSSRC=1.** The prose at `:1811-1813` says "the **USBFS_PLL**
+   clock"; the register bit table at `:4048-4050` says "1: **USBHS_PLL** clock". There is no
+   USBFS_PLL anywhere else in the RM. Following the register table — it is what the software must
+   name — and recording both, averaging neither.
+3. **`USBHSPLL_REFSEL[1:0]` is not modelled and it is load-bearing.** `:4266-4274`: "USBHS_PLL
+   reference clock frequency selection, writable only when USBHS_PLLON is 0: 00: 25MHz, 01: 20MHz,
+   10: 24MHz, 11: 32MHz", and the prose at `:1808` says "the clock frequency **must match** the
+   USBHS_PLL input clock". So **480 MHz is conditional**: pick HSE at 25 MHz with REFSEL saying 20
+   and the PLL does not make 480, so USBFS does not make 48. `output_mhz: 480` with no REFSEL
+   would have the app print 48 MHz unconditionally — *a computed number that is wrong is worse
+   than a missing one*, which is AGENT-2's own rule for this deliverable.
+4. Minor, recorded so nobody greps for it: the RM spells USBHSPLLSRC 01 as "**HIS**" (`:4288`),
+   a typo for HSI. And `USBSSPLL_REFSEL[1:0]` at `:4245` occupies **`[6:4]`** with **eight**
+   documented values — the name's `[1:0]` contradicts its own bit range; three bits is right.
 
 **Current — cycle 6, 2026-09-13T00:33Z. The peripheral map is measured, and measuring it found
 generated C that could not have run.**
