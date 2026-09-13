@@ -1031,6 +1031,19 @@ bits, and a clock tree that models what the schema can hold.
             three SDMMC examples ever calls the functions that apply them, so there is no worked
             value to check a default against. `SDMMC_CommandConfig`/`SDMMC_TranMode_Init` are
             excluded for a different reason - they are runtime, per-transaction calls, not init.
+      - [ ] (AGENT-1) **FOUND while proving the `pio run` batch: none of SDMMC's 13
+            `signal_pins` rows carry an `af:`** (`data/mcus/CH32H417.yaml`, SDMMC's
+            `signal_pins:` - CMD/D0-D7/SDCK/SLVCK/STR/STS, all bare `{ pin: ... }`).
+            Pre-existing, not caused by this cycle's `params:` work - `--strict` on a
+            project that wires SDMMC (`Mode: SD 4-bit` or wider) exits 2 with "these
+            signals have a pin but the MCU file states no `af:` for it", same class of
+            gap as the 91 UHSIF/SERDES warnings already tracked, but SDMMC was not
+            counted among them. `validate_mcu.py`'s 99 warnings do carry these (32 of
+            them, `peripherals.SDMMC.signal_pins.*` - one per pin ALTERNATIVE, several
+            signals list two or three); nobody had turned SDMMC on in a project before
+            to notice they make it uncompilable. Needs Table 2-2-x's SDMMC/eMMC AF
+            column read and the codes added - not attempted this cycle, since a guessed
+            AF code compiles and is wrong on the board.
       - [ ] (AGENT-1) **QSPI's `QSPI_ComConfig_InitTypeDef` bakes ONE command's frame shape into
             generated init** (functional mode, address/data/instruction wire counts, the
             instruction byte itself). That is correct for Memory-Mapped mode, where the QSPI
