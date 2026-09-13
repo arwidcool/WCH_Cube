@@ -3390,6 +3390,334 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: Enabled, signals: [BA0, BA1, CAS_N, RAS_N, WE_N, CKE0, CKE1, CS_N0, CS_N1, DQM0, DQM1, DQM2, DQM3] }
+      # A REGISTER CHOICE, NOT A PIN CLAIM - EXTMOD (R32_FMC_BCRx[14]) decides whether a
+      # second, WRITE-ONLY timing block applies (`FMC_WriteTimingStruct`); no signal list
+      # because nothing here claims a pad. It is what `embed: wr`'s params below key off,
+      # the same shape `FMC_ExtendedMode` itself uses as a `const:`-per-choice pair.
+      - name: "Extended Mode"
+        choices:
+          - { name: Disable }
+          - { name: Enable }
+    params:
+      # FMC_NORSRAMInitTypeDef (ch32h417_fmc.h:60-116), applied by FMC_NORSRAMInit()
+      # (:425, no handle - the bank is a struct member, not an argument). Covers the
+      # NOR/PSRAM/SRAM controller this peripheral's own worked example (the 8080 LCD
+      # wiring above) is: async or muxed-async NOR/SRAM/PSRAM on Bank1. Two structs
+      # nest through ONE pointer each - AGENT-2's `embed:` contract, `agents/BOARD.md`
+      # 2026-09-13T19:07Z - so `struct: FMC_NORSRAMTimingInitTypeDef` rows below carry
+      # `embed: rw` or `embed: wr` matching which of the SDK's two timing sets they set.
+      #
+      # `FMC_Bank` is FIXED to NORSRAM1 (NE1) rather than offered: "Chip select" above is
+      # a CHECKBOX row, so more than one of NE1-4 can be ticked at once for a multi-bank
+      # design, and one scalar `FMC_Bank` value cannot answer "which bank" for all of
+      # them - each additional bank needs its OWN `FMC_NORSRAMInit()` call with its own
+      # bank id and its own timing, the same `channel_params.instances` shape SERDES and
+      # SAI use, keyed to which checkbox is ticked rather than a channel number. Not
+      # built this cycle; TASKS.md line. NE1 is what this peripheral's own "how to wire
+      # an 8080 parallel display" note above already assumes.
+      - key: bank
+        name: Bank
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_Bank
+        const: FMC_Bank1_NORSRAM1
+        help: "ch32h417_fmc.h:63-64. Fixed to NE1/Bank1 - see the comment above for why the other three banks are not independently configurable yet."
+      - key: data_address_mux
+        name: Multiplex address/data bus
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_DataAddressMux
+        sdk_enabled: FMC_DataAddressMux_Enable
+        sdk_disabled: FMC_DataAddressMux_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:66-68, R32_FMC_BCRx MUXE bit 1 (Table 40-17, CH32H417RM.md:56978). Enable only for a multiplexed-bus NOR Flash; needs NADV (Optional FSMC signals above)."
+      - key: memory_type
+        name: Memory type
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_MemoryType
+        type: enum
+        default: SRAM
+        options:
+          - { name: SRAM,  value: 0, sdk: FMC_MemoryType_SRAM }
+          - { name: PSRAM, value: 1, sdk: FMC_MemoryType_PSRAM }
+          - { name: NOR,   value: 2, sdk: FMC_MemoryType_NOR }
+        help: "ch32h417_fmc.h:70-72, R32_FMC_BCRx MTYP[3:2] (Table 40-17, CH32H417RM.md:56978)."
+      - key: memory_data_width
+        name: Memory data width
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_MemoryDataWidth
+        type: enum
+        default: 8-bit
+        options:
+          - { name: 8-bit,  value: 0, sdk: FMC_MemoryDataWidth_8b }
+          - { name: 16-bit, value: 1, sdk: FMC_MemoryDataWidth_16b }
+          - { name: 32-bit, value: 2, sdk: FMC_MemoryDataWidth_32b }
+        help: >
+          ch32h417_fmc.h:74-76, R32_FMC_BCRx MWID[5:4] (Table 40-17, CH32H417RM.md:56978,
+          already the reasoning behind the `Bus mode`/width rows above). NOT derived from
+          those rows - keep this the SAME width as whichever `Bus mode`/`Memory bus`
+          choice you picked; a mismatch compiles and drives the wrong-width bus.
+      - key: burst_access_mode
+        name: Burst access mode
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_BurstAccessMode
+        sdk_enabled: FMC_BurstAccessMode_Enable
+        sdk_disabled: FMC_BurstAccessMode_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:77-79, R32_FMC_BCRx BURSTEN bit 8 (Table 40-17). Only meaningful with a synchronous burst NOR Flash."
+      - key: asynchronous_wait
+        name: Asynchronous wait signal
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_AsynchronousWait
+        sdk_enabled: FMC_AsynchronousWait_Enable
+        sdk_disabled: FMC_AsynchronousWait_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:81-83, R32_FMC_BCRx ASYNCWAIT bit 15 (Table 40-17: \"set to 1 if the memory supports this feature\"). Needs NWAIT (Optional FSMC signals above)."
+      - key: wait_signal_polarity
+        name: Wait signal polarity
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_WaitSignalPolarity
+        type: enum
+        default: Low
+        options:
+          - { name: Low,  value: 0, sdk: FMC_WaitSignalPolarity_Low }
+          - { name: High, value: 1, sdk: FMC_WaitSignalPolarity_High }
+        help: "ch32h417_fmc.h:85-87. Only makes sense with burst mode's wait signal active (Table 40-17, bit 9 WAITPOL)."
+      - key: wait_signal_active
+        name: Wait signal timing
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_WaitSignalActive
+        type: enum
+        default: Before wait state
+        options:
+          - { name: Before wait state, value: 0, sdk: FMC_WaitSignalActive_BeforeWaitState }
+          - { name: During wait state, value: 1, sdk: FMC_WaitSignalActive_DuringWaitState }
+        help: "ch32h417_fmc.h:89-92. Whether the memory asserts NWAIT one cycle early or during the wait cycle itself; burst mode only."
+      - key: write_operation
+        name: Write operation
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_WriteOperation
+        sdk_enabled: FMC_WriteOperation_Enable
+        sdk_disabled: FMC_WriteOperation_Disable
+        type: bool
+        default: true
+        help: "ch32h417_fmc.h:94-95, R32_FMC_BCRx WREN bit 12 (Table 40-17: \"make the settings as needed\"). Disabling makes the bank read-only to the FMC."
+      - key: wait_signal
+        name: Wait-state insertion
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_WaitSignal
+        sdk_enabled: FMC_WaitSignal_Enable
+        sdk_disabled: FMC_WaitSignal_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:97-99, R32_FMC_BCRx WAITEN bit 13 (Table 40-17: no effect outside burst mode)."
+      - key: extended_mode_enable
+        name: Extended mode
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_ExtendedMode
+        const: FMC_ExtendedMode_Enable
+        depends_on: { setting: "Extended Mode", equals: Enable }
+        help: "ch32h417_fmc.h:101-102, R32_FMC_BCRx EXTMOD bit 14 (Table 40-17/40-19, CH32H417RM.md:56978,57064). Fixed by the Extended Mode row - it is what decides whether the `wr` timing block below applies at all."
+      - key: extended_mode_disable
+        name: Extended mode
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_ExtendedMode
+        const: FMC_ExtendedMode_Disable
+        depends_on: { setting: "Extended Mode", equals: Disable }
+        help: "ch32h417_fmc.h:101-102. Fixed by the Extended Mode row."
+      - key: write_burst
+        name: Write burst
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_WriteBurst
+        sdk_enabled: FMC_WriteBurst_Enable
+        sdk_disabled: FMC_WriteBurst_Disable
+        type: bool
+        default: false
+        help: "ch32h417_fmc.h:104-106. Synchronous burst NOR Flash only, and needs Extended mode + Burst access mode both enabled."
+      - key: cpsize
+        name: CRAM page size
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_CPSIZE
+        type: enum
+        default: "None"
+        options:
+          - { name: "None",     value: 0, sdk: FMC_CPSIZE_None }
+          - { name: 128 bytes,  value: 1, sdk: FMC_CPSIZE_128Bytes }
+          - { name: 256 bytes,  value: 2, sdk: FMC_CPSIZE_256Bytes }
+          - { name: 512 bytes,  value: 3, sdk: FMC_CPSIZE_512Bytes }
+          - { name: 1024 bytes, value: 4, sdk: FMC_CPSIZE_1024Bytes }
+        help: "ch32h417_fmc.h:107-108, R32_FMC_BCRx CPSIZE[18:16] (Table 40-17: no effect on asynchronous mode). External CRAM page size, PSRAM only."
+      - key: bmp
+        name: Address mapping
+        struct: FMC_NORSRAMInitTypeDef
+        sdk_field: FMC_BMP
+        type: enum
+        default: Mode 0
+        options:
+          - { name: Mode 0, value: 0, sdk: FMC_BMP_Mode0 }
+          - { name: Mode 1, value: 1, sdk: FMC_BMP_Mode1 }
+        help: "ch32h417_fmc.h:110-111, R32_FMC_BCR1 BMP[25:24] (RM 40.4, CH32H417RM.md:56373: \"the FMC memory area mapping can be modified via the BMP[1:0] bits in R32_FMC_BCR1\")."
+      # THE TIMING STRUCT, applied per pointer member - one call, up to two blocks. Every
+      # row's DEFAULT is the maximum value the header's own range allows (the slowest,
+      # safest timing an unknown memory can be driven at) - not a guess at a real
+      # memory's numbers, which only that memory's own datasheet has. Narrow every one
+      # of these once the attached device is known; the header's own worked constants
+      # (CH32H417 EVT ships none for FMC - unlike SDIO/SDMMC, no EXAM/FMC folder exists
+      # to check a value against) do not exist to check against here.
+      - key: rw_addrset
+        name: "Address setup time (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw
+        sdk_field: FMC_AddressSetupTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:25-28, R32_FMC_BTRx ADDSET[3:0] (Table 40-18, CH32H417RM.md:57094-57112). Not used with synchronous NOR."
+      - key: wr_addrset
+        name: "Address setup time (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr
+        sdk_field: FMC_AddressSetupTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        when: { "Extended Mode": Enable }
+        help: "Same field, the write-only timing set that applies when Extended mode is enabled (ch32h417_fmc.h:115)."
+      - key: rw_addrhold
+        name: "Address hold time (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw
+        sdk_field: FMC_AddressHoldTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:30-33, R32_FMC_BTRx ADDHLD[7:4] (Table 40-18). Not used with synchronous NOR."
+      - key: wr_addrhold
+        name: "Address hold time (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr
+        sdk_field: FMC_AddressHoldTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        when: { "Extended Mode": Enable }
+        help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+      - key: rw_datasetup
+        name: "Data setup time (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw
+        sdk_field: FMC_DataSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        help: "ch32h417_fmc.h:35-38, R32_FMC_BTRx DATAST[15:8] (Table 40-18). SRAMs, ROMs and asynchronous muxed NOR Flash."
+      - key: wr_datasetup
+        name: "Data setup time (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr
+        sdk_field: FMC_DataSetupTime
+        type: int
+        default: 255
+        min: 0
+        max: 255
+        when: { "Extended Mode": Enable }
+        help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+      - key: rw_busturnaround
+        name: "Bus turnaround duration (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw
+        sdk_field: FMC_BusTurnAroundDuration
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:40-43, R32_FMC_BTRx BUSTURN[19:16] (Table 40-18). Multiplexed NOR Flash only."
+      - key: wr_busturnaround
+        name: "Bus turnaround duration (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr
+        sdk_field: FMC_BusTurnAroundDuration
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        when: { "Extended Mode": Enable }
+        help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+      - key: rw_clkdivision
+        name: "CLK output division (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw
+        sdk_field: FMC_CLKDivision
+        type: int
+        default: 1
+        min: 1
+        max: 15
+        help: "ch32h417_fmc.h:45-47, R32_FMC_BTRx CLKDIV[23:20] (Table 40-18). Synchronous NOR Flash only - not used for asynchronous NOR/SRAM/ROM, which is why the minimum legal value (1) is the default rather than 0."
+      - key: wr_clkdivision
+        name: "CLK output division (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr
+        sdk_field: FMC_CLKDivision
+        type: int
+        default: 1
+        min: 1
+        max: 15
+        when: { "Extended Mode": Enable }
+        help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+      - key: rw_datalatency
+        name: "Data latency (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw
+        sdk_field: FMC_DataLatency
+        type: int
+        default: 0
+        min: 0
+        max: 15
+        help: "ch32h417_fmc.h:49-56, R32_FMC_BTRx DATLAT[27:24] (Table 40-18). 0 for CRAM and for asynchronous NOR/SRAM/ROM; only synchronous burst NOR Flash needs a nonzero value."
+      - key: wr_datalatency
+        name: "Data latency (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr
+        sdk_field: FMC_DataLatency
+        type: int
+        default: 0
+        min: 0
+        max: 15
+        when: { "Extended Mode": Enable }
+        help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
+      - key: rw_accessmode
+        name: "Access mode (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw
+        sdk_field: FMC_AccessMode
+        type: enum
+        default: A
+        options:
+          - { name: A, value: 0, sdk: FMC_AccessMode_A }
+          - { name: B, value: 1, sdk: FMC_AccessMode_B }
+          - { name: C, value: 2, sdk: FMC_AccessMode_C }
+          - { name: D, value: 3, sdk: FMC_AccessMode_D }
+        help: "ch32h417_fmc.h:57-59, R32_FMC_BTRx ACCMOD[29:28] (Table 40-18). Mode A is the common asynchronous SRAM/PSRAM/NOR waveform (RM 40.5.4, Figures 40-5/40-6)."
+      - key: wr_accessmode
+        name: "Access mode (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr
+        sdk_field: FMC_AccessMode
+        type: enum
+        default: A
+        options:
+          - { name: A, value: 0, sdk: FMC_AccessMode_A }
+          - { name: B, value: 1, sdk: FMC_AccessMode_B }
+          - { name: C, value: 2, sdk: FMC_AccessMode_C }
+          - { name: D, value: 3, sdk: FMC_AccessMode_D }
+        when: { "Extended Mode": Enable }
+        help: "Same field, the write-only timing set (ch32h417_fmc.h:115)."
     notes: >
       Flexible memory controller. The data and address buses are picked by WIDTH rather
       than switched on whole, because the width is a real register field
@@ -3402,10 +3730,17 @@ peripherals:
       strobes` for the panel's RD and WR. That is eleven pins; switching the whole
       controller on used to claim 103. The panel's RESET and backlight are ordinary
       GPIO outputs and are not FSMC signals.
-      The generator emits no FMC init struct yet - `FMC_NORSRAMInit()` needs the timing
-      block (address setup, data setup, bus turnaround) which is a property of the panel
-      and not of the pin plan - so this peripheral configures pins and the clock enable,
-      and the timings go in your own code. Nothing here guesses a number.
+      `FMC_NORSRAMInit()` now emits, through AGENT-2's `embed:` mechanism
+      (`agents/BOARD.md` 2026-09-13T19:07Z) for the two pointer-nested
+      `FMC_NORSRAMTimingInitTypeDef` blocks. It covers Bank1/NE1 only (see the `bank`
+      param's own comment - the "Chip select" row above is a checkbox, so more than one
+      bank can be wired at once and this generator does not yet emit one call per bank),
+      and it covers the NOR/PSRAM/SRAM controller only: `ETH`, `FMC_NAND` and
+      `FMC_SDRAM` (SDRAM control above) are separate structs behind the same `embed:`
+      contract, not modelled this cycle. Every timing default is the SLOWEST value the
+      header's own range allows, not a real memory's number - CH32H417's own EVT ships
+      no FMC example to check one against, unlike SDIO/SDMMC. Narrow every timing once
+      the attached device's own datasheet is in hand.
   GPHA:
     category: Graphics
     settings:
@@ -4483,6 +4818,16 @@ peripherals:
       P13: [{ pin: PA2 }]
   PIOC:
     category: Connectivity
+    # NO SDK FUNCTION APPLIES ANY STRUCT HERE - there is no `ch32h417_pioc.c`, so no
+    # `PIOC_Init()` and nothing else that takes a `PIOC_TypeDef*`. What this part calls
+    # PIOC is a second, embedded CPU (RM ch.34, "Programmable Protocol I/O Microcontroller":
+    # a RISC8B core with 66 of its OWN instructions and a 2048-word program ROM multiplexed
+    # out of system SRAM), and its behaviour is set by loading a RISC8B assembly PROGRAM
+    # into that ROM - a separate toolchain (`CHRISC8B.PDF`,
+    # Evt/EXAM/PIOC/*/Common/Asm/*.ASM for this part's five shipped protocols: 1-Wire, I2C,
+    # NEC, Single-Wire, UART) - not by filling an init struct this generator could emit.
+    # `params:` is deliberately empty rather than filled with register-address rows no
+    # `codegen.init_structs` entry could ever apply. TASKS.md carries the finding.
     settings:
       - name: Mode
         choices:
@@ -5067,6 +5412,29 @@ peripherals:
       AGENT-2 for the schema half.
   SAI:
     category: Audio
+    # TWO HARDWARE BLOCKS, ONE TREE PERIPHERAL, same shape as LTDC's two layers:
+    # `SAI_Block_A`/`SAI_Block_B` are two register blocks (ch32h417.h:1775-1776) and the
+    # settings above already have independent `Block A`/`Block B` rows deciding whether
+    # each is live - exactly `channel_params.instances`, keyed to those two settings
+    # rather than a channel number.
+    #
+    # ONLY `SAI_InitTypeDef` (applied by `SAI_Init(SAI_Block_x, &s)`, ch32h417_sai.h:241)
+    # is modelled below. The driver defines TWO MORE per-block init structs -
+    # `SAI_FrameInitTypeDef` via `SAI_FrameInit()` and `SAI_SlotInitTypeDef` via
+    # `SAI_SlotInit()` - and the part's own example calls all three for the one block it
+    # uses (Evt/EXAM/SAI/SAI_Play/Common/hardware.c:103,110,116). Frame/Slot are NOT a
+    # later nicety: the header itself says their fields are "ignored ... when AC'97 or
+    # SPDIF protocols are selected", meaning they matter precisely in Free Protocol, which
+    # is what the EVT example configures (SAI_Free_Protocol, hardware.c:96) and what a
+    # typical I2S/TDM use of this block would be. They are left out because
+    # `channel_params:` (app/engine/params.js) holds exactly ONE `struct:` per peripheral -
+    # it cannot carry three different structs against the same two instances - and forcing
+    # Frame/Slot through a flat `params:` block would need ONE handle for the whole
+    # peripheral, silently misconfiguring whichever block is not that hardcoded choice.
+    # That is the wrong-but-compiling shape this file exists to refuse, so the two structs
+    # are recorded here rather than guessed into a shape the schema does not have.
+    # REQUEST to AGENT-2: `channel_params` (or a sibling key) needs to carry more than one
+    # struct against the same instance map before Frame/Slot can be modelled. TASKS.md line.
     settings:
       - name: "Block A"
         choices:
@@ -5087,6 +5455,132 @@ peripherals:
       SCK_B: [{ pin: PA14, af: 13 }, { pin: PF8, af: 6 }]
       SD_A: [{ pin: PC1, af: 7 }, { pin: PD6, af: 6 }, { pin: PE6, af: 6 }, { pin: PB2, af: 6 }]
       SD_B: [{ pin: PA13, af: 13 }, { pin: PE3, af: 6 }, { pin: PF6, af: 6 }]
+    channel_params:
+      struct: SAI_InitTypeDef
+      applies_per: block
+      instances:
+        1: { sdk_call: SAI_Init, handle: SAI_Block_A, setting: "Block A", active_choices: [Asynchronous, Synchronous] }
+        2: { sdk_call: SAI_Init, handle: SAI_Block_B, setting: "Block B", active_choices: [Asynchronous, Synchronous] }
+      params:
+        - key: mode
+          name: Audio mode
+          sdk_field: SAI_AudioMode
+          type: enum
+          default: Master transmitter
+          options:
+            - { name: Master transmitter, value: 0, sdk: SAI_Mode_MasterTx }
+            - { name: Master receiver,    value: 1, sdk: SAI_Mode_MasterRx }
+            - { name: Slave transmitter,  value: 2, sdk: SAI_Mode_SlaveTx }
+            - { name: Slave receiver,     value: 3, sdk: SAI_Mode_SlaveRx }
+          help: "R32_SAI_xCFGR1.MODE[1:0], CH32H417RM.md:52423-52440. The EVT's own example uses Master transmitter (hardware.c:95)."
+        - key: protocol
+          name: Protocol
+          sdk_field: SAI_Protocol
+          type: enum
+          default: Free protocol
+          options:
+            - { name: Free protocol, value: 0, sdk: SAI_Free_Protocol }
+            - { name: SPDIF,         value: 1, sdk: SAI_SPDIF_Protocol }
+            - { name: AC'97,         value: 2, sdk: SAI_AC97_Protocol }
+          help: >
+            R32_SAI_xCFGR1.PRTCFG[1:0], CH32H417RM.md:52399-52418. Free protocol leaves
+            the frame/slot structure to the Frame and Slot init calls (not modelled -
+            see the peripheral comment); SPDIF forces Master transmitter regardless of
+            the Audio mode row above (RM note under MODE[1:0]).
+        - key: data_size
+          name: Data size
+          sdk_field: SAI_DataSize
+          type: enum
+          default: 16 bits
+          options:
+            - { name: 8 bits,  value: 2, sdk: SAI_DataSize_8b }
+            - { name: 10 bits, value: 3, sdk: SAI_DataSize_10b }
+            - { name: 16 bits, value: 4, sdk: SAI_DataSize_16b }
+            - { name: 20 bits, value: 5, sdk: SAI_DataSize_20b }
+            - { name: 24 bits, value: 6, sdk: SAI_DataSize_24b }
+            - { name: 32 bits, value: 7, sdk: SAI_DataSize_32b }
+          help: "R32_SAI_xCFGR1.DS[2:0], CH32H417RM.md:52370-52392. Ignored for AC'97/SPDIF. The EVT's own example uses 16 bits (hardware.c:97)."
+        - key: first_bit
+          name: Bit order
+          sdk_field: SAI_FirstBit
+          type: enum
+          default: MSB first
+          options:
+            - { name: MSB first, value: 0, sdk: SAI_FirstBit_MSB }
+            - { name: LSB first, value: 1, sdk: SAI_FirstBit_LSB }
+          help: "R32_SAI_xCFGR1.LSBFIRST, CH32H417RM.md:52353-52368. Ignored for AC'97/SPDIF."
+        - key: clock_strobing
+          name: Clock strobing edge
+          sdk_field: SAI_ClockStrobing
+          type: enum
+          default: Rising edge
+          options:
+            - { name: Falling edge, value: 0, sdk: SAI_ClockStrobing_FallingEdge }
+            - { name: Rising edge,  value: 1, sdk: SAI_ClockStrobing_RisingEdge }
+          help: "R32_SAI_xCFGR1.CKSTR, CH32H417RM.md:52338-52351. The EVT's own example uses Rising edge (hardware.c:99)."
+        - key: synchro
+          name: Synchronisation
+          sdk_field: SAI_Synchro
+          type: enum
+          default: Asynchronous
+          options:
+            - { name: Asynchronous, value: 0, sdk: SAI_Asynchronous }
+            - { name: Synchronous,  value: 1, sdk: SAI_Synchronous }
+          help: >
+            R32_SAI_xCFGR1.SYNCEN[1:0], CH32H417RM.md:52313-52335. Synchronous makes this
+            block track the OTHER block's bit/frame clock, and the RM requires the
+            tracking block to be in a slave Audio mode when it does. The EVT's own
+            example uses Asynchronous (hardware.c:100).
+        - key: out_drive
+          name: Output drive timing
+          sdk_field: SAI_OutDRIV
+          const: 0
+          help: >
+            ch32h417_sai.h:46-47. The struct member exists and `SAI_Init()` OR's it
+            straight into CFGR1 (ch32h417_sai.c:55), but the header's own doc comment
+            points at "@ref SAI_Block_Output_Drive" and NO SUCH GROUP IS DEFINED anywhere
+            in this header - unlike every other `@ref` on this struct, which all resolve.
+            Fixed at 0 because that is what a zero-initialised struct gives it and what
+            this part's own SAI_Play example leaves it at (never assigns
+            `.SAI_OutDRIV`); there is no documented alternative to offer instead.
+        - key: no_divider
+          name: Master clock divider
+          sdk_field: SAI_NoDivider
+          type: enum
+          default: Enabled
+          options:
+            - { name: Enabled,  value: 0, sdk: SAI_MasterDivider_Enabled }
+            - { name: Disabled, value: 1, sdk: SAI_MasterDivider_Disabled }
+          help: "R32_SAI_xCFGR1.NODIV, CH32H417RM.md:52262-52272. Disabled feeds the master clock straight through and makes the divider row below inactive."
+        - key: master_divider
+          name: Master clock divider value
+          sdk_field: SAI_MasterDivider
+          type: int
+          default: 0
+          min: 0
+          max: 63
+          help: >
+            R32_SAI_xCFGR1.MCKDIV[5:0], CH32H417RM.md:52245-52261. 0 divides by 1;
+            non-zero values divide by the RM's own formula. Ignored when Master clock
+            divider above is Disabled. The EVT's own example computes this at runtime
+            from a target sample rate (hardware.c:80-91, `tmpdiv`) rather than using a
+            fixed constant, so 0 is the only value this file can cite without inventing
+            a target rate.
+        - key: fifo_threshold
+          name: FIFO threshold
+          sdk_field: SAI_FIFOThreshold
+          type: enum
+          default: FIFO empty
+          options:
+            - { name: FIFO empty,             value: 0, sdk: SAI_Threshold_FIFOEmpty }
+            - { name: "1/4 full",             value: 1, sdk: SAI_FIFOThreshold_1QuarterFull }
+            - { name: Half full,              value: 2, sdk: SAI_FIFOThreshold_HalfFull }
+            - { name: "3/4 full",             value: 3, sdk: SAI_FIFOThreshold_3QuartersFull }
+            - { name: Full,                   value: 4, sdk: SAI_FIFOThreshold_Full }
+          help: "R32_SAI_xCFGR2.FTH[2:0], CH32H417RM.md:52563-52579. The EVT's own example uses FIFO empty (hardware.c:101)."
+    notes: >
+      `SAI_FrameInit`/`SAI_FrameInitTypeDef` and `SAI_SlotInit`/`SAI_SlotInitTypeDef` are
+      not modelled - see the peripheral comment above for why and the REQUEST it names.
   SDIO:
     category: Connectivity
     # THE BUS WIDTH IS THE MODE ROW, and that is why `SDIO_BusWide` is not a second
@@ -7526,6 +8020,16 @@ codegen:
     # SDMMC_Init takes the struct ALONE - this part has one SDMMC controller, so no
     # register-block pointer is passed (ch32h417_sdmmc.h:250).
     SDMMC_InitTypeDef:       { fn: SDMMC_Init, no_handle: true }   # ch32h417_sdmmc.h:250
+    # FMC_NORSRAMInit takes the struct ALONE - the bank is a member, not an argument
+    # (ch32h417_fmc.h:425). The two `FMC_NORSRAMTimingInitTypeDef*` members are reached
+    # only by being pointed at from here, which is AGENT-2's `embed:` contract
+    # (agents/BOARD.md 2026-09-13T19:07Z): the child struct's OWN init_structs entry
+    # names which outer struct/member each embed key plugs into, instead of a `fn:`.
+    FMC_NORSRAMInitTypeDef:  { fn: FMC_NORSRAMInit, no_handle: true }   # ch32h417_fmc.h:425
+    FMC_NORSRAMTimingInitTypeDef:
+      embed:
+        rw: { into: FMC_NORSRAMInitTypeDef, member: FMC_ReadWriteTimingStruct }   # ch32h417_fmc.h:113
+        wr: { into: FMC_NORSRAMInitTypeDef, member: FMC_WriteTimingStruct }       # ch32h417_fmc.h:115
 
   periph_handle:
     USART1: USART1
@@ -7691,11 +8195,61 @@ clock:
 
   sysclk: { sources: [HSI, HSE, PLLCLK], max_mhz: 400 }
 
+  # ---- the secondary PLLs (RM 3.3.4) ----------------------------------------------
+  # One of the five is modelled. The other four (ETH, USBSS, SERDES, and the three other
+  # USBHS_PLL inputs) are declared in `notes:` below with the RM line that blocks each,
+  # because modelling them needs a thing the schema cannot say yet.
+  plls:
+    USBHS_PLL:
+      # Kept SHORT on purpose: the clock tree has no horizontal headroom at 1280x720
+      # @125% - see the FINDING to AGENT-2 of 2026-09-13T02:10Z, closed by AGENT-2's
+      # row-packing fix to renderClock() (agents/BOARD.md 2026-09-13T19:07Z: 1105px ->
+      # 898px measured in real Chrome, 126px of margin). The RM name and the 480 MHz are
+      # in `notes:` and in the comment below, where length costs nothing.
+      label: USBHS PLL
+      output: USBHS_PLL_CLK
+      # FIXED by the silicon, not a multiplier the user picks: RM:1733 and :1806-1811.
+      output_mhz: 480
+      # ONE input, and the reason is USBHSPLL_REFSEL[1:0] (RM:4266-4274), which tells the
+      # PLL what frequency its reference actually is: 00=25MHz 01=20MHz 10=24MHz 11=32MHz.
+      # RM:1808 - "the clock frequency MUST MATCH the USBHS_PLL input clock". So 480 MHz
+      # is CONDITIONAL on the reference selection agreeing with the real input, and the
+      # three inputs left out are exactly the three where the file cannot guarantee it:
+      #
+      #   HSE       - editable 4..25 MHz (`sources.HSE`), and REFSEL encodes only
+      #               20/24/25/32. HSE at 8 MHz is a legal setting on this part and
+      #               there is no REFSEL code for it, so the PLL would not lock while
+      #               the tab printed 480.
+      #   SYS_PLL/N - USBHSPLL_IN_DIV[4:0] /1../32 of PLLCLK (RM:4227). PLLCLK moves
+      #               with the user's own SYS PLL settings, so the same problem, one
+      #               level further down.
+      #   ETHCLK_20M- 20 MHz and would satisfy REFSEL=01, but it comes off the ETH PLL
+      #               (RM:1392-1394), which this file does not model yet. It lands with
+      #               the ETH PLL, not before.
+      #
+      # HSI is `fixed: true` at 25 MHz, so REFSEL=00 is correct for it unconditionally
+      # and 480 MHz is simply true. Round 5's rule, applied literally: every choice the
+      # app offers must be one the silicon can honour - so the app offers the one choice
+      # it can honour, and the rest are declared here rather than shipped as a number
+      # that is right only by luck.
+      inputs:
+        - { name: HSI, source: HSI, div: 1 }
+
   hse_peripheral: RCC
   hse_setting: High Speed Clock (HSE)
   hse_signals: [XI, XO]
 
   prescalers:
+    # RCC_CFGR2's USBFS 48M tap (RM 3.4.13): USBHS_PLL_CLK or PLLCLK, divided down to the
+    # 48 MHz USB full-speed clock. The only one of the eight RM 3.4.13 muxes this file can
+    # compute today, because it is the only secondary PLL modelled above.
+    USBFS:
+      label: USBFS 48M
+      source: [USBHS_PLL_CLK, PLLCLK]
+      options: [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7.5, 8, 9.5, 10]
+      default: 10
+      default_source: USBHS_PLL_CLK
+      target_mhz: 48
     # HPRE[3:0] - RM 3.4.2. **NOT a doubling run.** 0xxx = /1, then /2 /4 /8 /16 /64 /128
     # /256 /512: there is NO /32, so reading it as a doubling run puts /32 on code 1100
     # and halves every bus silently. That warning is in CH32H417.notes.md; this is the
@@ -7803,23 +8357,36 @@ clock:
   notes: >
     MODELLED: the four oscillators; the SYS PLL (PLLSRC's six legal sources, the one shared
     1..64 divider, and all 32 PLLMUL factors from RM 3.4.3); the SYSCLK mux; HPRE, FPRE,
-    PPRE2 and the ADC prescaler; and bus membership from the three clock-enable registers
-    (RM 3.4.7-3.4.9).
+    PPRE2 and the ADC prescaler; bus membership from the three clock-enable registers
+    (RM 3.4.7-3.4.9); and, as of 2026-09-13, the USBHS_PLL (fixed 480 MHz off HSI, RM:1733
+    and :1806-1811) and its USBFS 48M tap (RM 3.4.13) - the schema's first second PLL,
+    proven against the RM's own worked example (:4048 USBFSSRC, :4055-4077 all sixteen
+    USBFSDIV codes including the 7.5 a first draft of this block omitted) and unblocked by
+    AGENT-2's row-packing fix to the clock tab (`renderClock()`, `agents/BOARD.md`
+    2026-09-13T19:07Z) once the schema-and-layout blocker `agents/proposals/
+    CH32H417_usbhs_pll.yaml` recorded was gone.
 
     NOT MODELLED, and declared rather than approximated. This part has FIVE PLLs (RM 3.3.4):
-    SYS, USBHS (480 MHz), ETH (500 MHz), USBSS (125 MHz) and SERDES. Only SYS is here,
-    because `clock.pll` is a SINGLE object - one `inputs` list, one `multipliers` list - so
-    a second PLL has nowhere to go. That is also why `sysclk.sources` lists three entries
-    and not the seven RM 3.4.3 allows: SYSPLL_SEL can additionally route USBHS_PLL,
-    ETH_PLL, SERDES_PLL/2 and USBSS_PLL to the system clock, and until the schema can hold
-    those four, offering them here would offer a source whose frequency nothing computes.
+    SYS, USBHS, ETH (500 MHz), USBSS (125 MHz) and SERDES. `clock.plls` now holds more than
+    one, so ETH/USBSS/SERDES are a data gap, not a schema one - each needs the same
+    RM-line-by-line check USBHS_PLL got before it ships (`sysclk.sources` also lists three
+    entries and not the seven RM 3.4.3 allows for the same reason: SYSPLL_SEL can
+    additionally route USBHS_PLL, ETH_PLL, SERDES_PLL/2 and USBSS_PLL to the system clock,
+    and USBHS_PLL could be added to that list now that it computes).
 
-    The eight peripheral clock muxes in RM 3.4.13 (RCC_CFGR2) are absent for the same
-    reason: RNG, I2S2, I2S3, USBFS 48M, LTDC, UHSIF, HSADC and ETH1G each choose between
-    PLL_CLK, a secondary PLL and SYSCLK, several through their own 1..64 divider.
-    `clock.prescalers` expresses one source per tap and cannot express a CHOICE of source,
-    so an LTDC pixel clock or the USB 48 MHz clock cannot be computed. MCO (RM 3.3.5.5,
-    eight sources) is unmodelled likewise.
+    USBHS_PLL's own other three inputs (HSE, SYS_PLL/N, ETHCLK_20M) stay out for the reason
+    in the `plls.USBHS_PLL` comment above: `USBHSPLL_REFSEL[1:0]` (RM:4266-4274) makes
+    480 MHz conditional on the reference selection matching the real input, and only HSI's
+    `fixed: true` 25 MHz makes REFSEL=00 correct unconditionally.
+
+    The other seven peripheral clock muxes in RM 3.4.13 (RCC_CFGR2) are absent for the same
+    schema-shape reason USBFS's used to be: RNG, I2S2, I2S3, LTDC, UHSIF, HSADC and ETH1G
+    each choose between PLL_CLK, a secondary PLL and SYSCLK, several through their own
+    1..64 divider, and most need a PLL this file does not compute yet (ETH_PLL, SERDES_PLL)
+    or a mux entry that carries its own extra divider (LTDC's choice 01 is "SERDES_PLL
+    clock divided by 2", RM:4085-4089) - a shape `clock.prescalers` cannot express, per the
+    REQUEST to AGENT-2 on `agents/BOARD.md` 2026-09-13T01:14Z. MCO (RM 3.3.5.5, eight
+    sources) is unmodelled likewise.
 
     A wrong clock number is worse than a missing one - round 5's rule. A computed 48 MHz
     that is really 24 reaches the generated C and the SDI banner as a stated fact, so the
@@ -18836,6 +19403,12 @@ function normaliseParamDefs(list) {
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
     sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
     sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
+    // The SDK exposes a setter, but this generator's one-shot init function is not a
+    // safe place to call it (LTDC's pixel format — the setter is unsafe before the
+    // layer is otherwise configured). `sdk_none:` says "the SDK has nothing"; this
+    // says "the SDK has something, and firmware sets it some other way" — a different
+    // true statement in the same generated-comment shape.
+    sdk_manual: !!d.sdk_manual,
     // A struct member that is itself a POINTER to a second struct no SDK function takes
     // alone (ch32h417_fmc.h:113-115 — `FMC_NORSRAMInit()` dereferences
     // `FMC_ReadWriteTimingStruct` unconditionally). `embed:` names which of that inner
@@ -22197,6 +22770,29 @@ function gpioPlan() {
   return out.sort((a, b) => (a.port === b.port ? a.bit - b.bit : a.port.localeCompare(b.port)));
 }
 
+// An io-typed pin the configuration claims, whose name `gpioPlan()` cannot parse into
+// a port letter and a bit number (`PIN_RE`, `P<letter><digits>`). Before this existed,
+// `gpioPlan()`'s own `!m` check silently dropped it: right on all eight shipped parts,
+// which all spell their pins that way, and wrong the moment a ninth does not - a part
+// whose GPIO_Init came out looking complete with one pin simply, silently, absent.
+// codegen.js's read-through backlog item 3: "the fix is a named TODO, not a wider
+// regex" - deriving a port/bit pair from a different naming scheme is the same class
+// of guess this generator refuses everywhere else.
+function unparsedGpioPins() {
+  const e = E || compute();
+  const out = [];
+  for (const [canonPin, info] of Object.entries(e.pins)) {
+    const usable = info.claims.filter(c => !skipped(c));
+    for (const claim of usable) {
+      const pin = claim.via || canonPin;
+      if (pinType(pin) !== 'io' || PIN_RE.test(pin)) continue;
+      if (out.some(x => x.pin === pin)) continue;
+      out.push({ pin, signal: usable.map(c => c.signal).join(' / ') });
+    }
+  }
+  return out.sort((a, b) => a.pin.localeCompare(b.pin));
+}
+
 // Pins the configuration uses but GPIO_Init must not touch, with the reason.
 function skippedPins() {
   const e = E || compute();
@@ -22382,6 +22978,25 @@ function rccWordBuilder(register) {
       encoded.push({ s: sl, field });          // name this value contributes zero
     }
     if (!anyExplicit || encoded.some(e => e.field === undefined)) {
+      // DECISION (STATUS §2 AGENT-2, this cycle - "codegen.js item 6"), and the
+      // MEASUREMENT that changed it mid-cycle: the first attempt at this made "no
+      // encoding for X" a TODO on the theory that it is narrower and safer than
+      // rccWords()'s "not written" case below - a FIELD `codegen.rcc` already
+      // declares, just missing one value, versus a control it never attempts at all.
+      // That theory was wrong, measured: `node tests/run.js "codegen.test"` went
+      // 6 FAILED the moment it shipped, because CH32V006's OWN ADC prescaler is
+      // EXACTLY this case, on purpose, right now - `data/mcus/CH32V006.yaml:2291-2294`
+      // documents /1 as deliberately unencoded (it needs ADC_CLK_MODE, RCC_CFGR0 bit
+      // 31, a second field this MCU file does not yet also write) and says outright
+      // "the generator is left to report 'no encoding for 1' until it can write bit 31
+      // too." Converting this to a TODO does not catch a forgotten fact; it fails
+      // `--strict` on CH32V006 and CH32V005's DEFAULT configuration, for a gap AGENT-1
+      // already tracked and already left this way on purpose. So: still a comment,
+      // and the distinction this file's OTHER TODOs earn ("a gap the generator hit
+      // while doing work it could otherwise have done") is not enough on its own -
+      // "already hit" has to also mean "not already declared incomplete elsewhere in
+      // the data", which nothing here can check. Filed as a finding instead of a
+      // silent revert: `agents/BOARD.md`, this cycle.
       w.parts.push({ what, note: `no encoding for ${raw}` });
       return;                                  // a half-written divider is worse than a gap
     }
@@ -22449,7 +23064,12 @@ function rccWords() {
   // this the generated C prints "USBFS from USBHS_PLL_CLK /10 -> 48 MHz" in a comment
   // and writes not one bit of CFGR2 for it: a file that reads as configured and boots
   // at the reset value. Reported as a note beside the others, which is what `put()`
-  // already does for a divider it cannot encode.
+  // already does for a divider it cannot encode - see the DECISION comment on that one
+  // a few lines up in `rccWordBuilder`, measured rather than assumed: making either of
+  // these two a TODO fails `--strict` on real, shipped parts TODAY for gaps AGENT-1
+  // already tracks by name (CH32V006/CH32V005's ADC_CLK_MODE bit for `put()`'s case;
+  // every secondary PLL/mux mid-rollout on CH32H417, this cycle's own USBHS_PLL/USBFS
+  // included, for this one) - blocking exactly the incremental landing D depends on.
   const wrote = new Set();
   for (const w of out) for (const p of w.parts) if (p.what) wrote.add(p.what);
   const missing = [];
@@ -22577,11 +23197,12 @@ function skipNote(left) {
 function gpioSection() {
   const plan = gpioPlan();
   const left = skippedPins();
+  const unparsed = unparsedGpioPins();
   const L = [];
   L.push(banner('GPIO'));
   L.push('void WCHCube_GPIO_Init(void)');
   L.push('{');
-  if (!plan.length) {
+  if (!plan.length && !unparsed.length) {
     if (left.length) L.push(...skipNote(left).slice(0, 2));
     else L.push('    /* No pins configured. */');
     // The same USER CODE tag as the configured path: the set of tags must not depend
@@ -22590,12 +23211,18 @@ function gpioSection() {
     L.push('}');
     return L.join('\n');
   }
-  L.push('    GPIO_InitTypeDef GPIO_InitStructure = {0};');
-  L.push('');
+  if (plan.length) {
+    L.push('    GPIO_InitTypeDef GPIO_InitStructure = {0};');
+    L.push('');
+  }
 
   const ports = [...new Set(plan.map(p => p.port))].sort();
   const gc = cfg().gpio_clock;
-  if (gc && gc.fn && gc.port) {
+  if (!ports.length) {
+    // Every claimed io pin failed to parse - `unparsed.length` is why this function
+    // was even called - so there is no port to enable a clock for and no
+    // GPIO_InitStructure to fill. Fall through to the unparsed-pin TODO below.
+  } else if (gc && gc.fn && gc.port) {
     const macros = ports.map(p => gc.port.replace('$PORT', p));
     const remap = remapWord();
     if (remap && gc.afio) macros.push(gc.afio);
@@ -22606,7 +23233,7 @@ function gpioSection() {
     L.push('       The MCU file has no codegen.gpio_clock block, and this generator does');
     L.push('       not guess register names. */');
   }
-  L.push('');
+  if (ports.length) L.push('');
 
   for (const port of ports) {
     const mine = plan.filter(p => p.port === port);
@@ -22657,6 +23284,17 @@ function gpioSection() {
   }
 
   if (left.length) L.push(...skipNote(left));
+
+  if (unparsed.length) {
+    L.push(`    /* TODO: ${unparsed.length} pin${unparsed.length > 1 ? 's' : ''} this configuration claims `
+      + `${unparsed.length > 1 ? 'are' : 'is'} not named P<port-letter><bit-number>, so this generator`);
+    L.push('       cannot derive a GPIO port and bit for ' + (unparsed.length > 1 ? 'them' : 'it')
+      + ' - it does not guess one from a different naming convention:');
+    for (const u of unparsed) L.push(`         ${u.pin}: ${u.signal}`);
+    L.push('       Needed: a pin-naming convention this generator recognises, or an explicit');
+    L.push('       port/bit mapping in the MCU file. */');
+    L.push('');
+  }
 
   // AF style: one call per SIGNAL. Emitted before the two whole-peripheral styles
   // because a part is only ever one of the three, so at most one of these blocks runs.
@@ -22941,7 +23579,15 @@ function cSource() {
 //
 //    sdk_call:      the SDK sets it with a function, not a member  (TIM arpe)
 //    sdk_none:      the SDK exposes nothing for it                 (ADC lowpower)
+//    sdk_manual:    the SDK exposes something, but not safely at init - firmware
+//                   sets it later                                  (LTDC pixel format)
 //    struct: other  it belongs to a DIFFERENT struct               (TIM1 deadtime)
+//
+//  `sdk_none` and `sdk_manual` read as the same shape - a note instead of a struct
+//  field - and they say a DIFFERENT true thing. `sdk_none: "the SDK exposes nothing
+//  for it"` is false for a parameter the SDK CAN set; it is only unsafe to set from
+//  this generator's one-shot init function. Saying "nothing" when something exists is
+//  the kind of false comment a person reads as documentation and believes.
 //
 //  A parameter that does not apply under the current settings is not emitted, and
 //  neither is one the data marks readonly - those are derived, not chosen.
@@ -23057,6 +23703,15 @@ function initPlan(pid) {
   const hs = periphHandle(pid);
   const handle = hs.handle;
   for (const d of defs) {
+    // `sdk_manual:` FIRST, and checked separately from `sdk_none:` even though both
+    // produce a note rather than a struct field — the two say opposite things about
+    // whether the SDK exposes the setting at all, and `sdk_none` read over a
+    // `sdk_manual` case would tell a reader the SDK has no such setter when it does.
+    if (d.sdk_manual) {
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — set by firmware`
+        + (d.sdk_note ? `: ${d.sdk_note}` : ''));
+      continue;
+    }
     if (d.sdk_none) {
       notes.push(`${d.name} = ${paramValue(pid, d.key)} — the SDK exposes nothing for it`
         + (d.sdk_note ? `: ${d.sdk_note}` : ''));
@@ -23150,22 +23805,40 @@ function initPlan(pid) {
   const problems = [];
   for (const d of paramDefs(pid)) problems.push(...depProblems(pid, d));
 
-  // ---- one struct, applied once PER INSTANCE ---------------------------------
-  // `channel_params` (params.js). The block is filled and applied once for each LIVE
+  // ---- one OR MORE structs, applied once PER INSTANCE -------------------------
+  // `channel_params` (params.js). Every block is filled and applied once for each LIVE
   // instance, and what varies per instance is the function, the handle, or both:
   // `TIM_OC1Init(TIM1, &s)` … `TIM_OC4Init(TIM1, &s)` vary the function and keep the
   // peripheral's handle; `LTDC_LayerInit(LTDC_Layer1, &s)` keeps the function and varies
   // the handle. Both arrive here as the same row, so this loop knows about neither.
   //
-  // Each instance becomes an ordinary struct block, which is why `periphBlock()` needs no
-  // change to emit it: a block already carries its own `fn` and its own `handle`.
+  // SAI (and SERDES, the same shape) need MORE than one struct per instance: the SDK's
+  // own example calls `SAI_Init`, `SAI_FrameInit` and `SAI_SlotInit` for a single block
+  // (`SAI1_Block_A` / `SAI1_Block_B`, `ch32h417.h:1775-1776`), each its own struct type,
+  // each taken directly by its own function - unlike `embed:` (codegen.js above), where
+  // an inner struct is reached ONLY through a pointer inside another and nothing calls
+  // it alone. This is the opposite shape: three structs that all stand on their own and
+  // simply happen to share one instance's handle.
+  //
+  // No new list-of-structs schema is needed: a `channel_params.params:` ROW may already
+  // carry `struct:` like any ordinary `params:` row (TIM1's deadtime does the same thing
+  // one level up, "it belongs to a DIFFERENT struct" in the comment atop this file) - it
+  // simply used to be pointless here because every row silently used `cbl.struct`. A row
+  // naming a DIFFERENT struct now gets its OWN block, and because that struct's function
+  // does not vary by instance (SAI_FrameInit is SAI_FrameInit on Block A and Block B;
+  // only the HANDLE varies, and that is resolved the same way as the primary struct's),
+  // its `fn:` comes from `codegen.init_structs.<that struct>.fn` - the same global table
+  // every non-channel struct already uses - rather than from the per-instance `sdk_call`
+  // table, which is the primary struct's mechanism and stays exactly as it was.
   const cbl = channelParamBlock(pid);
   if (cbl && cbl.struct) {
     const plan = activeInstances(pid);
     if (plan.missing) problems.push(plan.missing);
     if (plan.note) notes.push(plan.note);
+    const chanDefs = channelParamDefs(pid);
     for (const inst of plan.instances) {
-      const block = {
+      const byStruct = new Map();
+      const primary = {
         struct: cbl.struct, fn: inst.fn || null,
         // No `handle:` on the row means the peripheral's own register block, which is
         // the timer case. An LTDC layer names its own.
@@ -23173,8 +23846,29 @@ function initPlan(pid) {
         fields: [], missing: [],
         instance: { n: inst.n, noun: plan.noun },
       };
-      for (const d of channelParamDefs(pid)) {
+      byStruct.set(cbl.struct, primary);
+      structs.push(primary);
+      for (const d of chanDefs) {
         if (d.readonly || !paramApplies(pid, d)) continue;
+        const structName = d.struct || cbl.struct;
+        let block = byStruct.get(structName);
+        if (!block) {
+          const spec = (cg.init_structs || {})[structName] || {};
+          block = {
+            struct: structName, fn: spec.fn || null,
+            noHandle: !!spec.no_handle, handle: spec.no_handle ? null : (inst.handle || handle || null),
+            // Read by `periphBlock()`'s existing "nothing applies this struct" fallback
+            // when `fn` is missing - the SAME message an ordinary (non-channel) struct
+            // gets, because it is the same gap: a struct beyond the block's own
+            // `cbl.struct` needs its OWN `codegen.init_structs.<struct>.fn` entry, since
+            // unlike the primary struct its function cannot come from an instance's
+            // `sdk_call`.
+            fields: [], missing: [],
+            instance: { n: inst.n, noun: plan.noun },
+          };
+          byStruct.set(structName, block);
+          structs.push(block);
+        }
         if (!d.sdk_field) {
           block.missing.push(`${d.name}: channel_params gives no sdk_field:, so the member name is unknown`);
           continue;
@@ -23185,10 +23879,9 @@ function initPlan(pid) {
         else block.fields.push({ member: d.sdk_field, text: lit.text, name: d.name, value, unit: d.unit });
       }
       if (!inst.fn) {
-        block.missing.push(`channel_params names no sdk_call for ${plan.noun} ${inst.n}, `
+        primary.missing.push(`channel_params names no sdk_call for ${plan.noun} ${inst.n}, `
           + 'and this generator does not paste a function name together from a number');
       }
-      structs.push(block);
     }
   }
   return { pid, structs, calls, notes, handle: handle || null, problems };
@@ -23308,7 +24001,15 @@ function clockBitOf(pid) {
 
 function structVar(name) {
   // USART_InitTypeDef -> USART_InitStructure, the SPL's own naming in every example.
-  return String(name).replace(/TypeDef$/, 'Structure');
+  const s = String(name);
+  const stripped = s.replace(/TypeDef$/, 'Structure');
+  // codegen.js read-through item 4 (backlog, manager-assigned): every struct type on
+  // every shipped part ends in `TypeDef`, so this line never fires today - but nothing
+  // in codegen.init_structs PROMISES that, and one that does not would otherwise get a
+  // variable named IDENTICALLY to its own type (`Foo Foo = {0};`), which a peripheral
+  // with two such structs could then collide on. Suffixed instead: cheap, and inert on
+  // every real struct because every real struct already took the branch above.
+  return stripped === s ? `${s}_var` : stripped;
 }
 
 // An embedded block's variable needs to be UNIQUE from its siblings: RW and WR are both
@@ -24741,7 +25442,12 @@ function syncMcuUi() {
   document.getElementById('crumb-mcu').textContent = M.mcu.name;
   const meta = document.getElementById('mcu-meta');
   const core = M.mcu.core || '';
-  const mem = `${M.mcu.flash_kb || '?'} KB flash · ${M.mcu.sram_kb || '?'} KB SRAM`;
+  // Trimmed from "960 KB flash · 896 KB SRAM" (agents/BOARD.md 09-12T23:04Z: 181px
+  // needed in a 168px box under Linux's fallback font — #mcu-meta ellipsises by
+  // design so nothing FAILS, but the box is tighter than it needs to be for
+  // information nobody loses by reading "960K" instead of "960 KB"). Shorter on
+  // every font, so it can only narrow the gap the finding measured, never widen it.
+  const mem = `${M.mcu.flash_kb || '?'}K flash · ${M.mcu.sram_kb || '?'}K SRAM`;
   meta.innerHTML = (core ? `<span class="meta-core">${esc(core)} · </span>` : '') + `<span>${esc(mem)}</span>`;
   meta.title = [core, mem].filter(Boolean).join(' · ');
   const ps = document.getElementById('pkgsel');

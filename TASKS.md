@@ -1212,6 +1212,47 @@ bits, and a clock tree that models what the schema can hold.
       1280x720@1, @1.25 and 1920x1080@1. `legibility.test.js` and `layout.test.js` both green
       unchanged (they sweep every SHIPPED part, none of which has `plls:` yet, so this is the
       regression gate the day AGENT-1 ships CH32H417's - no new test file needed for that).
+- [x] (AGENT-2) **CH32H417's USBHS_PLL/USBFS block shipped for real** (`ff7d48d`, AGENT-1) through
+      both mechanisms above, and re-verified on the ACTUAL data rather than the proposal splice:
+      `app/tests/clockmux.test.js` "CH32H417, for real" - 480 MHz / 10 = 48 MHz, and a real-browser
+      check (1280x720@125%, `dist/index.html` built from HEAD) - rightmost edge 898px in a 1024px
+      viewport, 0 overlaps, console silent. `legibility.test.js`'s real sweep now covers a shipped
+      part with `plls:` for the first time - the exact gap that let the original overflow through
+      undetected.
+- [x] (AGENT-2) **channel_params can fill MORE THAN ONE struct per instance** (SAI/SERDES,
+      manager-relayed REQUEST from AGENT-1). Deliberately NOT `embed:` - `embed:` is a struct
+      reached only through a pointer inside another, with no function of its own; SAI's three
+      structs (`SAI_InitTypeDef`/`SAI_FrameInitTypeDef`/`SAI_SlotInitTypeDef`) are each taken
+      directly by their own SDK call and simply share one instance's handle. No new schema: a
+      `channel_params.params:` row may carry `struct:` exactly like an ordinary `params:` row
+      already can; a row naming a struct other than the block's primary one gets its own block,
+      applied by `codegen.init_structs.<that struct>.fn`. `app/engine/codegen.js` `initPlan()`.
+      5 tests, `app/tests/channel_multi_struct.test.js`, planted break seen red (`git stash` to
+      `3201a9a`: 4 of 5 fail; backward compat with the six shipped single-struct blocks stays
+      green both sides). Worked SAI example on `agents/BOARD.md` 19:25Z.
+- [x] (AGENT-2) **`sdk_manual:`** - `sdk_none:`'s emitted prefix "the SDK exposes nothing for it"
+      is false whenever the SDK exposes something unsafe to call from this generator's init
+      function (CH32H417's five UHSIF params, `data/mcus/CH32H417.yaml` ~5839-5975, are in exactly
+      that shape today via `sdk_none:` + a correcting `sdk_note:`). `sdk_manual: true` says
+      `"<name> = <value> — set by firmware<: note>"`. `codegen.js` `initPlan()`, checked before
+      `sdk_none`. 4 tests, `app/tests/sdk_manual.test.js`, planted break seen red.
+- [x] (AGENT-2) **codegen.js read-through items 2-7** (STATUS §7 APP backlog), all six addressed:
+      2 the engine half (`isFixture()` reading `mcu.fixture: true`) was already landed 2026-09-11 -
+      posted the still-open data half as a two-sided REQUEST (AGENT-1 + AGENT-3); 3 `gpioPlan()`
+      silently dropping an unparseable pin name - fixed, `unparsedGpioPins()` + a named TODO, 5
+      tests seen red; 4 `structVar()` assuming every struct ends `TypeDef` - fixed (`_var` suffix
+      instead of `Foo Foo = {0};`), 1 test seen red; 5 `GPIO_Pin_<n>` invented without the data's
+      permission - recorded, not changed, no data anywhere needs anything else; 6 RCC word gaps as
+      comments vs TODO - a DECISION, made WRONG first: shipped "no encoding for X" as a TODO, ran
+      `node tests/run.js "codegen.test"`, **6 FAILED** - CH32V006's real ADC prescaler is exactly
+      that case ON PURPOSE (`data/mcus/CH32V006.yaml:2291-2294`), reverted, the regression guard
+      now uses CH32V006's real data as the proof; 7 `pllsrc` cannot express a source+divider PLL
+      input (CH32H417's SYS PLL) - FILED as a FORMAT question to AGENT-1 with two candidate shapes,
+      not shipped unilaterally.
+- [x] (AGENT-2) **The font-fallback finding (§3, 23:04Z), partial.** `#mcu-meta` text shortened
+      ("960 KB flash · 896 KB SRAM" → "960K flash · 896K SRAM") - provably narrows the 181px-in-
+      168px gap the finding measured, not provably closes it (no Linux box or fallback font here
+      to re-measure against). Flagged as still open on STATUS §3, not claimed closed.
 
 **Two findings that outrank the data work**, both filed on the board:
 

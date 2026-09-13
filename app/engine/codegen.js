@@ -159,6 +159,29 @@ export function gpioPlan() {
   return out.sort((a, b) => (a.port === b.port ? a.bit - b.bit : a.port.localeCompare(b.port)));
 }
 
+// An io-typed pin the configuration claims, whose name `gpioPlan()` cannot parse into
+// a port letter and a bit number (`PIN_RE`, `P<letter><digits>`). Before this existed,
+// `gpioPlan()`'s own `!m` check silently dropped it: right on all eight shipped parts,
+// which all spell their pins that way, and wrong the moment a ninth does not - a part
+// whose GPIO_Init came out looking complete with one pin simply, silently, absent.
+// codegen.js's read-through backlog item 3: "the fix is a named TODO, not a wider
+// regex" - deriving a port/bit pair from a different naming scheme is the same class
+// of guess this generator refuses everywhere else.
+export function unparsedGpioPins() {
+  const e = E || compute();
+  const out = [];
+  for (const [canonPin, info] of Object.entries(e.pins)) {
+    const usable = info.claims.filter(c => !skipped(c));
+    for (const claim of usable) {
+      const pin = claim.via || canonPin;
+      if (pinType(pin) !== 'io' || PIN_RE.test(pin)) continue;
+      if (out.some(x => x.pin === pin)) continue;
+      out.push({ pin, signal: usable.map(c => c.signal).join(' / ') });
+    }
+  }
+  return out.sort((a, b) => a.pin.localeCompare(b.pin));
+}
+
 // Pins the configuration uses but GPIO_Init must not touch, with the reason.
 export function skippedPins() {
   const e = E || compute();
@@ -344,6 +367,25 @@ function rccWordBuilder(register) {
       encoded.push({ s: sl, field });          // name this value contributes zero
     }
     if (!anyExplicit || encoded.some(e => e.field === undefined)) {
+      // DECISION (STATUS §2 AGENT-2, this cycle - "codegen.js item 6"), and the
+      // MEASUREMENT that changed it mid-cycle: the first attempt at this made "no
+      // encoding for X" a TODO on the theory that it is narrower and safer than
+      // rccWords()'s "not written" case below - a FIELD `codegen.rcc` already
+      // declares, just missing one value, versus a control it never attempts at all.
+      // That theory was wrong, measured: `node tests/run.js "codegen.test"` went
+      // 6 FAILED the moment it shipped, because CH32V006's OWN ADC prescaler is
+      // EXACTLY this case, on purpose, right now - `data/mcus/CH32V006.yaml:2291-2294`
+      // documents /1 as deliberately unencoded (it needs ADC_CLK_MODE, RCC_CFGR0 bit
+      // 31, a second field this MCU file does not yet also write) and says outright
+      // "the generator is left to report 'no encoding for 1' until it can write bit 31
+      // too." Converting this to a TODO does not catch a forgotten fact; it fails
+      // `--strict` on CH32V006 and CH32V005's DEFAULT configuration, for a gap AGENT-1
+      // already tracked and already left this way on purpose. So: still a comment,
+      // and the distinction this file's OTHER TODOs earn ("a gap the generator hit
+      // while doing work it could otherwise have done") is not enough on its own -
+      // "already hit" has to also mean "not already declared incomplete elsewhere in
+      // the data", which nothing here can check. Filed as a finding instead of a
+      // silent revert: `agents/BOARD.md`, this cycle.
       w.parts.push({ what, note: `no encoding for ${raw}` });
       return;                                  // a half-written divider is worse than a gap
     }
@@ -411,7 +453,12 @@ export function rccWords() {
   // this the generated C prints "USBFS from USBHS_PLL_CLK /10 -> 48 MHz" in a comment
   // and writes not one bit of CFGR2 for it: a file that reads as configured and boots
   // at the reset value. Reported as a note beside the others, which is what `put()`
-  // already does for a divider it cannot encode.
+  // already does for a divider it cannot encode - see the DECISION comment on that one
+  // a few lines up in `rccWordBuilder`, measured rather than assumed: making either of
+  // these two a TODO fails `--strict` on real, shipped parts TODAY for gaps AGENT-1
+  // already tracks by name (CH32V006/CH32V005's ADC_CLK_MODE bit for `put()`'s case;
+  // every secondary PLL/mux mid-rollout on CH32H417, this cycle's own USBHS_PLL/USBFS
+  // included, for this one) - blocking exactly the incremental landing D depends on.
   const wrote = new Set();
   for (const w of out) for (const p of w.parts) if (p.what) wrote.add(p.what);
   const missing = [];
@@ -539,11 +586,12 @@ function skipNote(left) {
 function gpioSection() {
   const plan = gpioPlan();
   const left = skippedPins();
+  const unparsed = unparsedGpioPins();
   const L = [];
   L.push(banner('GPIO'));
   L.push('void WCHCube_GPIO_Init(void)');
   L.push('{');
-  if (!plan.length) {
+  if (!plan.length && !unparsed.length) {
     if (left.length) L.push(...skipNote(left).slice(0, 2));
     else L.push('    /* No pins configured. */');
     // The same USER CODE tag as the configured path: the set of tags must not depend
@@ -552,12 +600,18 @@ function gpioSection() {
     L.push('}');
     return L.join('\n');
   }
-  L.push('    GPIO_InitTypeDef GPIO_InitStructure = {0};');
-  L.push('');
+  if (plan.length) {
+    L.push('    GPIO_InitTypeDef GPIO_InitStructure = {0};');
+    L.push('');
+  }
 
   const ports = [...new Set(plan.map(p => p.port))].sort();
   const gc = cfg().gpio_clock;
-  if (gc && gc.fn && gc.port) {
+  if (!ports.length) {
+    // Every claimed io pin failed to parse - `unparsed.length` is why this function
+    // was even called - so there is no port to enable a clock for and no
+    // GPIO_InitStructure to fill. Fall through to the unparsed-pin TODO below.
+  } else if (gc && gc.fn && gc.port) {
     const macros = ports.map(p => gc.port.replace('$PORT', p));
     const remap = remapWord();
     if (remap && gc.afio) macros.push(gc.afio);
@@ -568,7 +622,7 @@ function gpioSection() {
     L.push('       The MCU file has no codegen.gpio_clock block, and this generator does');
     L.push('       not guess register names. */');
   }
-  L.push('');
+  if (ports.length) L.push('');
 
   for (const port of ports) {
     const mine = plan.filter(p => p.port === port);
@@ -619,6 +673,17 @@ function gpioSection() {
   }
 
   if (left.length) L.push(...skipNote(left));
+
+  if (unparsed.length) {
+    L.push(`    /* TODO: ${unparsed.length} pin${unparsed.length > 1 ? 's' : ''} this configuration claims `
+      + `${unparsed.length > 1 ? 'are' : 'is'} not named P<port-letter><bit-number>, so this generator`);
+    L.push('       cannot derive a GPIO port and bit for ' + (unparsed.length > 1 ? 'them' : 'it')
+      + ' - it does not guess one from a different naming convention:');
+    for (const u of unparsed) L.push(`         ${u.pin}: ${u.signal}`);
+    L.push('       Needed: a pin-naming convention this generator recognises, or an explicit');
+    L.push('       port/bit mapping in the MCU file. */');
+    L.push('');
+  }
 
   // AF style: one call per SIGNAL. Emitted before the two whole-peripheral styles
   // because a part is only ever one of the three, so at most one of these blocks runs.
@@ -903,7 +968,15 @@ export function cSource() {
 //
 //    sdk_call:      the SDK sets it with a function, not a member  (TIM arpe)
 //    sdk_none:      the SDK exposes nothing for it                 (ADC lowpower)
+//    sdk_manual:    the SDK exposes something, but not safely at init - firmware
+//                   sets it later                                  (LTDC pixel format)
 //    struct: other  it belongs to a DIFFERENT struct               (TIM1 deadtime)
+//
+//  `sdk_none` and `sdk_manual` read as the same shape - a note instead of a struct
+//  field - and they say a DIFFERENT true thing. `sdk_none: "the SDK exposes nothing
+//  for it"` is false for a parameter the SDK CAN set; it is only unsafe to set from
+//  this generator's one-shot init function. Saying "nothing" when something exists is
+//  the kind of false comment a person reads as documentation and believes.
 //
 //  A parameter that does not apply under the current settings is not emitted, and
 //  neither is one the data marks readonly - those are derived, not chosen.
@@ -1019,6 +1092,15 @@ export function initPlan(pid) {
   const hs = periphHandle(pid);
   const handle = hs.handle;
   for (const d of defs) {
+    // `sdk_manual:` FIRST, and checked separately from `sdk_none:` even though both
+    // produce a note rather than a struct field — the two say opposite things about
+    // whether the SDK exposes the setting at all, and `sdk_none` read over a
+    // `sdk_manual` case would tell a reader the SDK has no such setter when it does.
+    if (d.sdk_manual) {
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — set by firmware`
+        + (d.sdk_note ? `: ${d.sdk_note}` : ''));
+      continue;
+    }
     if (d.sdk_none) {
       notes.push(`${d.name} = ${paramValue(pid, d.key)} — the SDK exposes nothing for it`
         + (d.sdk_note ? `: ${d.sdk_note}` : ''));
@@ -1112,22 +1194,40 @@ export function initPlan(pid) {
   const problems = [];
   for (const d of paramDefs(pid)) problems.push(...depProblems(pid, d));
 
-  // ---- one struct, applied once PER INSTANCE ---------------------------------
-  // `channel_params` (params.js). The block is filled and applied once for each LIVE
+  // ---- one OR MORE structs, applied once PER INSTANCE -------------------------
+  // `channel_params` (params.js). Every block is filled and applied once for each LIVE
   // instance, and what varies per instance is the function, the handle, or both:
   // `TIM_OC1Init(TIM1, &s)` … `TIM_OC4Init(TIM1, &s)` vary the function and keep the
   // peripheral's handle; `LTDC_LayerInit(LTDC_Layer1, &s)` keeps the function and varies
   // the handle. Both arrive here as the same row, so this loop knows about neither.
   //
-  // Each instance becomes an ordinary struct block, which is why `periphBlock()` needs no
-  // change to emit it: a block already carries its own `fn` and its own `handle`.
+  // SAI (and SERDES, the same shape) need MORE than one struct per instance: the SDK's
+  // own example calls `SAI_Init`, `SAI_FrameInit` and `SAI_SlotInit` for a single block
+  // (`SAI1_Block_A` / `SAI1_Block_B`, `ch32h417.h:1775-1776`), each its own struct type,
+  // each taken directly by its own function - unlike `embed:` (codegen.js above), where
+  // an inner struct is reached ONLY through a pointer inside another and nothing calls
+  // it alone. This is the opposite shape: three structs that all stand on their own and
+  // simply happen to share one instance's handle.
+  //
+  // No new list-of-structs schema is needed: a `channel_params.params:` ROW may already
+  // carry `struct:` like any ordinary `params:` row (TIM1's deadtime does the same thing
+  // one level up, "it belongs to a DIFFERENT struct" in the comment atop this file) - it
+  // simply used to be pointless here because every row silently used `cbl.struct`. A row
+  // naming a DIFFERENT struct now gets its OWN block, and because that struct's function
+  // does not vary by instance (SAI_FrameInit is SAI_FrameInit on Block A and Block B;
+  // only the HANDLE varies, and that is resolved the same way as the primary struct's),
+  // its `fn:` comes from `codegen.init_structs.<that struct>.fn` - the same global table
+  // every non-channel struct already uses - rather than from the per-instance `sdk_call`
+  // table, which is the primary struct's mechanism and stays exactly as it was.
   const cbl = channelParamBlock(pid);
   if (cbl && cbl.struct) {
     const plan = activeInstances(pid);
     if (plan.missing) problems.push(plan.missing);
     if (plan.note) notes.push(plan.note);
+    const chanDefs = channelParamDefs(pid);
     for (const inst of plan.instances) {
-      const block = {
+      const byStruct = new Map();
+      const primary = {
         struct: cbl.struct, fn: inst.fn || null,
         // No `handle:` on the row means the peripheral's own register block, which is
         // the timer case. An LTDC layer names its own.
@@ -1135,8 +1235,29 @@ export function initPlan(pid) {
         fields: [], missing: [],
         instance: { n: inst.n, noun: plan.noun },
       };
-      for (const d of channelParamDefs(pid)) {
+      byStruct.set(cbl.struct, primary);
+      structs.push(primary);
+      for (const d of chanDefs) {
         if (d.readonly || !paramApplies(pid, d)) continue;
+        const structName = d.struct || cbl.struct;
+        let block = byStruct.get(structName);
+        if (!block) {
+          const spec = (cg.init_structs || {})[structName] || {};
+          block = {
+            struct: structName, fn: spec.fn || null,
+            noHandle: !!spec.no_handle, handle: spec.no_handle ? null : (inst.handle || handle || null),
+            // Read by `periphBlock()`'s existing "nothing applies this struct" fallback
+            // when `fn` is missing - the SAME message an ordinary (non-channel) struct
+            // gets, because it is the same gap: a struct beyond the block's own
+            // `cbl.struct` needs its OWN `codegen.init_structs.<struct>.fn` entry, since
+            // unlike the primary struct its function cannot come from an instance's
+            // `sdk_call`.
+            fields: [], missing: [],
+            instance: { n: inst.n, noun: plan.noun },
+          };
+          byStruct.set(structName, block);
+          structs.push(block);
+        }
         if (!d.sdk_field) {
           block.missing.push(`${d.name}: channel_params gives no sdk_field:, so the member name is unknown`);
           continue;
@@ -1147,10 +1268,9 @@ export function initPlan(pid) {
         else block.fields.push({ member: d.sdk_field, text: lit.text, name: d.name, value, unit: d.unit });
       }
       if (!inst.fn) {
-        block.missing.push(`channel_params names no sdk_call for ${plan.noun} ${inst.n}, `
+        primary.missing.push(`channel_params names no sdk_call for ${plan.noun} ${inst.n}, `
           + 'and this generator does not paste a function name together from a number');
       }
-      structs.push(block);
     }
   }
   return { pid, structs, calls, notes, handle: handle || null, problems };
@@ -1270,7 +1390,15 @@ export function clockBitOf(pid) {
 
 function structVar(name) {
   // USART_InitTypeDef -> USART_InitStructure, the SPL's own naming in every example.
-  return String(name).replace(/TypeDef$/, 'Structure');
+  const s = String(name);
+  const stripped = s.replace(/TypeDef$/, 'Structure');
+  // codegen.js read-through item 4 (backlog, manager-assigned): every struct type on
+  // every shipped part ends in `TypeDef`, so this line never fires today - but nothing
+  // in codegen.init_structs PROMISES that, and one that does not would otherwise get a
+  // variable named IDENTICALLY to its own type (`Foo Foo = {0};`), which a peripheral
+  // with two such structs could then collide on. Suffixed instead: cheap, and inert on
+  // every real struct because every real struct already took the branch above.
+  return stripped === s ? `${s}_var` : stripped;
 }
 
 // An embedded block's variable needs to be UNIQUE from its siblings: RW and WR are both

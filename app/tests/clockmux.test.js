@@ -61,13 +61,34 @@ test('a second PLL and a mux get state; the five parts without them get none', (
 
   // The parts that have neither must gain NO new keys, or every .wchproj they have
   // ever written stops round-tripping byte for byte against an older build.
-  for (const part of ['CH32V006', 'CH32V005', 'CH32V003', 'CH32X035', 'CH32L103', 'CH32H417']) {
+  //
+  // CH32H417 is NOT in this list any more. It was, when this test was written — the
+  // comment at the top of this file even said "proving it on CH32H417 would prove only
+  // that CH32H417's YAML is right", written before that YAML existed. AGENT-1 shipped
+  // it this round (`ff7d48d`, "FMC NOR/SRAM + USBHS_PLL ship") through the layout fix
+  // and the `embed:` mechanism this file's own author (AGENT-2) landed, so CH32H417
+  // legitimately growing `preSrc`/`plls` now is the FEATURE working, not a regression -
+  // the gap this loop used to guard closed, and the next test down checks what it
+  // closed to, on the real part rather than only the synthetic one.
+  for (const part of ['CH32V006', 'CH32V005', 'CH32V003', 'CH32X035', 'CH32L103']) {
     const f = fresh(part);
     if (!f.M.clock) continue;
     const extra = Object.keys(f.S.clock).filter(n => n === 'preSrc' || n === 'plls');
     assert.deepEqual(extra, [], `${part} grew ${extra.join(', ')} without declaring any`);
     assert.deepEqual(Object.keys(f.projectObject().clock).filter(n => n === 'preSrc' || n === 'plls'), []);
   }
+});
+
+test('CH32H417, for real: USBHS_PLL and the USBFS tap compute 48 MHz on the shipped part', () => {
+  // The number D was always about, now checked on data/mcus/CH32H417.yaml itself
+  // rather than only on this file's synthetic stand-in above.
+  const e = fresh('CH32H417', 'QFN128');
+  const r = e.clockCalc();
+  assert.ok(r.plls && r.plls.USBHS_PLL, 'the shipped part really has the PLL now');
+  assert.equal(r.plls.USBHS_PLL.out, 480, 'RM 3.4.13: fixed 480 MHz');
+  assert.equal(Math.round(r.USBFS * 100) / 100, 48, 'RM 3.4.13\'s own worked example: /10 = 48 MHz');
+  assert.deepEqual(e.S.clock.plls.USBHS_PLL, { in: 0 }, 'fixed output: no multiplier, no divider stored');
+  assert.equal(e.S.clock.preSrc.USBFS, 'USBHS_PLL_CLK', 'the tab\'s default_source, not options[0]');
 });
 
 test('`default:` and `default_source:` must name something the file offers', () => {

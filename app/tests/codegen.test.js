@@ -478,6 +478,34 @@ test('a divider with no encoding is reported, not half written', () => {
   assert.equal((e.rccWord().mask >> 11) & 0x1f, 0, 'and the field is not even masked');
 });
 
+// DECISION (agents/STATUS.md §2 AGENT-2, manager-assigned "codegen.js read-through
+// item 6"), MEASURED rather than assumed. The first attempt made "no encoding for X" a
+// TODO, on the theory that it is a narrower, safer case than rccWords()'s "not written"
+// (a FIELD codegen.rcc already declares, missing one value, versus a control it never
+// attempts at all). That theory was WRONG: CH32V006's real ADC prescaler is exactly
+// this case, on purpose - `data/mcus/CH32V006.yaml:2291-2294` documents /1 as
+// deliberately unencoded until a second field (ADC_CLK_MODE) is also written, and says
+// outright the generator is meant to report "no encoding for 1" until then. A TODO
+// there fails --strict on CH32V006/CH32V005's DEFAULT configuration for a gap AGENT-1
+// already tracks by name. So: still a comment, both cases, and this test is the
+// regression guard for that — it fails the moment either one becomes a TODO again.
+test('DECISION: an RCC gap stays a note, not a TODO — proven against a real, deliberate case', () => {
+  const e = fresh('CH32V006', 'TSSOP20');           // real data, not a synthetic fixture
+  e.compute();
+  const adc = e.rccWord().parts.find(p => /ADC/.test(p.what));
+  assert.match(adc.note, /no encoding for/, 'setup: CH32V006 really does start on this gap');
+  assert.doesNotMatch(e.cSource(), /TODO.*no encoding for/,
+    'CH32V006.yaml:2291-2294 says this stays a note until ADC_CLK_MODE is also modelled');
+
+  const m = multiSlice();
+  m.setClock({ pre: { ADC: 16 } });                 // the synthetic no-encoding case too
+  assert.doesNotMatch(m.cSource(), /TODO.*no encoding for 16/);
+});
+
+// The OTHER site (a PLL/mux with no codegen.rcc entry at all) already has its own
+// regression coverage: app/tests/clockmux.test.js "a mux or a PLL with NO encoding is
+// named in the C, not silently skipped" asserts the exact same "stays a note" shape.
+
 // =============================================================================
 //  Round-3 P2 — everything the user can set has to reach the C
 // =============================================================================
@@ -628,6 +656,34 @@ test('two structs on one peripheral are two blocks, because they are two SDK cal
   const c = e.cSource();
   assert.ok(c.includes('TIM_BDTRInitTypeDef TIM_BDTRInitStructure = {0};'));
   assert.equal(/TIM_TimeBaseInitStructure\.TIM_DeadTime/.test(c), false);
+});
+
+// codegen.js read-through item 4 (backlog, manager-assigned): a struct typedef that
+// does not end in `TypeDef` used to become a variable named identically to its own
+// TYPE - `Foo Foo = {0};` - which a peripheral with two such structs could collide on.
+// No shipped part has one (every SPL struct ends in TypeDef), so this is a synthetic
+// part on purpose - the whole point is a struct the read-through found NO real example
+// of yet.
+test('a struct typedef that does not end in TypeDef gets a var name that cannot collide with it', () => {
+  const e = fresh('CH32V006');
+  e.registerMcuFile(`
+mcu: { name: CH32V006-ODDSTRUCT, inherits: CH32V006 }
+codegen:
+  init_structs:
+    FooCfg: { fn: Foo_Init, no_handle: true }
+peripherals:
+  IWDG:
+    params:
+      - { key: oddfield, name: Odd field, struct: FooCfg, sdk_field: x, type: int, default: 1 }
+`);
+  e.loadMcu('CH32V006-ODDSTRUCT');
+  e.setSetting('IWDG', 'Mode', 'Activated');   // inherited from CH32V006 - isEnabled() needs it
+  e.compute();
+  const c = e.cSource();
+  assert.doesNotMatch(c, /\bFooCfg FooCfg\b/, 'never a variable named identically to its own type');
+  assert.match(c, /FooCfg FooCfg_var = \{0\};/);
+  assert.match(c, /FooCfg_var\.x = 1;/);
+  assert.match(c, /Foo_Init\(&FooCfg_var\);/);
 });
 
 test('an applying function is never derived from a struct name', () => {
@@ -1100,6 +1156,11 @@ test('every bundled part generates only names its own MCU file carries', () => {
       if (!m) continue;
       const [, member, value] = m;
       if (/^-?\d+$/.test(value)) continue;
+      // `&FMC_NORSRAMTimingInitStructure_rw` etc. — an EMBEDDED struct's own address
+      // (codegen.js `initPlan()`'s embed: mechanism). The variable name is generated
+      // from the struct type and the embed key, never copied out of the MCU file, so
+      // it fails this check the same legitimate way a literal integer already did.
+      if (value.startsWith('&')) continue;
       assert.ok(data.includes(member), `${name}: member ${member} is not in the MCU file`);
       assert.ok(data.includes(value), `${name}: value ${value} is not in the MCU file`);
     }

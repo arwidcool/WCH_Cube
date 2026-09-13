@@ -95,6 +95,12 @@ export function normaliseParamDefs(list) {
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
     sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
     sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
+    // The SDK exposes a setter, but this generator's one-shot init function is not a
+    // safe place to call it (LTDC's pixel format — the setter is unsafe before the
+    // layer is otherwise configured). `sdk_none:` says "the SDK has nothing"; this
+    // says "the SDK has something, and firmware sets it some other way" — a different
+    // true statement in the same generated-comment shape.
+    sdk_manual: !!d.sdk_manual,
     // A struct member that is itself a POINTER to a second struct no SDK function takes
     // alone (ch32h417_fmc.h:113-115 — `FMC_NORSRAMInit()` dereferences
     // `FMC_ReadWriteTimingStruct` unconditionally). `embed:` names which of that inner

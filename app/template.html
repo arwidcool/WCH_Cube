@@ -984,7 +984,12 @@ function syncMcuUi() {
   document.getElementById('crumb-mcu').textContent = M.mcu.name;
   const meta = document.getElementById('mcu-meta');
   const core = M.mcu.core || '';
-  const mem = `${M.mcu.flash_kb || '?'} KB flash · ${M.mcu.sram_kb || '?'} KB SRAM`;
+  // Trimmed from "960 KB flash · 896 KB SRAM" (agents/BOARD.md 09-12T23:04Z: 181px
+  // needed in a 168px box under Linux's fallback font — #mcu-meta ellipsises by
+  // design so nothing FAILS, but the box is tighter than it needs to be for
+  // information nobody loses by reading "960K" instead of "960 KB"). Shorter on
+  // every font, so it can only narrow the gap the finding measured, never widen it.
+  const mem = `${M.mcu.flash_kb || '?'}K flash · ${M.mcu.sram_kb || '?'}K SRAM`;
   meta.innerHTML = (core ? `<span class="meta-core">${esc(core)} · </span>` : '') + `<span>${esc(mem)}</span>`;
   meta.title = [core, mem].filter(Boolean).join(' · ');
   const ps = document.getElementById('pkgsel');
