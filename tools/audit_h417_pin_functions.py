@@ -23,6 +23,38 @@ this run actually audits it, and `main()` cross-checks that list against every s
 heading the DS itself contains -- a table appearing in the DS that is not in `TABLES` is
 UNKNOWN and fails the run, by name, before anything else is printed as a result.
 
+THE SECOND HARD LESSON, found the expensive way on this tool's first real run (main,
+2026-09-13/14, `agents/BOARD.md`): agreeing with a Table 2-2-x reading is real evidence a
+peripheral's `signal_pins:` are right, because the two tables are independent sources --
+but DISAGREEING with one is NOT evidence the FILE is wrong. It is only evidence the
+DATASHEET'S TWO TABLES disagree with each other, and in `CH32H417DS0.md` specifically,
+**Table 2-2-x is measurably less reliable than Table 2-1-1**: checking eight raw diffs
+against Table 2-1-1 by hand found five were Table 2-2-x's own error, one was a naming
+inconsistency Table 2-1-1 sides with the file on, one was confirmed correct, and only one
+(`MCO`, a whole missing peripheral) was a real file defect. A tool that reads every
+Table-2-2-x disagreement as "the file is wrong" would have been wrong 5 times out of 7.
+
+So every diff against Table 2-2-x is now cross-checked against Table 2-1-1 (imported from
+`tools/extract_h417_pins.py`, AGENT-1's own battle-tested parser for that table -- this
+file does not re-parse Table 2-1-1 itself, both to avoid a second buggy parser and because
+that parser already handles the PDF's line-wrap and split-name/split-AF damage this table
+carries) and resolved to exactly THREE verdicts, never a fourth invented one:
+
+    file_defect                Table 2-1-1 confirms Table 2-2-x's claim, against the file
+                                -- a real gap or wrong value; fix the file.
+    datasheet_self_contradiction   Table 2-1-1 confirms what the FILE already has, against
+                                Table 2-2-x's differing claim -- the file is right; the
+                                datasheet's two tables disagree with each other.
+    unresolved                  Table 2-1-1 does not confirm EITHER side for this specific
+                                pin -- most often a signal Table 2-2-x adds that is missing
+                                from the file, where Table 2-1-1 assigns that exact pin/AF
+                                to something else entirely (`LPTIM2_CH2` claimed on `PB12`
+                                AF13, where `PB12`'s own COMPLETE, gapless Table 2-1-1 AF0-15
+                                list puts `CMP_OUT` there instead) -- both DS tables are
+                                internally consistent with THEMSELVES and contradict each
+                                other, and this tool does not pick a side without a third
+                                source. Model as `disagreements:`, per main's ruling.
+
 Four shapes have been found by inspection (`agents/BOARD.md`, this file's own history):
     af_list          "SIGNAL  PIN(AFn), PIN(AFn)..."      -- the majority; AFIO-muxed
     no_af            "SIGNAL  PIN"                         -- a dedicated pad, no AF mux
@@ -36,12 +68,15 @@ now and must not be asserted about out from under whoever is mid-edit on them.
 A table registered here with a shape this run does not implement is PENDING, printed and
 counted, never silently treated as "checked and clean".
 
-Exit codes: 0 clean (every af_list table agrees, nothing UNKNOWN); 1 a real difference (or
-an UNKNOWN table) was found; 2 the DS or the MCU file could not be read at all.
+Exit codes: 0 clean (every af_list table agrees or every disagreement resolved to
+`datasheet_self_contradiction`/`unresolved`, never `file_defect`, and every row parsed with
+no anomaly); 1 a `file_defect` verdict, or a parse anomaly, was found; 2 an UNKNOWN table,
+a registered table gone missing from the DS, or the DS/MCU file could not be read at all.
 """
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import pathlib
 import re
 import sys
@@ -51,6 +86,50 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT_DS = ROOT / 'data/sources/H417/Datasheets/CH32H417DS0.md'
 DEFAULT_MCU = ROOT / 'data/mcus/CH32H417.yaml'
+
+
+def _load_extract_h417_pins():
+    """Import `tools/extract_h417_pins.py` by path (it is not a package) -- reused, never
+    reimplemented, for the Table 2-1-1 cross-check below. That file is AGENT-1's, already
+    handles this table's PDF line-wrap and split-name/split-AF damage, and a second,
+    independently-written parser for the SAME table would be a second place to have the
+    exact bug this tool exists to catch in the first place."""
+    path = ROOT / 'tools' / 'extract_h417_pins.py'
+    spec = importlib.util.spec_from_file_location('extract_h417_pins', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def table_2_1_1_pin_functions(ds_path: pathlib.Path) -> dict[str, set[tuple[str, int]]]:
+    """`{pin: {(signal, af_int), ...}}`, straight from Table 2-1-1 (the PIN-first table),
+    via `extract_h417_pins.parse()`. This is the SECOND independent source `main()` uses
+    to arbitrate a Table 2-2-x disagreement -- see the module docstring's three verdicts."""
+    extract = _load_extract_h417_pins()
+    rows, _tables, _signals = extract.parse(ds_path)
+    out: dict[str, set[tuple[str, int]]] = {}
+    for r in rows:
+        pin = r['name']
+        for sig, af in extract.AF.findall(r['text']):
+            out.setdefault(pin, set()).add((sig, int(af[2:])))
+    return out
+
+
+def classify(pin: str, ds_full_signal: str, file_af: int | None, claimed_af: int | None,
+             table_2_1_1: dict[str, set[tuple[str, int]]]) -> str:
+    """One of the three verdicts (module docstring) for ONE contested pin on ONE signal.
+    `file_af` is the AF the FILE gives this pin for this signal, `claimed_af` is what
+    Table 2-2-x gives it -- exactly one is `None` for a missing/extra pin, both present
+    (and different) for a value mismatch. Confirming ONE side against Table 2-1-1 and not
+    the other is decisive; confirming both, or neither, is `unresolved` -- never guessed."""
+    confirmed = table_2_1_1.get(pin, set())
+    file_ok = file_af is not None and (ds_full_signal, file_af) in confirmed
+    claim_ok = claimed_af is not None and (ds_full_signal, claimed_af) in confirmed
+    if claim_ok and not file_ok:
+        return 'file_defect'
+    if file_ok and not claim_ok:
+        return 'datasheet_self_contradiction'
+    return 'unresolved'
 
 # =============================================================================
 # THE REGISTRY. Every "Table 2-2-N ... Pin function(s)" this datasheet has, found by
@@ -113,7 +192,12 @@ TABLES = {
     27: {'title': 'SAI', 'shape': 'af_list', 'prefix_map': {'SAI': ('SAI', 'SAI')}},
     28: {'title': 'LTDC', 'shape': 'af_list', 'prefix_map': {'LTDC': ('LTDC', 'LTDC')}},
     29: {'title': 'DFSDM', 'shape': 'af_list', 'prefix_map': {'DFSDM': ('DFSDM', 'DFSDM')}},
-    30: {'title': 'MCO', 'shape': 'af_list', 'prefix_map': {'MCO': (None, 'MCO')}},
+    # MCO is not its own peripheral: `data/mcus/CH32H417.yaml:5492-5509` models it as one
+    # choice-row of RCC's own "Master Clock Output (MCO)" setting, `signal_pins.MCO` lives
+    # under `peripherals.RCC`. First pass here wrongly assumed a bare-name DS table implies
+    # a same-named top-level peripheral and reported it "missing" - it never was (main,
+    # 2026-09-14, correcting AGENT-3's own finding 8).
+    30: {'title': 'MCO', 'shape': 'af_list', 'prefix_map': {'MCO': (None, 'RCC')}},
     31: {'title': 'PIOC', 'shape': 'af_list', 'prefix_map': {'PIOC': ('PIOC', 'PIOC')}},
 }
 
@@ -235,12 +319,16 @@ def resolve_half(half: str, current: str, prefix_map: dict, dual_map: dict) -> t
     return None
 
 
-def parse_af_list(body: str, spec: dict, anomalies: list[str]) -> dict[str, dict[str, set]]:
-    """`{yaml_pid: {short_signal: {(pin, af), ...}}}` for one `af_list`-shaped table."""
+def parse_af_list(body: str, spec: dict, anomalies: list[str]) -> tuple[dict[str, dict[str, set]], dict[tuple[str, str], str]]:
+    """`({yaml_pid: {short_signal: {(pin, af), ...}}}, {(yaml_pid, short_signal): ds_full_name})`
+    for one `af_list`-shaped table. The second dict is what the Table 2-1-1 cross-check
+    needs -- `half` (the DS's own full signal name, e.g. `LTDC_CLK`) is already in hand
+    here and would otherwise be thrown away the moment it is stripped to `short`."""
     prefix_map = spec.get('prefix_map', {})
     dual_map = spec.get('dual_prefix_map', {})
     current: str | None = None
     out: dict[str, dict[str, set]] = {}
+    full_name_of: dict[tuple[str, str], str] = {}
     lines = [clean_line(l) for l in body.splitlines() if not is_footer_noise(clean_line(l))]
     i = 0
     while i < len(lines):
@@ -285,10 +373,11 @@ def parse_af_list(body: str, spec: dict, anomalies: list[str]) -> dict[str, dict
             if short is None:
                 anomalies.append(f'{current}: {half!r} does not start with expected prefix {ds_prefix!r}')
                 continue
-            targets.append((pid, short))
-        for pid, short in targets:
+            targets.append((pid, short, half))
+        for pid, short, half in targets:
             out.setdefault(pid, {}).setdefault(short, set()).update(cells)
-    return out
+            full_name_of[(pid, short)] = half
+    return out, full_name_of
 
 
 def actual_signal_pins(doc: dict, pid: str) -> dict[str, set]:
@@ -299,20 +388,37 @@ def actual_signal_pins(doc: dict, pid: str) -> dict[str, set]:
     return out
 
 
-def compare(pid: str, want: dict[str, set], got: dict[str, set], out: list[str]) -> int:
+def compare(pid: str, want: dict[str, set], got: dict[str, set],
+            full_name_of: dict[tuple[str, str], str],
+            table_2_1_1: dict[str, set[tuple[str, int]]],
+            verdict_counts: dict[str, int], out: list[str]) -> int:
+    """Per signal, per PIN that differs between Table 2-2-x (`want`) and the file (`got`),
+    resolve one of the three verdicts against Table 2-1-1 (module docstring) rather than
+    printing a raw diff and letting a reader assume the file is wrong. `bad` counts only
+    `file_defect` -- a `datasheet_self_contradiction` or `unresolved` line is printed (the
+    disagreement is real and worth a human's eyes) but is NOT the file's fault, so it does
+    not fail the run."""
     bad = 0
-    missing = sorted(set(want) - set(got))
-    extra = sorted(set(got) - set(want))
-    if missing:
-        bad += 1
-        out.append(f'   {pid}: MISSING from the file ({len(missing)}): {missing}')
-    if extra:
-        bad += 1
-        out.append(f'   {pid}: NOT IN THE DS ({len(extra)}): {extra}')
-    for s in sorted(set(want) & set(got)):
-        if want[s] != got[s]:
-            bad += 1
-            out.append(f'   {pid}.{s}: DS {sorted(want[s])}  file {sorted(got[s])}')
+    for s in sorted(set(want) | set(got)):
+        want_pins = dict(want.get(s, ()))   # {pin: af}
+        got_pins = dict(got.get(s, ()))
+        if want_pins == got_pins:
+            continue
+        full = full_name_of.get((pid, s), f'{pid}_{s}')
+        for pin in sorted(set(want_pins) | set(got_pins)):
+            w_af, g_af = want_pins.get(pin), got_pins.get(pin)
+            if w_af == g_af:
+                continue
+            verdict = classify(pin, full, g_af, w_af, table_2_1_1)
+            verdict_counts[verdict] = verdict_counts.get(verdict, 0) + 1
+            shape = ('missing from the file' if g_af is None else
+                     'not in Table 2-2-x' if w_af is None else 'value mismatch')
+            label = {'file_defect': 'FILE DEFECT', 'datasheet_self_contradiction':
+                     'DATASHEET SELF-CONTRADICTION (file is right)', 'unresolved': 'UNRESOLVED'}[verdict]
+            out.append(f'   [{label}] {pid}.{s} ({full}) on {pin}: Table-2-2-x says AF{w_af}, '
+                       f'file says AF{g_af} ({shape})')
+            if verdict == 'file_defect':
+                bad += 1
     return bad
 
 
@@ -369,6 +475,11 @@ def main() -> int:
         print(f'  {shape} ({len(ns)}): {names}{audited}')
     print()
 
+    print('Loading Table 2-1-1 (the PIN-first table) via tools/extract_h417_pins.py, for '
+          'the three-verdict cross-check every Table-2-2-x disagreement now goes through...')
+    table_2_1_1 = table_2_1_1_pin_functions(ds_path)
+    print(f'  {len(table_2_1_1)} pin(s) with at least one AF-numbered function.\n')
+
     anomalies: list[str] = []
     diffs: list[str] = []
     bad = 0
@@ -380,6 +491,7 @@ def main() -> int:
     # SDRAM-only signal as "not in the DS" -- true only of THAT table, not of the DS as a
     # whole, and exactly the false positive a per-table compare would have shipped.
     merged: dict[str, dict[str, set]] = {}
+    full_name_of: dict[tuple[str, str], str] = {}
     for n in sorted(by_shape.get('af_list', [])):
         spec = TABLES[n]
         body = table_body(text, n)
@@ -388,16 +500,18 @@ def main() -> int:
                   f'sliced out -- treating as a parse failure, not a clean table.')
             bad += 1
             continue
-        got_from_ds = parse_af_list(body, spec, anomalies)
+        got_from_ds, names = parse_af_list(body, spec, anomalies)
+        full_name_of.update(names)
         for pid, sigs in got_from_ds.items():
             dest = merged.setdefault(pid, {})
             for short, cells in sigs.items():
                 dest.setdefault(short, set()).update(cells)
 
     covered_pids = set(merged)
+    verdict_counts: dict[str, int] = {}
     for pid, sigs in merged.items():
         got_from_yaml = actual_signal_pins(doc, pid)
-        bad += compare(pid, sigs, got_from_yaml, diffs)
+        bad += compare(pid, sigs, got_from_yaml, full_name_of, table_2_1_1, verdict_counts, diffs)
 
     if anomalies:
         print(f'{len(anomalies)} PARSE ANOMALY/ANOMALIES (a row this run could not read with confidence '
@@ -411,9 +525,15 @@ def main() -> int:
     print()
 
     if diffs:
-        print(f'{bad} difference(s) against the DS Table 2-2-x series:')
+        total = sum(verdict_counts.values())
+        tally = ', '.join(f'{v}={verdict_counts.get(v, 0)}'
+                           for v in ('file_defect', 'datasheet_self_contradiction', 'unresolved'))
+        print(f'{total} raw disagreement(s) against Table 2-2-x, resolved against Table 2-1-1 ({tally}):')
         for d in diffs:
             print(d)
+        print(f'\nOnly file_defect ({verdict_counts.get("file_defect", 0)}) fails this run - a '
+              f'datasheet_self_contradiction means the FILE is right and the datasheet disagrees '
+              f'with itself, and an unresolved case is printed for a human, never asserted either way.')
     else:
         print('Every af_list-covered peripheral agrees with its DS Table 2-2-x entry, signal for '
               'signal, pin for pin, AF for AF.')
