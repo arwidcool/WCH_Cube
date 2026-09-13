@@ -1540,3 +1540,18 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
 > later owner's line (verify_sdk_names in run.js, Taskfile, `lib/util` native tests, the README
 > environment facts, the round-3 DONE section) or is restated in round 6 under AGENT-3 (the flash
 > evidence line, the dead-control sweep). Nothing was deleted; `[-]` is the record.
+
+- [x] (AGENT-2) **§7 APP P1: `projectDiff()` — a readable diff between two `.wchproj` files.**
+      Done `23323ca`. `app/engine/project.js` gains `projectDiff(srcA, srcB)`: loads both files
+      for real through the same `projectApply()`/`compute()` path "Open project…" uses (never a
+      second, parallel YAML reader), then reports changed pins, peripheral settings, params and
+      clock (mux/PLL choices and the computed numbers), with DMA/NVIC/generator options flagged
+      as a block. `tools/wchcube_cli.js --diff <a> <b>` prints it and exits 0, or exits 1 naming
+      which of the two files/paths is bad. Identical files read "unchanged" everywhere; a
+      cross-MCU diff adds a NOTE and reports most fields as added/removed rather than "changed";
+      an unregistered MCU throws `"A: ... is not loaded"` / `"B: ... is not loaded"`, naming
+      which file. 9 tests (`app/tests/project.test.js`, `app/tests/cli.test.js`), planted break
+      seen red (`git stash` the two engine files to pre-mechanism: 5/5 + 4/4 new tests fail;
+      restored, green). `node tests/run.js "project.test"` 20/20, `"cli.test"` 26/26. **Parked
+      here on the owner's priority change** — §7 APP P2 (pinout SVG, print view, KiCad CSV) is
+      deprioritised along with it; moving to §2 C.
