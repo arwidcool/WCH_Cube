@@ -625,7 +625,18 @@ test('planted break: ticking an IN_EXTRACTION line in TASKS.md expires the exemp
   const out = (r.stdout || '') + (r.stderr || '');
   assert.notEqual(r.status, 0, 'the matrix passed with the exemption expired — the cells it excused did not fail');
   assert.match(out, /IN_EXTRACTION for CH32H417 has expired/, `the matrix's failure does not say the exemption expired:\n${out.slice(-1500)}`);
-  const cells = (out.match(/CH32H417 {2}\w+: (params|clock) —/g) || []).length;
+  // NOT a count of the printed `CH32H417  <pid>: (params|clock) —` bullet lines: `assert.empty`
+  // (tests/lib/harness.js) shows at most 40 of them and appends "... and N more", and the
+  // runner's own failure printer then caps the whole body at 45 LINES on top of that - so a
+  // bullet-line regex silently reads a DISPLAY LIMIT as the count (found AGENT-1, STATUS §3,
+  // 2026-09-13T00:33Z: this printed "40" the day CH32H417's real total was higher).
+  // `assert.empty` puts the TRUE, untruncated `list.length` in its own message header before
+  // any of that truncation happens, and — because the untouched suite is ALL GREEN (§1: 0
+  // failures across every part before this plant) — every cell that header counts here is one
+  // this plant caused, so the header total IS the exact CH32H417 count, not an approximation.
+  const total = out.match(/peripheral cells that are neither filled in nor declared absent in ABSENT \((\d+)\)/);
+  assert.ok(total, `expected assert.empty's own untruncated count in its message header, found:\n${out.slice(-1500)}`);
+  const cells = Number(total[1]);
   assert.ok(cells >= 1, `expected the excused cells to be listed as failures, found ${cells}:\n${out.slice(-1500)}`);
   console.log(`      planted refusal (matrix): ${cells} CH32H417 cell(s) failed once the line was ticked`);
 });

@@ -219,11 +219,14 @@ test('every peripheral offers a mode that does something, or declares that it ho
 // both times, not by writing down whatever the last run printed - the data was moving under this
 // file all afternoon.
 //
-// The four that remain are all QFN68, all cases where a signal has few pads to move to:
-//   FMC.Address bus A0-A25   FMC_A6 + FMC_A11 + FMC_A20 on PB11  (FMC_A11 could move)
-//   FMC.Address bus A0-A25   FMC_A7 + FMC_A12 + FMC_A21 on PB12  (FMC_A12 could move)
-//   UHSIF.Mode = Enabled     UHSIF_PORT3 + UHSIF_PORT6 on PB0    (UHSIF_PORT3 could move)
-//   UHSIF.Mode = Enabled     UHSIF_PORT4 + UHSIF_PORT7 on PB1    (UHSIF_PORT4 could move)
+// The four that remain are all QFN68, all cases where a signal has few pads to move to.
+// The FMC setting these come from was renamed "Address bus" -> "Address lines" (its
+// choice is still "A0-A25") since this list was first written; found AGENT-1, STATUS §3,
+// 2026-09-13T00:33Z — the count below was always right, only the label had gone stale:
+//   FMC.Address lines = A0-A25   FMC_A6 + FMC_A11 + FMC_A20 on PB11  (FMC_A11 could move)
+//   FMC.Address lines = A0-A25   FMC_A7 + FMC_A12 + FMC_A21 on PB12  (FMC_A12 could move)
+//   UHSIF.Mode = Enabled         UHSIF_PORT3 + UHSIF_PORT6 on PB0    (UHSIF_PORT3 could move)
+//   UHSIF.Mode = Enabled         UHSIF_PORT4 + UHSIF_PORT7 on PB1    (UHSIF_PORT4 could move)
 // At 0 the entry goes and these three checks become the plain assertions they want to be.
 const COLLISION_CEILING = {
   // package: choices that default onto an already-taken pad they could have avoided

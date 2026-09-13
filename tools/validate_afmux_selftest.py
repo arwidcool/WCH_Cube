@@ -116,12 +116,29 @@ def main() -> int:
     failures: list[str] = []
     with tempfile.TemporaryDirectory() as tmp:
         for i, (name, find, replace, expect) in enumerate(CASES):
-            if find not in base:
-                failures.append(f"{name}: anchor not found")
-                print(f"FAIL  {name}\n        anchor not found: {find[:70]!r}")
+            # THE ANCHOR MUST BE UNIQUE, and this guard is not paranoia: `if find not in
+            # base` (what this loop used to check) only proves the anchor exists SOMEWHERE,
+            # not that it is the one line the case means to mutate. An anchor with no line
+            # boundary matches INSIDE a longer line elsewhere in the file, `.replace(..., 1)`
+            # patches that unrelated occurrence, the real target survives untouched, and the
+            # case still reports OK for a reason that has nothing to do with the break it
+            # claims to plant - a planted-break test that plants nothing reads exactly like
+            # one that works. Found by AGENT-1 in this file's sibling
+            # (validate_clock_selftest.py), fixed there first; same shape, same fix, here.
+            hits = base.count(find)
+            if hits != 1:
+                where = "not found" if hits == 0 else f"matches {hits} places"
+                failures.append(f"{name}: anchor {where} in {PART.name}")
+                print(f"FAIL  {name}\n        anchor {where}, so the break is not the one "
+                      f"described: {find[:70]!r}")
+                continue
+            mutated = base.replace(find, replace, 1)
+            if mutated == base:
+                failures.append(f"{name}: the mutation changed nothing")
+                print(f"FAIL  {name}\n        find and replace are identical")
                 continue
             scratch = pathlib.Path(tmp) / f"case{i}.yaml"
-            scratch.write_text(base.replace(find, replace, 1), encoding="utf-8")
+            scratch.write_text(mutated, encoding="utf-8")
             code, out = run(scratch)
             flat = re.sub(r"\s+", " ", out)
             want = re.sub(r"\s+", " ", expect)

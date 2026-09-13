@@ -57,14 +57,24 @@ CASES = [
      "    classes: [out]\n    choices: [Output Push Pull]\n    not_on: [PB1, PB5]",
      "exactly one of `choices:`"),
 
+    # `when: { peripheral: USBFS, enabled: true }` is not unique in this file - PC10/PC11
+    # carry it on BOTH their gpio.mode and their gpio.pull entry - so each of these two
+    # cases anchors on that line PLUS its own entry's other fields, which is unique.
+    # Found by this file's own new anchor-uniqueness guard below: before it, both cases
+    # silently mutated the FIRST (gpio.mode) occurrence and reported OK regardless of
+    # which one they meant to target.
     ("a `when` naming hardware this part does not have",
-     "when: { peripheral: USBFS, enabled: true }",
-     "when: { peripheral: USB_DEVICE, enabled: true }",
+     "    classes: [out, af, analog]\n    not_on: [PC10, PC11]\n"
+     "    when: { peripheral: USBFS, enabled: true }",
+     "    classes: [out, af, analog]\n    not_on: [PC10, PC11]\n"
+     "    when: { peripheral: USB_DEVICE, enabled: true }",
      "is not a peripheral in this file"),
 
     ("a `when` with a non-boolean `enabled`",
-     "when: { peripheral: USBFS, enabled: true }",
-     'when: { peripheral: USBFS, enabled: "yes" }',
+     "    choices: [Pull-up, Pull-down]\n    not_on: [PC10, PC11]\n"
+     "    when: { peripheral: USBFS, enabled: true }",
+     "    choices: [Pull-up, Pull-down]\n    not_on: [PC10, PC11]\n"
+     '    when: { peripheral: USBFS, enabled: "yes" }',
      "`enabled` must be true or false"),
 
     ("a class outside the closed set",
@@ -155,13 +165,29 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         for i, (name, find, replace, expect) in enumerate(CASES):
-            if find not in base:
-                failures.append(f"{name}: the text to mutate is not in {PART.name} "
-                                f"(the check and the file have drifted apart)")
-                print(f"FAIL  {name}\n        anchor not found: {find[:60]!r}")
+            # THE ANCHOR MUST BE UNIQUE, and this guard is not paranoia: `if find not in
+            # base` (what this loop used to check) only proves the anchor exists SOMEWHERE,
+            # not that it is the one line the case means to mutate. An anchor with no line
+            # boundary matches INSIDE a longer line elsewhere in the file, `.replace(..., 1)`
+            # patches that unrelated occurrence, the real target survives untouched, and the
+            # case still reports OK by exiting non-zero for a reason that has nothing to do
+            # with the break it claims to plant - a planted-break test that plants nothing
+            # reads exactly like one that works. Found by AGENT-1 in this file's sibling
+            # (validate_clock_selftest.py), fixed there first; same shape, same fix, here.
+            hits = base.count(find)
+            if hits != 1:
+                where = "not found" if hits == 0 else f"matches {hits} places"
+                failures.append(f"{name}: anchor {where} in {PART.name}")
+                print(f"FAIL  {name}\n        anchor {where}, so the break is not the one "
+                      f"described: {find[:60]!r}")
+                continue
+            mutated = base.replace(find, replace, 1)
+            if mutated == base:
+                failures.append(f"{name}: the mutation changed nothing")
+                print(f"FAIL  {name}\n        find and replace are identical")
                 continue
             scratch = pathlib.Path(tmp) / f"case{i}.yaml"
-            scratch.write_text(base.replace(find, replace, 1), encoding="utf-8")
+            scratch.write_text(mutated, encoding="utf-8")
             code, out = run(scratch)
             flat = re.sub(r"\s+", " ", out)
             caught = code != 0 and expect in flat

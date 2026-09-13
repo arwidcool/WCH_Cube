@@ -203,7 +203,7 @@ Keep it current: if a statement here stops being true, change it here first.
      reappears in `data/mcus/`, and `tests/clock_ui.test.js` covers the "no HSE,
      no PLL" clock shape on CH32X035 instead.
 - **Not yet true, and the words matter:** nothing here has been **flashed**.
-  Every green result in this repository is a compile. See §6 and `HUMAN_TODO` 6.
+  Every green result in this repository is a compile. See §6 and `agents/STATUS.md` §6 item 8.
 - **New this pass:** the CH32X035 DMA request map that the RM's markdown
   conversion had destroyed (RM Table 9-2 — rows kept, columns lost) is
   recovered from the original PDF by word position, cross-checked against the
@@ -218,7 +218,7 @@ Keep it current: if a statement here stops being true, change it here first.
   GPIO speed is 50 MHz rather than 30. `tests/no_part_names.test.js` holds that
   line: `app/engine/` and `app/template.html` name no part outside comments.
 - **Not yet true, and the words matter:** nothing here has been **flashed**.
-  Every green result in this repository is a compile. See §6 and `HUMAN_TODO` 6.
+  Every green result in this repository is a compile. See §6 and `agents/STATUS.md` §6 item 8.
 
 Related documents, none of which this file duplicates:
 
@@ -445,7 +445,7 @@ version, ordered by what blocks the most.
 | CH32X035 | DS v2.2 + RM v1.9, `data/sources/X035/Datasheets/` + **EVT, 2 239 files** | landed; `validate_mcu.py` 0 errors, `verify_sdk_names.py` 0 errors | `CH32X035G8U6` | the second family. 7 packages, 8 variants, all packages draw with 0 conflicts, generated C **compiles**, `--strict` exits 0. Five peripherals are still partly modelled (OPA, CMP1/2/3, USBFS/USBPD params, TKEY) and `tests/completeness.test.js` prints those cells every run. Seven cited `constraints:` entries, and the consumer that reads them |
 | WCH-DUMMY32-C8 | n/a — synthetic | `tests/fixtures/mcus/` | n/a | layout/scale fixture, QFN12 → LQFP144. Not shipped, not offered in the part selector |
 | CH32V003 | DS + RM, `data/sources/V003/datasheets/` + **EVT** | landed mid-round-5 | `CH32V003F4P6` | the smallest part the app ships: RV32EC, 16 KB flash, 2 KB SRAM, 18 I/O on TSSOP20, **no GPIOB**, no OPA interrupt vector. 4 packages, 4 variants. `--strict` exits 0; `tests/completeness.test.js` and `tests/smoke.js` cover it; `params:` for OPA1 is the one open cell |
-| CH32V203, CH32V307 | none | none | none | waiting on sources (`HUMAN_TODO` 4) |
+| CH32V203, CH32V307 | none | none | none | waiting on sources (`agents/STATUS.md` §6 item 4) |
 
 **Both EVT packages have landed** — `data/sources/V006/Evt/` (988 files) and
 `data/sources/X035/Evt/` (2 239 files). Every "until the EVT package arrives"
@@ -543,7 +543,7 @@ shown** and the fixed value is displayed as text. ENGINE and UI own that, and it
 is in flight (`app/tests/project.test.js` currently has a red line named
 "setGpioField refuses a speed a multi-speed part does not offer").
 
-### Resolved this pass — `HUMAN_TODO.md` item 5
+### Resolved this pass — `agents/STATUS.md` §6 item 5
 
 "Verify the ch32v00x EVT SDK spelling of the port clock enable." **Settled, and
 AGENT-1's spelling is correct.** `framework-wch-noneos-sdk/Peripheral/ch32v00Xx/inc/ch32v00X_rcc.h`
@@ -602,7 +602,7 @@ the assumption note in `CH32V006.notes.md` can be marked confirmed.
 
 ### Environment
 
-- **No git remote.** CI has never run. `HUMAN_TODO` item 1.
+- **No git remote.** CI has never run. `agents/STATUS.md` §6 item 1.
   **The workflow side is ready as of 2026-09-12** and is now checked by
   `tests/release.test.js` rather than only by reading it: `ci.yml` has three jobs
   (`test` with no PlatformIO; `firmware`, which installs PlatformIO, builds all five
@@ -625,11 +625,11 @@ the assumption note in `CH32V006.notes.md` can be marked confirmed.
   cites **against the case the filesystem actually has**, and plants both a wrong-case
   path and a wrong-case `codegen.sdk.evt` to prove it bites.
 - **The repo is on a Google Drive mount.** `npm install` fails with EBADF; test
-  deps live in `%LOCALAPPDATA%\wchcube-deps`. `HUMAN_TODO` item 3.
+  deps live in `%LOCALAPPDATA%\wchcube-deps`. `agents/STATUS.md` §6 item 3.
 - **`agents/README.md` "Environment facts" is stale.** It says there is no
   `cargo` and no C compiler. Both now exist: `cargo 1.98.1` is on PATH, and
   PlatformIO has the WCH RISC-V GCC 12.2.0 at
-  `~/.platformio/packages/toolchain-riscv`. `HUMAN_TODO` item 2 is done.
+  `~/.platformio/packages/toolchain-riscv`. `agents/STATUS.md` §6 item 2 is done.
 - **RESOLVED — the floating `src-tauri` change.** The `open_project` fix was not
   optional: the command returns `Result<Option<String>, String>` and the body
   returned `Result<String, String>`. Reverting just that line and running
@@ -649,7 +649,7 @@ the assumption note in `CH32V006.notes.md` can be marked confirmed.
   `data/FORMAT.md`, `data/mcus/CH32V006.notes.md`, `tools/extract_remaps.py` and
   the agent packs still name the old flat locations.
 - **The repo is 52 MB of history plus an 84 MB EVT drop.** Not a problem today;
-  worth a thought the day a remote appears (`HUMAN_TODO` item 1).
+  worth a thought the day a remote appears (`agents/STATUS.md` §6 item 1).
 - **The human's `Taskfile.yml` is still a stub** (`echo "Hello, world!"`),
   untracked. Not half-adopted; see `TASKS.md` housekeeping.
 
@@ -839,9 +839,9 @@ They are not repeated here. What is left, in order:
    `agents/history/round6-pack/DONE.md`.**
    It still carries a "15 of 24" count from round 3 and most of what it calls open has
    since closed. A status nobody has checked is worse than no status.
-6. **A human flashes one generated project.** `HUMAN_TODO` 6, the highest-value open item
+6. **A human flashes one generated project.** `agents/STATUS.md` §6 item 8, the highest-value open item
    in the repo, and the only one that turns "compiles" into "works". Until then every
    DONE line about the generated code says **builds, not flashed**.
 7. **Build something on Linux.** Every compile claim in this file is a Windows claim, and
    the one defect a compiler could not catch here (wrong-case header) is exactly the one
-   Linux would have caught instantly. This wants the git remote — `HUMAN_TODO` item 1.
+   Linux would have caught instantly. This wants the git remote — `agents/STATUS.md` §6 item 1.
