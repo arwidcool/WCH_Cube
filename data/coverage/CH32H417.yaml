@@ -104,6 +104,41 @@ absent:
   # alone would be half true. What a user picks is a REQUEST per channel, and this part has
   # no `dma.request_defaults` yet - that is the TASKS.md line, not a peripheral.
   - { instance: DMAMUX, reason: "the DMA request multiplexer: one register block routing peripheral requests into DMA1's and DMA2's channels (RM 10.2.3), not a peripheral of its own. The per-channel request selection it configures is not modelled on this part yet", source: "CH32H417RM.md:12508-12514 and Table 10-6 (:12678)" }
+  # SDMMC's 19 other-remap-state pads. `AFIO_PCFR1.SDMMC_RM[1:0]` (CH32H417RM.md:11741-
+  # 11768, Table 9-32) moves EVERY SDMMC signal to one of three pin sets at once - the
+  # `remaps:` shape (data/FORMAT.md:220-244), not the per-pin `af:` mux every other
+  # signal on this part uses. This part's `codegen.remap.style` is `af`, and `style: af`
+  # FORBIDS `codegen.remap.fields` (data/FORMAT.md:654-657): no emitter exists that could
+  # ever WRITE SDMMC_RM, confirmed against the vendor's own `SD_GPIO_Init()`
+  # (`Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113`), which calls `GPIO_Init(...,
+  # GPIO_Mode_AF_PP, ...)` and never `GPIO_PinAFConfig()`. Only `SDMMC_RM=00` - the reset
+  # default - is reachable through anything the generator emits, so the file's
+  # `signal_pins:` (data/sources/H417/peripheral_extras.yaml SDMMC override) narrows to
+  # that one pin set; these 19 rows are the RM=01 and RM=1x pads Table 2-1-1 also lists
+  # for the same signals. Same citation as `KNOWN_NARROWED.SDMMC`
+  # (tests/h417_dedicated.test.js), ruling on the REQUEST at agents/BOARD.md
+  # 2026-09-13T20:23Z: a cited, per-peripheral narrowing, not a blanket one.
+  # `data/sources/H417/dedicated_pins.yaml` still carries the full three-set DS
+  # extraction unfiltered - only this part's `signal_pins:` override narrows.
+  - { token: SDMMC_D2, pin: PB10, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable (style: af forbids codegen.remap.fields, data/FORMAT.md:654-657), so the file narrows to RM=00's D2/PC10", source: "CH32H417DS0.md:4460" }
+  - { token: SDMMC_D3, pin: PB11, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D3/PC11", source: "CH32H417DS0.md:4472" }
+  - { token: SDMMC_D0, pin: PB13, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D0/PC8", source: "CH32H417DS0.md:4548" }
+  - { token: SDMMC_CMD, pin: PC10, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's CMD/PD2", source: "CH32H417DS0.md:4956" }
+  - { token: SDMMC_STS, pin: PC10, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's STS/PD2", source: "CH32H417DS0.md:4954" }
+  - { token: SDMMC_STR, pin: PC11, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's STR/PD3", source: "CH32H417DS0.md:5014" }
+  - { token: SDMMC_D0, pin: PD0, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D0/PC8", source: "CH32H417DS0.md:5046" }
+  - { token: SDMMC_D1, pin: PD1, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D1/PC9", source: "CH32H417DS0.md:5058" }
+  - { token: SDMMC_STR, pin: PD10, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's STR/PD3", source: "CH32H417DS0.md:4623" }
+  - { token: SDMMC_SDCK, pin: PD11, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's SDCK/PC12", source: "CH32H417DS0.md:4631" }
+  - { token: SDMMC_SLVCK, pin: PD11, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's SLVCK/PC12", source: "CH32H417DS0.md:4633" }
+  - { token: SDMMC_CMD, pin: PD12, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's CMD/PD2", source: "CH32H417DS0.md:4646" }
+  - { token: SDMMC_STS, pin: PD12, reason: "SDMMC_RM=01 pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's STS/PD2", source: "CH32H417DS0.md:4644" }
+  - { token: SDMMC_D2, pin: PD2, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D2/PC10", source: "CH32H417DS0.md:5109" }
+  - { token: SDMMC_D3, pin: PD3, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D3/PC11", source: "CH32H417DS0.md:5129" }
+  - { token: SDMMC_D4, pin: PD4, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D4/PA14", source: "CH32H417DS0.md:5147" }
+  - { token: SDMMC_D5, pin: PD5, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D5/PA15", source: "CH32H417DS0.md:5164" }
+  - { token: SDMMC_D6, pin: PD6, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D6/PC6", source: "CH32H417DS0.md:5191" }
+  - { token: SDMMC_D7, pin: PD7, reason: "SDMMC_RM=1x pin set (AFIO_PCFR1.SDMMC_RM[1:0], CH32H417RM.md:11741-11768, Table 9-32); only SDMMC_RM=00 is reachable, so the file narrows to RM=00's D7/PC7", source: "CH32H417DS0.md:5206" }
 # The DS reads the same silicon twice - Table 2-1-1 pin-first, Tables 2-2-x
 # signal-first - and where the two answers differ, BOTH are recorded here and
 # neither is averaged. Every entry names the line of each reading. One entry closes
