@@ -95,6 +95,14 @@ export function normaliseParamDefs(list) {
     sdk_enabled: d.sdk_enabled, sdk_disabled: d.sdk_disabled,
     sdk_call: d.sdk_call, sdk_args: d.sdk_args, sdk_repeat: d.sdk_repeat,
     sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
+    // A struct member that is itself a POINTER to a second struct no SDK function takes
+    // alone (ch32h417_fmc.h:113-115 — `FMC_NORSRAMInit()` dereferences
+    // `FMC_ReadWriteTimingStruct` unconditionally). `embed:` names which of that inner
+    // struct's `codegen.init_structs.<struct>.embed` entries this param's block belongs
+    // to, so two members of the SAME C struct TYPE (FMC_ReadWriteTimingStruct /
+    // FMC_WriteTimingStruct, both `FMC_NORSRAMTimingInitTypeDef*`) become two separate
+    // blocks instead of one merged, ambiguous one. See codegen.js `initPlan()`.
+    embed: d.embed || null,
     // A member whose value is fixed by WHICH INSTANCE this is, not by the user. OPA and
     // CMP begin their init struct with a `*_NUM` and the SDK branches on it
     // (`ch32x035_opa.c:117`: `if (OPA_InitStruct->OPA_NUM == OPA1)`), so a struct with

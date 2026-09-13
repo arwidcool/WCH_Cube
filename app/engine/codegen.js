@@ -1036,7 +1036,11 @@ export function initPlan(pid) {
       notes.push(`${d.name}: struct: ${d.struct} without an sdk_field:, so the member name is unknown`);
       continue;
     }
-    let block = structs.find(b => b.struct === d.struct);
+    // Two params can name the SAME struct: but a struct member that is a pointer to a
+    // second struct (below) needs TWO separate instances of that second struct, one per
+    // pointer member — grouping by struct name alone would merge FMC_ReadWriteTimingStruct's
+    // fields and FMC_WriteTimingStruct's fields into one block. `embed:` disambiguates.
+    let block = structs.find(b => b.struct === d.struct && b.embed === (d.embed || null));
     if (!block) {
       const spec = (cg.init_structs || {})[d.struct] || {};
       // A single-instance peripheral's Init takes the struct ALONE: OPA_Init(&s), not
@@ -1050,11 +1054,55 @@ export function initPlan(pid) {
         // already there.
         handleMissing: spec.no_handle ? null : hs.missing,
         fields: [], missing: [],
+        // Set below this loop, once every block has all its fields, for a block whose
+        // `embed:` names a real `codegen.init_structs.<struct>.embed.<key>` entry: the
+        // block it is a pointer INTO. Left null for an ordinary (non-nested) struct.
+        embed: d.embed || null, embedInto: null,
       });
     }
     const lit = paramLiteral(pid, d);
     if (lit.missing) block.missing.push(lit.missing);
     else block.fields.push({ member: d.sdk_field, text: lit.text, name: d.name, value: paramValue(pid, d.key), unit: d.unit });
+  }
+
+  // ---- nested structs: a member that is a POINTER to a second struct -----------
+  // `ch32h417_fmc.h:113-115`: `FMC_NORSRAMInitTypeDef` has two members,
+  // `FMC_ReadWriteTimingStruct` and `FMC_WriteTimingStruct`, both
+  // `FMC_NORSRAMTimingInitTypeDef*`, and no SDK function takes the inner struct alone.
+  // Shipping the outer struct with those left null is WORSE than not shipping it —
+  // `FMC_NORSRAMInit()` dereferences `FMC_ReadWriteTimingStruct` unconditionally, so a
+  // zeroed struct is a null read at init. So every block whose params carried `embed:`
+  // is resolved here, AFTER every block has all its fields (a param naming the outer
+  // struct may be read before or after the params naming the inner one — order in the
+  // MCU file must not matter): `codegen.init_structs.<inner-struct>.embed.<key>` names
+  // the outer struct and the pointer member that receives `&<this block's variable>`.
+  // The outer struct's own block is created here if the data has no direct params for
+  // it (FMC_NORSRAMInitTypeDef might, in principle, be nothing but two timing pointers).
+  for (const block of structs) {
+    if (!block.embed) continue;
+    const spec = (cg.init_structs || {})[block.struct] || {};
+    const emb = (spec.embed || {})[block.embed];
+    if (!emb || !emb.into || !emb.member) {
+      block.missing.push(`codegen.init_structs.${block.struct}.embed.${block.embed} does not name `
+        + 'both an into: struct and a member: — this struct has no fn: because nothing calls it '
+        + 'alone, so without a complete embed: entry nothing applies it either');
+      continue;
+    }
+    let target = structs.find(b => b.struct === emb.into && !b.embed);
+    if (!target) {
+      const outerSpec = (cg.init_structs || {})[emb.into] || {};
+      structs.push(target = {
+        struct: emb.into, fn: outerSpec.fn || null,
+        noHandle: !!outerSpec.no_handle, handle: outerSpec.no_handle ? null : (handle || null),
+        handleMissing: outerSpec.no_handle ? null : hs.missing,
+        fields: [], missing: [], embed: null, embedInto: null,
+      });
+    }
+    block.embedInto = target;
+    target.fields.push({
+      member: emb.member, text: `&${blockVarName(block)}`,
+      name: `${block.struct} (embed: ${block.embed})`, pointer: true,
+    });
   }
   // A `when:` that cannot be resolved against this MCU file is a data defect with a
   // silent failure mode, so it becomes a TODO - see `depProblems()` in params.js for the
@@ -1225,6 +1273,37 @@ function structVar(name) {
   return String(name).replace(/TypeDef$/, 'Structure');
 }
 
+// An embedded block's variable needs to be UNIQUE from its siblings: RW and WR are both
+// `FMC_NORSRAMTimingInitTypeDef`, and structVar() alone would give both the same name.
+// Suffixing with the embed key keeps every declared variable distinct without inventing
+// a numbering scheme the data does not have.
+function blockVarName(b) {
+  return structVar(b.struct) + (b.embed ? `_${b.embed}` : '');
+}
+
+// Group struct blocks so an embedded (child) block and the block it is a pointer INTO
+// share one C scope, child(ren) declared first — `&FMC_NORSRAMTimingInitStructure_rw`
+// must still be in scope when `FMC_NORSRAMInit(&FMC_NORSRAMInitStructure)` reads it.
+// Every other block keeps its own scope exactly as before: unrelated blocks (and two
+// per-instance blocks of the SAME struct type, e.g. two LTDC layers) reuse variable
+// names across SIBLING scopes today, which only works because each is self-contained.
+function structGroups(structs) {
+  const done = new Set();
+  const groups = [];
+  for (const b of structs) {
+    if (b.embedInto || done.has(b)) continue;
+    const children = structs.filter(c => c.embedInto === b && !done.has(c));
+    for (const c of children) done.add(c);
+    done.add(b);
+    groups.push([...children, b]);
+  }
+  // Safety net: a block whose embedInto target was somehow never grouped (should not
+  // happen — embedInto always points at an object already in `structs`) still gets
+  // emitted, on its own, rather than silently dropped.
+  for (const b of structs) if (!done.has(b)) groups.push([b]);
+  return groups;
+}
+
 function periphBlock(pid) {
   const plan = initPlan(pid);
   const L = [];
@@ -1233,32 +1312,42 @@ function periphBlock(pid) {
   if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
   else if (cfg().periph_clock) L.push(`    /* ${pid} has no clock enable bit in codegen.periph_clock — none is written. */`);
 
-  for (const b of plan.structs) {
-    const varName = structVar(b.struct);
+  for (const group of structGroups(plan.structs)) {
     L.push(`    {`);
-    // A per-instance block is one of several identical-looking scopes, so it says which
-    // instance it is. Without this, two LTDC layers differing only in one member read as
-    // a copy-paste in the generated file.
-    if (b.instance) L.push(`        /* ${pid} ${b.instance.noun} ${b.instance.n} */`);
-    L.push(`        ${b.struct} ${varName} = {0};`);
-    for (const f of b.fields) {
-      const human = f.unit ? `${f.value} ${f.unit}` : String(f.value);
-      L.push(`        ${varName}.${f.member} = ${f.text};   /* ${f.name}: ${human} */`);
-    }
-    for (const m of b.missing) {
-      L.push(`        /* TODO: ${m}. */`);
-    }
-    if (b.fn && (b.handle || b.noHandle)) {
-      L.push(`        ${b.fn}(${b.noHandle ? '' : `${b.handle}, `}&${varName});`);
-    } else {
-      L.push('        /* TODO: nothing applies this struct. The MCU file needs');
-      if (!b.fn) L.push(`           codegen.init_structs.${b.struct}.fn — the SDK function that takes a ${b.struct}`);
-      if (!b.handle) {
-        L.push(b.handleMissing
-          ? `           ${b.handleMissing}`
-          : `           codegen.periph_handle.${pid} — the SPL name of ${pid}'s register block`);
+    for (const b of group) {
+      const varName = blockVarName(b);
+      // A per-instance block is one of several identical-looking scopes, so it says which
+      // instance it is. Without this, two LTDC layers differing only in one member read as
+      // a copy-paste in the generated file.
+      if (b.instance) L.push(`        /* ${pid} ${b.instance.noun} ${b.instance.n} */`);
+      if (b.embed) L.push(`        /* ${b.struct}, embed "${b.embed}" — written into a pointer member below */`);
+      L.push(`        ${b.struct} ${varName} = {0};`);
+      for (const f of b.fields) {
+        const comment = f.pointer ? f.name : `${f.name}: ${f.unit ? `${f.value} ${f.unit}` : String(f.value)}`;
+        L.push(`        ${varName}.${f.member} = ${f.text};   /* ${comment} */`);
       }
-      L.push('           This generator does not derive a function name from a struct name. */');
+      for (const m of b.missing) {
+        L.push(`        /* TODO: ${m}. */`);
+      }
+      if (b.embedInto) {
+        // Consumed via a pointer by another block in this same scope (above or below) —
+        // nothing calls this struct directly, and that is correct, not a gap.
+      } else if (b.embed) {
+        // `embed:` named a key `codegen.init_structs` does not resolve; already reported
+        // in `b.missing` above. Falling through to "nothing applies this struct" would
+        // ask for a `.fn` this struct is never meant to have.
+      } else if (b.fn && (b.handle || b.noHandle)) {
+        L.push(`        ${b.fn}(${b.noHandle ? '' : `${b.handle}, `}&${varName});`);
+      } else {
+        L.push('        /* TODO: nothing applies this struct. The MCU file needs');
+        if (!b.fn) L.push(`           codegen.init_structs.${b.struct}.fn — the SDK function that takes a ${b.struct}`);
+        if (!b.handle) {
+          L.push(b.handleMissing
+            ? `           ${b.handleMissing}`
+            : `           codegen.periph_handle.${pid} — the SPL name of ${pid}'s register block`);
+        }
+        L.push('           This generator does not derive a function name from a struct name. */');
+      }
     }
     L.push(`    }`);
   }

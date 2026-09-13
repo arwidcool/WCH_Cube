@@ -3265,16 +3265,56 @@ function renderClock() {
   }
   if (wscale < 1) for (const n of nodes) { n.w = Math.max(120, Math.floor(n.w * wscale)); box[n.id].style.width = n.w + 'px'; }
 
-  let x = PAD; const colX = {}, colH = {};
-  for (const col of cols) {
-    const mine = nodes.filter(n => n.col === col);
-    colX[col] = x;
-    x += Math.max(...mine.map(n => n.w)) + GAPX;
-    colH[col] = mine.reduce((acc, n) => acc + box[n.id].offsetHeight + GAPY, -GAPY);
+  // Columns pack onto ROWS, not just one line. A second PLL adds a whole COLUMN
+  // (COL.pll2), never more nodes squeezed into an existing one, so six columns is the
+  // worst case on any part this schema can describe today. At 1280x720 @125% (1024 CSS
+  // px) six columns still do not fit in one row even at SCALE_MIN — measured on the
+  // parked USBHS_PLL block, agents/proposals/CH32H417_usbhs_pll.yaml: 1095px of tree in
+  // a 1024px window, three ways (with the tap, with shorter labels — no change, it is a
+  // structural column width, not text — and with only the second PLL and no tap, still
+  // 1095px). `.ctreescroll{overflow-x:auto}` already made the overflow SCROLLABLE rather
+  // than painted past the edge, but scrolling to see a box is not "fits", so a column
+  // that does not fit the room wraps onto another row underneath instead - the same
+  // floor-then-scroll fallback still applies within each row if even one column alone
+  // is wider than the room (it never has been: COLW's widest entry is 240px).
+  //
+  // A column never splits across rows: every node in it keeps the neighbours its edges
+  // already point at, so only whole columns move to the next line, and an edge between
+  // two rows is drawn exactly like one within a row (the SVG path below only reads x/y).
+  const colW = {};
+  for (const col of cols) colW[col] = Math.max(...nodes.filter(n => n.col === col).map(n => n.w));
+  const ROWGAP = 22;
+  const rowsOfCols = [];
+  {
+    let row = [], rowW = 0;
+    for (const col of cols) {
+      const next = rowW + (row.length ? GAPX : 0) + colW[col];
+      if (row.length && room > 0 && next > room) { rowsOfCols.push(row); row = [col]; rowW = colW[col]; }
+      else { row.push(col); rowW = next; }
+    }
+    if (row.length) rowsOfCols.push(row);
   }
-  const totalW = x - GAPX + PAD, totalH = Math.max(...Object.values(colH)) + 2 * PAD;
+  const rowOf = {}; rowsOfCols.forEach((row, i) => row.forEach(col => rowOf[col] = i));
+
+  const colX = {}, colH = {}, rowTop = {}, rowH = [];
+  let y0 = PAD, totalW = 0;
+  for (const row of rowsOfCols) {
+    let x = PAD;
+    for (const col of row) {
+      const mine = nodes.filter(n => n.col === col);
+      colX[col] = x;
+      x += colW[col] + GAPX;
+      colH[col] = mine.reduce((acc, n) => acc + box[n.id].offsetHeight + GAPY, -GAPY);
+      rowTop[col] = y0;
+    }
+    const h = Math.max(...row.map(col => colH[col]));
+    rowH.push(h);
+    totalW = Math.max(totalW, x - GAPX + PAD);
+    y0 += h + ROWGAP;
+  }
+  const totalH = y0 - ROWGAP + PAD;
   for (const col of cols) {
-    let y = PAD + (totalH - 2 * PAD - colH[col]) / 2;
+    let y = rowTop[col] + (rowH[rowOf[col]] - colH[col]) / 2;
     for (const n of nodes.filter(n => n.col === col)) {
       const d = box[n.id];
       n.x = colX[col]; n.y = y; n.h = d.offsetHeight;

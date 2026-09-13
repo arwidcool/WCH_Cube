@@ -750,6 +750,23 @@ Per-line acceptance list and full detail: `agents/STATUS.md` §2 (round 6) and
       gates the SDK-name selftest: assert the exit code AND that the output says `19/19`, so a
       selftest that degenerates to "0 cases" cannot read as a pass. Requested on the board
       2026-09-11T22:17Z.
+- [~] (AGENT-3) **Deliverable B's remaining half - the planted-break sweep over `app/tests/**`.**
+      `tests/**` is met (14 refusals verbatim, gates-that-cannot-go-red list empty);
+      `app/tests/**` has almost none. One mutation per file into a COPY of `app/engine/`
+      (`tests/lib/enginemutant.js` - the tree is never touched), the mutated engine run under
+      that file's own tests, the red recorded verbatim in
+      `tests/evidence/round6/2026-09-13-app-tests-planted-breaks.md`. A break the checker
+      could not RUN is counted separately from one it MISSED.
+- [~] (AGENT-3) **`validate_constraints_selftest.py` and `validate_afmux_selftest.py` have the
+      anchor defect AGENT-1 found in their sibling** (BOARD 2026-09-13T01:14Z): a find/replace
+      anchor with no line boundary matches INSIDE a longer line, mutates something unrelated,
+      leaves the real target untouched, and the case prints OK over a file that was never
+      broken. Each anchor must occur exactly once and the mutation must change the text, with a
+      non-unique anchor planted to watch the new guard fire.
+- [~] (AGENT-3) **Two stale readings in `tests/`** (AGENT-1, STATUS §3, 2026-09-13T00:33Z):
+      `tests/h417_packages.test.js:222-227` names the four QFN68 collisions by a setting label
+      the data no longer uses, and the `IN_EXTRACTION` expiry planted break's cell count is
+      capped at 40 by `assert.empty`'s display limit - a display limit read as a count.
 - [ ] (AGENT-1) **CH32X035's five partial peripherals**, in this order: OPA (13 members, 3
       modelled), CMP1/2/3 (5 and 3), TKEY (raw registers; `TKEY1_CHARGE1` **overlaps** the ADC
       `sample` parameter and the interaction has to be decided before either ships), USBFS and
@@ -982,6 +999,49 @@ bits, and a clock tree that models what the schema can hold.
             unreachable because nothing could turn UHSIF on. They are dedicated pads rather than
             AF-muxed ones; the answer is probably a `codegen.skip_signals` / dedicated-pad
             declaration, same as the 91 UHSIF/SERDES `validate_mcu` warnings already noted.
+      **2026-09-13, SERDES/QSPI1/QSPI2/SDMMC/SAI landed - 40 -> 45 of 78 have a block.** Three
+      more open items, none of them a source gap this time - a schema gap and two scope calls:
+      - [ ] (AGENT-1 + AGENT-2) **SAI's `SAI_FrameInitTypeDef`/`SAI_SlotInitTypeDef` are not
+            modelled.** `channel_params:` (`app/engine/params.js`) holds exactly ONE `struct:`
+            per peripheral, so `SAI_InitTypeDef` (mode/protocol/clock, applied per block via
+            `SAI_Init`) filled the one slot and the two remaining per-block structs - which the
+            part's own example calls for the same reason (`SAI_FrameInit`/`SAI_SlotInit`,
+            `Evt/EXAM/SAI/SAI_Play/Common/hardware.c:110,116`, needed in Free Protocol, which is
+            what that example and a typical I2S/TDM use both are) - have nowhere to go. Needs
+            `channel_params` (or a sibling key) to carry more than one struct against the same
+            `instances:` map. REQUEST posted to AGENT-2 in `data/sources/H417/peripheral_extras.yaml`
+            (SAI comment block).
+      - [ ] (AGENT-1) **SDMMC's DDR-mode structs are not modelled**: `SDMMC_IOInputDelayDDRTypeDef`
+            / `SDMMC_IOOutputDelayDDRTypeDef` (eight 4-bit per-line delay taps each,
+            `ch32h417_sdmmc.h:111-177`) are real init-time settings, but neither of this part's
+            three SDMMC examples ever calls the functions that apply them, so there is no worked
+            value to check a default against. `SDMMC_CommandConfig`/`SDMMC_TranMode_Init` are
+            excluded for a different reason - they are runtime, per-transaction calls, not init.
+      - [ ] (AGENT-1) **QSPI's `QSPI_ComConfig_InitTypeDef` bakes ONE command's frame shape into
+            generated init** (functional mode, address/data/instruction wire counts, the
+            instruction byte itself). That is correct for Memory-Mapped mode, where the QSPI
+            controller replays this exact frame forever, but for Indirect mode a real driver
+            calls `QSPI_ComConfig_Init` again per command with a different instruction byte -
+            the generated one-shot call is then only the FIRST command's shape. Recorded rather
+            than restructured, because restructuring it needs the same multi-struct-per-instance
+            mechanism the SAI item above is waiting on.
+      - [ ] (AGENT-1) **PIOC is not UHSIF-shaped, it is a different gap, and `params:` is
+            deliberately still empty for it.** There is no `ch32h417_pioc.c` anywhere under
+            `Peripheral/src` - `ch32h417_pioc.h` gives raw register-address macros and one
+            struct (`PIOC_TypeDef`) with no function of any kind that takes it. RM ch.34
+            (`CH32H417RM.md:49360-49399`) says why: PIOC is a SECOND, EMBEDDED CPU
+            ("Programmable Protocol I/O Microcontroller" - a RISC8B core with 66 of its own
+            instructions and a 2048-word program ROM multiplexed out of system SRAM), and
+            what it does is set by loading a RISC8B assembly PROGRAM into that ROM - a
+            separate toolchain (`CHRISC8B.PDF`,
+            `Evt/EXAM/PIOC/*/Common/Asm/*.ASM` for this part's five shipped protocols:
+            1-Wire, I2C, NEC, Single-Wire, UART) - not by filling an init struct this
+            generator could ever emit a call for. Filling `PIOC_TypeDef` fields anyway would
+            be rows no `codegen.init_structs` entry could apply - the same
+            "plausible-looking, does nothing" shape the rules forbid. This corrects the
+            cycle brief that said all five targets "have real SPL drivers ... so the task
+            keeps its normal shape": true for SERDES/QSPI1/QSPI2/SDMMC/SAI, not true for
+            PIOC. Left at 0; not a source gap, a shape this generator cannot express yet.
       The part's peripheral SET is complete - 78 entries from the DS + the 41 SPL headers -
       along with its pins (950 AF assignments, mechanical), its clock tree, its 125 NVIC
       vectors and its 73 clock-enable bits, but ~70 peripherals have no `params:` block, so
@@ -1074,6 +1134,46 @@ bits, and a clock tree that models what the schema can hold.
       RM:4266-4274), and a mux entry that carries its own DIVIDER (LTDC's choice 01 is
       "SERDES_PLL clock divided by 2", RM:4085-4089). Both are REQUESTs to AGENT-2 on
       `agents/BOARD.md` 2026-09-13T01:14Z. Do not start the remainder without reading them.
+- [x] (AGENT-2) **The nested-struct shape (§3 REQUEST, 09-12T19:33Z): a member that is a POINTER
+      to a second struct no SDK function takes alone.** `codegen.init_structs.<inner-struct>.embed`
+      now maps a param's `embed: <key>` to `{ into: <outer-struct>, member: <pointer-field> }`.
+      `initPlan()` groups params by `struct: + embed:` (not `struct:` alone) so two members of the
+      SAME struct TYPE - FMC's `FMC_ReadWriteTimingStruct` / `FMC_WriteTimingStruct`, both
+      `FMC_NORSRAMTimingInitTypeDef*` - become two separate blocks, each its own C variable
+      (`blockVarName()` suffixes by embed key); `periphBlock()` then emits the family (every
+      embedded child, then the block it points into) inside ONE shared `{ }` scope so `&child` is
+      still in scope where the parent's `fn(&outer)` reads it - THE TRAP: an inner struct's params
+      are grouped by `struct:` alone before this, so `FMC_ReadWriteTimingStruct` and
+      `FMC_WriteTimingStruct` (same type, no `fn:` because nothing calls either alone) merged into
+      ONE unappliable block, while `FMC_NORSRAMInit()` would still be called with both pointers
+      left at `{0}` - `FMC_NORSRAMInit()` dereferences `FMC_ReadWriteTimingStruct`
+      unconditionally, so that is a null read at init, not a missing feature. An unresolved
+      `embed:` key is a named TODO (`app/tests/nested_structs.test.js`, "PLANTED BREAK: an embed
+      key the data does not resolve"), never a silent unset pointer. `codegen.js:1013-1130,
+      1223-1310`; `params.js` carries `embed:` through untouched like `struct:`/`sdk_field:`.
+      8 tests, `app/tests/nested_structs.test.js`, including the planted break seen red on the
+      PRE-mechanism engine (`git stash` the two engine files back to `e25ba30`: 7 of 8 fail).
+      Data-side contract and a worked `FMC_NORSRAMInitTypeDef` example posted to `agents/BOARD.md`
+      and to AGENT-1 there - FMC, ETH, ECDC, FMC_NAND, FMC_SDRAM are unblocked.
+- [x] (AGENT-2) **The clock tab can now lay out more than one PLL and a per-peripheral mux at
+      1280x720 @125% (§3, D's remaining blocker).** `renderClock()`'s placement pass
+      (`app/template.html`, "measure, place, connect") packed every column onto ONE row and
+      stopped shrinking at `SCALE_MIN` (0.78), so a 6th column (a second PLL) left `.ctreescroll`
+      to scroll rather than fit - and `legibility.test.js` correctly does not count "you can
+      scroll to see it" as fitting. Columns now pack onto ROWS: greedily filled left-to-right
+      against the panel's actual room, a column never split across rows, wrapped rows stacked
+      with a gap. Reduces to the exact old single-row formulas when everything already fits
+      (proven: no shipped part's layout changed - `legibility` and `layout` suites unchanged,
+      full output below). Measured in real Chrome (`tests/lib/browser.js`, CDP - jsdom has no
+      layout engine) with `agents/proposals/CH32H417_usbhs_pll.yaml` spliced into a copy of
+      CH32H417's `clock:` at runtime (never written to `data/`): **before** the fix, 1280x720
+      @125%, rightmost box edge at 1105px CSS in a 1024px viewport (81px over, reproducing
+      AGENT-1's 1095px/71px within noise of a slightly different synthetic tap position);
+      **after**, rightmost edge 898px (126px of margin), 0 overlaps, 0 console messages,
+      `USBHS_PLL_CLK 480MHz`, `USBFS 48MHz` ("must be 48 MHz", on target) - screenshotted at
+      1280x720@1, @1.25 and 1920x1080@1. `legibility.test.js` and `layout.test.js` both green
+      unchanged (they sweep every SHIPPED part, none of which has `plls:` yet, so this is the
+      regression gate the day AGENT-1 ships CH32H417's - no new test file needed for that).
 
 **Two findings that outrank the data work**, both filed on the board:
 

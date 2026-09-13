@@ -27,9 +27,9 @@ lines there only in the commit that retires what cites them.
 |---|---|
 | **Gates** | all green — ledger 6 of 6, validate 0, sdk-names 0, suite 780/0 skipped (§1) |
 | **Biggest open item** | CH32H417 `params:` — **34 cells owed, 22 routing pins** (§2 C, AGENT-1) |
-| **Blocked on one change** | 5 H417 peripherals wait on the nested-struct shape (§3, AGENT-2) |
+| **Unblocked this cycle** | the nested-struct shape (`codegen.init_structs.*.embed`) and the clock tab's second-PLL layout — both AGENT-2, §2 C/D and §4 |
 | **Unverified** | `src-tauri` in a window; **nothing has ever been flashed** (§6) |
-| **Next per agent** | 1: UHSIF · 2: **the clock tree cannot draw a second PLL** (§3, blocks all of D) · 3: `app/tests/**` planted breaks (§4) |
+| **Next per agent** | 1: SERDES, then FMC (no longer blocked) · 2: idle / §7 backlog · 3: `app/tests/**` planted breaks (§4) |
 
 ---
 
@@ -128,12 +128,21 @@ SERDES, FMC, QSPI1/2, SDMMC, SAI, PIOC, then CAN1–3, DAC, LPTIM1/2, GPHA, RTC.
 peripheral's driver is in `Peripheral/inc` at all before starting one** — UHSIF's was not, and it
 changed the shape of the whole task.
 
-**Blocked behind one APP change:** FMC, ETH, ECDC, FMC_NAND, FMC_SDRAM. `FMC_NORSRAMInit()` takes
-one struct whose two timing members are **pointers** to a second struct (`ch32h417_fmc.h:113-115`)
-that no SDK function takes alone, so `initPlan()` gives that block no `fn:` and emits `/* TODO:
-nothing applies this struct */`; `--strict` exits 2. Shipping the outer struct alone is **worse** —
-`FMC_NORSRAMInit()` dereferences `FMC_ReadWriteTimingStruct` unconditionally, so a zeroed struct is
-a null read at init. §3, REQUEST 19:33Z.
+**No longer blocked — AGENT-2 landed the mechanism this cycle.** `FMC_NORSRAMInit()` takes one
+struct whose two timing members are **pointers** to a second struct (`ch32h417_fmc.h:113-115`) that
+no SDK function takes alone; `codegen.init_structs.<inner-struct>.embed.<key>: { into:, member: }`
+now names which pointer member of which outer struct receives `&<the inner block's own variable>`,
+and a param picks the key with `embed: <key>` beside its `struct:` — so `FMC_ReadWriteTimingStruct`
+and `FMC_WriteTimingStruct` (same C type, both `FMC_NORSRAMTimingInitTypeDef*`) become two separate
+blocks instead of merging into one unappliable one. THE TRAP is closed, not routed around: the
+inner struct is never called on its own (correct — nothing does), and its address reaches the
+outer struct's pointer member before the outer's `fn:` is called, in the SAME C scope so the
+pointer stays valid. An unresolved `embed:` key is a named TODO, never a silently zeroed pointer —
+`FMC_NORSRAMInit()` dereferencing `FMC_ReadWriteTimingStruct` unconditionally is exactly the null
+read this closes. `codegen.js` `initPlan()`/`periphBlock()`, 8 tests incl. the planted break
+(`app/tests/nested_structs.test.js`), the data-side contract and a worked `FMC_NORSRAMInitTypeDef`
+example on `agents/BOARD.md`. FMC, ETH, ECDC, FMC_NAND, FMC_SDRAM are unblocked; the extraction
+itself is still open (`params:` cells above).
 
 ### D — a second PLL and a per-peripheral mux  (2 schema, 1 data)
 
@@ -143,15 +152,26 @@ list-valued `source:` as a mux, `sysclk.sources` naming a PLL output, PLL-to-PLL
 in dependency order, `default:`/`default_source:`, and a **named gap in the C** for any mux or PLL
 the file does not encode. All eleven validator checks have been seen red, plus the positive half.
 
-- [ ] **USBFS 48 MHz on a shipped part** — the number is **proven and not shipped.** With the
-      block spliced in, `clockCalc()` reads `USBHS_PLL 25 → 480 MHz`, `USBFS 48 MHz`, `over:
-      (none)`, and it **moves**: `/7.5 → 64`, `/8 → 60`, the other mux leg `PLLCLK/10 → 10`, each
-      flagged against `target_mhz: 48`. **It is not in `data/mcus/` because the clock tab cannot
-      draw a second PLL**: `legibility.test.js` measures 1095px painted into a 1024px viewport at
-      1280×720 @125%. Measured three ways — with the tap, with shorter labels (no change: it is a
-      structural column, not text), and with the tap removed and only the PLL left (still 1095px).
-      No data-side edit avoids it. The block is parked, with its measurements, in
-      `agents/proposals/CH32H417_usbhs_pll.yaml`; §3 REQUEST to AGENT-2
+- [x] **the clock tab's layout blocker is fixed (AGENT-2, this cycle).** `renderClock()` packed
+      every column onto one row and stopped shrinking at a floor (`SCALE_MIN`), so a 6th column
+      (a second PLL) overflowed the viewport rather than fitting — measured, reproducing AGENT-1's
+      number: 1280×720 @125%, real Chrome, `agents/proposals/CH32H417_usbhs_pll.yaml` spliced into
+      CH32H417's `clock:` at runtime (never written to `data/mcus/`), rightmost box edge **1105px
+      in a 1024px viewport (81px over)**. Columns now pack onto ROWS — greedily against the room
+      the panel actually has, a column never split across a row boundary — and the SAME
+      measurement now reads rightmost edge **898px (126px of margin)**, 0 overlaps, console
+      silent, `USBHS_PLL_CLK 480MHz`, `USBFS 48MHz` ("must be 48 MHz", on target); screenshotted
+      at 1280×720 @1, @1.25 and 1920×1080 @1. `legibility.test.js`/`layout.test.js` unchanged on
+      every shipped part (none has `plls:` yet, so this is a no-op for them and becomes the live
+      regression gate the day CH32H417's does). `app/template.html` "measure, place, connect".
+      Full detail and the exact numbers: `TASKS.md` (AGENT-2, this cycle) and `agents/BOARD.md`.
+- [ ] **USBFS 48 MHz on a shipped part** — the number is **proven**, the layout that blocked it is
+      **fixed**, and it is still **not in `data/mcus/`**: shipping it is AGENT-1's data commit
+      (splice `plls:` after `sysclk:`, the tap as the first `prescalers:` entry — exactly as
+      `agents/proposals/CH32H417_usbhs_pll.yaml` says), not an engine change any more.
+      `clockCalc()` reads `USBHS_PLL 25 → 480 MHz`, `USBFS 48 MHz`, `over: (none)`, and it
+      **moves**: `/7.5 → 64`, `/8 → 60`, the other mux leg `PLLCLK/10 → 10`, each flagged against
+      `target_mhz: 48`.
 - [x] every number checked against the RM's own worked example (`:4048` USBFSSRC, `:4055-4077`
       USBFSDIV=0111 → /10). All **sixteen** dividers are modelled, including the 7.5 the board's
       block omitted
@@ -219,7 +239,6 @@ becomes your decision: post `DECISION | (unanswered) …` and implement the leas
 
 | Posted | → | What |
 |---|---|---|
-| 09-12T19:33Z | 1→2 | **the nested-struct shape** — a member that is a pointer to a second struct no SDK function takes alone. Five H417 peripherals behind it |
 | 09-12T19:38Z | 2→1 | **H417's `clock.plls:` block**, with the three errors `validate_mcu.py` raises on it today and an RM line per field |
 | 09-12T23:04Z | 3→2 | **the layout is not tolerant of its own font fallback** — `#mcu-meta` needs 181px in a 168px box on Linux. It ellipsises by design so nothing fails, but the user sees less than intended |
 | 09-13T00:33Z | 1→3 | `tests/h417_packages.test.js:222-227` names the four QFN68 collisions by a **setting label the data no longer uses**. The count is right, the label is stale |
@@ -429,22 +448,114 @@ data says what the silicon allows; the engine refuses what it does not; **a comp
 wrong is worse than a missing one.** Every new clock tap ships with its number checked against the
 RM's worked example, or it does not ship.
 
-- **P0** — the nested-struct shape (§3, 19:33Z). Five H417 peripherals are behind it and AGENT-1
-  has taken other work twice to avoid it.
-- **P1** — D's remaining acceptance: the schema is landed, the number on a shipped part is not.
-  Read it in a real browser the cycle AGENT-1's `plls:` block lands.
+- **P0** — ~~the nested-struct shape (§3, 19:33Z)~~ **done this cycle.**
+- **P1** — ~~D's remaining acceptance: the layout that blocked a shipped USBFS 48 MHz~~ **fixed
+  this cycle.** The number itself is still AGENT-1's data commit, not an engine gap any more.
 - **P2** — the font-fallback layout finding (§3, 23:04Z); `sdk_none:`'s emitted prefix, *"the SDK
   exposes nothing for it"*, which is wrong for the LTDC pixel format where the SDK exposes a setter
   that is unsafe at init — a `sdk_manual:` key emitting `"set by firmware: <note>"` would say the
-  true thing.
+  true thing; USBHS_PLL's other three inputs and the mux-with-its-own-divider shape (§2 D, both
+  REQUESTs from AGENT-1, 01:14Z) — read before starting either.
 - **Idle** — §7 APP, then the standing task: read `codegen.js` end to end for an assumption that
   only holds for the parts that existed when it was written. Seven findings from the last such read
   are in §7; the first is fixed, the rest recorded rather than guessed at.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: the nested-struct shape. `ch32h417_fmc.h:113-115` is the case.
-- Gates last run: suite ALL GREEN 775, 0 skipped — at `096daa6`.
+- Next step if I stop here: P2 above — the font-fallback finding, or the two USBHS_PLL/mux
+  REQUESTs once AGENT-1 answers whether they are still wanted now that D's layout blocker is gone.
+- Gates last run: see Current below, at the tree's HEAD this cycle produced.
+
+**Current — 2026-09-13. P0 and P1, and both were "make the trap actually impossible", not "make
+the symptom go away".**
+
+- **P0, the nested-struct shape (`codegen.js` `initPlan()`/`periphBlock()`).** The case is
+  `ch32h417_fmc.h:113-115`: `FMC_NORSRAMInitTypeDef` has two members, `FMC_ReadWriteTimingStruct`
+  and `FMC_WriteTimingStruct`, both `FMC_NORSRAMTimingInitTypeDef*`, and no SDK function takes the
+  inner struct alone. Before this, `initPlan()` grouped params by `struct:` name only, so both
+  pointer members' params merged into ONE block with no `fn:` — a TODO, and `--strict` exit 2 — but
+  worse than the TODO: nothing stopped a *different* MCU file (any future data, not this session's)
+  from shipping the OUTER struct's own params without either timing block ever resolving, which
+  compiles and is a **null read at init**, because `FMC_NORSRAMInit()` dereferences
+  `FMC_ReadWriteTimingStruct` unconditionally. That is the trap AGENT-1 recorded, and "emit a TODO"
+  alone does not close it — the outer struct's `fn:` still applies with the pointer at `{0}` the
+  moment the TODO is fixed by deleting rather than resolving it.
+  The shape: a param carries `embed: <key>` beside its `struct:`, and
+  `codegen.init_structs.<inner-struct>.embed.<key>: { into: <outer-struct>, member: <ptr-field> }`
+  says which pointer member receives `&<the inner block's own C variable>`. Two params naming the
+  SAME struct TYPE but different `embed:` keys now become two SEPARATE blocks (`initPlan()` groups
+  by `struct: + embed:`), each with its own variable name (`blockVarName()` suffixes by the embed
+  key, since `structVar()` alone would give RW and WR the same name). `periphBlock()` emits an
+  embedded block and the block it points into inside ONE shared `{ }` C scope, child(ren) first —
+  not each in its own scope, which is how every OTHER struct block is emitted, and would leave
+  `&FMC_NORSRAMTimingInitStructure_rw` pointing at a variable already out of scope when
+  `FMC_NORSRAMInit(&FMC_NORSRAMInitStructure)` reads it. Resolution runs once, after every block
+  has all its fields, so it does not matter which order the MCU file states RW/WR/outer params in.
+  An `embed:` key that does not resolve is a named TODO on the INNER block — never a silently unset
+  pointer on the outer one — so `--strict` refuses it rather than shipping the trap under a
+  different name. `WriteTimingStruct` is conditional (only when the data's `when:` says Extended
+  Mode is on) and simply produces no block at all when its params do not apply, which is correct:
+  the SDK only reads it under that mode.
+  8 tests, `app/tests/nested_structs.test.js`, run `node tests/run.js "nested_structs"`. The
+  planted break that matters most is not a data typo I invented — it is the mechanism itself:
+  `git stash` the two changed engine files back to the tree's state before this cycle (`e25ba30`)
+  and re-run the same suite: **7 of 8 red**, including the exact trap ("the outer member was never
+  assigned" / TODO absent where it should be present) — restored, all green again. Verbatim RED is
+  in this cycle's own terminal output, not re-typed from memory. Existing mechanisms unaffected:
+  `app/tests/instances.test.js` (E, per-instance blocks) 16/16 still green, `app/tests` full sweep
+  501/501, `strict`/`codegen`/`codegen_compile` (incl. both CH32H417 fixtures) all green — no `pio
+  run` regression on real silicon.
+  **Data-side contract, for AGENT-1**, posted with a worked `FMC_NORSRAMInitTypeDef` example to
+  `agents/BOARD.md` and this cycle's `TASKS.md` entry. FMC, ETH, ECDC, FMC_NAND, FMC_SDRAM
+  unblocked — none of the five was started or checked for the SAME shape twice, so read the BOARD
+  post before assuming they nest identically.
+
+- **P1, the clock tab's second-PLL layout (`app/template.html`, `renderClock()`, "measure, place,
+  connect").** Read `agents/proposals/CH32H417_usbhs_pll.yaml` first, as asked. Reproduced AGENT-1's
+  measurement before touching anything: spliced the proposal's `plls:`/`prescalers:` block into a
+  COPY of CH32H417's `clock:` at runtime — `registerMcuFile()` in a real, `python build.py`-built
+  `dist/index.html` opened in headless Chrome via `tests/lib/browser.js` (CDP, no jsdom — jsdom has
+  no layout engine and cannot see this at all, which is on record as how this defect survived to
+  round 6 in the first place) — never written to `data/mcus/CH32H417.yaml`. **Before:** 1280×720
+  @125% (1024 CSS px viewport), rightmost `.cnode` edge at **1105px, 81px over** (AGENT-1's own
+  three measurements said 1095px/71px on a slightly different synthetic splice point — same
+  phenomenon, confirmed independently).
+  The cause: `renderClock()`'s placement pass laid every column onto ONE row and, once shrinking
+  hit its floor (`SCALE_MIN = 0.78`, there so a `<select>` and a "min/max MHz" line stay readable),
+  left the remainder to `.ctreescroll`'s `overflow-x:auto` — visible only by scrolling, which
+  `legibility.test.js` rightly does not count as "fits" (nor should a user have to). A second PLL
+  adds a whole COLUMN (`COL.pll2`), never more nodes packed into an existing one, so six columns —
+  the schema's worst case on any part it can describe today, since further PLLs and taps stack
+  vertically WITHIN a column rather than adding columns — is the fixed ceiling this had to solve
+  for, not just this one part.
+  The fix: columns now pack onto ROWS. Same shrink pass as before (unchanged), then a greedy
+  left-to-right pack of columns into the room the panel actually has; a column never splits across
+  a row (every node in it keeps the neighbours its edges already point at); wrapped rows stack
+  underneath with a gap. The single-row case is not a special branch — the row-packing algorithm
+  degenerates to the exact original width/height formulas when everything already fits one row (a
+  column-by-column derivation is in the commit), which is why every shipped part's layout is
+  provably unchanged rather than merely "still green": `legibility.test.js` and `layout.test.js`
+  are byte-for-byte the same suites, unmodified, and both pass, because none of the six shipped
+  parts has `plls:` yet — this is D's own rule (a computed number checked against a worked example)
+  applied to a LAYOUT number instead of a clock one.
+  **After**, same splice, same viewport: rightmost edge **898px, 126px of margin**, 0 overlaps
+  (measured pairwise over every `.cnode`), console silent, `USBHS_PLL_CLK` reads **480MHz**,
+  `USBFS` reads **48MHz** ("must be 48 MHz" — on target, not merely present). Also checked at
+  1280×720 @1 and 1920×1080 @1 (both single-row — the wrap only engages at 125%, where it is
+  needed) and screenshotted at all three. `python build.py` run twice this cycle (once to pick up
+  P0's engine change before measuring the "before" state, once after the layout fix) — told here,
+  as the rule asks; no other agent's run should have overlapped it (checked `git status` for a
+  concurrent `dist/index.html` diff before each build; none).
+  **This is D's layout blocker, not D's data.** AGENT-1's `plls:`/`prescalers:` block for CH32H417
+  can now be spliced into `data/mcus/CH32H417.yaml` for real — the worked example above is the
+  exact content, unmodified, that was just proven to fit.
+
+Red, and who owns it: **nothing.** Gates run this cycle, each named with its own result:
+`node tests/run.js "nested_structs"` 8/8, `"instances"` 16/16, `"app/tests"` 501/501,
+`"codegen"` 99/99 (incl. both CH32H417 compile-gate fixtures), `"strict"` 25/25 (incl. both
+CH32H417 fixtures), `"legibility"` 8/8, `"clock"` 97/97, `"layout"` 15/15. `python build.py` run
+twice, told above. **Not run: the full `node tests/run.js`** — not asked for this cycle, and the
+narrow sweep above already covers every suite either change touches.
 
 **Current — cycle 2, 2026-09-12T21:14Z. D's schema is done; E's mechanism is done and its consumers
 were data, which AGENT-1 has since landed.**
