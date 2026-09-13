@@ -250,6 +250,20 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      excute_mode: RAM block encrypt
+      algorithm: SM4
+      block_cipher_mode: CTR
+      key_len: 128-bit
+      excute_endian: Little
+      key_31_0: 0
+      key_63_32: 0
+      key_95_64: 0
+      key_127_96: 0
+      key_159_128: 0
+      key_191_160: 0
+      key_223_192: 0
+      key_255_224: 0
   ETH:
     settings:
       Interface: Disable
@@ -304,6 +318,39 @@ peripherals:
       wr_datalatency: 0
       rw_accessmode: A
       wr_accessmode: A
+      nand_waitfeature: false
+      nand_width: 8-bit
+      nand_ecc: false
+      nand_eccpagesize: 256 bytes
+      nand_tclr: 255
+      nand_tar: 255
+      nand_common_setup: 255
+      nand_common_wait: 255
+      nand_common_hold: 255
+      nand_common_hiz: 255
+      nand_attr_setup: 255
+      nand_attr_wait: 255
+      nand_attr_hold: 255
+      nand_attr_hiz: 255
+      sdram_columnbits: '8'
+      sdram_rowbits: '11'
+      sdram_width: 8-bit
+      sdram_internalbanks: '2'
+      sdram_caslatency: '2'
+      sdram_writeprotection: false
+      sdram_clockperiod: Disable
+      sdram_readburst: false
+      sdram_readpipedelay: None
+      sdram_nrfscnt: 0
+      sdram_phasesel: 0
+      sdram_enhancereadmode: true
+      sdram_loadtoactive: 15
+      sdram_exitselfrefresh: 15
+      sdram_selfrefreshtime: 15
+      sdram_rowcycledelay: 15
+      sdram_writerecoverytime: 15
+      sdram_rpdelay: 15
+      sdram_rcddelay: 15
   GPHA:
     settings:
       Mode: Disable
