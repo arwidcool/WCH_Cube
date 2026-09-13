@@ -278,3 +278,91 @@ test('save -> close -> open -> regenerate is byte-identical, including DMA and N
     `${choosable} request(s) have a channel CHOICE but ${movedChannels} were moved - `
     + 'a part with a selectable DMA channel now exists, so this sweep must exercise it');
 });
+
+// ---------------------------------------------------------------- projectDiff, §7 APP P1
+// "What did I change" between two .wchproj files, readably - built on the same
+// projectApply()/compute() every "Open project…" already goes through, never a second
+// parallel reading of the raw YAML, so a diff line can never disagree with what the app
+// itself would show for the same file.
+
+test('projectDiff on the same project text reports unchanged everywhere', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.compute();
+  const text = e.projectSerialize();
+
+  const out = e.projectDiff(text, text);
+  assert.match(out, /MCU: CH32V006 \(unchanged\)/);
+  assert.match(out, /Package: TSSOP20 \(unchanged\)/);
+  assert.match(out, /Pins: unchanged\./);
+  assert.match(out, /Settings: unchanged\./);
+  assert.match(out, /Params: unchanged\./);
+  assert.match(out, /Clock: unchanged\./);
+  assert.match(out, /DMA, NVIC and generator options: unchanged\./);
+  assert.equal(/NOTE:/.test(out), false, 'no cross-MCU note on a same-part diff');
+});
+
+test('projectDiff reports a changed pin, setting, param and clock choice, and nothing it did not change', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const a = e.projectSerialize();
+
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.S.gpio.PC0.label = 'LED';
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setParam('USART1', 'baud', 9600);
+  e.S.clock.sys = 'PLLCLK';
+  e.compute();
+  const b = e.projectSerialize();
+
+  const out = e.projectDiff(a, b);
+  assert.match(out, /PC0: \(unassigned\) -> GPIO_Output/, out);
+  assert.match(out, /PC0 label: \(unassigned\) -> LED/, out);
+  assert.match(out, /USART1\.Mode: .* -> Asynchronous/, out);
+  assert.match(out, /USART1\.Baud rate: .* -> 9600/, out);
+  assert.match(out, /SYSCLK source: .* -> PLLCLK/, out);
+  assert.match(out, /Pins \(\d+ changed\):/);
+  assert.match(out, /Settings \(\d+ changed\):/);
+  assert.match(out, /Params \(\d+ changed\):/);
+  assert.match(out, /Clock \(\d+ changed\):/);
+  // a peripheral never touched must not show up as a false positive
+  assert.equal(new RegExp('\\bSPI1\\.').test(out), false, out);
+});
+
+test('projectDiff runs a stale field through the same rewrite Open project uses, not a raw text compare', () => {
+  // If this used a second, parallel YAML reader instead of projectApply(), a file
+  // needing a migration or a speed rewrite (see "opening a project saved with a
+  // speed this part never had" above) would diff the RAW, pre-rewrite text - silently
+  // wrong, and disagreeing with what the app itself would show for the same file.
+  const e = fresh('CH32V006', 'TSSOP20');
+  configure(e);
+  const a = e.projectSerialize();
+  const b = a.replace('speed: 30 MHz', 'speed: High');   // "High" does not exist on this part
+  assert.match(b, /speed: High/, 'setup: the file really says High');
+
+  const out = e.projectDiff(a, b);
+  // "High" is not a real speed on this one-speed part - the rewrite must have run
+  // and put it back to 30 MHz before the diff ever compared anything, so A and B's
+  // PC4 speed must read identical rather than "High" appearing as the after value.
+  assert.equal(/-> High\b/.test(out), false, out);
+  assert.equal(/\bPC4\b.*speed/i.test(out), false, 'a rewrite back to the same value is not a change: ' + out);
+});
+
+test('projectDiff prints a cross-MCU note when the two projects are for different parts', () => {
+  const e = fresh('CH32V006', 'QFN32');
+  const a = e.projectSerialize();
+  const f = fresh('CH32L103', 'QFN32');
+  const b = f.projectSerialize();
+
+  const out = e.projectDiff(a, b);
+  assert.match(out, /MCU: CH32V006 -> CH32L103/);
+  assert.match(out, /NOTE: the two projects are for different parts/);
+  assert.match(out, /Pins \(\d+ changed\):/, 'cross-part pin sets must show as changed, not "unchanged"');
+});
+
+test('projectDiff on a project naming an MCU that is not loaded says which of the two files, and which part', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  const a = e.projectSerialize();
+  const bogus = a.replace('mcu: CH32V006', 'mcu: CH32V999');
+  assert.throws(() => e.projectDiff(a, bogus), /B: "CH32V999" is not loaded/);
+  assert.throws(() => e.projectDiff(bogus, a), /A: "CH32V999" is not loaded/);
+});

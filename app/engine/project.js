@@ -11,11 +11,14 @@ import {
   addDmaRequest, setDmaParam, setDmaRequest, dmaLegalChannels,
   setNvicVector, setNvicGroup, nvicGroups,
 } from './resources.js';
-import { generatorOptions, setGeneratorOption } from './export.js';
+import { generatorOptions, setGeneratorOption, pinRows } from './export.js';
 import { normaliseGpioConstraints } from './constraints.js';
-import { applyParams, paramsObject, applyChannelParams, channelParamsObject } from './params.js';
+import {
+  applyParams, paramsObject, applyChannelParams, channelParamsObject, paramDefs, paramValue,
+} from './params.js';
 import { clearHistory } from './history.js';
-import { pllList, tapSources } from './clock.js';
+import { pllList, tapSources, clockCalc } from './clock.js';
+import { compute } from './engine.js';
 
 export const PROJECT = { name: 'Untitled', variant: null, dirty: false };
 
@@ -324,4 +327,164 @@ export function projectApply(src) {
   // here so the UI can say so instead of opening a file that silently lost settings.
   PROJECT.warnings = dropped;
   return PROJECT;
+}
+
+// =============================================================================
+//  projectDiff — "what did I change" between two .wchproj files, readably. §7 APP
+//  backlog: the most useful of the remaining items, because the format already
+//  round-trips through this exact engine and needs no new data contract.
+//
+//  Both projects are loaded for REAL, one after the other, through the same
+//  projectApply()/compute() every "Open project…" already goes through - never a
+//  second, parallel reading of the raw YAML. That is what makes "PA9: SPI1 MOSI ->
+//  (unassigned)" trustworthy: it is `pinRows()`'s own label, the one the pinout view
+//  and the exported pin table already show, not a re-derivation that could disagree
+//  with them. The one cost is real too: loading B overwrites the M/S the app's own
+//  UI is showing, exactly like opening a project from the menu does - callers that
+//  care what was open before calling this must reload it after.
+// =============================================================================
+
+/** One project, snapshotted after really loading it: pins as the pinout view would
+ * show them, peripheral settings/params as flat "pid.name" keys, and the clock -
+ * both the raw mux/PLL/divider choices and what they compute to - the same shape a
+ * settings/params/clock diff can walk generically. */
+function snapshotProject(src, label) {
+  const obj = migrateProject(typeof src === 'string' ? yamlLoad(src) : src);
+  if (!MCU_FILES[obj.mcu]) {
+    throw new Error(`${label}: "${obj.mcu}" is not loaded — register its MCU file before diffing.`);
+  }
+  projectApply(obj);
+  compute();
+
+  const pins = {};
+  for (const r of pinRows()) {
+    if (!r.name) continue;
+    pins[r.name] = r.signal || (r.type !== 'io' ? r.type.toUpperCase() : '(unassigned)');
+    if (r.label) pins[`${r.name} label`] = r.label;
+  }
+
+  const settings = {};
+  for (const [pid, st] of Object.entries(S.periph)) {
+    for (const [name, v] of Object.entries(st.settings || {})) {
+      settings[`${pid}.${name}`] = v instanceof Set ? [...v].sort().join(', ') || '(none)' : String(v);
+    }
+  }
+
+  const params = {};
+  for (const pid of Object.keys(M.peripherals)) {
+    for (const d of paramDefs(pid)) {
+      if (d.readonly) continue;               // derived, never a decision - would never differ meaningfully
+      params[`${pid}.${d.name}`] = String(paramValue(pid, d.key));
+    }
+  }
+
+  const clock = {};
+  if (M.clock) {
+    const k = S.clock, r = clockCalc();
+    clock['SYSCLK source'] = k.sys;
+    if (M.clock.pll) {
+      const inp = M.clock.pll.inputs[k.pllIn];
+      clock['PLL input'] = inp ? inp.name : String(k.pllIn);
+      clock['PLL multiplier'] = String(k.pllMul);
+    }
+    if (M.clock.sources.HSE) clock['HSE frequency'] = `${k.hse} MHz`;
+    for (const [name, v] of Object.entries(k.pre || {})) clock[`${name} divider`] = `/${v}`;
+    for (const [name, v] of Object.entries(k.preSrc || {})) clock[`${name} source`] = v;
+    for (const [id, st] of Object.entries(k.plls || {})) {
+      if (st.in !== undefined) clock[`${id} input`] = String(st.in);
+      if (st.mul !== undefined) clock[`${id} multiplier`] = String(st.mul);
+      if (st.div !== undefined) clock[`${id} divider`] = String(st.div);
+    }
+    // The NUMBERS a user actually reads, not only the choices behind them - two
+    // projects can pick the same mux leg and still compute differently if something
+    // upstream moved, and "the tap still says 48 MHz" is exactly what a diff should
+    // be able to say plainly rather than making the reader recompute it by hand.
+    clock['SYSCLK (computed)'] = `${num2(r.SYSCLK)} MHz`;
+    clock['HCLK (computed)'] = `${num2(r.HCLK)} MHz`;
+    for (const name of Object.keys(M.clock.prescalers || {})) {
+      clock[`${name} (computed)`] = `${num2(r[name])} MHz`;
+    }
+  }
+
+  return {
+    label, name: obj.name || 'Untitled', mcu: obj.mcu, variant: obj.variant || null,
+    pkg: obj.package || S.pkg, pins, settings, params, clock,
+    dma: obj.dma || null, nvic: obj.nvic || null, generator: obj.generator || null,
+  };
+}
+
+const num2 = v => Number.isFinite(v) ? String(Math.round(v * 1000) / 1000) : '—';
+
+/** Every key present in either map, in the order A then B introduces them. */
+function unionKeys(a, b) {
+  const seen = new Set();
+  const out = [];
+  for (const k of [...Object.keys(a), ...Object.keys(b)]) if (!seen.has(k)) { seen.add(k); out.push(k); }
+  return out;
+}
+
+/** `{key: value}` maps -> readable "key: before -> after" lines, changed keys only. */
+function diffLines(a, b, missing = '(none)') {
+  const lines = [];
+  for (const k of unionKeys(a, b)) {
+    const av = a[k] !== undefined ? a[k] : missing, bv = b[k] !== undefined ? b[k] : missing;
+    if (av !== bv) lines.push(`  ${k}: ${av} -> ${bv}`);
+  }
+  return lines;
+}
+
+// A raw block (dma:/nvic:/generator:) that came straight off the YAML, not through
+// the engine - each is already a plain-enough structure that a JSON round-trip is a
+// faithful, if blunt, "did this change at all" without inventing a second parser for
+// three different small shapes. Good enough for "changed, see the file", which is
+// all the round-6 ask needed for these three; the pin/setting/clock sections above
+// carry the readable, field-by-field detail.
+function blockChanged(a, b) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
+
+/**
+ * The readable report itself. `srcA`/`srcB` are .wchproj YAML text (or already-parsed
+ * objects) - CLI's `--diff`, and any future UI, both hand this the same two arguments.
+ * Loads A, then B, through the app's own projectApply()/compute() - the CALLER'S
+ * currently-open project (if any) is not restored, exactly like opening either file
+ * from the menu is not undone by opening the other; say so where this is offered
+ * from a running UI, not a fresh CLI process.
+ */
+export function projectDiff(srcA, srcB) {
+  const a = snapshotProject(srcA, 'A');
+  const b = snapshotProject(srcB, 'B');
+  const L = [];
+  L.push(`Project diff: ${a.name} -> ${b.name}`);
+  L.push('');
+  L.push(`MCU: ${a.mcu}${a.mcu === b.mcu ? ' (unchanged)' : ` -> ${b.mcu}`}`);
+  L.push(`Package: ${a.pkg}${a.pkg === b.pkg ? ' (unchanged)' : ` -> ${b.pkg}`}`);
+  if (a.variant !== b.variant) L.push(`Variant: ${a.variant || '(none)'} -> ${b.variant || '(none)'}`);
+  if (a.mcu !== b.mcu) {
+    L.push('');
+    L.push('NOTE: the two projects are for different parts. Pins, settings and params below');
+    L.push('      compare whatever names happen to exist on both - most will read as fully');
+    L.push('      added or removed rather than "changed", which is the honest answer here.');
+  }
+
+  const section = (title, lines) => {
+    L.push('');
+    if (!lines.length) { L.push(`${title}: unchanged.`); return; }
+    L.push(`${title} (${lines.length} changed):`);
+    L.push(...lines);
+  };
+  section('Pins', diffLines(a.pins, b.pins, '(unassigned)'));
+  section('Settings', diffLines(a.settings, b.settings));
+  section('Params', diffLines(a.params, b.params));
+  section('Clock', diffLines(a.clock, b.clock));
+
+  const blocks = [['DMA', a.dma, b.dma], ['NVIC', a.nvic, b.nvic], ['Generator options', a.generator, b.generator]];
+  const changedBlocks = blocks.filter(([, x, y]) => blockChanged(x, y));
+  L.push('');
+  if (changedBlocks.length) {
+    L.push(`Also changed (see the file for detail): ${changedBlocks.map(([n]) => n).join(', ')}.`);
+  } else {
+    L.push('DMA, NVIC and generator options: unchanged.');
+  }
+  return L.join('\n') + '\n';
 }

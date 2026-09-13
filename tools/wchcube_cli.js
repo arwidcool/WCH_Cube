@@ -33,6 +33,10 @@ const USAGE = `wchcube — headless pinout, clocks and code generation
   node tools/wchcube_cli.js [options] [<mcu name or .yaml path>]
 
 Options
+  --diff <a> <b>       print a readable diff between two .wchproj files - changed
+                       pins, settings, params and clock - and exit. Both files are
+                       loaded for real through the same engine "Open project…"
+                       uses, so the labels match what the app itself would show.
   --project <file>     apply a .wchproj (it names its own MCU and package)
   --package <id>       package to use, e.g. TSSOP20 (default: the part's own default)
   --format <list>      comma separated: ${FORMATS.join(', ')}, or all   [default: pins-md]
@@ -81,6 +85,7 @@ function parseArgs(argv) {
     else if (a === '--list') o.list = true;
     else if (a === '--strict') o.strict = true;
     else if (a === '--quiet') o.quiet = true;
+    else if (a === '--diff') { o.diffA = need('a .wchproj path'); o.diffB = need('a second .wchproj path'); }
     else if (a === '--project') o.project = need('a .wchproj path');
     else if (a === '--package') o.pkg = need('a package id');
     else if (a === '--out') o.out = need('a directory');
@@ -263,6 +268,16 @@ function main() {
       process.stdout.write(`${d.key}=${d.default}   ${d.name}\n`);
       if (d.help) process.stdout.write(`    ${d.help}\n`);
     }
+    return 0;
+  }
+
+  if (o.diffA) {
+    if (!fs.existsSync(o.diffA)) fail(`no such project file: ${o.diffA}`);
+    if (!fs.existsSync(o.diffB)) fail(`no such project file: ${o.diffB}`);
+    try {
+      process.stdout.write(eng.projectDiff(
+        fs.readFileSync(o.diffA, 'utf8'), fs.readFileSync(o.diffB, 'utf8')));
+    } catch (e) { fail(e.message); }
     return 0;
   }
 

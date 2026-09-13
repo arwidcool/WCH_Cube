@@ -324,6 +324,60 @@ test('--option overrides what the project saved, so one fixture builds both ways
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
+// --diff, §7 APP P1: a readable diff between two .wchproj files. Both are loaded for
+// real (projectApply()/compute()) so the CLI's labels can never disagree with the app's.
+test('--diff prints unchanged everywhere for identical files, and the changed sections for different ones', () => {
+  const fx = p => path.join(ROOT, 'tests', 'fixtures', p);
+  const same = run(['--diff', fx('CH32V006_TSSOP20_full.wchproj'), fx('CH32V006_TSSOP20_full.wchproj')]);
+  assert.equal(same.code, 0, same.err);
+  assert.match(same.out, /MCU: CH32V006 \(unchanged\)/);
+  assert.match(same.out, /Pins: unchanged\./);
+  assert.match(same.out, /Settings: unchanged\./);
+  assert.match(same.out, /Params: unchanged\./);
+  assert.match(same.out, /Clock: unchanged\./);
+  assert.equal(/NOTE:/.test(same.out), false);
+
+  const cross = run(['--diff', fx('CH32V006_QFN32_full.wchproj'), fx('CH32V003_TSSOP20_full.wchproj')]);
+  assert.equal(cross.code, 0, cross.err);
+  assert.match(cross.out, /MCU: CH32V006 -> CH32V003/);
+  assert.match(cross.out, /NOTE: the two projects are for different parts/);
+  assert.match(cross.out, /Pins \(\d+ changed\):/);
+});
+
+test('--diff refuses a project naming an MCU that is not loaded, and says which of the two files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-diff-'));
+  try {
+    const good = path.join(ROOT, 'tests', 'fixtures', 'CH32V006_TSSOP20_full.wchproj');
+    const bogus = path.join(dir, 'bogus.wchproj');
+    fs.writeFileSync(bogus, fs.readFileSync(good, 'utf8').replace('mcu: CH32V006', 'mcu: NOSUCHPART9000'), 'utf8');
+
+    const r = run(['--diff', bogus, good]);
+    assert.equal(r.code, 1);
+    assert.match(r.err, /A: "NOSUCHPART9000" is not loaded/);
+
+    const r2 = run(['--diff', good, bogus]);
+    assert.equal(r2.code, 1);
+    assert.match(r2.err, /B: "NOSUCHPART9000" is not loaded/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('--diff refuses a missing file by name, before trying to parse anything', () => {
+  const good = path.join(ROOT, 'tests', 'fixtures', 'CH32V006_TSSOP20_full.wchproj');
+  const r = run(['--diff', good, path.join(ROOT, 'tests', 'fixtures', 'does-not-exist.wchproj')]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /no such project file/);
+
+  const r2 = run(['--diff', path.join(ROOT, 'tests', 'fixtures', 'does-not-exist.wchproj'), good]);
+  assert.equal(r2.code, 1);
+  assert.match(r2.err, /no such project file/);
+});
+
+test('--diff needs two paths', () => {
+  const r = run(['--diff', path.join(ROOT, 'tests', 'fixtures', 'CH32V006_TSSOP20_full.wchproj')]);
+  assert.equal(r.code, 1);
+  assert.match(r.err, /--diff needs a second \.wchproj path/);
+});
+
 test('--option refuses a key this build does not have, and says which it does', () => {
   const bad = run(['CH32V006', '--option', 'nope=1', '--quiet']);
   assert.equal(bad.code, 1);
