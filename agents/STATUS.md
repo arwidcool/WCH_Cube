@@ -75,7 +75,7 @@ run history is sparser than the commit history | `git log origin/main`, `actions
 | | Deliverable | Owner | State |
 |---|---|---|---|
 | **A** | CI executes and is read green | 3 | done; one line withheld |
-| **B** | every gate proven able to fail | 3 | done for `tests/**`; `app/tests/**` not swept |
+| **B** | every gate proven able to fail | 3 | **COMPLETE** — `tests/**` and `app/tests/**` both swept, gates-without-a-plant list empty, both cycle-1 gaps closed |
 | **C** | CH32H417's Parameter Settings stop being empty | 1 | **open — 35 cells owed** |
 | **D** | clock schema holds a second PLL and a per-peripheral mux | 2 schema, 1 data | schema + validator landed; **the data is PROVEN and NOT SHIPPED — the tab cannot draw a second PLL** |
 | **E** | the per-instance init struct | 2 mechanism, 1 data | mechanism landed; three consumers emit |
@@ -131,14 +131,20 @@ having corrected the "empty" claim when they didn't close.
       `const ARROWS = {...}` leaves `U.focus` at `null` after `ArrowDown`; neutering the
       `Delete`/`Backspace` branch's `resetPin()` call leaves a set pin's state unchanged.
       `node tests/run.js "keyboard_ui"`: 4/4.
-- [ ] **`features › a user label set on a pin shows on the chip and in the export` — open,
-      blocked on a `data-test` hook on the label element (`app/`, AGENT-2's; requested directly by
-      main 2026-09-13).** Plant the label-renderer mutation the moment it lands; if the hook's
-      shape does not let the mutation anchor cleanly, say so rather than planting something
-      adjacent that passes.
+- [x] **`features › a user label set on a pin shows on the chip and in the export` — closed
+      2026-09-13T20:23Z (AGENT-3).** AGENT-2 landed `data-test="pin-user-label"` on the label
+      `<tspan>` (`app/template.html:1238`, commit `33fd841`), its own comment marking it a TEST
+      CONTRACT rather than a styling hook — stable by contract, which is what this row was
+      actually blocked on (every prior anchor was engine code, and moved).
+      `tests/features.test.js`'s new planted break mutates the ONE line that emits the attribute
+      (`withMutantDist`, a copy of `dist/index.html`, tree untouched), confirms the label text
+      still renders — the plant is deliberately invisible to a bare text-grep check, which is the
+      gap the hook exists to close — and confirms the hook selector then finds nothing.
+      `node tests/run.js "features.test"`: 7/7.
 
-**§5.2 step 8's acceptance ("the list is empty") is still NOT met — one of two gaps closed, one
-open.** B is not tickable until the second one closes too.
+**§5.2 step 8's acceptance ("the list is empty") IS MET as of 2026-09-13T20:23Z.**
+`2026-09-13-gates-without-a-plant.md` carries both closures with the red output verbatim, and
+says explicitly that nothing remains in a "not yet planted" state. **Deliverable B is CLOSED.**
 
 - [x] **the same sweep over `app/tests/**`** — done 2026-09-13: all 27 files (18 more than the 9
       counted when this row was written — the file grew under it while it was open, and the plan

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { suite, test, assert } from './lib/harness.js';
 import { boot, ROOT } from './lib/app.js';
+import { withMutantDist } from './lib/mutant.js';
 
 suite('features');
 
@@ -23,6 +24,13 @@ test('a user label set on a pin shows on the chip and in the export', () => {
     const svgText = a.document.getElementById('svg').textContent;
     assert.includes(svgText, 'MOTOR_EN', 'the label is not drawn on the chip');
 
+    // `data-test="pin-user-label"` is the TEST CONTRACT (app/template.html, the tspan's
+    // own comment) - a stable hook, unlike the class name or the SVG structure around it,
+    // which are free to change. Check it directly, not just "the text appears somewhere".
+    const hook = a.document.querySelector('[data-test="pin-user-label"]');
+    assert.ok(hook, 'the pin-user-label hook is missing from the rendered chip');
+    assert.equal(hook.textContent, 'MOTOR_EN', 'the hook exists but does not carry the label text');
+
     if (typeof a.window.pinTableMarkdown === 'function') {
       assert.includes(a.window.pinTableMarkdown(), 'MOTOR_EN', 'the label is missing from the markdown export');
     } else if (typeof a.window.exportPinTable === 'function') {
@@ -31,6 +39,34 @@ test('a user label set on a pin shows on the chip and in the export', () => {
       // export lives in app/engine/export.js and is unit-tested there; nothing to add here
       console.log('        (export function not exposed globally; covered by app/tests/export.test.js)');
     }
+  } finally { a.close(); }
+});
+
+test('planted break: dropping the pin-user-label hook is caught even though the label still renders', () => {
+  // Round 6, deliverable B's last open row (tests/evidence/round6/2026-09-13-gates-without-a-plant.md).
+  // The anchor is the ONE line the hook's own comment says is a test contract, not the
+  // class name or the surrounding markup - a refactor is free to rename `.userlabel` or
+  // restructure the <text>/<tspan> nesting, and this plant must still mean the same thing
+  // the day that happens, which is why it targets the attribute alone.
+  const m = withMutantDist(
+    '+ (ul ? `<tspan class="userlabel" data-test="pin-user-label">${esc(ul)}</tspan>` : \'\');',
+    '+ (ul ? `<tspan class="userlabel">${esc(ul)}</tspan>` : \'\');');
+  assert.notOk(m.error, m.error || '');
+  const a = boot({ html: fs.readFileSync(m.file, 'utf8') });
+  try {
+    const pin = a.pinNames().find(n => a.ev(`pinType(${JSON.stringify(n)})`) === 'io');
+    a.ev(`(S.gpio[${JSON.stringify(pin)}] ||= {}).label = 'MOTOR_EN'`);
+    a.window.renderAll();
+
+    // The label still renders - the mutation is deliberately invisible to a check that
+    // only greps the SVG text, which is exactly the gap a bare "the text appears" check
+    // could not catch and the hook exists to close.
+    const svgText = a.document.getElementById('svg').textContent;
+    assert.includes(svgText, 'MOTOR_EN', 'setup: the plant should not remove the label itself, only the hook');
+
+    const hook = a.document.querySelector('[data-test="pin-user-label"]');
+    assert.notOk(hook, 'the pin-user-label hook still resolves with the attribute removed - the plant did not take');
+    console.log('      planted refusal (label hook): pin-user-label attribute missing while MOTOR_EN still renders');
   } finally { a.close(); }
 });
 

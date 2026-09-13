@@ -1,8 +1,8 @@
 # Gates without a planted break — named, with the reason  (round 6, deliverable B)
 
-**Acceptance for B is that this list is EMPTY.** Until it is, every entry is a check nobody has
-seen fail on purpose, and the reason is written so the next person can either plant it or say
-why it cannot be. Status at 2026-09-13T00:00Z, after cycle 1.
+**Acceptance for B is that this list is EMPTY, and as of 2026-09-13T20:23Z it is.** Every entry
+below either was seen red for real, is covered by a sibling's plant, or was closed this cycle
+with the red output verbatim. Status at 2026-09-13T00:00Z, after cycle 1; closed 2026-09-13.
 
 ## Seen red for REAL on the runner — better than a plant, and recorded as such
 
@@ -19,18 +19,14 @@ why it cannot be. Status at 2026-09-13T00:00Z, after cycle 1.
 | `codegen › once an MCU file has a codegen: block its C contains no TODO` | its own sibling `a missing codegen: block produces a TODO that says what is missing` — the negative case is a standing test. |
 | `generated_project › platformio.ini names the board from the MCU file` | its sibling `a variant with no pio_board is refused by name` — the standing negative. |
 
-## Closed this cycle (AGENT-3, 2026-09-13T20:06Z)
+## Closed this cycle (AGENT-3, 2026-09-13T20:06Z - 20:23Z) — the last two rows
 
 | Check | Closed by |
 |---|---|
 | `features › arrow keys / Enter / Delete` (keyboard) | `tests/keyboard_ui.test.js` — the real-browser sibling this row said it needed. Dispatches genuine `KeyboardEvent`s at `window` inside a real Chrome/Edge tab (`tests/lib/browser.js`), which the app's `window.addEventListener('keydown', ...)` cannot distinguish from an operator's keypress — the jsdom objection does not apply to a real tab. Two planted breaks, both watched red: emptying `const ARROWS = {...}` (a copy, `withMutantDist`) leaves `U.focus` at `null` after `ArrowDown`; neutering the `Delete`/`Backspace` branch's `resetPin()` call leaves an assigned pin's state at `'set'` after pressing Delete. `node tests/run.js "keyboard_ui"`: 4/4. |
+| `features › a user label set on a pin shows on the chip and in the export` | AGENT-2 landed `data-test="pin-user-label"` on the label `<tspan>` (`app/template.html:1238`, commit `33fd841`), marked in its own comment as a TEST CONTRACT rather than a styling hook — stable by contract, unlike the class name or the SVG structure around it. `tests/features.test.js`'s new planted break mutates the ONE line that emits the attribute (`withMutantDist`, a copy of `dist/index.html`, tree untouched), confirms the label text still renders (`MOTOR_EN` still in `#svg`'s text — the plant is deliberately invisible to a bare text-grep check), and confirms `document.querySelector('[data-test="pin-user-label"]')` now finds nothing. `node tests/run.js "features.test"`: 7/7. |
 
-## Not yet planted — the reason, and what a plant would take
-
-| Check | Reason it is not planted yet | What it would take |
-|---|---|---|
-| `features › a user label set on a pin shows on the chip and in the export` | needs a mutation of the label RENDERER inside the bundled app, not of data; the anchor is engine code, which is AGENT-2's and moves | a `data-test` hook on the label element — **requested from AGENT-2 directly by main, 2026-09-13**; plant against it the moment it lands |
-| `legibility`, `layout` (real browser) | already carry breaks (3–4 refs each); listed only to say they were checked, not skipped | — |
+Nothing remains in a "not yet planted" state — both rows above were the whole list.
 
 ## Planted this cycle (twelve, all in `2026-09-12-planted-breaks.md` with the red verbatim)
 
