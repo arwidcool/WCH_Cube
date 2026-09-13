@@ -120,15 +120,42 @@ def classify(pin: str, ds_full_signal: str, file_af: int | None, claimed_af: int
     """One of the three verdicts (module docstring) for ONE contested pin on ONE signal.
     `file_af` is the AF the FILE gives this pin for this signal, `claimed_af` is what
     Table 2-2-x gives it -- exactly one is `None` for a missing/extra pin, both present
-    (and different) for a value mismatch. Confirming ONE side against Table 2-1-1 and not
-    the other is decisive; confirming both, or neither, is `unresolved` -- never guessed."""
-    confirmed = table_2_1_1.get(pin, set())
-    file_ok = file_af is not None and (ds_full_signal, file_af) in confirmed
-    claim_ok = claimed_af is not None and (ds_full_signal, claimed_af) in confirmed
-    if claim_ok and not file_ok:
+    (and different) for a value mismatch.
+
+    Two independent tests against Table 2-1-1, either one decisive on its own:
+
+    CONFIRMED - Table 2-1-1 has this exact (signal, af) on this pin. Direct positive
+    evidence for that side.
+
+    DENIED - Table 2-1-1 has THIS AF NUMBER on this pin assigned to a DIFFERENT signal.
+    Positive evidence AGAINST that side, and it needs no separate "is this pin's entry a
+    complete 0-15 enumeration" check first (main, 2026-09-14, on `LPTIM2.CH2`): if the
+    slot is occupied by something else, that IS the fact, whether or not every other slot
+    on the same pin is also documented. A slot with NOTHING recorded at all -- neither
+    this signal nor another -- is simply not decided either way, which is exactly what
+    `unresolved` already means; a full 0-15 walk of the pin's OTHER slots would only ever
+    confirm what a direct look at the ONE contested slot already tells you.
+
+    Confirming or denying ONE side and not the other is decisive; the same verdict on both
+    (both confirmed only happens if they're equal, which never reaches this function;
+    both denied means Table 2-1-1 disagrees with EVERYTHING contested, an internal
+    puzzle) or neither is `unresolved` -- never guessed."""
+    entries = table_2_1_1.get(pin, set())
+
+    def confirmed(af):
+        return af is not None and (ds_full_signal, af) in entries
+
+    def denied(af):
+        return af is not None and any(a == af and s != ds_full_signal for s, a in entries)
+
+    if confirmed(claimed_af) and not confirmed(file_af):
         return 'file_defect'
-    if file_ok and not claim_ok:
+    if confirmed(file_af) and not confirmed(claimed_af):
         return 'datasheet_self_contradiction'
+    if denied(claimed_af) and not denied(file_af):
+        return 'datasheet_self_contradiction'
+    if denied(file_af) and not denied(claimed_af):
+        return 'file_defect'
     return 'unresolved'
 
 # =============================================================================
