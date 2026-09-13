@@ -267,15 +267,25 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — nothing. UHSIF landed; `params:` **39 → 40 of 78**, owed cells **35 → 34**.
-- TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: **SERDES**, the next worst by stranded pads, then FMC/QSPI1/2/SDMMC/
-  SAI/PIOC. Before starting one, check whether its driver is in `Peripheral/inc` at all — UHSIF's
-  was not, and that changed the shape of the whole task.
+**IN FLIGHT** — CH32H417 `params:` worst-first: SERDES, then QSPI1/QSPI2, SDMMC, SAI, PIOC.
+- TASKS.md line: `- [~] (AGENT-1) CH32H417: params: for the peripherals that have none.` (line 983)
+- Doing: confirmed all five targets have real SPL drivers in `Peripheral/inc`
+  (`ch32h417_serdes.h`, `_qspi.h`, `_sdmmc.h`, `_sai.h`, `_pioc.h` — unlike UHSIF). Starting
+  SERDES: `SDS_CFG_TypeDef` applied per controller via `SDS_Config(SDSx, &cfg)`
+  (`ch32h417_serdes.h:62-81`) — two independent register blocks `SDS1`/`SDS2`
+  (`ch32h417.h:1827-1828`) behind the one differential pad set already routed, which is
+  `channel_params.instances` (E's mechanism), not a flat `params:` block.
+- Files touched: none committed yet.
+- Next step if I stop here: write SERDES's `channel_params` block into
+  `data/sources/H417/peripheral_extras.yaml` (extras.SERDES.yaml), citing
+  `CH32H417RM.md:23785-23864` (R32_SERDESx_CTRL bit table) and
+  `Evt/EXAM/SerDes/FullDuxTrans/Common/hardware.c:88-138` (the two-instance TX/RX example),
+  then `python tools/gen_h417_peripherals.py --splice --refresh --dry-run` to check, then for
+  real, then `validate_mcu.py` + `verify_sdk_names.py` + `coverage.py CH32H417`.
 - Gates last run: `validate_mcu` 0 · `verify_sdk_names` 0 · `coverage --gate` 6 of 6 ·
   `validate_clock_selftest` 11/11 · `validate_params_selftest` 5/5 · `verify_sdk_names_selftest`
   35/35 + 3 · `--strict` 0 on all 8 fixtures · `pio run` **SUCCESS** on CH32H417QEU6 with UHSIF
-  Master / Mapping 2 / Mapping 1 / /4 / 32-bit.
+  Master / Mapping 2 / Mapping 1 / /4 / 32-bit. (baseline before this cycle's edits)
 
 **Current — 2026-09-13T02:00Z. UHSIF, and it is not shaped like the other 34.**
 
@@ -481,10 +491,21 @@ tree. That is the discipline working, not failing.
   and `tests/evidence/` is a live pointer at something that no longer exists.
 - **Idle** — §7 QA/RELEASE.
 
-**IN FLIGHT** — nothing.
-- TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: the `app/tests/**` planted-break sweep, and watch `main` for three
-  consecutive green commits before posting `DECISION | worktrees ON`.
+**IN FLIGHT** — B's remaining half: the planted-break sweep over `app/tests/**`, plus the three
+findings addressed to me in §3 and at BOARD 01:14Z.
+- TASKS.md line: "Deliverable B's remaining half - the planted-break sweep over `app/tests/**`"
+  (+ the two beside it: the self-test anchor guard, and the two stale readings in `tests/`)
+- Doing: `tests/lib/enginemutant.js` — one mutation into a COPY of `app/engine/` under a junctioned
+  ROOT, the mutated engine run under one `app/tests/*.test.js` file in a child process, restore,
+  re-prove green. **The tree is never touched and `app/` is never written.**
+- Files touched: `TASKS.md`, `agents/STATUS.md`, `tests/lib/enginemutant.js`,
+  `tests/app_tests_planted.test.js`, `scripts/plant_app_tests.js`,
+  `tests/evidence/round6/2026-09-13-app-tests-planted-breaks.md`,
+  `tools/validate_constraints_selftest.py`, `tools/validate_afmux_selftest.py`,
+  `tests/h417_packages.test.js`, `tests/completeness.test.js`
+- Next step if I stop here: run `node scripts/plant_app_tests.js` — it prints one row per
+  `app/tests/*.test.js` file (CAUGHT / MISSED / COULD-NOT-RUN) and writes the verbatim red into
+  the evidence file. Then the same for any file whose row is not CAUGHT.
 - Gates last run: see §1, at `2b1967d`.
 
 **Current — 2026-09-13. The pack is three files, and a stopped session is now resumable.**
