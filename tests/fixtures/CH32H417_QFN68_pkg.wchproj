@@ -401,11 +401,45 @@ peripherals:
       Mode: Disable
       Extended signals: []
     remap: 0
+    params:
+      prescaler: 0
+      ckmode: Mode 0
+      csht: 1 cycle
+      fsize: 0
+      fselect: FLASH1
+      dflash: false
+      com_fmode: Indirect write
+      com_sioo: false
+      com_dmode: No data
+      com_dummy: 0
+      com_absize: 8-bit
+      com_abmode: No alternate byte
+      com_adsize: 8-bit
+      com_admode: No address
+      com_imode: No instruction
+      com_ins: 0
   QSPI2:
     settings:
       Mode: Disable
       Extended signals: []
     remap: 0
+    params:
+      prescaler: 0
+      ckmode: Mode 0
+      csht: 1 cycle
+      fsize: 0
+      fselect: FLASH1
+      dflash: false
+      com_fmode: Indirect write
+      com_sioo: false
+      com_dmode: No data
+      com_dummy: 0
+      com_absize: 8-bit
+      com_abmode: No alternate byte
+      com_adsize: 8-bit
+      com_admode: No address
+      com_imode: No instruction
+      com_ins: 0
   RCC:
     settings:
       High Speed Clock (HSE): Disable
@@ -440,6 +474,16 @@ peripherals:
       Mode: Disable
       Strobe and status: []
     remap: 0
+    params:
+      mode: Host
+      phase_inv: No inverse
+      clock_speed: Low
+      clock_edge: Rising
+      clock_div: 31
+      timeout: 12
+      slave_force_crc_err: false
+      dma_en: true
+      clock_oe: false
   SERDES:
     settings:
       Mode: Disable

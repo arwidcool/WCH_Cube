@@ -750,23 +750,37 @@ Per-line acceptance list and full detail: `agents/STATUS.md` §2 (round 6) and
       gates the SDK-name selftest: assert the exit code AND that the output says `19/19`, so a
       selftest that degenerates to "0 cases" cannot read as a pass. Requested on the board
       2026-09-11T22:17Z.
-- [~] (AGENT-3) **Deliverable B's remaining half - the planted-break sweep over `app/tests/**`.**
+- [x] (AGENT-3) **Deliverable B's remaining half - the planted-break sweep over `app/tests/**`.**
       `tests/**` is met (14 refusals verbatim, gates-that-cannot-go-red list empty);
-      `app/tests/**` has almost none. One mutation per file into a COPY of `app/engine/`
-      (`tests/lib/enginemutant.js` - the tree is never touched), the mutated engine run under
-      that file's own tests, the red recorded verbatim in
-      `tests/evidence/round6/2026-09-13-app-tests-planted-breaks.md`. A break the checker
-      could not RUN is counted separately from one it MISSED.
-- [~] (AGENT-3) **`validate_constraints_selftest.py` and `validate_afmux_selftest.py` have the
+      `app/tests/**` had almost none - now all 27 files, one targeted mutation each: 22 into a
+      COPY of `app/engine/<file>` (`tests/lib/enginemutant.js` - a fresh temp root per file,
+      the tree never touched), 4 into a COPY of `dist/index.html` for the files that
+      `boot()`/`withPage()` the built bundle instead of importing the engine live.
+      `scripts/plant_app_tests.js` runs the plan and writes the verbatim red to
+      `tests/evidence/round6/2026-09-13-app-tests-planted-breaks.md`: **CAUGHT 27 · MISSED 0 ·
+      COULD-NOT-RUN 0.** A break the checker could not RUN is counted separately from one it
+      MISSED.
+- [x] (AGENT-3) **`validate_constraints_selftest.py` and `validate_afmux_selftest.py` have the
       anchor defect AGENT-1 found in their sibling** (BOARD 2026-09-13T01:14Z): a find/replace
       anchor with no line boundary matches INSIDE a longer line, mutates something unrelated,
       leaves the real target untouched, and the case prints OK over a file that was never
-      broken. Each anchor must occur exactly once and the mutation must change the text, with a
-      non-unique anchor planted to watch the new guard fire.
-- [~] (AGENT-3) **Two stale readings in `tests/`** (AGENT-1, STATUS §3, 2026-09-13T00:33Z):
-      `tests/h417_packages.test.js:222-227` names the four QFN68 collisions by a setting label
-      the data no longer uses, and the `IN_EXTRACTION` expiry planted break's cell count is
-      capped at 40 by `assert.empty`'s display limit - a display limit read as a count.
+      broken. Both fixed with the sibling's own guard (anchor exactly once, mutation changes
+      the text). **The guard found a REAL instance in `validate_constraints_selftest.py`**: two
+      cases shared the anchor `when: { peripheral: USBFS, enabled: true }`, which is not unique
+      in `CH32X035.yaml` (PC10/PC11's `gpio.mode` AND `gpio.pull` entries both carry it), so one
+      case had silently been mutating the other's target since it was written. Disambiguated by
+      anchoring on each entry's own distinguishing line too. `validate_afmux_selftest.py`'s own
+      anchors were already unique; a non-unique one was planted on purpose and watched fail
+      before being reverted. Evidence:
+      `tests/evidence/round6/2026-09-13-constraints-afmux-anchor-guard.md`.
+- [x] (AGENT-3) **Two stale readings in `tests/`** (AGENT-1, STATUS §3, 2026-09-13T00:33Z):
+      `tests/h417_packages.test.js:222-227` named the four QFN68 collisions by a setting label
+      the data no longer uses (`FMC.Address bus A0-A25` -> the setting is now `FMC.Address
+      lines = A0-A25`; the count was always right) - fixed and confirmed against the live
+      collision sweep output. The `IN_EXTRACTION` expiry planted break's cell count was
+      capped at 40 by `assert.empty`'s display limit read as a count - `tests/completeness.test.js`
+      now reads the exact untruncated total from `assert.empty`'s own message header instead of
+      counting displayed bullet lines; re-run prints the true current count (32, not 40).
 - [ ] (AGENT-1) **CH32X035's five partial peripherals**, in this order: OPA (13 members, 3
       modelled), CMP1/2/3 (5 and 3), TKEY (raw registers; `TKEY1_CHARGE1` **overlaps** the ADC
       `sample` parameter and the interaction has to be decided before either ships), USBFS and

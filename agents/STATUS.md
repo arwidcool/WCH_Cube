@@ -29,7 +29,7 @@ lines there only in the commit that retires what cites them.
 | **Biggest open item** | CH32H417 `params:` — **34 cells owed, 22 routing pins** (§2 C, AGENT-1) |
 | **Unblocked this cycle** | the nested-struct shape (`codegen.init_structs.*.embed`) and the clock tab's second-PLL layout — both AGENT-2, §2 C/D and §4 |
 | **Unverified** | `src-tauri` in a window; **nothing has ever been flashed** (§6) |
-| **Next per agent** | 1: SERDES, then FMC (no longer blocked) · 2: idle / §7 backlog · 3: `app/tests/**` planted breaks (§4) |
+| **Next per agent** | 1: SERDES, then FMC (no longer blocked) · 2: idle / §7 backlog · 3: watch `main` for three green different-agent commits, `--strict` re-check, §7 backlog (§4) |
 
 ---
 
@@ -103,7 +103,18 @@ in `tests/evidence/round6/2026-09-12-planted-breaks.md`; the gates-that-cannot-g
 the reachability check, the SPL-header guard, fixture freshness, `--strict` per fixture, the
 `IN_EXTRACTION` expiry, `verify_sdk_names.py`.
 
-- [ ] **the same sweep over `app/tests/**`** — 17 files with almost none.
+- [x] **the same sweep over `app/tests/**`** — done 2026-09-13: all 27 files (18 more than the 9
+      counted when this row was written — the file grew under it while it was open, and the plan
+      covers what is actually there rather than the count last measured). **CAUGHT 27 · MISSED 0 ·
+      COULD-NOT-RUN 0**, `tests/evidence/round6/2026-09-13-app-tests-planted-breaks.md`,
+      `scripts/plant_app_tests.js` reruns it. 22 files mutate a COPY of `app/engine/<file>` under a
+      fresh temp root (`tests/lib/enginemutant.js`); 4 (`glue`, `clockmux_ui`, `tree`, `layout`)
+      mutate a COPY of `dist/index.html` instead, because they `boot()`/`withPage()` the built
+      bundle rather than importing the engine live — measured before writing either shape: Node's
+      ESM loader realpaths a module reached through a Windows junction, so `tests/lib/mutant.js`'s
+      junction trick would have had `app/tests/_harness.js` import the REAL, unmutated engine
+      regardless of what the junction pointed at. Every module whose relative imports must reach
+      the mutated file is a real file physically under the temp root instead.
 
 Two rules this produced: **a break the checker could not RUN is not a break it MISSED** (counted
 separately now), and **a guard that catches four facts out of five reads exactly like one that
@@ -241,8 +252,14 @@ becomes your decision: post `DECISION | (unanswered) …` and implement the leas
 |---|---|---|
 | 09-12T19:38Z | 2→1 | **H417's `clock.plls:` block**, with the three errors `validate_mcu.py` raises on it today and an RM line per field |
 | 09-12T23:04Z | 3→2 | **the layout is not tolerant of its own font fallback** — `#mcu-meta` needs 181px in a 168px box on Linux. It ellipsises by design so nothing fails, but the user sees less than intended |
-| 09-13T00:33Z | 1→3 | `tests/h417_packages.test.js:222-227` names the four QFN68 collisions by a **setting label the data no longer uses**. The count is right, the label is stale |
-| 09-13T00:33Z | 1→3 | the expiry planted break's cell count is **capped at 40 by `assert.empty`** — a display limit, not a count |
+
+Answered this cycle (AGENT-3), both closed:
+- 09-13T00:33Z 1→3 `tests/h417_packages.test.js:222-227`'s stale setting label — fixed, and the
+  live collision output now prints the corrected label (`FMC.Address lines = "A0-A25"`); count
+  unchanged at 4.
+- 09-13T00:33Z 1→3 the expiry planted break's count capped at 40 by `assert.empty`'s display
+  limit — fixed by reading the exact count from `assert.empty`'s own message header instead of
+  the truncated bullet list; re-run now prints the true current count (32).
 
 ---
 
@@ -286,25 +303,80 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — CH32H417 `params:` worst-first: SERDES, then QSPI1/QSPI2, SDMMC, SAI, PIOC.
-- TASKS.md line: `- [~] (AGENT-1) CH32H417: params: for the peripherals that have none.` (line 983)
-- Doing: confirmed all five targets have real SPL drivers in `Peripheral/inc`
-  (`ch32h417_serdes.h`, `_qspi.h`, `_sdmmc.h`, `_sai.h`, `_pioc.h` — unlike UHSIF). Starting
-  SERDES: `SDS_CFG_TypeDef` applied per controller via `SDS_Config(SDSx, &cfg)`
-  (`ch32h417_serdes.h:62-81`) — two independent register blocks `SDS1`/`SDS2`
-  (`ch32h417.h:1827-1828`) behind the one differential pad set already routed, which is
-  `channel_params.instances` (E's mechanism), not a flat `params:` block.
-- Files touched: none committed yet.
-- Next step if I stop here: write SERDES's `channel_params` block into
-  `data/sources/H417/peripheral_extras.yaml` (extras.SERDES.yaml), citing
-  `CH32H417RM.md:23785-23864` (R32_SERDESx_CTRL bit table) and
-  `Evt/EXAM/SerDes/FullDuxTrans/Common/hardware.c:88-138` (the two-instance TX/RX example),
-  then `python tools/gen_h417_peripherals.py --splice --refresh --dry-run` to check, then for
-  real, then `validate_mcu.py` + `verify_sdk_names.py` + `coverage.py CH32H417`.
-- Gates last run: `validate_mcu` 0 · `verify_sdk_names` 0 · `coverage --gate` 6 of 6 ·
-  `validate_clock_selftest` 11/11 · `validate_params_selftest` 5/5 · `verify_sdk_names_selftest`
-  35/35 + 3 · `--strict` 0 on all 8 fixtures · `pio run` **SUCCESS** on CH32H417QEU6 with UHSIF
-  Master / Mapping 2 / Mapping 1 / /4 / 32-bit. (baseline before this cycle's edits)
+**IN FLIGHT** — nothing. Worst-first batch landed: SERDES, QSPI1/QSPI2, SDMMC, SAI; PIOC
+found to be a different shape and correctly left unmodelled. `params:` **40 → 45 of 78**.
+- TASKS.md line: — · Doing: — · Files touched: —
+- Next step if I stop here: FMC via AGENT-2's new `embed:` contract (board post, `448b628`),
+  then the parked USBHS_PLL block now that the clock tab fits it, then CAN1-3/DAC/LPTIM1-2/
+  GPHA/RTC (RTC's gate is TWO bits — do not let `BKP` alone tick it).
+- Gates last run: `validate_mcu` 0 errors/99 warnings · `verify_sdk_names` 0/0 ·
+  `coverage.py CH32H417` complete, 0 open · `validate_params_selftest` 5/5 ·
+  `validate_clock_selftest` 11/11 · `verify_sdk_names_selftest` 35/35 · `--strict` exits 0 on
+  all 8 shipped fixtures · `node tests/run.js "H417"` 64/64 · `"codegen_compile"` 18/18
+  (fixtures refreshed via `make_fixtures.js`, both CH32H417 ones) · `"params"` 52/52.
+
+**Current — 2026-09-13, cycle 7. Four peripherals landed clean, one correctly refused.**
+
+- **SERDES** (`SDS_CFG_TypeDef`, `ch32h417_serdes.h:62-81`): two independent controllers,
+  `SDS1`/`SDS2` (`ch32h417.h:1827-1828`), behind the ONE differential pad set — modelled as
+  `channel_params.instances`, E's mechanism, not a flat block, because the EVT's own
+  full-duplex example calls `SDS_Config()` twice with different role bits
+  (`Evt/EXAM/SerDes/FullDuxTrans/Common/hardware.c:95-120`). All twelve fields cite
+  `CH32H417RM.md:23785-23864` (R32_SERDESx_CTRL) by exact bit line.
+- **Found and fixed a real bug in a tool I own**, before SERDES could pass at all:
+  `tools/verify_sdk_names.py`'s struct-field parser could not read a C bitfield
+  (`uint32_t ClearALL : 1;`) — the regex required a comma or end-of-string right after the
+  name, which `: 1` is neither, so all twelve of SERDES's real, correct fields reported as
+  "not a member of its own struct". Fixed by stripping the `: <width>` suffix before field
+  extraction (`BITFIELD_WIDTH_RE`); an anonymous bitfield (`uint32_t : 5;`) still correctly
+  yields no field. `verify_sdk_names_selftest.py` unchanged at 35/35 — this fix has no
+  planted-break case yet (noted, not invented under time pressure); the positive proof is
+  the real file going from 12 errors to 0 on unchanged, correct data.
+- **QSPI1/QSPI2** (`ch32h417_qspi.h`): one shared template (`&qspi_params`, both instances
+  cast to the same `QSPI_TypeDef*`, `ch32h417.h:1815-1816`), 16 fields across TWO structs —
+  `QSPI_InitTypeDef` (clock/flash geometry) and `QSPI_ComConfig_InitTypeDef` (one command's
+  frame shape) — both ordinary `struct:`/`sdk_field:` rows since, unlike FMC, neither is
+  reached only through a pointer inside the other. **Found a real scope limit**: ComConfig
+  bakes ONE command's shape into init, correct for Memory-Mapped mode, only the first
+  command's shape for Indirect mode. TASKS.md line, not guessed around.
+- **SDMMC** (`ch32h417_sdmmc.h`): bus width is the `Mode` row exactly like SDIO's existing
+  precedent (`const:`+`depends_on:`, three rows); the other nine fields of
+  `SDMMC_InitTypeDef` default to what this part's OWN two SD/eMMC examples actually run
+  (`sdmmc_sd.c`, `sdmmc_emmc.c`), not the raw register POR value, where the two disagree —
+  `clock_speed`/`clock_div` because the examples deliberately start slow for card
+  identification, `clock_oe` because both examples start SDCK through a separate runtime
+  call (`SDMMC_ClockCmd`) the struct field is not part of. Four more structs
+  (`SDMMC_CMDInitTypeDef`, `SDMMC_TranModeTypeDef`, two DDR I/O-delay structs) declared NOT
+  modelled — two are per-transaction runtime calls, two are DDR-only settings neither
+  example ever exercises.
+- **SAI**: same two-block shape as SERDES (`SAI_Block_A`/`SAI_Block_B`,
+  `ch32h417.h:1775-1776`), and the settings already had independent `Block A`/`Block B`
+  rows to key `channel_params.instances` off. **Found the cycle's real schema gap**: the
+  driver has THREE per-block init structs (`SAI_InitTypeDef`, `SAI_FrameInitTypeDef`,
+  `SAI_SlotInitTypeDef`, all three called for the ONE block the EVT's own example uses —
+  `Evt/EXAM/SAI/SAI_Play/Common/hardware.c:103,110,116`) and `channel_params:` holds exactly
+  ONE `struct:` per peripheral. Modelled `SAI_InitTypeDef` (mode/protocol/clock, 10 fields,
+  one of them — `SAI_OutDRIV` — fixed at `const: 0` because the header's own doc comment
+  points at an `@ref` group that is not defined anywhere in it); Frame/Slot recorded as a
+  REQUEST to AGENT-2 (peripheral_extras.yaml SAI comment, TASKS.md) rather than forced
+  through a flat block that could only ever configure one hardcoded block.
+- **PIOC checked and correctly NOT modelled.** The cycle brief said all five targets have
+  real SPL drivers "so the task keeps its normal shape" — true for the other four, false
+  for this one: there is no `ch32h417_pioc.c` anywhere, so no function of any kind applies
+  `PIOC_TypeDef`. RM ch.34 (`CH32H417RM.md:49360-49399`) says why — PIOC is a second,
+  embedded RISC8B CPU with its own 66-instruction set and a 2048-word program ROM; what it
+  does is set by loading an assembly PROGRAM into that ROM (a separate toolchain,
+  `Evt/EXAM/PIOC/*/Common/Asm/*.ASM`), not by filling a struct. Filling `PIOC_TypeDef`
+  fields anyway would be rows no `codegen.init_structs` entry could ever apply — correctly
+  refused rather than forced. `params:` left at 0 for it; TASKS.md line.
+- **Fixtures refreshed in this commit**, at `main`'s request: `node tests/fixtures/make_fixtures.js`
+  rewrote `tests/fixtures/CH32H417_QFN{128,68}*.wchproj` (default values for the sixteen new
+  QSPI keys and the nine new SDMMC keys only — no other project field moved), and
+  `node tests/run.js "codegen_compile"` went from 2 failing to **18/18 green**.
+
+Red, and who owns it: **nothing.** `pio run` on this batch was not asked for and not run —
+per the manager's "once per batch, not once per peripheral" rule, held for the end of the
+FMC/USBHS_PLL work still to come this cycle.
 
 **Current — 2026-09-13T02:00Z. UHSIF, and it is not shaped like the other 34.**
 
@@ -602,22 +674,95 @@ tree. That is the discipline working, not failing.
   and `tests/evidence/` is a live pointer at something that no longer exists.
 - **Idle** — §7 QA/RELEASE.
 
-**IN FLIGHT** — B's remaining half: the planted-break sweep over `app/tests/**`, plus the three
-findings addressed to me in §3 and at BOARD 01:14Z.
-- TASKS.md line: "Deliverable B's remaining half - the planted-break sweep over `app/tests/**`"
-  (+ the two beside it: the self-test anchor guard, and the two stale readings in `tests/`)
-- Doing: `tests/lib/enginemutant.js` — one mutation into a COPY of `app/engine/` under a junctioned
-  ROOT, the mutated engine run under one `app/tests/*.test.js` file in a child process, restore,
-  re-prove green. **The tree is never touched and `app/` is never written.**
-- Files touched: `TASKS.md`, `agents/STATUS.md`, `tests/lib/enginemutant.js`,
-  `tests/app_tests_planted.test.js`, `scripts/plant_app_tests.js`,
-  `tests/evidence/round6/2026-09-13-app-tests-planted-breaks.md`,
-  `tools/validate_constraints_selftest.py`, `tools/validate_afmux_selftest.py`,
-  `tests/h417_packages.test.js`, `tests/completeness.test.js`
-- Next step if I stop here: run `node scripts/plant_app_tests.js` — it prints one row per
-  `app/tests/*.test.js` file (CAUGHT / MISSED / COULD-NOT-RUN) and writes the verbatim red into
-  the evidence file. Then the same for any file whose row is not CAUGHT.
-- Gates last run: see §1, at `2b1967d`.
+**IN FLIGHT** — nothing.
+- TASKS.md line: — · Doing: — · Files touched: —
+- Next step if I stop here: watch `main` for the third consecutive different-agent green
+  commit (§2 A); pick up `--strict` exit 0 re-check (E) or a §7 QA/RELEASE backlog item if idle.
+- Gates last run: see Current below.
+
+**Current — 2026-09-13T19:05Z. B's remaining half is closed, the two P1 findings addressed to
+me are fixed, and the anchor guard found a real bug while fixing it.**
+
+- **The planted-break sweep over `app/tests/**` — the junctioned-ROOT plan I inherited from the
+  stopped session does not work, and I proved it before writing the real version.** Node's ESM
+  loader realpaths every module it loads by default: a file reached through a Windows junction
+  reports its REAL path as `import.meta.url` regardless of the path used to reach it (measured
+  with a throwaway junction and a two-line importer before touching this file — the junction
+  trick `tests/lib/mutant.js` already uses for `dist/index.html` copies is fine there because it
+  mutates a single self-contained HTML file, never a module graph). A junctioned
+  `app/tests/_harness.js` would have realpathed its own `import * as eng from '../engine/index.js'`
+  straight back to the REAL, unmutated engine — the whole sweep would have been a no-op mutator
+  that still printed green, which is the exact failure mode this deliverable exists to prevent.
+  `tests/lib/enginemutant.js` instead makes a REAL, recursive, mutated copy of `app/engine/` under
+  a fresh temp root, junctions only `data/`, `tests/` and `app/vendor` (plain `fs.readFileSync`
+  reads and leaf modules that never need to see the mutation are transparent through a junction —
+  confirmed separately), and real-copies `app/tests/_harness.js` plus the one target test file (and
+  `tools/wchcube_cli.js` for `cli.test.js`) so their relative imports land on the mutated copy.
+  `tests/lib/enginemutant_run.js` runs that one file's own tests in a fresh child process.
+- **27 files, not the 9-17 last counted** — the directory grew while this row sat open
+  (`nested_structs.test.js` landed mid-cycle, AGENT-2's). Swept all 27: 22 with a targeted
+  one-line mutation of the `app/engine/*.js` function the file actually exercises (verified by
+  reading each file's own assertions first, not guessed); 4 (`glue`, `clockmux_ui`, `tree`,
+  `layout`) mutate a COPY of `dist/index.html` instead via `tests/lib/enginemutant.js`'s
+  `withMutantDist()`, because they `boot()`/`withPage()` the built bundle rather than importing
+  the engine live — a mutated engine copy is invisible to them.
+  `node scripts/plant_app_tests.js`: **CAUGHT 27 · MISSED 0 · COULD-NOT-RUN 0**. The one real
+  miss along the way: `export.test.js`'s first mutation (blanking `pinMapHeader()`'s text in
+  `projectFiles()`) passed clean — that file's own assertions never look at `BoardPins.h`
+  content (that is `pinmap.test.js`'s job, a separate file, separately caught); re-targeted at
+  `pinRows()`'s shorted-pin name instead, which IS one of `export.test.js`'s own first three
+  assertions, and it caught. Verbatim red for all 27, plus that one MISSED-then-fixed history:
+  `tests/evidence/round6/2026-09-13-app-tests-planted-breaks.md`.
+- **The two stale readings AGENT-1 found (§3, 00:33Z), both fixed and re-verified live**, not
+  just read about: `tests/h417_packages.test.js`'s comment said `FMC.Address bus A0-A25`; the
+  data's setting is now named `Address lines` (choice `A0-A25`) — fixed the comment and confirmed
+  against `node tests/run.js "h417_packages"`'s own live output, which prints
+  `FMC.Address lines = "A0-A25"` today. And `tests/completeness.test.js`'s IN_EXTRACTION-expiry
+  planted break counted CH32H417 cells by regexing the CHILD PROCESS's printed bullet list, which
+  `assert.empty` (`tests/lib/harness.js`) caps at 40 lines — a display limit, read as a count, and
+  the very day it was written the real count was already different from what it showed. Fixed to
+  read the exact, untruncated `list.length` `assert.empty` already puts in its own message header;
+  re-run prints the TRUE current count, **32**, not 40.
+- **`validate_constraints_selftest.py` and `validate_afmux_selftest.py`'s anchor-uniqueness
+  guard — and it found a real bug in the first one, immediately, the moment it was added.** Both
+  had AGENT-1's find-in-`validate_clock_selftest.py` shape: `if find not in base` proves the
+  anchor exists, never that it is unique. Fixed both with the sibling's own guard
+  (`base.count(find) == 1`, and `mutated != base`). The moment `validate_constraints_selftest.py`
+  got it, two of its 19 cases failed: `when: { peripheral: USBFS, enabled: true }` is not unique
+  in `data/mcus/CH32X035.yaml` — PC10/PC11's `gpio.mode` AND `gpio.pull` constraint entries both
+  end in that exact line — so `.replace(find, replace, 1)` had always mutated the FIRST
+  (`gpio.mode`) occurrence, and whichever of the two cases meant to target `gpio.pull` had never
+  actually done so; both still read OK because `validate_mcu.py` refused the file for the same
+  class of reason either way. Disambiguated both anchors on their own distinguishing line
+  (`classes: [out, af, analog]` / `choices: [Pull-up, Pull-down]`) plus `not_on:` plus the shared
+  `when:` line — each verified unique before trusting the fix. Re-run: 19/19.
+  `validate_afmux_selftest.py`'s eleven anchors were already unique — nothing to disambiguate —
+  so a non-unique one was planted on purpose (widened one case's anchor to the substring `af: 4`,
+  which occurs 56 times in `CH32H417.yaml`), the guard was watched refuse it
+  (`anchor matches 56 places`), and the case was reverted to its real text in the same sitting;
+  `git diff` after the revert carries only the guard, not the demonstration. Both runs, and the
+  full narrative: `tests/evidence/round6/2026-09-13-constraints-afmux-anchor-guard.md`.
+- **The stale-pointer grep, P2.** One hit I own and fixed: `PROGRESS.md` cited `HUMAN_TODO`/
+  `HUMAN_TODO.md` nine times — that file does not exist any more (`agents/` is three files now).
+  Renumbered to `agents/STATUS.md §6`, and caught myself mapping the numbers blind on the first
+  pass: the OLD `HUMAN_TODO` numbering had "flash a generated project" as item 6; in today's §6
+  it is item 8 (three occurrences fixed to match). The rest of the grep's hits are outside my
+  files — `data/mcus/CH32V006.*` and `data/sources/README.md` cite `HUMAN_TODO`/`00_PROJECT.md`
+  (AGENT-1's), `agents/proposals/layout-orientation.test.js` cites `DONE.md` (already on §7's
+  backlog as an orphan, not new), and a handful of `tests/*.test.js` comments cite `DONE.md` as
+  narrative provenance rather than a live cross-reference — recorded, not fixed this cycle; none
+  of them make a gate read wrong.
+- **`main` this cycle:** two commits landed from two different agents while this work was in
+  flight (AGENT-1 `e25ba30`, AGENT-2 `448b628`, both after AGENT-1's `b1eff49`) — **not verified
+  green by me**, no `node tests/run.js` was run for this report, narrow suites only. If my own
+  commit lands next, that would be three consecutive commits from three different agents
+  (AGENT-1, AGENT-2, AGENT-3) — **not posting `DECISION | worktrees ON`**: the condition is about
+  three commits *seen* green, not three commits merely landed, and nobody has run the full suite
+  on this tree this cycle.
+
+Red, and who owns it: **nothing found in `app/` or `data/` this cycle** — both P1 findings and
+the anchor-guard bug were in files I own (`tests/`, `tools/validate_*_selftest.py`). Numbers:
+unchanged from §1 except what this block states directly. Nothing closed by lowering anything.
 
 **Current — 2026-09-13. The pack is three files, and a stopped session is now resumable.**
 `README.md`, `STATUS.md`, `BOARD.md`; the eight superseded files archived whole under

@@ -1041,6 +1041,191 @@ _params:
           - { name: High, value: 1, sdk: I2S_CPOL_High }
         help: "SPI_I2SCFGR CKPOL (ch32h417_spi.h:155-156). The level CK sits at between frames."
 
+  # QSPI1 and QSPI2 are the SAME register block type - ch32h417.h:1815-1816 cast both to
+  # `QSPI_TypeDef *` - so one template, shared. TWO structs apply, because the SDK splits
+  # the interface config from the per-command config: QSPI_Init() (ch32h417_qspi.h:107,
+  # QSPI_InitTypeDef) sets the clock/flash-geometry side of R32_QSPIx_CR/DCR, and
+  # QSPI_ComConfig_Init() (:108, QSPI_ComConfig_InitTypeDef) sets one command's frame shape
+  # in R32_QSPIx_CCR - unlike FMC, NEITHER struct is reached only through a pointer inside
+  # the other, so both are ordinary `struct:`/`sdk_field:` rows the generator already knows
+  # how to apply, each to its own `codegen.init_structs` entry, same handle.
+  qspi: &qspi_params |
+    params:
+      - key: prescaler
+        name: Clock prescaler
+        struct: QSPI_InitTypeDef
+        sdk_field: QSPI_Prescaler
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: "R32_QSPIx_CR.PRESCALER[31:24], CH32H417RM.md:53779-53790. SCK = HCLK/(prescaler+1); 0 bypasses the divider (FSCK = FHCLK)."
+      - key: ckmode
+        name: Clock mode
+        struct: QSPI_InitTypeDef
+        sdk_field: QSPI_CKMode
+        type: enum
+        default: Mode 0
+        options:
+          - { name: Mode 0, value: 0, sdk: QSPI_CKMode_Mode0 }
+          - { name: Mode 3, value: 1, sdk: QSPI_CKMode_Mode3 }
+        help: "R32_QSPIx_DCR.CKMODE, CH32H417RM.md:54088-54098. Mode 0: SCK idles low between commands; Mode 3: SCK idles high."
+      - key: csht
+        name: Chip select high time
+        struct: QSPI_InitTypeDef
+        sdk_field: QSPI_CSHTime
+        type: enum
+        default: 1 cycle
+        options:
+          - { name: 1 cycle,   value: 0, sdk: QSPI_CSHTime_1Cycle }
+          - { name: 2 cycles,  value: 1, sdk: QSPI_CSHTime_2Cycle }
+          - { name: 3 cycles,  value: 2, sdk: QSPI_CSHTime_3Cycle }
+          - { name: 4 cycles,  value: 3, sdk: QSPI_CSHTime_4Cycle }
+          - { name: 5 cycles,  value: 4, sdk: QSPI_CSHTime_5Cycle }
+          - { name: 6 cycles,  value: 5, sdk: QSPI_CSHTime_6Cycle }
+          - { name: 7 cycles,  value: 6, sdk: QSPI_CSHTime_7Cycle }
+          - { name: 8 cycles,  value: 7, sdk: QSPI_CSHTime_8Cycle }
+        help: "R32_QSPIx_DCR.CSHT[10:8], CH32H417RM.md:54051-54070. Minimum SCK cycles nCS stays high between FLASH commands, CSHT+1."
+      - key: fsize
+        name: Flash size
+        struct: QSPI_InitTypeDef
+        sdk_field: QSPI_FSize
+        type: int
+        default: 0
+        min: 0
+        max: 31
+        help: "R32_QSPIx_DCR.FSIZE[20:16], CH32H417RM.md:54036-54049. The FLASH holds 2^(FSIZE+1) bytes; FSIZE+1 is the address width the QSPI drives."
+      - key: fselect
+        name: Flash select
+        struct: QSPI_InitTypeDef
+        sdk_field: QSPI_FSelect
+        type: enum
+        default: FLASH1
+        options:
+          - { name: FLASH1, value: 0, sdk: QSPI_FSelect_1 }
+          - { name: FLASH2, value: 1, sdk: QSPI_FSelect_2 }
+        help: "R32_QSPIx_CR.FSEL, CH32H417RM.md:53912-53918. Ignored once Dual flash mode is enabled below."
+      - key: dflash
+        name: Dual flash mode
+        struct: QSPI_InitTypeDef
+        sdk_field: QSPI_DFlash
+        sdk_enabled: QSPI_DFlash_Enable
+        sdk_disabled: QSPI_DFlash_Disable
+        type: bool
+        default: false
+        help: "R32_QSPIx_CR.DFM, CH32H417RM.md:53922-53925. Splits every access across two FLASH devices at once, doubling the effective bus width."
+      - key: com_fmode
+        name: "Command: functional mode"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_FMode
+        type: enum
+        default: Indirect write
+        options:
+          - { name: Indirect write, value: 0, sdk: QSPI_ComConfig_FMode_Indirect_Write }
+          - { name: Indirect read,  value: 1, sdk: QSPI_ComConfig_FMode_Indirect_Read }
+          - { name: Auto polling,   value: 2, sdk: QSPI_ComConfig_FMode_Auto_Polling }
+          - { name: Memory mapped,  value: 3, sdk: QSPI_ComConfig_FMode_Memory_Mapped }
+        help: "R32_QSPIx_CCR.FMODE[27:26], CH32H417RM.md:54296-54309."
+      - key: com_sioo
+        name: "Command: send instruction only once"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_SIOOMode
+        sdk_enabled: QSPI_ComConfig_SIOOMode_Enable
+        sdk_disabled: QSPI_ComConfig_SIOOMode_Disable
+        type: bool
+        default: false
+        help: "R32_QSPIx_CCR.SIOO, CH32H417RM.md:54287-54295. Inactive when Instruction mode below is 'No instruction'."
+      - key: com_dmode
+        name: "Command: data mode"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_DMode
+        type: enum
+        default: No data
+        options:
+          - { name: No data, value: 0, sdk: QSPI_ComConfig_DMode_NoData }
+          - { name: 1-wire,  value: 1, sdk: QSPI_ComConfig_DMode_1Line }
+          - { name: 2-wire,  value: 2, sdk: QSPI_ComConfig_DMode_2Line }
+          - { name: 4-wire,  value: 3, sdk: QSPI_ComConfig_DMode_4Line }
+        help: "R32_QSPIx_CCR.DMODE[25:24], CH32H417RM.md:54310-54327. Also shapes the empty data phase when 'No data' is chosen."
+      - key: com_dummy
+        name: "Command: dummy cycles"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_DummyCycles
+        type: int
+        default: 0
+        min: 0
+        max: 31
+        help: "R32_QSPIx_CCR.DCYC[22:18], CH32H417RM.md:54328-54336. SCK cycles of the empty instruction (dummy) phase in SDR mode."
+      - key: com_absize
+        name: "Command: alternate byte size"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_ABSize
+        type: enum
+        default: 8-bit
+        options:
+          - { name: 8-bit,  value: 0, sdk: QSPI_ComConfig_ABSize_8bit }
+          - { name: 16-bit, value: 1, sdk: QSPI_ComConfig_ABSize_16bit }
+          - { name: 24-bit, value: 2, sdk: QSPI_ComConfig_ABSize_24bit }
+          - { name: 32-bit, value: 3, sdk: QSPI_ComConfig_ABSize_32bit }
+        help: "R32_QSPIx_CCR.ABSIZE[17:16], CH32H417RM.md:54337-54350."
+      - key: com_abmode
+        name: "Command: alternate byte mode"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_ABMode
+        type: enum
+        default: No alternate byte
+        options:
+          - { name: No alternate byte, value: 0, sdk: QSPI_ComConfig_ABMode_NoAlternateByte }
+          - { name: 1-wire, value: 1, sdk: QSPI_ComConfig_ABMode_1Line }
+          - { name: 2-wire, value: 2, sdk: QSPI_ComConfig_ABMode_2Line }
+          - { name: 4-wire, value: 3, sdk: QSPI_ComConfig_ABMode_4Line }
+        help: "R32_QSPIx_CCR.ABMODE[15:14], CH32H417RM.md:54351-54364."
+      - key: com_adsize
+        name: "Command: address size"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_ADSize
+        type: enum
+        default: 8-bit
+        options:
+          - { name: 8-bit,  value: 0, sdk: QSPI_ComConfig_ADSize_8bit }
+          - { name: 16-bit, value: 1, sdk: QSPI_ComConfig_ADSize_16bit }
+          - { name: 24-bit, value: 2, sdk: QSPI_ComConfig_ADSize_24bit }
+          - { name: 32-bit, value: 3, sdk: QSPI_ComConfig_ADSize_32bit }
+        help: "R32_QSPIx_CCR.ADSIZE[13:12], CH32H417RM.md:54365-54378."
+      - key: com_admode
+        name: "Command: address mode"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_ADMode
+        type: enum
+        default: No address
+        options:
+          - { name: No address, value: 0, sdk: QSPI_ComConfig_ADMode_NoAddress }
+          - { name: 1-wire, value: 1, sdk: QSPI_ComConfig_ADMode_1Line }
+          - { name: 2-wire, value: 2, sdk: QSPI_ComConfig_ADMode_2Line }
+          - { name: 4-wire, value: 3, sdk: QSPI_ComConfig_ADMode_4Line }
+        help: "R32_QSPIx_CCR.ADMODE[11:10], CH32H417RM.md:54379-54392."
+      - key: com_imode
+        name: "Command: instruction mode"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_IMode
+        type: enum
+        default: No instruction
+        options:
+          - { name: No instruction, value: 0, sdk: QSPI_ComConfig_IMode_NoInstruction }
+          - { name: 1-wire, value: 1, sdk: QSPI_ComConfig_IMode_1Line }
+          - { name: 2-wire, value: 2, sdk: QSPI_ComConfig_IMode_2Line }
+          - { name: 4-wire, value: 3, sdk: QSPI_ComConfig_IMode_4Line }
+        help: "R32_QSPIx_CCR.IMODE[9:8], CH32H417RM.md:54393-54408."
+      - key: com_ins
+        name: "Command: instruction byte"
+        struct: QSPI_ComConfig_InitTypeDef
+        sdk_field: QSPI_ComConfig_Ins
+        type: int
+        default: 0
+        min: 0
+        max: 255
+        help: "R32_QSPIx_CCR.INSTRUCTION[7:0], CH32H417RM.md:54409-54415. The command byte sent to the FLASH; meaning is device-specific (e.g. common SPI NOR flash: 0x03 = Read)."
+
 extras:
 
   SDIO:
@@ -1128,6 +1313,320 @@ extras:
             - { name: Enabled , value: 1, sdk: SDIO_HardwareFlowControl_Enable }
           help: "SDIO_CLKCR HWFC_EN (ch32h417_sdio.h:108-109). Stalls the clock rather than overrunning the FIFO."
 
+  SDMMC:
+    comment: |
+      THE BUS WIDTH IS THE MODE ROW, same shape as SDIO just above: `Mode` offers SD
+      1-bit/4-bit/8-bit and those are what claim D0, D0-D3 and D0-D7, so `SDMMC_BusWidth`
+      is three `const:` rows keyed off that same choice, not a second dropdown a project
+      could set wider than the pads it claimed. `SDMMC_Init(SDMMC_InitTypeDef*)`
+      (ch32h417_sdmmc.h:250) takes no register-block pointer - this part has one SDMMC
+      controller - so it is `no_handle: true`, the DVP/LTDC/SDIO/IPC shape.
+
+      FOUR more structs this driver defines are NOT modelled here, each for a different
+      reason. `SDMMC_CMDInitTypeDef` (applied by `SDMMC_CommandConfig`) carries the
+      ARGUMENT and INDEX of one specific SD/MMC command - a runtime call issued per
+      transaction, the same class as SerDes's `SDS_RTX_Ctrl`, not a one-time init.
+      `SDMMC_TranModeTypeDef` (`SDMMC_TranMode_Init`) sets the DMA DIRECTION and
+      dual-buffer bookkeeping for one transfer, which varies transfer to transfer for the
+      same reason. `SDMMC_IOInputDelayDDRTypeDef` and `SDMMC_IOOutputDelayDDRTypeDef`
+      (`SDMMC_IOInputDelayDDRInit` / `SDMMC_IOOutputDelayDDRInit`) tune eight per-line
+      signal-integrity delays that matter only in DDR mode (ch32h417_sdmmc.h:111-177) -
+      real init-time settings, but neither of this part's own SD/eMMC examples
+      (Evt/EXAM/SDMMC/SDMMC_SD, SDMMC_eMMC, SDMMC_eMMC_DDR) ever calls them, so there is no
+      worked default to check eight raw 4-bit taps against. Left unmodelled rather than
+      guessed; TASKS.md line.
+    yaml: |
+      params:
+        - key: width_1b
+          name: Bus width
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_BusWidth
+          const: SDMMC_BusWidth_1
+          depends_on: { setting: Mode, equals: SD 1-bit }
+          help: "R16_EMMC_CONTROL RB_EMMC_LW_MASK[1:0], CH32H417RM.md:48759-48768. Fixed by the Mode row, which is what claims the data pads."
+        - key: width_4b
+          name: Bus width
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_BusWidth
+          const: SDMMC_BusWidth_4
+          depends_on: { setting: Mode, equals: SD 4-bit }
+          help: "R16_EMMC_CONTROL RB_EMMC_LW_MASK[1:0], CH32H417RM.md:48759-48768. Fixed by the Mode row."
+        - key: width_8b
+          name: Bus width
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_BusWidth
+          const: SDMMC_BusWidth_8
+          depends_on: { setting: Mode, equals: SD 8-bit }
+          help: "R16_EMMC_CONTROL RB_EMMC_LW_MASK[1:0], CH32H417RM.md:48759-48768. Fixed by the Mode row."
+        - key: mode
+          name: Controller mode
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_Mode
+          type: enum
+          default: Host
+          options:
+            - { name: Host,  value: 0, sdk: SDMMC_Mode_Host }
+            - { name: Slave, value: 1, sdk: SDMMC_Mode_Slave }
+          help: "R16_EMMC_CONTROL RB_SLV_MODE, CH32H417RM.md:48715-48721. Slave mode takes SDCK as an input instead of driving it; both of the part's own SD/eMMC examples use Host (sdmmc_sd.c:186, sdmmc_emmc.c:223)."
+        - key: phase_inv
+          name: Clock phase invert
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_PhaseInv
+          type: enum
+          default: No inverse
+          options:
+            - { name: No inverse, value: 0, sdk: SDMMC_Phase_No_Inverse }
+            - { name: Inverse,    value: 1, sdk: SDMMC_Phase_Inverse }
+          help: "R16_EMMC_CLK_DIV RB_EMMC_PHASEINV, CH32H417RM.md:49207. Inverts the SDCK output phase."
+        - key: clock_speed
+          name: Clock speed mode
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_ClockSpeed
+          type: enum
+          default: Low
+          options:
+            - { name: Low,  value: 0, sdk: SDMMC_ClockSpeed_Low }
+            - { name: High, value: 1, sdk: SDMMC_ClockSpeed_High }
+          help: >
+            R16_EMMC_CLK_DIV RB_EMMC_CLKMode, CH32H417RM.md:49208-49214: 0 = below 5 MHz,
+            1 = 25-200 MHz (register reset value is 1). Changes what the Clock divider
+            below divides by (RB_EMMC_DIV_MASK's own /1 vs /64 factor,
+            CH32H417RM.md:49224-49236). Defaulted to Low, overriding the register's own
+            reset, because both of this part's SD/eMMC examples set it explicitly for card
+            identification (sdmmc_sd.c:191, sdmmc_emmc.c:228) and raise it afterwards in
+            application code, which this row does not do for you.
+        - key: clock_edge
+          name: Sample clock edge
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_ClockEdge
+          type: enum
+          default: Rising
+          options:
+            - { name: Rising,  value: 0, sdk: SDMMC_SampleClock_Rising }
+            - { name: Falling, value: 1, sdk: SDMMC_SampleClock_Falling }
+          help: >
+            R16_EMMC_CONTROL RB_EMMC_NEGSMP, CH32H417RM.md:48723-48729. Reset value 0
+            (Rising), which is what the eMMC example uses (sdmmc_emmc.c:224); the SD
+            example uses Falling instead (sdmmc_sd.c:187) - the two disagree and the choice
+            is left to the project rather than picked for it.
+        - key: clock_div
+          name: Clock divider
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_ClockDiv
+          type: int
+          default: 31
+          min: 0
+          max: 31
+          help: >
+            R16_EMMC_CLK_DIV RB_EMMC_DIV_MASK[4:0], CH32H417RM.md:49224-49236 (0x00-0x1F per
+            ch32h417_sdmmc.h:41-42). SDCLK = SYSPLL_SEL / ClockDiv (High speed) or
+            SYSPLL_SEL / ClockDiv / 64 (Low speed); the RM states the minimum usable value
+            is 2 and that 1 disables the clock. Defaulted to 31 (0x1F), the maximum divider
+            and so the slowest, safest identification clock, overriding the register's own
+            reset of 0x13 - both SD/eMMC examples set it to exactly this value via their own
+            `RB_SDMMC_DIV_MASK` constant (sdmmc_sd.c:192, sdmmc_emmc.c:229).
+        - key: timeout
+          name: Response/data timeout
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_TimeOut
+          type: int
+          default: 12
+          min: 0
+          max: 15
+          help: >
+            R8_EMMC_TIMEOUT RB_EMMC_TOCNT_MASK[3:0], CH32H417RM.md:48775-48793 (0x0-0x0F per
+            ch32h417_sdmmc.h:44-45). Timeout = SDCLK period * 4194304 * this value; 0
+            disables the timeout. Default 12 (0xC) is the register's own reset value and
+            matches both SD/eMMC examples (sdmmc_sd.c:193, sdmmc_emmc.c:230).
+        - key: slave_force_crc_err
+          name: Force CRC error (slave mode)
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_SlaveForceCrc_ERR
+          sdk_enabled: ENABLE
+          sdk_disabled: DISABLE
+          type: bool
+          default: false
+          help: "R16_EMMC_CONTROL RB_SLV_FORCE_ERR, CH32H417RM.md:48707-48714. Test hook: forces an invalid data-block CRC while acting as a slave. Reset value 0; not set by either example."
+        - key: dma_en
+          name: DMA enable
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_DMA_EN
+          sdk_enabled: ENABLE
+          sdk_disabled: DISABLE
+          type: bool
+          default: true
+          help: "R16_EMMC_CONTROL RB_EMMC_DMAEN, CH32H417RM.md:48742-48748. Reset value 0, but both SD/eMMC examples set it to 1 (sdmmc_sd.c:188, sdmmc_emmc.c:225) - the FIFO-only path has no worked example to default to instead."
+        - key: clock_oe
+          name: Clock output enable
+          struct: SDMMC_InitTypeDef
+          sdk_field: SDMMC_Clock_OE
+          sdk_enabled: ENABLE
+          sdk_disabled: DISABLE
+          type: bool
+          default: false
+          help: >
+            R16_EMMC_CLK_DIV RB_EMMC_CLKOE, CH32H417RM.md:49215-49221. Reset value 0 and
+            left unset (zero) by both examples, which start SDCK through the separate
+            runtime call `SDMMC_ClockCmd(ENABLE)` instead (sdmmc_sd.c:185,195;
+            sdmmc_emmc.c:222,232) - a runtime enable, not this struct's field, and not
+            modelled here.
+      notes: >
+        `SDMMC_CommandConfig`, `SDMMC_TranMode_Init`, `SDMMC_IOInputDelayDDRInit` and
+        `SDMMC_IOOutputDelayDDRInit` are not modelled - see the peripheral comment above.
+
+  SAI:
+    comment: |
+      TWO HARDWARE BLOCKS, ONE TREE PERIPHERAL, same shape as LTDC's two layers:
+      `SAI_Block_A`/`SAI_Block_B` are two register blocks (ch32h417.h:1775-1776) and the
+      settings above already have independent `Block A`/`Block B` rows deciding whether
+      each is live - exactly `channel_params.instances`, keyed to those two settings
+      rather than a channel number.
+
+      ONLY `SAI_InitTypeDef` (applied by `SAI_Init(SAI_Block_x, &s)`, ch32h417_sai.h:241)
+      is modelled below. The driver defines TWO MORE per-block init structs -
+      `SAI_FrameInitTypeDef` via `SAI_FrameInit()` and `SAI_SlotInitTypeDef` via
+      `SAI_SlotInit()` - and the part's own example calls all three for the one block it
+      uses (Evt/EXAM/SAI/SAI_Play/Common/hardware.c:103,110,116). Frame/Slot are NOT a
+      later nicety: the header itself says their fields are "ignored ... when AC'97 or
+      SPDIF protocols are selected", meaning they matter precisely in Free Protocol, which
+      is what the EVT example configures (SAI_Free_Protocol, hardware.c:96) and what a
+      typical I2S/TDM use of this block would be. They are left out because
+      `channel_params:` (app/engine/params.js) holds exactly ONE `struct:` per peripheral -
+      it cannot carry three different structs against the same two instances - and forcing
+      Frame/Slot through a flat `params:` block would need ONE handle for the whole
+      peripheral, silently misconfiguring whichever block is not that hardcoded choice.
+      That is the wrong-but-compiling shape this file exists to refuse, so the two structs
+      are recorded here rather than guessed into a shape the schema does not have.
+      REQUEST to AGENT-2: `channel_params` (or a sibling key) needs to carry more than one
+      struct against the same instance map before Frame/Slot can be modelled. TASKS.md line.
+    yaml: |
+      channel_params:
+        struct: SAI_InitTypeDef
+        applies_per: block
+        instances:
+          1: { sdk_call: SAI_Init, handle: SAI_Block_A, setting: "Block A", active_choices: [Asynchronous, Synchronous] }
+          2: { sdk_call: SAI_Init, handle: SAI_Block_B, setting: "Block B", active_choices: [Asynchronous, Synchronous] }
+        params:
+          - key: mode
+            name: Audio mode
+            sdk_field: SAI_AudioMode
+            type: enum
+            default: Master transmitter
+            options:
+              - { name: Master transmitter, value: 0, sdk: SAI_Mode_MasterTx }
+              - { name: Master receiver,    value: 1, sdk: SAI_Mode_MasterRx }
+              - { name: Slave transmitter,  value: 2, sdk: SAI_Mode_SlaveTx }
+              - { name: Slave receiver,     value: 3, sdk: SAI_Mode_SlaveRx }
+            help: "R32_SAI_xCFGR1.MODE[1:0], CH32H417RM.md:52423-52440. The EVT's own example uses Master transmitter (hardware.c:95)."
+          - key: protocol
+            name: Protocol
+            sdk_field: SAI_Protocol
+            type: enum
+            default: Free protocol
+            options:
+              - { name: Free protocol, value: 0, sdk: SAI_Free_Protocol }
+              - { name: SPDIF,         value: 1, sdk: SAI_SPDIF_Protocol }
+              - { name: AC'97,         value: 2, sdk: SAI_AC97_Protocol }
+            help: >
+              R32_SAI_xCFGR1.PRTCFG[1:0], CH32H417RM.md:52399-52418. Free protocol leaves
+              the frame/slot structure to the Frame and Slot init calls (not modelled -
+              see the peripheral comment); SPDIF forces Master transmitter regardless of
+              the Audio mode row above (RM note under MODE[1:0]).
+          - key: data_size
+            name: Data size
+            sdk_field: SAI_DataSize
+            type: enum
+            default: 16 bits
+            options:
+              - { name: 8 bits,  value: 2, sdk: SAI_DataSize_8b }
+              - { name: 10 bits, value: 3, sdk: SAI_DataSize_10b }
+              - { name: 16 bits, value: 4, sdk: SAI_DataSize_16b }
+              - { name: 20 bits, value: 5, sdk: SAI_DataSize_20b }
+              - { name: 24 bits, value: 6, sdk: SAI_DataSize_24b }
+              - { name: 32 bits, value: 7, sdk: SAI_DataSize_32b }
+            help: "R32_SAI_xCFGR1.DS[2:0], CH32H417RM.md:52370-52392. Ignored for AC'97/SPDIF. The EVT's own example uses 16 bits (hardware.c:97)."
+          - key: first_bit
+            name: Bit order
+            sdk_field: SAI_FirstBit
+            type: enum
+            default: MSB first
+            options:
+              - { name: MSB first, value: 0, sdk: SAI_FirstBit_MSB }
+              - { name: LSB first, value: 1, sdk: SAI_FirstBit_LSB }
+            help: "R32_SAI_xCFGR1.LSBFIRST, CH32H417RM.md:52353-52368. Ignored for AC'97/SPDIF."
+          - key: clock_strobing
+            name: Clock strobing edge
+            sdk_field: SAI_ClockStrobing
+            type: enum
+            default: Rising edge
+            options:
+              - { name: Falling edge, value: 0, sdk: SAI_ClockStrobing_FallingEdge }
+              - { name: Rising edge,  value: 1, sdk: SAI_ClockStrobing_RisingEdge }
+            help: "R32_SAI_xCFGR1.CKSTR, CH32H417RM.md:52338-52351. The EVT's own example uses Rising edge (hardware.c:99)."
+          - key: synchro
+            name: Synchronisation
+            sdk_field: SAI_Synchro
+            type: enum
+            default: Asynchronous
+            options:
+              - { name: Asynchronous, value: 0, sdk: SAI_Asynchronous }
+              - { name: Synchronous,  value: 1, sdk: SAI_Synchronous }
+            help: >
+              R32_SAI_xCFGR1.SYNCEN[1:0], CH32H417RM.md:52313-52335. Synchronous makes this
+              block track the OTHER block's bit/frame clock, and the RM requires the
+              tracking block to be in a slave Audio mode when it does. The EVT's own
+              example uses Asynchronous (hardware.c:100).
+          - key: out_drive
+            name: Output drive timing
+            sdk_field: SAI_OutDRIV
+            const: 0
+            help: >
+              ch32h417_sai.h:46-47. The struct member exists and `SAI_Init()` OR's it
+              straight into CFGR1 (ch32h417_sai.c:55), but the header's own doc comment
+              points at "@ref SAI_Block_Output_Drive" and NO SUCH GROUP IS DEFINED anywhere
+              in this header - unlike every other `@ref` on this struct, which all resolve.
+              Fixed at 0 because that is what a zero-initialised struct gives it and what
+              this part's own SAI_Play example leaves it at (never assigns
+              `.SAI_OutDRIV`); there is no documented alternative to offer instead.
+          - key: no_divider
+            name: Master clock divider
+            sdk_field: SAI_NoDivider
+            type: enum
+            default: Enabled
+            options:
+              - { name: Enabled,  value: 0, sdk: SAI_MasterDivider_Enabled }
+              - { name: Disabled, value: 1, sdk: SAI_MasterDivider_Disabled }
+            help: "R32_SAI_xCFGR1.NODIV, CH32H417RM.md:52262-52272. Disabled feeds the master clock straight through and makes the divider row below inactive."
+          - key: master_divider
+            name: Master clock divider value
+            sdk_field: SAI_MasterDivider
+            type: int
+            default: 0
+            min: 0
+            max: 63
+            help: >
+              R32_SAI_xCFGR1.MCKDIV[5:0], CH32H417RM.md:52245-52261. 0 divides by 1;
+              non-zero values divide by the RM's own formula. Ignored when Master clock
+              divider above is Disabled. The EVT's own example computes this at runtime
+              from a target sample rate (hardware.c:80-91, `tmpdiv`) rather than using a
+              fixed constant, so 0 is the only value this file can cite without inventing
+              a target rate.
+          - key: fifo_threshold
+            name: FIFO threshold
+            sdk_field: SAI_FIFOThreshold
+            type: enum
+            default: FIFO empty
+            options:
+              - { name: FIFO empty,             value: 0, sdk: SAI_Threshold_FIFOEmpty }
+              - { name: "1/4 full",             value: 1, sdk: SAI_FIFOThreshold_1QuarterFull }
+              - { name: Half full,              value: 2, sdk: SAI_FIFOThreshold_HalfFull }
+              - { name: "3/4 full",             value: 3, sdk: SAI_FIFOThreshold_3QuartersFull }
+              - { name: Full,                   value: 4, sdk: SAI_FIFOThreshold_Full }
+            help: "R32_SAI_xCFGR2.FTH[2:0], CH32H417RM.md:52563-52579. The EVT's own example uses FIFO empty (hardware.c:101)."
+      notes: >
+        `SAI_FrameInit`/`SAI_FrameInitTypeDef` and `SAI_SlotInit`/`SAI_SlotInitTypeDef` are
+        not modelled - see the peripheral comment above for why and the REQUEST it names.
+
   HSADC:
     comment: |
       ONLY THE THREE MEMBERS THAT ARE A CONFIGURATION ARE ROWS. `HSADC_InitTypeDef` has
@@ -1212,6 +1711,9 @@ extras:
   DVP:   { yaml: *dvp_params }
   IPC:   { yaml: *ipc_params }
   SWPMI: { yaml: *swpmi_params }
+
+  QSPI1: { yaml: *qspi_params }
+  QSPI2: { yaml: *qspi_params }
 
   # ETH's `notes:` were hand-added to the GENERATED block on 2026-09-12 (commit 9a502ae,
   # AGENT-4), where `--splice --refresh` deletes them - the generator's loss guard reported
@@ -2063,3 +2565,184 @@ extras:
         no markdown conversion yet. Two consequences are recorded rather than guessed at:
         which pads each of the three data mappings and four clock mappings select, and how
         the 8/16/24/32-bit width narrows the 49-signal claim. Both are in TASKS.md.
+
+  # SERDES - RM ch.20, "Serial-parallel Interconversion Controller and Transceiver". Unlike
+  # UHSIF, its driver IS in the SPL: ch32h417_serdes.h/.c under Peripheral/inc and /src.
+  #
+  # ONE differential pad set (SERDES_TXP/TXN/RXP/RXN, already routed above) is driven by TWO
+  # independent register-block controllers, SDS1 and SDS2 (ch32h417.h:1827-1828, base
+  # 0x40027C00 / 0x40027C40 - RM ch.20 intro, CH32H417RM.md:23641-23642). Each controller is
+  # configured by its OWN SDS_Config(SDSx, &cfg) call (ch32h417_serdes.h:81) with its own
+  # SDS_CFG_TypeDef, and the EVT's own full-duplex example calls it twice - once per
+  # controller, with different RxEn/TxEn/RxPowerUp/TxPowerUp - to pair one controller with the
+  # PHY's Tx channel and the other with its Rx channel:
+  # Evt/EXAM/SerDes/FullDuxTrans/Common/hardware.c:16,33-44 (`#define SDS1_TX__SDS2_RX`,
+  # `SDS_TypeDef *TxSDS = SDS1; *RxSDS = SDS2;`) and :64,95-120,188,192 (`sds_initial(TxSDS,
+  # 1)` sets TxEn/TxPowerUp, `sds_initial(RxSDS, 0)` sets RxEn/RxPowerUp). That is
+  # `channel_params.instances` - deliverable E's mechanism, built for LTDC's two layers and
+  # exactly this shape: one struct, one function, the HANDLE varying per instance - not a
+  # flat `params:` block, which could only ever apply to one of the two controllers.
+  SERDES:
+    yaml: |
+      channel_params:
+        struct: SDS_CFG_TypeDef
+        applies_per: controller
+        instances:
+          1: { sdk_call: SDS_Config, handle: SDS1, setting: Mode, active_choices: [Enabled] }
+          2: { sdk_call: SDS_Config, handle: SDS2, setting: Mode, active_choices: [Enabled] }
+        params:
+          # Every field is a 1-bit member of SDS_CFG_TypeDef (ch32h417_serdes.h:62-79, struct
+          # order preserved here) and every default is the REGISTER's own reset value
+          # (R32_SERDESx_CTRL, RM 20.3.1, CH32H417RM.md:23785-23864, reset 0x00041207) - not a
+          # guess. The role-defining fields (rx_en/tx_en/rx_power_up/tx_power_up) reset to
+          # 0/disabled on BOTH controllers, so a fresh project claims the pads and drives
+          # nothing until the user picks a role for each controller - which is what this
+          # per-instance editor is for.
+          - key: clear_all
+            name: Clear interrupt flags and FIFO
+            sdk_field: ClearALL
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: true
+            help: "R32_SERDESx_CTRL.CLR_ALL, CH32H417RM.md:23859-23864. Reset value 1."
+          - key: reset_link
+            name: Reset link layer
+            sdk_field: ResetLink
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: true
+            help: "R32_SERDESx_CTRL.RESET_LINK, CH32H417RM.md:23852-23858. Reset value 1."
+          - key: reset_phy
+            name: Reset physical layer
+            sdk_field: ResetPHY
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: true
+            help: "R32_SERDESx_CTRL.RESET_PHY, CH32H417RM.md:23842-23851. Reset value 1."
+          - key: int_busy_en
+            name: Auto-pause before transmit-complete flag clears
+            sdk_field: INIBusy_En
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: "R32_SERDESx_CTRL.INT_BUSY_EN, CH32H417RM.md:23833-23841. Reset value 0."
+          - key: rx_polarity
+            name: Swap RXP/RXN polarity
+            sdk_field: SwitchRxPolarity
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: "R32_SERDESx_CTRL.RX_POLARITY, CH32H417RM.md:23832. Reset value 0."
+          - key: rx_en
+            name: Receive enable
+            sdk_field: RxEn
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: >
+              R32_SERDESx_CTRL.RX_EN, CH32H417RM.md:23825-23831. Reset value 0 - this is the
+              field the EVT's receive-role controller sets to 1
+              (hardware.c:117, `.RxEn = 1` inside `sds_initial(RxSDS, 0)`).
+          - key: tx_en
+            name: Transmit enable
+            sdk_field: TxEn
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: >
+              R32_SERDESx_CTRL.TX_EN, CH32H417RM.md:23818-23824. Reset value 0 - this is the
+              field the EVT's transmit-role controller sets to 1
+              (hardware.c:103, `.TxEn = 1` inside `sds_initial(TxSDS, 1)`).
+          - key: dma_enable
+            name: DMA enable
+            sdk_field: DMA_Enable
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: >
+              R32_SERDESx_CTRL.DMA_EN, CH32H417RM.md:23811-23817. Reset value 0; the EVT sets
+              it 1 on both controllers (hardware.c:96,111).
+          - key: rx_power_up
+            name: Receive module power-up
+            sdk_field: RxPowerUp
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: "R32_SERDESx_CTRL.RX_PWR_UP, CH32H417RM.md:23803-23809. Reset value 0."
+          - key: tx_power_up
+            name: Transmit module power-up
+            sdk_field: TxPowerUp
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: "R32_SERDESx_CTRL.TX_PWR_UP, CH32H417RM.md:23796-23802. Reset value 0."
+          - key: cont_en
+            name: Replace idle SYNC with CONT + scrambling
+            sdk_field: ReplaceSYNCwithCONT
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: false
+            help: "R32_SERDESx_CTRL.CONT_EN, CH32H417RM.md:23788-23792. Reduces EMI while idle. Reset value 0."
+          - key: align_en
+            name: Insert ALIGN signal when transmitting
+            sdk_field: InsertAlign
+            sdk_enabled: ENABLE
+            sdk_disabled: DISABLE
+            type: bool
+            default: true
+            help: "R32_SERDESx_CTRL.ALIGN_EN, CH32H417RM.md:23787. Corrects frequency offset. Reset value 1."
+      notes: >
+        SDS1/SDS2 are the two independent controllers behind the one differential pad set
+        (ch32h417.h:1827-1828); `channel_params` fills and applies SDS_CFG_TypeDef once per
+        controller via SDS_Config() (ch32h417_serdes.h:81), so enabling `Mode` emits BOTH
+        calls and the user picks each controller's role with rx_en/tx_en. The RM's own
+        bring-up sequence (20.2.1/20.2.2, CH32H417RM.md:23653-23706) sets these bits across
+        MORE THAN ONE register write, waiting for PLL lock between them; one struct fill per
+        controller covers the steady-state configuration a single SDS_Config() call can
+        express, not that multi-step sequence - recorded rather than modelled as a sequence,
+        since `channel_params` applies one struct once. SDS_RTX_Ctrl, SDS_DMA_Tx_CFG,
+        SDS_DMA_Rx_CFG and the interrupt-config/read calls are runtime/data-path APIs with no
+        init-time analogue and are not modelled here.
+
+  # PIOC - checked and NOT a UHSIF-shaped gap; a DIFFERENT one. `ch32h417_pioc.h` is the
+  # only file: no `ch32h417_pioc.c` exists anywhere under Peripheral/src, so there is no
+  # `PIOC_Init()` and NO function of any kind that takes `PIOC_TypeDef*`. What the header
+  # gives instead is raw register-address macros (`R8_PORT_DIR`, `R8_SYS_CFG`, ...) and one
+  # struct with the same layout for direct access - and RM ch.34 (CH32H417RM.md:49360-49399)
+  # explains why: PIOC is not a peripheral in the usual sense, it is a SECOND, EMBEDDED CPU
+  # ("Programmable Protocol I/O Microcontroller" - RISC8B core, 66 own instructions, a
+  # 2048-word program ROM multiplexed out of system SRAM, its own 6-level stack). What it
+  # DOES when switched on is defined by a PROGRAM loaded into that ROM - written in RISC8B
+  # assembly against a SEPARATE toolchain (`CHRISC8B.PDF`, `Evt/EXAM/PIOC/*/Common/Asm/*.ASM`
+  # for the five protocols this part's EVT ships: 1-Wire, I2C, NEC IR, Single-Wire, UART) -
+  # not by filling an init struct. The handful of host-side control bits that exist
+  # (`RB_MST_CLK_GATE`, `RB_MST_RESET`, `RB_MST_IO_EN0/1`, `ch32h417_pioc.h:88-92`) are real,
+  # but there is no SDK call to set them either, and modelling them alone - with no way to
+  # load the program that makes them mean anything - would be `params:` that fills fields no
+  # `codegen.init_structs` entry could ever apply, since none of this is a function call.
+  # Not modelled; TASKS.md line, and the wording of AGENT-1's cycle brief that promised "all
+  # five targets have real SPL drivers ... so the task keeps its normal shape" was right for
+  # four of five and wrong for this one - corrected here rather than forced to fit.
+  PIOC:
+    comment: |
+      NO SDK FUNCTION APPLIES ANY STRUCT HERE - there is no `ch32h417_pioc.c`, so no
+      `PIOC_Init()` and nothing else that takes a `PIOC_TypeDef*`. What this part calls
+      PIOC is a second, embedded CPU (RM ch.34, "Programmable Protocol I/O Microcontroller":
+      a RISC8B core with 66 of its OWN instructions and a 2048-word program ROM multiplexed
+      out of system SRAM), and its behaviour is set by loading a RISC8B assembly PROGRAM
+      into that ROM - a separate toolchain (`CHRISC8B.PDF`,
+      Evt/EXAM/PIOC/*/Common/Asm/*.ASM for this part's five shipped protocols: 1-Wire, I2C,
+      NEC, Single-Wire, UART) - not by filling an init struct this generator could emit.
+      `params:` is deliberately empty rather than filled with register-address rows no
+      `codegen.init_structs` entry could ever apply. TASKS.md carries the finding.

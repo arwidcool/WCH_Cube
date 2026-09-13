@@ -105,6 +105,14 @@ ENUM_MEMBER_RE = re.compile(r"^\s*([A-Za-z_]\w*)")
 TYPEDEF_TAIL_RE = re.compile(r"\}\s*([A-Za-z_]\w*)\s*;")
 STRUCT_RE = re.compile(r"\btypedef\s+struct\b[^{;]*\{(.*?)\}\s*([A-Za-z_]\w*)\s*;", re.S)
 FIELD_RE = re.compile(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*(?:,|$)")
+# A bitfield member ends in `: <width>` instead of a bare `;` - CH32H417's
+# `SDS_CFG_TypeDef` (ch32h417_serdes.h:62-79) is packed entirely out of `uint32_t NAME : 1;`
+# rows. FIELD_RE requires a comma or end-of-string right after the name (plus an optional
+# array subscript), which " : 1" is neither, so every named bitfield member read as "not a
+# member of its own struct" - found modelling SERDES's params. An UNNAMED bitfield
+# (`uint32_t : 5;`) must keep reading as no field at all, so the width is stripped rather
+# than taught to FIELD_RE as a second terminator.
+BITFIELD_WIDTH_RE = re.compile(r":\s*\d+")
 FUNC_RE = re.compile(
     r"^[ \t]*(?:extern[ \t]+)?[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)[ \t]*\([^;{]*\)[ \t]*;",
     re.M,
@@ -167,8 +175,10 @@ class Index:
                 parts = decl.split(None, 1)
                 if len(parts) < 2:
                     continue
-                # "uint16_t GPIO_Pin" -> GPIO_Pin ; "uint32_t a, b" -> a, b
-                for m in FIELD_RE.findall(parts[1]):
+                # "uint16_t GPIO_Pin" -> GPIO_Pin ; "uint32_t a, b" -> a, b ;
+                # "uint32_t ClearALL : 1" -> ClearALL ; "uint32_t : 5" -> (nothing, unnamed)
+                tail = BITFIELD_WIDTH_RE.sub("", parts[1])
+                for m in FIELD_RE.findall(tail):
                     fields.add(m.lstrip("*"))
             self.fields.setdefault(name, set()).update(fields)
         self.types.update(TYPEDEF_TAIL_RE.findall(text))
