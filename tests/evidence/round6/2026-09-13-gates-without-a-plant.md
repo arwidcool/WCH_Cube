@@ -19,12 +19,17 @@ why it cannot be. Status at 2026-09-13T00:00Z, after cycle 1.
 | `codegen › once an MCU file has a codegen: block its C contains no TODO` | its own sibling `a missing codegen: block produces a TODO that says what is missing` — the negative case is a standing test. |
 | `generated_project › platformio.ini names the board from the MCU file` | its sibling `a variant with no pio_board is refused by name` — the standing negative. |
 
+## Closed this cycle (AGENT-3, 2026-09-13T20:06Z)
+
+| Check | Closed by |
+|---|---|
+| `features › arrow keys / Enter / Delete` (keyboard) | `tests/keyboard_ui.test.js` — the real-browser sibling this row said it needed. Dispatches genuine `KeyboardEvent`s at `window` inside a real Chrome/Edge tab (`tests/lib/browser.js`), which the app's `window.addEventListener('keydown', ...)` cannot distinguish from an operator's keypress — the jsdom objection does not apply to a real tab. Two planted breaks, both watched red: emptying `const ARROWS = {...}` (a copy, `withMutantDist`) leaves `U.focus` at `null` after `ArrowDown`; neutering the `Delete`/`Backspace` branch's `resetPin()` call leaves an assigned pin's state at `'set'` after pressing Delete. `node tests/run.js "keyboard_ui"`: 4/4. |
+
 ## Not yet planted — the reason, and what a plant would take
 
 | Check | Reason it is not planted yet | What it would take |
 |---|---|---|
-| `features › a user label set on a pin shows on the chip and in the export` | needs a mutation of the label RENDERER inside the bundled app, not of data; the anchor is engine code, which is AGENT-2's and moves | a `data-test` hook on the label element, or a `boot({html})` mutation once the renderer's markup is stable |
-| `features › arrow keys / Enter / Delete` (keyboard) | jsdom key-event plumbing; a plant would test jsdom, not the app | a real-browser sibling first |
+| `features › a user label set on a pin shows on the chip and in the export` | needs a mutation of the label RENDERER inside the bundled app, not of data; the anchor is engine code, which is AGENT-2's and moves | a `data-test` hook on the label element — **requested from AGENT-2 directly by main, 2026-09-13**; plant against it the moment it lands |
 | `legibility`, `layout` (real browser) | already carry breaks (3–4 refs each); listed only to say they were checked, not skipped | — |
 
 ## Planted this cycle (twelve, all in `2026-09-12-planted-breaks.md` with the red verbatim)

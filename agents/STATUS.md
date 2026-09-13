@@ -102,14 +102,28 @@ seen red: the collision ratchet, the reachability check, the SPL-header guard, f
 `--strict` per fixture, the `IN_EXTRACTION` expiry, `verify_sdk_names.py`.
 
 **Correction, found 2026-09-13T20:00Z (AGENT-3, §5 partial dry-run) — this line previously said
-the gates-that-cannot-go-red list was empty; it is not.** Opened the actual file rather than
-trusting the summary: `2026-09-13-gates-without-a-plant.md`'s own "Not yet planted" section still
-names two real gaps — `features › a user label set on a pin shows on the chip and in the export`
-(needs a mutation of the label renderer inside the bundled app, AGENT-2's code, not planted) and
-`features › arrow keys / Enter / Delete` (a plant would test jsdom's key-event plumbing, not the
-app, so a real-browser sibling is needed first). Neither has moved since the file was written at
-cycle 1 (`2026-09-13T00:00Z`) and nobody corrected the "empty" claim when they didn't close. §5.2
-step 8's acceptance ("the list is empty") is **not met** — said explicitly rather than rounded up.
+the gates-that-cannot-go-red list was empty; it was not.** Opened the actual file rather than
+trusting the summary: `2026-09-13-gates-without-a-plant.md`'s own "Not yet planted" section named
+two real gaps, unmoved since the file was written at cycle 1 (`2026-09-13T00:00Z`), with nobody
+having corrected the "empty" claim when they didn't close.
+
+- [x] **`features › arrow keys / Enter / Delete` (keyboard) — closed 2026-09-13T20:06Z (AGENT-3).**
+      The evidence file's own objection — "a plant would test jsdom's key-event plumbing, not the
+      app" — does not apply to a real tab: `tests/keyboard_ui.test.js` dispatches genuine
+      `KeyboardEvent`s at `window` inside actual Chrome/Edge over CDP (`tests/lib/browser.js`),
+      which `window.addEventListener('keydown', ...)` cannot tell apart from an operator's
+      keypress. Two planted breaks, both watched red on a COPY of `dist/index.html`: emptying
+      `const ARROWS = {...}` leaves `U.focus` at `null` after `ArrowDown`; neutering the
+      `Delete`/`Backspace` branch's `resetPin()` call leaves a set pin's state unchanged.
+      `node tests/run.js "keyboard_ui"`: 4/4.
+- [ ] **`features › a user label set on a pin shows on the chip and in the export` — open,
+      blocked on a `data-test` hook on the label element (`app/`, AGENT-2's; requested directly by
+      main 2026-09-13).** Plant the label-renderer mutation the moment it lands; if the hook's
+      shape does not let the mutation anchor cleanly, say so rather than planting something
+      adjacent that passes.
+
+**§5.2 step 8's acceptance ("the list is empty") is still NOT met — one of two gaps closed, one
+open.** B is not tickable until the second one closes too.
 
 - [x] **the same sweep over `app/tests/**`** — done 2026-09-13: all 27 files (18 more than the 9
       counted when this row was written — the file grew under it while it was open, and the plan
@@ -814,12 +828,37 @@ tree. That is the discipline working, not failing.
   and `tests/evidence/` is a live pointer at something that no longer exists.
 - **Idle** — §7 QA/RELEASE.
 
-**IN FLIGHT** — nothing.
-- TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: the full `node tests/run.js`, once `main` hands it over (both AGENT-1
-  and AGENT-2 still mid-cycle); meanwhile `--strict` exit 0 re-check (E), `sdk_manual.test.js` once
-  AGENT-2 commits it, or a §7 QA/RELEASE backlog item.
+**IN FLIGHT** — B's last gap: the label-renderer plant, blocked on AGENT-2's `data-test` hook
+(main requested it directly).
+- TASKS.md line: — · Doing: waiting on the hook to land; nothing to plant against yet.
+- Files touched (this wait): none yet.
+- Next step if I stop here: the moment AGENT-2's hook lands, plant the label-renderer mutation in
+  a `tests/features_label.test.js`-shaped file (or add to `keyboard_ui.test.js`'s sibling pattern),
+  watch it red, then tick §2 B and update
+  `tests/evidence/round6/2026-09-13-gates-without-a-plant.md` together — not before both close.
+  If the hook's shape does not let the mutation anchor cleanly, say so on the board rather than
+  planting something adjacent that would pass regardless.
 - Gates last run: see Current below.
+
+**Current — 2026-09-13T20:06Z. B's keyboard gap closed for real, in an actual browser — the
+jsdom objection on record no longer applies because nothing here is jsdom.**
+
+- **`tests/keyboard_ui.test.js`.** The evidence file said a plant for arrow keys/Enter/Delete
+  "would test jsdom's key-event plumbing, not the app." Answered rather than restated: dispatches
+  a genuine `KeyboardEvent` at `window` inside a real Chrome/Edge tab over CDP
+  (`tests/lib/browser.js`) — the app's own `window.addEventListener('keydown', ...)` cannot tell
+  a dispatched event from an operator's keypress, so only the INPUT SOURCE was ever jsdom's, and
+  this removes it. Two real checks first (arrow-key focus movement, Enter-opens-picker /
+  Delete-clears), THEN two planted breaks on copies of `dist/index.html`
+  (`tests/lib/mutant.js`'s `withMutantDist`, tree untouched): emptying `const ARROWS = {...}`
+  leaves `U.focus` at `null` after `ArrowDown`; neutering the `Delete`/`Backspace` branch's
+  `resetPin()` call leaves an assigned pin's state unchanged. Both watched red before being
+  trusted. Found two bugs of my own along the way, not the app's: `assert.deepEqual` does not
+  exist on this harness (`tests/lib/harness.js` only has `.deep`), and `E.pins[canon(pin)]` has
+  NO entry at all for an unclaimed pin — `pinState()` (`tests/lib/app.js`) already falls back to
+  `'unused'` for exactly that reason, and my first draft forgot to. Fixed both, not the app.
+  `node tests/run.js "keyboard_ui"`: 4/4. Evidence file and §2 B updated for this one row; the
+  label-renderer row stays open, so **B is not tickable yet** — one of two gaps closed.
 
 **Current — 2026-09-13T19:45Z. Two §7 backlog items closed for real, both against the live
 engine, and one found the engine more precise than expected rather than broken.**
