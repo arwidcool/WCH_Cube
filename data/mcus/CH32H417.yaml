@@ -2336,6 +2336,33 @@ peripherals:
         help: "ch32h417_can.h:64-66. CTLR TXFP bit (ch32h417_can.c:252-259). Default matches CAN_StructInit() (ch32h417_can.c:418)."
   CMP:
     category: Analog
+    # `CMP_InitTypeDef` (ch32h417_opa.h:145-151) is applied WHOLE by
+    # `OPA_CMP_Init(CMP_InitTypeDef*)` (ch32h417_opa.h:169, ch32h417_opa.c:110-120,
+    # writes R32_CMP_CTLR bits [12:0] in one go) - `no_handle: true`, this part has one
+    # comparator (unlike CH32L103's three, so there is no `CMP_NUM` here at all - the
+    # CH32L103 instance-fixing trap this comment used to warn about does not apply to
+    # this part's silicon).
+    #
+    # `PSEL`/`NSEL` are NOT free-standing choices: they are DERIVED from the "Positive
+    # input"/"Negative input" settings above, which already decide the pad (or the
+    # internal OPA1/DAC2 tap) - offering them again as a second dropdown could disagree
+    # with the pin picker (FORMAT.md "Do not duplicate a setting"). Each is a `const:`
+    # row keyed by `depends_on:` to its setting's choice, the same shape DVP's data-width
+    # rows use.
+    #
+    # `MODE[3:0]` (CH32H417RM.md:50694-50735) is bigger than the "Output" setting
+    # models: 0000 is "drive the GPIO pad" (what "Output: OUT" claims), but 0001-1110
+    # route the comparator result INTERNALLY to one of eleven timers'
+    # break/capture inputs (TIM1_BKIN, TIM8_BKIN, TIMx_CH4 x8, LPTIM1/2_CH1) with NO pad
+    # involved, and 1111 turns the output off entirely. Modelling only 0000 (const,
+    # depends_on Output=OUT) rather than adding an eleven-target second setting that
+    # could contradict the pin claim - TASKS.md line for the internal-routing capability,
+    # not guessed into an unverified interaction with the pin picker.
+    #
+    # `OPA_CMP_Cmd(ENABLE)` (ch32h417_opa.c:149-159) is a SEPARATE call after
+    # `OPA_CMP_Init()`, same gap as DAC's `DAC_Cmd` (comment above, `channel_params` /
+    # plain `params:` have no slot for a required follow-up call) - the four real fields
+    # below configure the comparator but do not yet enable it.
     settings:
       - name: "Positive input"
         choices:
@@ -2348,7 +2375,7 @@ peripherals:
           - { name: Disable }
           - { name: N0, signals: [N0] }
           - { name: N1, signals: [N1] }
-          - { name: "N2 (DAC1 output, internal - claims no pin)" }
+          - { name: "N2 (DAC channel 2 output, internal - claims no pin)" }
       - name: Output
         choices:
           - { name: Disable }
@@ -2359,6 +2386,88 @@ peripherals:
       OUT: [{ pin: PB12, af: 13 }, { pin: PE15, af: 13 }, { pin: PE12, af: 13 }, { pin: PE6, af: 11 }, { pin: PA6, af: 10 }, { pin: PA8, af: 12 }, { pin: PC5, af: 13 }]
       P0: [{ pin: PB0 }]
       P1: [{ pin: PB2 }]
+    params:
+      - key: psel_p0
+        name: Positive input select
+        struct: CMP_InitTypeDef
+        sdk_field: PSEL
+        const: CMP_CHP_0
+        depends_on: { setting: "Positive input", equals: P0 }
+        help: "R32_CMP_CTLR PSEL[1:0]=00 (CH32H417RM.md:50767-50768). Derived from the Positive input setting, not a separate choice."
+      - key: psel_p1
+        name: Positive input select
+        struct: CMP_InitTypeDef
+        sdk_field: PSEL
+        const: CMP_CHP_1
+        depends_on: { setting: "Positive input", equals: P1 }
+        help: "R32_CMP_CTLR PSEL[1:0]=01 (CH32H417RM.md:50769-50770)."
+      - key: psel_p2
+        name: Positive input select
+        struct: CMP_InitTypeDef
+        sdk_field: PSEL
+        const: CMP_OPA1
+        depends_on: { setting: "Positive input", equals: "P2 (OPA1 output, internal - claims no pin)" }
+        help: "R32_CMP_CTLR PSEL[1:0]=10, OPA1 output (CH32H417RM.md:50771-50772)."
+      - key: nsel_n0
+        name: Negative input select
+        struct: CMP_InitTypeDef
+        sdk_field: NSEL
+        const: CMP_CHN0
+        depends_on: { setting: "Negative input", equals: N0 }
+        help: "R32_CMP_CTLR NSEL[1:0]=00 (CH32H417RM.md:50756-50758)."
+      - key: nsel_n1
+        name: Negative input select
+        struct: CMP_InitTypeDef
+        sdk_field: NSEL
+        const: CMP_CHN1
+        depends_on: { setting: "Negative input", equals: N1 }
+        help: "R32_CMP_CTLR NSEL[1:0]=01 (CH32H417RM.md:50759-50760)."
+      - key: nsel_n2
+        name: Negative input select
+        struct: CMP_InitTypeDef
+        sdk_field: NSEL
+        const: CMP_DAC2
+        depends_on: { setting: "Negative input", equals: "N2 (DAC channel 2 output, internal - claims no pin)" }
+        help: >
+          R32_CMP_CTLR NSEL[1:0]=10, "DAC2 output (PA5)" (CH32H417RM.md:50761-50762) -
+          DAC CHANNEL 2's own output pin, not channel 1's (PA4). DISAGREEMENT: DS
+          Table 2-2-22 reads "DAC1_OUT/CMP_N2" (CH32H417DS0.md:7368); the register-level
+          RM text is followed here as the more specific source. Recorded, not averaged.
+      - key: mode_gpio
+        name: Output routing
+        struct: CMP_InitTypeDef
+        sdk_field: Mode
+        const: OUT_TO_IO
+        depends_on: { setting: Output, equals: OUT }
+        help: >
+          R32_CMP_CTLR MODE[3:0]=0000, "Connect to GPIO" (CH32H417RM.md:50694-50698).
+          Derived from the Output setting. The other 15 MODE codes route the result to
+          an internal timer break/capture input instead of a pad (CH32H417RM.md:
+          50699-50734) - not modelled, TASKS.md line.
+      - key: vref
+        name: Internal bias voltage
+        struct: CMP_InitTypeDef
+        sdk_field: VREF
+        type: enum
+        default: Disabled
+        options:
+          - { name: Disabled,       value: 0, sdk: CMP_VREF_OFF }
+          - { name: "1/4 VDD33A",   value: 1, sdk: CMP_VREF_25PER_VDD }
+          - { name: "1/2 VDD33A",   value: 2, sdk: CMP_VREF_50PERT_VDD }
+          - { name: "3/4 VDD33A",   value: 3, sdk: CMP_VREF_75PERC_VDD }
+        help: "R32_CMP_CTLR VREF[1:0], CH32H417RM.md:50666-50677. Default matches the EVT's OPA_CMP_StructInit() (ch32h417_opa.c) and the register reset (both 0)."
+      - key: hypsel
+        name: Hysteresis voltage
+        struct: CMP_InitTypeDef
+        sdk_field: HYPSEL
+        type: enum
+        default: 0 mV
+        options:
+          - { name: 0 mV,  value: 0, sdk: CMP_HYPSEL_OFF }
+          - { name: 10 mV, value: 1, sdk: CMP_HYPSEL_10mV }
+          - { name: 20 mV, value: 2, sdk: CMP_HYPSEL_20mV }
+          - { name: 30 mV, value: 3, sdk: CMP_HYPSEL_30mV }
+        help: "R32_CMP_CTLR HYPSEL[1:0], CH32H417RM.md:50678-50689. Default matches the register reset (0)."
   CRC:
     category: System Core
     settings:
@@ -8241,8 +8350,24 @@ codegen:
     FMC_SDRAM_TimingTypeDef:
       embed:
         timing: { into: FMC_SDRAM_InitTypeDef, member: FMC_SDRAM_Timing }   # ch32h417_fmc.h:244
+    # CAN_Init(CAN_TypeDef*, CAN_InitTypeDef*) (ch32h417_can.h:342) takes a handle - CAN1/
+    # CAN2/CAN3 share this one entry, `periph_handle` below tells it which register block.
+    CAN_InitTypeDef:         { fn: CAN_Init }   # ch32h417_can.h:342
+    # OPA_Init(OPA_Num_TypeDef, OPA_InitTypeDef*) (ch32h417_opa.h) also takes a handle, but
+    # a PER-INSTANCE one (OPA1/OPA2/OPA3) - not in `periph_handle` (that is one entry per
+    # PERIPHERAL, and OPA is one peripheral with three instances). The handle comes from
+    # `channel_params.instances.<n>.handle` instead, same as DAC's `DAC_Channel_1/2`.
+    OPA_InitTypeDef:         { fn: OPA_Init }   # ch32h417_opa.h
+    # OPA_CMP_Init(CMP_InitTypeDef*) (ch32h417_opa.h:169) takes the struct ALONE - this
+    # part has ONE comparator (unlike CH32L103's three), so no CMP_NUM/handle exists.
+    CMP_InitTypeDef:         { fn: OPA_CMP_Init, no_handle: true }   # ch32h417_opa.h:169
 
   periph_handle:
+    # CAN1/CAN2/CAN3 are the SDK's own register-block names (ch32h417.h:1743-1747 casts
+    # all three CAN_TypeDef* bases identically, AGENT-2 board finding), so no rename.
+    CAN1:   CAN1
+    CAN2:   CAN2
+    CAN3:   CAN3
     USART1: USART1
     USART2: USART2
     USART3: USART3

@@ -1108,9 +1108,18 @@ MODES: dict[str, list[dict]] = {
     #              PE15(AF13)
     #
     # P2 and N2 are the two that are NOT pads: `OPA1_OUT` is the op-amp's own output
-    # routed internally, and `DAC1_OUT` likewise. They are offered as choices with no
-    # `signals:` - naming a signal there would reference a pad that does not exist - and
-    # the internal route is in the label so the user knows no pin is being claimed.
+    # routed internally, and the CMP's own N2 tap likewise. They are offered as choices
+    # with no `signals:` - naming a signal there would reference a pad that does not
+    # exist - and the internal route is in the label so the user knows no pin is being
+    # claimed.
+    #
+    # N2's label says DAC CHANNEL 2, not DAC1 as DS Table 2-2-22 reads ("DAC1_OUT/CMP_N2")
+    # - the RM's own register bit description disagrees with its own datasheet:
+    # `R32_CMP_CTLR.NSEL[1:0]` = 10 is "DAC2 output (PA5)" (CH32H417RM.md:50761-50762),
+    # and PA5 is DAC channel 2's own output pin (ch32h417.h / DAC_OUT2), not channel 1's
+    # (PA4). Recorded as a disagreements: entry (data/coverage/CH32H417.yaml) rather than
+    # silently kept wrong; the register-level RM text is followed here as the more
+    # specific source for what the silicon does.
     "CMP": [
         {"name": "Positive input",
          "choices": [{"name": "Disable"},
@@ -1121,7 +1130,7 @@ MODES: dict[str, list[dict]] = {
          "choices": [{"name": "Disable"},
                      {"name": "N0", "signals": ["N0"]},
                      {"name": "N1", "signals": ["N1"]},
-                     {"name": "N2 (DAC1 output, internal - claims no pin)"}]},
+                     {"name": "N2 (DAC channel 2 output, internal - claims no pin)"}]},
         {"name": "Output",
          "choices": [{"name": "Disable"}, {"name": "OUT", "signals": ["OUT"]}]},
     ],
