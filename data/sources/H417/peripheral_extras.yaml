@@ -642,6 +642,158 @@ _params:
           row is greyed until the input buffer is on: "ADC_Buffer needs to be enabled to use
           this function."
 
+  # CAN1/CAN2/CAN3 share ONE struct, ONE init function, same shape as the usart/spi/i2c
+  # templates above - ch32h417.h:1743-1747 casts all three CAN_TypeDef* bases identically
+  # (AGENT-2, board), CAN_InitTypeDef (ch32h417_can.h:23-67) is applied whole by
+  # `CAN_Init(CAN_TypeDef*, CAN_InitTypeDef*)` (:342), and `CAN1`/`CAN2`/`CAN3` are already
+  # the SDK's own register-block names (ch32h417.h:1743-1747) so `periph_handle` needs no
+  # override. `CAN_Init()` (ch32h417_can.c:91-266) applies every one of the eleven fields
+  # unconditionally - TTCM/ABOM/AWUM/NART/RFLM/TXFP each get their own CTLR bit, and
+  # Mode/SJW/BS1/BS2/Prescaler are composed into one BTIMR write (:258-262) - so nothing
+  # here is a dead field the way ETH's struct had two dozen of (board, 00:20Z).
+  #
+  # Defaults are `CAN_StructInit()`'s own (ch32h417_can.c:411-424) rather than one EVT
+  # example's bit-timing (Evt/EXAM/CAN/Networking/Common/hardware.c:451-462 tunes
+  # Prescaler/BS1/BS2/NART for a specific bus speed and clock, which is a board fact, not
+  # a part fact) - StructInit is the vendor's own "no bus assumed yet" answer and every
+  # FunctionalState field there is DISABLE, which is also the safer power-on-reset-shaped
+  # default for a peripheral a user has not touched yet.
+  can: &can_params |
+    params:
+      - key: prescaler
+        name: Baud rate prescaler
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_Prescaler
+        type: int
+        default: 1
+        min: 1
+        max: 1024
+        help: "ch32h417_can.h:24-25 (\"ranges from 1 to 1024\"). BTIMR[9:0] = prescaler - 1 (ch32h417_can.c:262). Default matches CAN_StructInit() (ch32h417_can.c:423)."
+      - key: mode
+        name: Mode
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_Mode
+        type: enum
+        default: Normal
+        options:
+          - { name: Normal,                    value: 0, sdk: CAN_Mode_Normal }
+          - { name: Loopback,                  value: 1, sdk: CAN_Mode_LoopBack }
+          - { name: Silent,                     value: 2, sdk: CAN_Mode_Silent }
+          - { name: "Silent loopback",          value: 3, sdk: CAN_Mode_Silent_LoopBack }
+        help: "ch32h417_can.h:163-166. BTIMR[31:30] (ch32h417_can.c:258). Default matches CAN_StructInit() (ch32h417_can.c:419)."
+      - key: sjw
+        name: Resync jump width (SJW)
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_SJW
+        type: enum
+        default: 1 time quantum
+        options:
+          - { name: 1 time quantum, value: 0, sdk: CAN_SJW_1tq }
+          - { name: 2 time quanta,  value: 1, sdk: CAN_SJW_2tq }
+          - { name: 3 time quanta,  value: 2, sdk: CAN_SJW_3tq }
+          - { name: 4 time quanta,  value: 3, sdk: CAN_SJW_4tq }
+        help: "ch32h417_can.h:178-181. BTIMR[25:24] (ch32h417_can.c:259). Default matches CAN_StructInit() (ch32h417_can.c:420)."
+      - key: bs1
+        name: Bit segment 1 (BS1)
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_BS1
+        type: enum
+        default: 4 time quanta
+        options:
+          - { name: 1 time quantum,   value: 0,  sdk: CAN_BS1_1tq }
+          - { name: 2 time quanta,    value: 1,  sdk: CAN_BS1_2tq }
+          - { name: 3 time quanta,    value: 2,  sdk: CAN_BS1_3tq }
+          - { name: 4 time quanta,    value: 3,  sdk: CAN_BS1_4tq }
+          - { name: 5 time quanta,    value: 4,  sdk: CAN_BS1_5tq }
+          - { name: 6 time quanta,    value: 5,  sdk: CAN_BS1_6tq }
+          - { name: 7 time quanta,    value: 6,  sdk: CAN_BS1_7tq }
+          - { name: 8 time quanta,    value: 7,  sdk: CAN_BS1_8tq }
+          - { name: 9 time quanta,    value: 8,  sdk: CAN_BS1_9tq }
+          - { name: 10 time quanta,   value: 9,  sdk: CAN_BS1_10tq }
+          - { name: 11 time quanta,   value: 10, sdk: CAN_BS1_11tq }
+          - { name: 12 time quanta,   value: 11, sdk: CAN_BS1_12tq }
+          - { name: 13 time quanta,   value: 12, sdk: CAN_BS1_13tq }
+          - { name: 14 time quanta,   value: 13, sdk: CAN_BS1_14tq }
+          - { name: 15 time quanta,   value: 14, sdk: CAN_BS1_15tq }
+          - { name: 16 time quanta,   value: 15, sdk: CAN_BS1_16tq }
+        help: "ch32h417_can.h:184-199. BTIMR[19:16] (ch32h417_can.c:260). Default matches CAN_StructInit() (ch32h417_can.c:421)."
+      - key: bs2
+        name: Bit segment 2 (BS2)
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_BS2
+        type: enum
+        default: 3 time quanta
+        options:
+          - { name: 1 time quantum, value: 0, sdk: CAN_BS2_1tq }
+          - { name: 2 time quanta,  value: 1, sdk: CAN_BS2_2tq }
+          - { name: 3 time quanta,  value: 2, sdk: CAN_BS2_3tq }
+          - { name: 4 time quanta,  value: 3, sdk: CAN_BS2_4tq }
+          - { name: 5 time quanta,  value: 4, sdk: CAN_BS2_5tq }
+          - { name: 6 time quanta,  value: 5, sdk: CAN_BS2_6tq }
+          - { name: 7 time quanta,  value: 6, sdk: CAN_BS2_7tq }
+          - { name: 8 time quanta,  value: 7, sdk: CAN_BS2_8tq }
+        help: "ch32h417_can.h:202-209. BTIMR[22:20] (ch32h417_can.c:260, shifted 20). Default matches CAN_StructInit() (ch32h417_can.c:422)."
+      - key: ttcm
+        name: Time-triggered communication
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_TTCM
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_can.h:44-46. CTLR TTCM bit (ch32h417_can.c:196-203). Default matches CAN_StructInit() (ch32h417_can.c:413)."
+      - key: abom
+        name: Automatic bus-off management
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_ABOM
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_can.h:48-50. CTLR ABOM bit (ch32h417_can.c:212-221). Default matches CAN_StructInit() (ch32h417_can.c:414)."
+      - key: awum
+        name: Automatic wake-up
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_AWUM
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_can.h:52-54. CTLR AWUM bit (ch32h417_can.c:225-232). Default matches CAN_StructInit() (ch32h417_can.c:415)."
+      - key: nart
+        name: No automatic retransmission
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_NART
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_can.h:56-58. CTLR NART bit (ch32h417_can.c:234-241). Default matches CAN_StructInit() (ch32h417_can.c:416); the Networking EVT example enables it instead (hardware.c:455) for its own bus - a board choice, not this default."
+      - key: rflm
+        name: Receive FIFO locked mode
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_RFLM
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_can.h:60-62. CTLR RFLM bit (ch32h417_can.c:243-250). Default matches CAN_StructInit() (ch32h417_can.c:417)."
+      - key: txfp
+        name: Transmit FIFO priority
+        struct: CAN_InitTypeDef
+        sdk_field: CAN_TXFP
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_can.h:64-66. CTLR TXFP bit (ch32h417_can.c:252-259). Default matches CAN_StructInit() (ch32h417_can.c:418)."
+
   # DVP - THE DATA WIDTH IS ALREADY A SETTING, so it is not offered a second time as a
   # dropdown that could disagree with it. `Mode` (Disable / 8-bit / 10-bit / 12-bit) is what
   # claims D8-D11, and `DVP_CR0.DATA_SIZE` has to say the same thing, so the member is
@@ -1749,6 +1901,10 @@ extras:
 
   ADC1: { yaml: *adc_params }
   ADC2: { yaml: *adc_params }
+
+  CAN1: { yaml: *can_params }
+  CAN2: { yaml: *can_params }
+  CAN3: { yaml: *can_params }
 
   DVP:   { yaml: *dvp_params }
   IPC:   { yaml: *ipc_params }
