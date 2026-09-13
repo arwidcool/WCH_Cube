@@ -1173,17 +1173,13 @@ export function initPlan(pid) {
       notes.push(`${d.name} = ${paramValue(pid, d.key)} — the MCU file says neither struct:, sdk_call: nor sdk_none:`);
       continue;
     }
-    if (!d.sdk_field) {
-      notes.push(`${d.name}: struct: ${d.struct} without an sdk_field:, so the member name is unknown`);
-      continue;
-    }
     // Two params can name the SAME struct: but a struct member that is a pointer to a
     // second struct (below) needs TWO separate instances of that second struct, one per
     // pointer member — grouping by struct name alone would merge FMC_ReadWriteTimingStruct's
     // fields and FMC_WriteTimingStruct's fields into one block. `embed:` disambiguates.
     let block = structs.find(b => b.struct === d.struct && b.embed === (d.embed || null));
+    const spec = (cg.init_structs || {})[d.struct] || {};
     if (!block) {
-      const spec = (cg.init_structs || {})[d.struct] || {};
       // A single-instance peripheral's Init takes the struct ALONE: OPA_Init(&s), not
       // OPA_Init(OPA, &s) (ch32v00X_opa.h). The data says so; it is not guessable.
       structs.push(block = {
@@ -1194,12 +1190,60 @@ export function initPlan(pid) {
         // "add codegen.periph_handle.USBFS" would be wrong advice for it - the key is
         // already there.
         handleMissing: spec.no_handle ? null : hs.missing,
-        fields: [], missing: [],
+        fields: [], missing: [], extraArgs: [], extraArgsOk: true,
         // Set below this loop, once every block has all its fields, for a block whose
         // `embed:` names a real `codegen.init_structs.<struct>.embed.<key>` entry: the
         // block it is a pointer INTO. Left null for an ordinary (non-nested) struct.
         embed: d.embed || null, embedInto: null,
       });
+    }
+    // `call_arg: true` — a param whose value is a SCALAR ARGUMENT the struct's own apply
+    // call needs beside the struct pointer, not a struct member at all. CH32H417 ETH is
+    // the proven case: `ETH_RegInit(ETH_InitTypeDef* ETH_InitStruct, uint16_t PHYAddress)`
+    // (Evt/EXAM/ETH/.../ETH_Driver/eth_driver_100M.c:482, byte-identical in the RGMII
+    // variant) takes the PHY's own MDIO address beside the struct - a real per-board
+    // choice (which physical PHY chip answers on the bus), not a member `ETH_InitTypeDef`
+    // has anywhere, and not guessable from a struct name the way `embed:`'s member
+    // lookup already refuses to guess a function name. Extra args are emitted in
+    // DECLARATION order, after the struct pointer, by `periphBlock()`.
+    if (d.call_arg) {
+      const lit = paramLiteral(pid, d);
+      if (lit.missing) {
+        // A struct MEMBER left unresolved still compiles - it stays at its zeroed
+        // default and the TODO above says why. An unresolved CALL ARGUMENT cannot: the
+        // call would compile with the wrong argument count, which is not a
+        // "plausible-looking wrong" value, it is a build failure with no comment
+        // explaining it. So the whole call is withheld (`extraArgsOk`, read by
+        // `periphBlock()`) rather than emitted short one argument.
+        block.missing.push(`extra call argument: ${lit.missing}`);
+        block.extraArgsOk = false;
+      } else block.extraArgs.push({ text: lit.text, name: d.name, value: paramValue(pid, d.key) });
+      continue;
+    }
+    if (!d.sdk_field) {
+      notes.push(`${d.name}: struct: ${d.struct} without an sdk_field:, so the member name is unknown`);
+      continue;
+    }
+    // `codegen.init_structs.<struct>.dead_fields` — a member the data says is UNMODELLABLE,
+    // not merely unmodelled: it compiles, looks like a real setting, and changes NOTHING
+    // on real hardware, because the one function this generator can call to apply the
+    // struct never reads it. CH32H417 ETH is the proven case: `ETH_RegInit()` (the only
+    // function that ever applies `ETH_InitTypeDef` to hardware — there is no `ETH_Init()`
+    // in `Peripheral/src` at all) reads 26 of the struct's 47 fields; the other 21 are
+    // filled ONLY by `ETH_StructInit()` (ch32h417_eth.c:44-95, which nothing reads back)
+    // and never appear in either driver variant's call site. Modelling those 21 would
+    // ship settings that compile, render in the UI, and do nothing — exactly the
+    // "plausible-looking wrong code" class this generator exists to refuse, and a gap
+    // nobody has forbidden is a gap someone eventually fills by accident. A param naming
+    // a `dead_fields` member is refused here, loudly, as a TODO on the STRUCT'S OWN
+    // block (`block.missing`, not the quiet `notes` list `sdk_manual`/`sdk_none` use for
+    // an intentional, cited gap) — so `--strict`/`cComplaints()` catch it exactly like
+    // any other refusal, and it cannot be added back by accident without a red gate.
+    if ((spec.dead_fields || []).includes(d.sdk_field)) {
+      block.missing.push(`${d.name}: struct: ${d.struct}.${d.sdk_field} is in codegen.init_structs.`
+        + `${d.struct}.dead_fields — set by a StructInit() default that ${block.fn || 'the applying function'} `
+        + 'never reads, so modelling it would ship a setting that compiles and does nothing. Remove this param row');
+      continue;
     }
     const lit = paramLiteral(pid, d);
     if (lit.missing) block.missing.push(lit.missing);
@@ -1558,8 +1602,24 @@ function periphBlock(pid) {
         // `embed:` named a key `codegen.init_structs` does not resolve; already reported
         // in `b.missing` above. Falling through to "nothing applies this struct" would
         // ask for a `.fn` this struct is never meant to have.
-      } else if (b.fn && (b.handle || b.noHandle)) {
-        L.push(`        ${b.fn}(${b.noHandle ? '' : `${b.handle}, `}&${varName});`);
+      } else if (b.fn && (b.handle || b.noHandle) && b.extraArgsOk !== false) {
+        // `extraArgs` — call_arg: true params (ETH's PHYAddress): scalars the apply
+        // call needs beside the struct pointer, appended in declaration order, each
+        // named in a trailing comment so the value's SOURCE param is never a mystery.
+        const extra = (b.extraArgs || []).length
+          ? `, ${b.extraArgs.map(a => a.text).join(', ')}` : '';
+        const extraNote = (b.extraArgs || []).length
+          ? ` + ${b.extraArgs.map(a => `${a.name}: ${a.value}`).join(', ')}` : '';
+        L.push(`        ${b.fn}(${b.noHandle ? '' : `${b.handle}, `}&${varName}${extra});`
+          + (extraNote ? `   /*${extraNote} */` : ''));
+      } else if (b.extraArgsOk === false) {
+        // A call_arg: true param could not be resolved (its own TODO is already above,
+        // in `b.missing`). The call is withheld ENTIRELY rather than emitted one
+        // argument short - a wrong argument count is a build failure with nothing
+        // explaining it, not the "plausible-looking wrong" value a struct member left
+        // at zero would be.
+        L.push(`        /* ${b.fn || 'the apply call'} is not written: see the TODO above naming the`);
+        L.push('           unresolved argument. Calling it short one argument would not compile. */');
       } else {
         L.push('        /* TODO: nothing applies this struct. The MCU file needs');
         if (!b.fn) L.push(`           codegen.init_structs.${b.struct}.fn — the SDK function that takes a ${b.struct}`);

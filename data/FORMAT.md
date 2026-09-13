@@ -517,6 +517,66 @@ refuses to do.
 entries and TIM1's has eight. That is the same rule as `gpio.speeds`: what the part does
 not have is not offered.
 
+### `call_arg: true` — a scalar the apply call needs beside the struct pointer
+
+Every mechanism above assumes the function that applies a struct takes the struct alone
+(or the struct plus the peripheral's own handle). CH32H417's Ethernet MAC does not:
+`ETH_RegInit(ETH_InitTypeDef* ETH_InitStruct, uint16_t PHYAddress)` (found only in EXAMPLE
+driver code, `Evt/EXAM/ETH/.../ETH_Driver/eth_driver_100M.c:482` — there is no `ETH_Init()`
+in `Peripheral/src` at all) takes a second argument that is not a struct member anywhere:
+the MDIO address of whichever PHY chip the board actually wires up, a real per-board
+choice, not a fixed fact `const:` could name.
+
+```yaml
+peripherals:
+  ETH:
+    params:
+      - key: phy_addr
+        name: PHY address
+        struct: ETH_InitTypeDef
+        call_arg: true          # NOT a struct member - an extra argument to its apply call
+        type: int
+        default: 1              # cite the EVT's own gPHYAddress, not a guess
+        min: 0
+        max: 31
+        help: "ETH_RegInit()'s second argument - which MDIO address the board's PHY answers to."
+```
+
+A `call_arg:` param is still an ordinary, editable, validated `params:` row — `type:`,
+`min:`/`max:`, `default:` all mean what they always mean. The only difference is where its
+value lands: appended to the struct's own apply call, in declaration order, after the
+struct pointer (`ETH_RegInit(&ETH_InitStructure, 1)`), rather than assigned to a member. A
+struct may have more than one `call_arg:` row; they are emitted in the order they appear.
+
+### `codegen.init_structs.<struct>.dead_fields` — a member that must never be modelled
+
+Not every field of a struct the generator CAN fill is a field the generator CAN apply.
+CH32H417's `ETH_InitTypeDef` is 47 fields, but `ETH_RegInit()` — the only function that
+ever applies it to hardware — reads just 26 of them (confirmed identical in both driver
+variants, 100M and RGMII); the other 21 are filled only by `ETH_StructInit()`'s defaults,
+which nothing reads back. A `params:` row for one of those 21 would compile, render as an
+ordinary control in the UI, and change nothing on the board — the exact "plausible-looking
+wrong code" this generator exists to refuse, and refusing it once by not writing the row is
+not the same as refusing it FOREVER: the next person to open the header sees a real struct
+member and a gap that looks like an oversight.
+
+```yaml
+codegen:
+  init_structs:
+    ETH_InitTypeDef:
+      fn: ETH_RegInit
+      dead_fields: [AutoNegotiation, CarrierSense, Speed, ReceiveOwn, Mode, RetryTransmission,
+                    BackOffLimit, DeferralCheck, ZeroQuantaPause, PauseLowThreshold,
+                    ReceiveStoreForward, FlushReceivedFrame, TransmitThresholdControl,
+                    ReceiveThresholdControl, SecondFrameOperate, AddressAlignedBeats,
+                    FixedBurst, RxDMABurstLength, TxDMABurstLength, DescriptorSkipLength,
+                    DMAArbitration]
+```
+
+A `params:` row whose `sdk_field:` names a listed member is refused with a TODO on the
+struct's own block — the same `--strict`-visible failure as a missing `fn:` or handle, not
+a quiet note — so adding one of the 21 back is a red gate, not a silent, accepted mistake.
+
 ### Give every enum its register encoding
 
 Write `options` as `{ name, value }` whenever the reference manual states the field

@@ -102,6 +102,10 @@ export function normaliseParamDefs(list) {
     // `sdkCalls()`). Carried through untouched like the other sdk_* keys above; nothing
     // here interprets it.
     sdk_call_order: d.sdk_call_order || null,
+    // A scalar the struct's own apply call needs BESIDE the struct pointer, not a
+    // struct member (`ETH_RegInit(ETH_InitTypeDef*, uint16_t PHYAddress)` — see
+    // codegen.js `initPlan()`). Carried through like every other sdk_* key above.
+    call_arg: !!d.call_arg,
     sdk_none: !!d.sdk_none, sdk_note: d.sdk_note || '',
     // The SDK exposes a setter, but this generator's one-shot init function is not a
     // safe place to call it (LTDC's pixel format — the setter is unsafe before the
