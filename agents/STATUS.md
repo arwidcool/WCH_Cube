@@ -92,17 +92,33 @@ rather than skip (run 34721092664 prints `::notice compile gates that ran: 16`, 
 job's `20 test(s) SKIPPED` for the same suites); the `Coverage ledger` step prints `6 of 6` **on
 the runner**; `desktop` green.
 
-- [ ] **`DECISION | worktrees ON`** — **checked 2026-09-13T20:15Z (AGENT-3) and still NOT posted.**
-      The condition is three consecutive commits from different agents seen green ON A RUNNER.
-      What is actually there: run 66 (`448b628`, AGENT-2) is a completed **failure**; run 67
-      (`593a82e`, AGENT-2) is a completed, fully-green success; run 68 (`0f259c7`, AGENT-3, just
-      pushed by this check) is still **in progress**. Every commit between 66 and 67 —
-      `3bfc9e5`/`ff7d48d`/`668a315`/`ceb9b46` — has **no CI run of its own** (batched into a later
-      push; GitHub runs once per push, not once per commit). So there are not three consecutive
-      GREEN runs to point at, only one, and the sample is smaller than the commit list makes it
-      look — reporting three-different-agents-in-a-row by commit AUTHOR, as if that meant
-      three-in-a-row SEEN GREEN, is exactly the gap this line exists to catch. Revisit once run 68
-      completes and, ideally, once pushes happen one commit at a time so CI actually reads each one.
+**The stale-`dist` defect — four CI failures, one cause — now has a guard, closed
+2026-09-13T20:38Z (AGENT-3).** Two data commits that did not rebuild, one clean-clone build
+overtaken by later commits, and run 66 (`448b628`) failing at `dist/index.html is up to date`
+and then **skipping** fonts/browser-detect/Run tests, so that commit shipped with no test result
+at all. `scripts/check_dist_fresh.js` runs the same rebuild-and-diff check locally, but only when
+a commit being pushed touches something `build.py` reads (`app/template.html`, `app/engine/**`,
+`app/assets/**`, `data/**`, `build.py`) — anything else costs nothing. `scripts/install_hooks.js`
+wires it into `.git/hooks/pre-push`; installed on this shared clone already, covering all three
+agents' pushes from this box. `.github/workflows/ci.yml`'s own step now uses
+`continue-on-error: true` plus a final re-raising step, so a stale `dist` no longer skips the
+real tests — the job still fails, but only after everything else has had a chance to report.
+
+- [ ] **`DECISION | worktrees ON` — the condition itself was redefined 2026-09-13T20:39Z
+      (AGENT-3, board DECISION), because the old wording cannot be evaluated.** "Three
+      consecutive commits from different agents seen green" presumes one CI run per commit;
+      GitHub runs `ci.yml` once per **push**, so a multi-commit push produces one run and
+      most commits get none — the condition could fail for reasons that have nothing to do
+      with quality. **New wording: the three most recent COMPLETED CI runs on `main` are all
+      green (every job success), and their three head commits were authored by three
+      DIFFERENT agents.** Checkable directly from run number + conclusion + head commit
+      author, no ambiguity about batching. **Applied honestly, not just redefined**: as of
+      20:39Z the three most recent completed runs are 70 (`33fd841`, AGENT-2, success), 69
+      (`f198d31`, AGENT-3, success), 68 (`0f259c7`, AGENT-3, success) — green, but only two
+      distinct agents, not three; AGENT-1's most recent completed, dedicated run is 65
+      (`b1eff49`), well back, because AGENT-1's latest commit (`4d15726`) was bundled into a
+      later push and never got a run of its own. **STILL NOT MET, under either wording. Not
+      posted.**
 
 The 31 red runs, and why nobody saw them: `tests/evidence/round6/2026-09-12-ci-30-failures.md`.
 Three fixes that outlive it — annotations must not sit behind a failing pipeline (`bash -eo

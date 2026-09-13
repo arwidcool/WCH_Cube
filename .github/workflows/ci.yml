@@ -109,7 +109,20 @@ jobs:
         run: python build.py
 
       # build.py output is committed; a diff here means someone shipped a stale build.
+      #
+      # `continue-on-error: true` is load-bearing, not leniency. Run 66 (2026-09-13,
+      # 448b628) failed HERE and every step after it - fonts, browser-detect, Run tests -
+      # SKIPPED in consequence, so that commit shipped with NO test result at all, which
+      # is worse than a plain red: a real regression in the same push would have read as
+      # "nothing ran" rather than "this failed". This is the fourth time a stale dist has
+      # failed CI (two data commits that did not rebuild, one clean-clone build overtaken
+      # by later commits, now this one) and all four share the same cause: the job stopped
+      # instead of reporting. The job still fails overall - see "the commit still fails
+      # the job" below - but now only after the real tests have had a chance to say
+      # something about the commit that shipped a stale build.
       - name: dist/index.html is up to date
+        id: dist_fresh
+        continue-on-error: true
         run: |
           if ! git diff --quiet -- dist/index.html; then
             echo "::error file=dist/index.html::dist/index.html is stale - run 'python build.py' and commit the result"
@@ -190,6 +203,16 @@ jobs:
           grep -E 'ALL GREEN|test\(s\) SKIPPED' run.log | sed 's/^/::notice title=verdict::/' || true
           grep -E '^  - tests/' run.log | sed 's/^/::notice title=skipped::/' || true
           exit "$rc"
+
+      # The commit still fails the job - `continue-on-error` on the step above buys the
+      # real tests a chance to run and report, it does not excuse a stale build. This
+      # step only re-raises a failure `dist_fresh` already found; it changes nothing
+      # about whether the job passes, only when the rest of the log gets written.
+      - name: the commit still fails the job if dist/index.html was stale
+        if: steps.dist_fresh.outcome == 'failure'
+        run: |
+          echo "::error::dist/index.html was stale earlier in this job (see 'dist/index.html is up to date' above). The tests above ran and their own result stands, but this commit still ships a stale build and the job must still fail."
+          exit 1
 
   # ---------------------------------------------------------------------------
   firmware:
