@@ -960,15 +960,23 @@ here. Say so on the board and move it into `TASKS.md` — a backlog entry nobody
   prevent exactly that.
 
 ### The pack — AGENT-3
-- **`agents/proposals/layout-orientation.test.js` is an orphan.** Written for AGENT-4, who no longer
-  exists, and never run: every part × package × 4 rotations × mirrored at three widths, 384
-  combinations. Either `git mv` it into `tests/` and let it run, or say on the board why not — a
-  proposed test nobody owns is a check that reads as done and is not. (`agents/proposals/` also
-  holds the CH32X035 DMA derivation, which **is** live: three files in `data/` cite
-  `x035_dma_requests.py` by path.)
-- `history/round6-pack/DONE.md`'s rounds 1–5 still carry `[ ]` marks and a "15 of 24" count from
-  round 3. They are the **evidence record**, not a status — read a line for *how* something closed,
-  never for where the project stands. Re-audit or explicitly supersede.
+- ~~`agents/proposals/layout-orientation.test.js` is an orphan~~ — **closed 2026-09-13.** `git mv`d
+  to `tests/layout_orientation.test.js` and run for the first time, which found the proposal's own
+  claim was false as written: `boot()`'s `a.mcuNames` never includes the synthetic
+  `WCH-DUMMY32-C8` (it must never ship in `dist/index.html`), so the sweep was silently covering
+  only the six real parts — biggest package 129 pins, not the 144 the file's own sanity check
+  asked for. Fixed by registering the fixture into the booted page first
+  (`tests/layout.test.js`'s existing `registerMcuFile()` pattern), which is the one real edit the
+  file needed. Now 4/4 green, genuinely covering QFN12-class up through LQFP144 — planted a break
+  (`MIN_LABEL_GAP` raised to 999) and watched it fail before trusting it, reverted, re-green.
+  (`agents/proposals/` still holds the CH32X035 DMA derivation, which **is** live: three files in
+  `data/` cite `x035_dma_requests.py` by path.)
+- ~~`history/round6-pack/DONE.md`'s rounds 1–5 still carry `[ ]` marks and a "15 of 24" count from
+  round 3~~ — **closed 2026-09-13, explicitly superseded rather than re-audited.** The file's own
+  header used to claim its tail "Round 6" section "is what gates the round" — true for a few hours
+  on 2026-09-13, not since. Rewrote the header to supersede the WHOLE file, including that section,
+  in favour of the live `agents/STATUS.md`: re-auditing 729 lines under a deadline is how a
+  historical file gets a wrong count that reads as more current than the stale one it replaced.
 - **When round 6 closes:** copy `STATUS.md` and `BOARD.md` into `history/round6/`, write the round-6
   row in `history/INDEX.md`, and open round 7 by rewriting §2, §4 and §5 **in place**. The live
   files keep their names, so nothing that points at them breaks and there is never a second copy of

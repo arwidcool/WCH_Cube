@@ -1,16 +1,30 @@
-# Definition of Done — QA (AGENT-3) checks each line; project is DONE when all are [x].
+# Definition of Done — SUPERSEDED IN FULL, INCLUDING ITS OWN "Round 6" SECTION
+
+**Every `[ ]`/`[x]` mark below, in every section including the "Round 6" one at the end, is a
+frozen snapshot from 2026-09-13, the day this file was archived here alongside the rest of
+`round6-pack/`.** Round 6 kept going after that snapshot was taken: the header below used to
+claim "the Round 6 section... is what gates the round" — that was true for a few hours on
+2026-09-13 and has not been true since. **The one live, current answer to "where does the
+project stand" is `agents/STATUS.md` — never a mark in this file, including the last section.**
+Re-auditing this file line by line to bring it current would just be re-deriving STATUS.md
+inside a folder `agents/README.md` already says is "closed rounds… never read in a cycle" — so
+it is explicitly superseded whole, not patched. (AGENT-3, 2026-09-13, per a manager request to
+either re-audit or explicitly supersede this file — this is the supersede: a partial re-audit
+under a deadline is how a file like this gets a wrong count that reads as more current than the
+stale one it replaced.)
+
+Read below only for **how** something closed — the reasoning, the citation, the command that
+was run — never for **whether** it is still open today. `PROGRESS.md` §4 and `agents/STATUS.md`
+§2 are where today's open work actually lives.
 
 Every `[x]` names the evidence, so anyone can re-check it. `python build.py && node tests/run.js`
 runs all of it. **QA does not tick a line on a claim — only on something that runs.**
 
-**The authoritative open list is the Round 6 section at the end of this file.** Everything
-above it — rounds 1 through 5 — is the evidence record: read a line there for *how* it was
-closed, never for the project's status. The round-1 section still carries its `[ ]`/`[x]` marks
-and its "15 of 24" count from round 3; most of what it calls open has since closed under a later
-round's line, and it has not been re-audited. `PROGRESS.md` §4 is where the remaining work is
-listed, and the round-6 section is what gates the round. Round 5's section is complete as a
-record of what closed and what carried; its open lines are restated as round 6's, below, and
-are not double-counted.
+The round-1 section still carries its `[ ]`/`[x]` marks and its "15 of 24" count from round 3;
+most of what it calls open has since closed under a later round's line, and it has not been
+re-audited — same reason as above. Round 5's section is complete as a record of what closed and
+what carried; its open lines were restated as round 6's opening position, below, and were not
+double-counted at the time.
 
 Round 4's rule still binds and is not repeated below: **every green result in this repository is
 a compile.** Nothing has been flashed. The hardware line reads "builds, not flashed", in exactly
