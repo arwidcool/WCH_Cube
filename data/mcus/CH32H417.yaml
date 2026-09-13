@@ -1969,6 +1969,33 @@ peripherals:
       through its own registers and the clock tree only.
   DAC:
     category: Analog
+    # `DAC_InitTypeDef` (ch32h417_dac.h:22-38) is applied PER CHANNEL by
+    # `DAC_Init(uint32_t DAC_Channel, DAC_InitTypeDef*)` (ch32h417_dac.h:104), the same
+    # `channel_params`/`instances` shape this file already uses for SAI's two blocks -
+    # here keyed to the two existing "Channel 1"/"Channel 2" settings rows instead of a
+    # channel number.
+    #
+    # `output_buffer` IS A GENUINE DISAGREEMENT, recorded rather than picked quietly:
+    # `R32_DAC_CTLR` resets to `0x00000000` (CH32H417RM.md:22064) and BOFF1's own bit
+    # description reads "DAC channel1 output buffer disable control (Recommended to be
+    # enabled)" (CH32H417RM.md:22318-22320) - both point at `DAC_OutputBuffer_Enable`
+    # (value 0). The EVT's own example runs the opposite,
+    # `DAC_OutputBuffer_Disable` (Evt/EXAM/DAC/DAC_Normal_OUT/Common/hardware.c:43).
+    # Default here is Enable: two independent sources (the reset state and the RM's own
+    # recommendation) against one example's runtime choice, and a board disabling the
+    # buffer is plausibly a board fact, not a part fact - the user-visible row makes a
+    # wrong default one click from fixed either way.
+    #
+    # `DAC_Cmd(DAC_Channel_x, ENABLE)` (ch32h417_dac.h:106) is a SEPARATE call the EVT
+    # example always makes right after `DAC_Init()` (hardware.c:45) - `channel_params`
+    # has no slot for a required follow-up call today, so selecting "Output on pin"
+    # configures the channel's mode but does not yet emit the enable. Same class of gap
+    # as SAI's Frame/Slot (comment above) and I3C's target/controller split: landing the
+    # four real `DAC_InitTypeDef` fields rather than waiting on a mechanism that also
+    # does not exist yet, cited here instead of silently shipping a channel that never
+    # turns on. REQUEST to AGENT-2: `channel_params.instances.<n>` needs an optional
+    # second call (`cmd_call`/`cmd_args`, or similar) emitted after `sdk_call` succeeds.
+    # TASKS.md line.
     settings:
       - name: "Channel 1"
         choices:
@@ -1981,6 +2008,78 @@ peripherals:
     signal_pins:
       OUT1: [{ pin: PA4 }]
       OUT2: [{ pin: PA5 }]
+    channel_params:
+      struct: DAC_InitTypeDef
+      applies_per: channel
+      instances:
+        1: { sdk_call: DAC_Init, handle: DAC_Channel_1, setting: "Channel 1", active_choices: ["Output on pin"] }
+        2: { sdk_call: DAC_Init, handle: DAC_Channel_2, setting: "Channel 2", active_choices: ["Output on pin"] }
+      params:
+        - key: trigger
+          name: Trigger
+          struct: DAC_InitTypeDef
+          sdk_field: DAC_Trigger
+          type: enum
+          default: None (write DHR to convert)
+          options:
+            - { name: "None (write DHR to convert)", value: 0, sdk: DAC_Trigger_None }
+            - { name: "TIM2 TRGO",  value: 1, sdk: DAC_Trigger_T2_TRGO }
+            - { name: "TIM4 TRGO",  value: 2, sdk: DAC_Trigger_T4_TRGO }
+            - { name: "TIM5 TRGO",  value: 3, sdk: DAC_Trigger_T5_TRGO }
+            - { name: "TIM6 TRGO",  value: 4, sdk: DAC_Trigger_T6_TRGO }
+            - { name: "TIM7 TRGO",  value: 5, sdk: DAC_Trigger_T7_TRGO }
+            - { name: "TIM8 TRGO",  value: 6, sdk: DAC_Trigger_T8_TRGO }
+            - { name: "EXTI line 9", value: 7, sdk: DAC_Trigger_Ext_IT9 }
+            - { name: "Software",   value: 8, sdk: DAC_Trigger_Software }
+          help: "ch32h417_dac.h:24-25. Default matches R32_DAC_CTLR reset (TEN1=0, CH32H417RM.md:22064) and the EVT example (hardware.c:40)."
+        - key: wave
+          name: Wave generation
+          struct: DAC_InitTypeDef
+          sdk_field: DAC_WaveGeneration
+          type: enum
+          default: None
+          options:
+            - { name: None,     value: 0, sdk: DAC_WaveGeneration_None }
+            - { name: Noise,    value: 1, sdk: DAC_WaveGeneration_Noise }
+            - { name: Triangle, value: 2, sdk: DAC_WaveGeneration_Triangle }
+          help: "ch32h417_dac.h:27-28. Default matches R32_DAC_CTLR reset (WAVE1=00, CH32H417RM.md:22064) and the EVT example (hardware.c:41)."
+        - key: lfsr_mask
+          name: Noise mask / triangle amplitude
+          struct: DAC_InitTypeDef
+          sdk_field: DAC_LFSRUnmask_TriangleAmplitude
+          type: enum
+          default: "Bit 0 / amplitude 1"
+          depends_on: { param: wave, ne: None }
+          options:
+            - { name: "Bit 0 / amplitude 1",         value: 0,  sdk: DAC_LFSRUnmask_Bit0 }
+            - { name: "Bits 1:0 / amplitude 3",      value: 1,  sdk: DAC_LFSRUnmask_Bits1_0 }
+            - { name: "Bits 2:0 / amplitude 7",      value: 2,  sdk: DAC_LFSRUnmask_Bits2_0 }
+            - { name: "Bits 3:0 / amplitude 15",     value: 3,  sdk: DAC_LFSRUnmask_Bits3_0 }
+            - { name: "Bits 4:0 / amplitude 31",     value: 4,  sdk: DAC_LFSRUnmask_Bits4_0 }
+            - { name: "Bits 5:0 / amplitude 63",     value: 5,  sdk: DAC_LFSRUnmask_Bits5_0 }
+            - { name: "Bits 6:0 / amplitude 127",    value: 6,  sdk: DAC_LFSRUnmask_Bits6_0 }
+            - { name: "Bits 7:0 / amplitude 255",    value: 7,  sdk: DAC_LFSRUnmask_Bits7_0 }
+            - { name: "Bits 8:0 / amplitude 511",    value: 8,  sdk: DAC_LFSRUnmask_Bits8_0 }
+            - { name: "Bits 9:0 / amplitude 1023",   value: 9,  sdk: DAC_LFSRUnmask_Bits9_0 }
+            - { name: "Bits 10:0 / amplitude 2047",  value: 10, sdk: DAC_LFSRUnmask_Bits10_0 }
+            - { name: "Bits 11:0 / amplitude 4095",  value: 11, sdk: DAC_LFSRUnmask_Bits11_0 }
+          help: "ch32h417_dac.h:31-32. One field serves both wave modes (ch32h417_dac.h:57-71 aliases the same values as DAC_TriangleAmplitude_*). Default matches R32_DAC_CTLR reset (MAMP1=0000, CH32H417RM.md:22064) and the EVT example (hardware.c:42)."
+        - key: output_buffer
+          name: Output buffer
+          struct: DAC_InitTypeDef
+          sdk_field: DAC_OutputBuffer
+          type: enum
+          default: Enable
+          options:
+            - { name: Enable,  value: 0, sdk: DAC_OutputBuffer_Enable }
+            - { name: Disable, value: 2, sdk: DAC_OutputBuffer_Disable }
+          help: >
+            ch32h417_dac.h:36. DISAGREEMENT, recorded rather than averaged: R32_DAC_CTLR
+            resets to BOFF1=0 = Enable (CH32H417RM.md:22064) and the RM's own bit text
+            calls Enable "Recommended" (CH32H417RM.md:22318-22320); the EVT example runs
+            Disable instead (Evt/EXAM/DAC/DAC_Normal_OUT/Common/hardware.c:43). Default
+            here is Enable (reset state + RM recommendation outrank one unexplained
+            example choice) - change it if your board needs otherwise.
   DBGMCU:
     category: System Core
     settings:
@@ -5045,6 +5144,33 @@ peripherals:
       `RCC_RTCCLKSource_*` (:226-228) and `RCC_RTCCLKCmd` (:646), which SELECT and run
       the RTC clock rather than gate the bus interface. Tracked in TASKS.md, owner
       AGENT-2 for the schema half.
+    params:
+      # ch32h417_rtc.h has ZERO typedefs - every row here is applied by CALLING a
+      # function, the same shape CH32L103's RTC uses (data/mcus/CH32L103.yaml:1862-
+      # 1885). Default is this PART'S OWN EVT example, not L103's: CH32H417's
+      # RTC_Calendar example runs RCC_RTCCLKConfig(RCC_RTCCLKSource_LSI) then
+      # RTC_SetPrescaler(40000) (hardware.c:112,131) - LSI, not a 32.768 kHz LSE - so
+      # 32767 (L103's number) would be the wrong clock's math carried across parts.
+      - key: prescaler
+        name: Prescaler
+        sdk_call: RTC_SetPrescaler
+        sdk_args: [$VALUE]
+        type: int
+        group: Basic
+        default: 40000
+        min: 0
+        max: 1048575
+        help: "ch32h417_rtc.h:41. 20-bit field (CH32H417RM.md:9980, RTC_PSCRH/RTC_PSCRL PRL[19:0]). Default matches this part's own EVT example (hardware.c:112,131), which clocks RTC from LSI, not LSE - do not carry over another part's LSE-based number."
+      - key: alarm
+        name: Alarm value
+        sdk_call: RTC_SetAlarm
+        sdk_args: [$VALUE]
+        type: int
+        group: Advanced
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "ch32h417_rtc.h:42. A data compare register, not a field with a documented reset recommendation; 0 matches the EVT example's starting point (hardware.c:249)."
   SAI:
     category: Audio
     # TWO HARDWARE BLOCKS, ONE TREE PERIPHERAL, same shape as LTDC's two layers:
@@ -5345,22 +5471,28 @@ peripherals:
     # (CH32H417RM.md:11741-11768, Table 9-32) is a genuine register remap moving EVERY
     # SDMMC signal to one of three pin sets at once, the `remaps:` shape
     # (data/FORMAT.md:220-244) - not the per-pin `af:` mux every other signal on this
-    # part uses. `--strict` still exits 2 whenever a project wires SDMMC, because this
-    # part's `codegen.remap.style` is `af` and `style: af` FORBIDS
+    # part uses. This part's `codegen.remap.style` is `af` and `style: af` FORBIDS
     # `codegen.remap.fields` (data/FORMAT.md:654-657): no emitter exists that could
-    # ever WRITE SDMMC_RM, and no key exists for "GPIO_Init runs, GPIO_PinAFConfig
-    # deliberately does not, no TODO" either - confirmed against the vendor's own
-    # `SD_GPIO_Init()` (`Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113`), which
-    # calls `GPIO_Init(..., GPIO_Mode_AF_PP, ...)` and never `GPIO_PinAFConfig()`.
-    # NOT narrowed to one pin set here: `tests/h417_dedicated.test.js` (QA-owned)
-    # asserts this file's `signal_pins:` matches DS Table 2-2-12 completely, all three
-    # remap sets, so the full extraction stays and the "only RM=00 is reachable"
-    # finding is recorded rather than acted on unilaterally - it would need either a
-    # new `codegen.remap` capability that coexists with `style: af` for one peripheral,
-    # or the test learning that an unreachable remap alternative is correctly excluded.
-    # REQUEST to AGENT-2 (and AGENT-3 for the test), `agents/BOARD.md` 2026-09-13 - the
-    # same `remaps:`-on-an-`af:`-part gap as FMC's multi-bank `Chip select` checkbox
-    # and SAI's Frame/Slot structs.
+    # ever WRITE SDMMC_RM, confirmed against the vendor's own `SD_GPIO_Init()`
+    # (`Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113`), which calls
+    # `GPIO_Init(..., GPIO_Mode_AF_PP, ...)` and never `GPIO_PinAFConfig()` - the pad
+    # reaches SDMMC through the register field, not the AFRL/AFRH nibble
+    # `GPIO_PinAFConfig` writes.
+    #
+    # `signal_pins:` BELOW REPLACES THE GENERATOR'S OWN, narrowed to `SDMMC_RM=00` (the
+    # reset default, needing no register write at all - the only one of the three
+    # DS-listed pin sets anything the generator emits can ever reach) rather than
+    # offering the other two as choices nothing can honour (Round 5's rule).
+    # `data/sources/H417/dedicated_pins.yaml` still carries the FULL three-set DS
+    # extraction unfiltered; this override is where the cited narrowing happens, one
+    # peripheral, per `tests/h417_dedicated.test.js`'s `KNOWN_NARROWED` guard (AGENT-3,
+    # board 2026-09-13, ruling on the REQUEST at 20:23Z) - a cited, per-peripheral
+    # narrowing is accepted, a blanket one is not, and the guard checks the file's pins
+    # are a genuine SUBSET of the DS's, never a superset or substitution. Same
+    # citation as `KNOWN_NARROWED.SDMMC` in that test file. The remaining
+    # `codegen.remap`-on-`style: af` capability (so `SDMMC_RM=01`/`1x` could ever be
+    # reached) is still open with AGENT-2, same as FMC's multi-bank `Chip select`
+    # checkbox and SAI's Frame/Slot structs.
     settings:
       - name: Mode
         choices:
@@ -5375,19 +5507,19 @@ peripherals:
           - { name: "SLVCK (slave clock)", signals: [SLVCK] }
           - { name: "STS (status)", signals: [STS] }
     signal_pins:
-      CMD: [{ pin: PC10 }, { pin: PD12 }, { pin: PD2 }]
-      D0: [{ pin: PB13 }, { pin: PC8 }, { pin: PD0 }]
-      D1: [{ pin: PC9 }, { pin: PD1 }]
-      D2: [{ pin: PB10 }, { pin: PD2 }, { pin: PC10 }]
-      D3: [{ pin: PB11 }, { pin: PC11 }, { pin: PD3 }]
-      D4: [{ pin: PA14 }, { pin: PD4 }]
-      D5: [{ pin: PA15 }, { pin: PD5 }]
-      D6: [{ pin: PC6 }, { pin: PD6 }]
-      D7: [{ pin: PC7 }, { pin: PD7 }]
-      SDCK: [{ pin: PC12 }, { pin: PD11 }]
-      SLVCK: [{ pin: PD11 }, { pin: PC12 }]
-      STR: [{ pin: PC11 }, { pin: PD10 }, { pin: PD3 }]
-      STS: [{ pin: PD12 }, { pin: PD2 }, { pin: PC10 }]
+      D0: [{ pin: PC8 }]
+      D1: [{ pin: PC9 }]
+      D2: [{ pin: PC10 }]
+      D3: [{ pin: PC11 }]
+      D4: [{ pin: PA14 }]
+      D5: [{ pin: PA15 }]
+      D6: [{ pin: PC6 }]
+      D7: [{ pin: PC7 }]
+      CMD: [{ pin: PD2 }]
+      STR: [{ pin: PD3 }]
+      STS: [{ pin: PD2 }]
+      SDCK: [{ pin: PC12 }]
+      SLVCK: [{ pin: PC12 }]
     params:
       - key: width_1b
         name: Bus width

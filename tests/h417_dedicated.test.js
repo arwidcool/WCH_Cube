@@ -61,10 +61,16 @@ const MCU = path.join(ROOT, 'data', 'mcus', 'CH32H417.yaml');
 // signal named here whose file pin set turns out NOT to be a subset of the DS's still
 // fails, so this cannot silently cover a genuinely wrong pin.
 const KNOWN_NARROWED = {
-  // SDMMC: 'AFIO_PCFR1.SDMMC_RM[1:0] (CH32H417RM.md:11741-11768, Table 9-32) selects the '
-  //   + 'pin set; codegen.remap.style: af forbids codegen.remap.fields '
-  //   + '(data/FORMAT.md:654-657), so no emitter can ever write it - only SDMMC_RM=00, '
-  //   + 'the reset default, is reachable. agents/BOARD.md 2026-09-13T20:23Z.',
+  // Verified 2026-09-13 (AGENT-3) against CH32H417RM.md:11741-11768 Table 9-32 itself,
+  // not just AGENT-1's board claim: all 13 file pins equal SDMMC_RM=00's own "Default
+  // mapping" value (STS/CMD/PD2, SDCK/SLVCK/PC12, STR/PD3, D0/PC8, D1/PC9, D2/PC10,
+  // D3/PC11, D4/PA14, D5/PA15, D6/PC6, D7/PC7 - digit for digit), and each is a genuine
+  // member of the DS's per-signal set (the union of the 00/01/1x remap rows) - zero torn
+  // names, zero superset, zero substitution.
+  SDMMC: 'AFIO_PCFR1.SDMMC_RM[1:0] (CH32H417RM.md:11741-11768, Table 9-32) selects the '
+    + 'pin set; codegen.remap.style: af forbids codegen.remap.fields '
+    + '(data/FORMAT.md:654-657), so no emitter can ever write it - only SDMMC_RM=00, '
+    + 'the reset default, is reachable. agents/BOARD.md 2026-09-13T20:23Z.',
 };
 
 /** Parse the audit's `== {pid}: ...` header lines and per-signal `{s}: DS [...] file [...]`
