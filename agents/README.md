@@ -100,7 +100,16 @@ Precedence for anything the software must *name*: **EVT → RM → DS → anythi
 |---|---|---|---|
 | 1 | **DATA** | `data/mcus/**`, `data/packages/**`, `data/sources/**`, `data/coverage/**`, `data/FORMAT.md`, `tools/extract_*.py`, `tools/gen_*.py`, `tools/validate_mcu.py`, `tools/coverage*.py`, `tools/ledger.py` | `app/`, `tests/`, `src-tauri/`, `data/firmware/` |
 | 2 | **APP** | `app/engine/**`, `app/template.html`, `app/tests/**`, `app/assets/**`, `build.py`, `tools/wchcube_cli.js` | `data/`, `tests/`, `src-tauri/` |
-| 3 | **QA + RELEASE** | `tests/**`, `tests/evidence/**`, `src-tauri/**`, `data/firmware/**`, `.github/**`, `scripts/**`, `README.md`, `PROGRESS.md`, `Taskfile.yml`, `agents/**` (the pack) | `data/mcus/**`, `app/` (may only ADD tests, never change behaviour) |
+| 3 | **QA + RELEASE** | `tests/**`, `tests/evidence/**`, `src-tauri/**`, `data/firmware/**`, `.github/**`, `scripts/**`, `README.md`, `PROGRESS.md`, `Taskfile.yml`, `agents/**` (the pack), `tools/audit_*.py` | `data/mcus/**`, `app/` (may only ADD tests, never change behaviour) |
+
+`tools/audit_*.py` is QA's: tooling that PROVES a data claim independently (re-derives a fact
+from a source structurally different from the one that produced the data, then diffs), never
+tooling that PRODUCES data. `tools/extract_*.py`/`gen_*.py`/`validate_mcu.py`/`coverage*.py`/
+`ledger.py` stay AGENT-1's — they make or shape the data itself. The line is which side of
+"make it" vs "check it" a script is on, not which directory it lives in; both live in `tools/`.
+Precedent: `tools/audit_h417_dedicated.py` (SDMMC/UHSIF vs DS Table 2-2-12/16) and
+`tools/audit_h417_pin_functions.py` (every AF-mux peripheral vs DS Table 2-2-1..31), both
+depended on by `tests/*.test.js`, both built and owned by AGENT-3 (main, 2026-09-13T23:2xZ).
 
 Everyone may edit `TASKS.md`, `agents/BOARD.md`, and **their own block in `agents/STATUS.md`**.
 Ownership prevents collisions; if you need a change in someone else's area, **post a REQUEST on
