@@ -6,6 +6,11 @@
 > `tests/codegen_compile.test.js` read this file by path and look exemptions up by the wording
 > of the task they cite, so an exemption dies the day its line is ticked or removed. Edit a line
 > that an exemption cites only in the commit that retires the exemption.
+>
+> **Closed sections and the session log cite paths as they were at the time** - `agents/PROJECT.md`, `agents/DONE.md`, `agents/AGENT_n_*.md`, `run_agents.ps1` and the
+> `PROMPT_*.txt` files. Those are a record, not a route: the pack became three files on
+> 2026-09-13 and `agents/history/round6-pack/README.md` maps every one of them to where its
+> content went. Nothing above the round-6 lines should be followed as a pointer.
 
 CubeMX-style pinout / peripheral / clock configurator for WCH MCUs.
 Update this file every session. Newest notes at the bottom of each section.
