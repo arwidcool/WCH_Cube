@@ -964,6 +964,24 @@ bits, and a clock tree that models what the schema can hold.
 - [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
       SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
 - [~] **(AGENT-1) CH32H417: `params:` for the peripherals that have none.**
+      **2026-09-13: UHSIF landed - 39 -> 40 of 78 have a block, 34 cells owed, 22 routing pins.**
+      Two NEW open items came out of it, both needing a source nobody can read yet:
+      - [ ] (AGENT-1) **UHSIF claims all 49 pads whatever `width_bit` says.** `Mode: Enabled`
+            takes every signal, so an 8-bit bus still holds 32 data pads it does not use and
+            cannot release; enabling UHSIF gives **5 conflicts on the QFN128 fixture and 10 on
+            QFN68**, so it cannot be switched on in either. Very likely two of the four QFN68
+            entries in `COLLISION_CEILING`. The fix is a `Data width` setting whose choices claim
+            different PORT ranges - the shape DVP/SDIO/I2S already use - and it needs the
+            per-mapping, per-width pad table in
+            `data/sources/H417/Evt/EXAM/UHSIF/CH32H417 UHSIF Development Reference Manual-EN.pdf`,
+            which has **no markdown conversion**; `UHSIF_GPIO_Init` itself is inside `libUHSIF.a`,
+            so no readable source answers it. Convert the PDF first (`data/sources/README.md`
+            protocol: `PDF FALLBACK:` line, recover by script, write the cells back). DO NOT GUESS.
+      - [ ] (AGENT-1) **UHSIF's 49 signals have no `af:`**, so `--strict` exits 2 on any project
+            that enables it (TODO: alternate function select). Pre-existing and previously
+            unreachable because nothing could turn UHSIF on. They are dedicated pads rather than
+            AF-muxed ones; the answer is probably a `codegen.skip_signals` / dedicated-pad
+            declaration, same as the 91 UHSIF/SERDES `validate_mcu` warnings already noted.
       The part's peripheral SET is complete - 78 entries from the DS + the 41 SPL headers -
       along with its pins (950 AF assignments, mechanical), its clock tree, its 125 NVIC
       vectors and its 73 clock-enable bits, but ~70 peripherals have no `params:` block, so

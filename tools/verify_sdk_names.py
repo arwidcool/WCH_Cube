@@ -200,10 +200,52 @@ class Index:
 
 # ---------------------------------------------------------------- locating an SDK
 def evt_include_dirs(evt_root: pathlib.Path) -> list[pathlib.Path]:
-    """EVT layout varies by drop; find the Peripheral/inc folders wherever they are."""
+    """EVT layout varies by drop; find the Peripheral/inc folders wherever they are.
+
+    AND the driver headers that ship OUTSIDE it. `Peripheral/inc` is the SPL, but not every
+    peripheral has an SPL driver: CH32H417's UHSIF ships as a prebuilt `libUHSIF.a` with its
+    header in one example folder (`Evt/EXAM/UHSIF/UHSIF_SLAVE/Common/ch32h417_uhsif.h`), and
+    there is no `ch32h417_uhsif.h` in `Peripheral/inc` at all.
+
+    Scanning only `Peripheral/inc` made that header invisible, and invisible here does not
+    mean ignored - it means every name the MCU file takes from it (`UHSIF_GPIO_Init`, every
+    `DEF_UHSIF_*`) is reported as a name that does not exist. So the gate whose whole job is
+    "a name nobody compiled is a guess" would have refused the one peripheral whose names
+    are only knowable from a vendor header, and the cheap way out would have been to leave
+    UHSIF unmodelled - a peripheral holding 49 pads and reaching no generated code.
+
+    THE RULE IS DELIBERATELY NARROW, and the first version of it was not. "A header next to
+    a `.c` or `.a` of any name" matched **711 directories** in this one drop, because every
+    example ships `main.h`/`main.c` and `ch32h417_it.h`/`.c`. That does not just add noise:
+    it lets a stale example's scratch header vouch for a macro the SPL has removed, which
+    turns this gate from "the name exists in the SDK" into "the name exists somewhere in the
+    zip". A gate that answers a weaker question than its name claims is this repository's
+    oldest defect, so the wide version is not worth having.
+
+    What counts instead, and both halves are required:
+      * the directory holds a **prebuilt static library** (`*.a`) - that is the marker of a
+        driver shipped as a binary rather than as SPL source, which is the only reason a
+        header would legitimately live outside `Peripheral/inc`; and
+      * the header follows the SPL's own naming (`<prefix>_*.h`, the prefix taken from the
+        SPL headers actually present) - so `ch32h417_uhsif.h` is indexed and the `hardware.h`
+        and `usb_desc.h` sitting beside it are not.
+
+    On this drop that is 9 libraries and a handful of headers, against 711 before.
+    """
     if not evt_root.is_dir():
         return []
-    return sorted({p for p in evt_root.rglob("Peripheral/inc") if p.is_dir()})
+    spl = {p for p in evt_root.rglob("Peripheral/inc") if p.is_dir()}
+    # The prefixes the SPL itself uses, e.g. {"ch32h417"} from ch32h417_adc.h and friends.
+    prefixes = {h.stem.split("_", 1)[0].lower()
+                for d in spl for h in d.glob("*_*.h")}
+    dirs = set(spl)
+    if prefixes:
+        for lib in evt_root.rglob("*.a"):
+            for hdr in lib.parent.glob("*_*.h"):
+                if hdr.stem.split("_", 1)[0].lower() in prefixes:
+                    dirs.add(hdr.parent)
+                    break
+    return sorted(dirs)
 
 
 def evt_support_dirs(evt_root: pathlib.Path) -> list[pathlib.Path]:

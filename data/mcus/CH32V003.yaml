@@ -1254,7 +1254,6 @@ peripherals:
         struct: USART_ClockInitTypeDef
         sdk_field: USART_Clock
         const: USART_Clock_Enable
-        default: USART_Clock_Enable
         depends_on: { setting: Mode, equals: Synchronous }
         help: "USART_CTLR2 CLKEN, bit 11 (ch32v00x_usart.h:95). Not a choice: the Mode row is what turns synchronous mode on and claims the CK pad, so this follows it."
       - key: ck_cpol

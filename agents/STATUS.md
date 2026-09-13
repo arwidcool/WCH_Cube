@@ -26,7 +26,7 @@ lines there only in the commit that retires what cites them.
 | | |
 |---|---|
 | **Gates** | all green — ledger 6 of 6, validate 0, sdk-names 0, suite 780/0 skipped (§1) |
-| **Biggest open item** | CH32H417 `params:` — **35 cells owed, 23 routing pins** (§2 C, AGENT-1) |
+| **Biggest open item** | CH32H417 `params:` — **34 cells owed, 22 routing pins** (§2 C, AGENT-1) |
 | **Blocked on one change** | 5 H417 peripherals wait on the nested-struct shape (§3, AGENT-2) |
 | **Unverified** | `src-tauri` in a window; **nothing has ever been flashed** (§6) |
 | **Next per agent** | 1: UHSIF · 2: **the clock tree cannot draw a second PLL** (§3, blocks all of D) · 3: `app/tests/**` planted breaks (§4) |
@@ -48,7 +48,7 @@ node tests/run.js                    ALL GREEN — 780 tests, 0 skipped  (381.8 
 
 | | Measured | Source |
 |---|---|---|
-| CH32H417 `params:` | **39 of 78 peripherals have a block, 39 do not.** 4 of those 39 are declared ABSENT (SYS, RCC, EXTI, DMA1 — choices, not numbers), so **35 cells are owed, 23 of them routing pins** | count over `data/mcus/CH32H417.yaml` |
+| CH32H417 `params:` | **40 of 78 peripherals have a block, 38 do not.** 4 of those 38 are declared ABSENT (SYS, RCC, EXTI, DMA1 — choices, not numbers), so **34 cells are owed, 22 of them routing pins** (UHSIF landed 2026-09-13) | count over `data/mcus/CH32H417.yaml` |
 | CH32H417, other axes | clock 68 of 78, 9 ABSENT, **1 open (RTC)** · vectors 66 of 78, all 12 without ABSENT — **0 owed** · pins 61 route, 17 `pins: none`, 0 `pins: open`, **0 unreachable routed signals** · codegen reach **0** peripherals hold a pad and reach no code. **Cells 41 → 36** | `tests/evidence/round6/2026-09-13-h417-peripheral-map.md` |
 | CH32H417 collisions | **QFN68 4 · QFN88 0 · QFN128 0** (450 claiming choices swept per package) | `COLLISION_CEILING`, `tests/h417_packages.test.js:228` |
 | CI | green on all three jobs: run **34723740365** on `b5a654f` | the run page; URL in `PROGRESS.md` §1 |
@@ -112,8 +112,8 @@ catches all five**. The `IN_EXTRACTION` expiry is the sharpest case — it *did 
 
 ### C — CH32H417's Parameter Settings stop being empty  (1)
 
-**The largest open work in the repository.** 35 cells owed, 23 routing pins (49 at the round's
-open). Post the count each cycle.
+**The largest open work in the repository.** **34 cells owed, 22 routing pins** (49 at the
+round's open). Post the count each cycle.
 
 - [ ] `params:` for every peripheral that routes pins
 - [ ] every parameter traced to `ch32h417_*.h`. True of every parameter that exists today, and
@@ -123,8 +123,10 @@ open). Post the count each cycle.
       `TASKS.md` line ticked — every remaining cell fails hard from that commit on
 - [ ] all of it in `data/sources/H417/peripheral_extras.yaml`, none in the generated block
 
-**Order, worst-first by stranded pads:** UHSIF (49 routed signals), SERDES, FMC, QSPI1/2, SDMMC,
-SAI, PIOC, then CAN1–3, DAC, LPTIM1/2, GPHA, RTC.
+**Order, worst-first by stranded pads:** ~~UHSIF (49 routed signals)~~ **done 2026-09-13**, then
+SERDES, FMC, QSPI1/2, SDMMC, SAI, PIOC, then CAN1–3, DAC, LPTIM1/2, GPHA, RTC. **Check whether the
+peripheral's driver is in `Peripheral/inc` at all before starting one** — UHSIF's was not, and it
+changed the shape of the whole task.
 
 **Blocked behind one APP change:** FMC, ETH, ECDC, FMC_NAND, FMC_SDRAM. `FMC_NORSRAMInit()` takes
 one struct whose two timing members are **pointers** to a second struct (`ch32h417_fmc.h:113-115`)
@@ -201,7 +203,8 @@ Closed: `gen_h417_peripherals.py` writes LF · `validate_mcu.py` refuses a dupli
 (`:762`) · the two stale comments in `app/`.
 
 - [ ] the 4 QFN68 default collisions closed and `COLLISION_CEILING` at 0-0-0 — **waited three
-      rounds** (1). `FMC_A11`/PB11, `FMC_A12`/PB12, `UHSIF_PORT3`/PB0, `UHSIF_PORT4`/PB1; all cases
+      rounds** (1). **Two of them are probably UHSIF's 49-pad claim**, which ignores `width_bit`
+      (see §4 AGENT-1); that needs the pad table behind the UHSIF PDF. `FMC_A11`/PB11, `FMC_A12`/PB12, `UHSIF_PORT3`/PB0, `UHSIF_PORT4`/PB1; all cases
       where a signal has few pads to move to. The fix is the pin order in the generator
 - [ ] CH32X035's remaining `params:` — an `IN_EXTRACTION` entry with a live `TASKS.md` line (1)
 - [ ] §5 run end to end, QA-PASS posted with what failed (3)
@@ -264,17 +267,56 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — nothing. D's schema is committed; D's DATA is written, measured and parked.
+**IN FLIGHT** — nothing. UHSIF landed; `params:` **39 → 40 of 78**, owed cells **35 → 34**.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: **P0, C's 35 `params:` cells, UHSIF first** (49 routed signals),
-  through `data/sources/H417/peripheral_extras.yaml`, never the generated block. **Do not restart
-  D without reading §3 first** — all of it is blocked in `app/`, and the block itself is already
-  written and measured in `agents/proposals/CH32H417_usbhs_pll.yaml`, so the data work is done
-  and only the paste-back remains. Three blockers, all AGENT-2's: the clock tree cannot draw a
-  second PLL at all; a fixed `output_mhz:` cannot be made conditional on its input; a mux entry
-  cannot carry its own divider.
+- Next step if I stop here: **SERDES**, the next worst by stranded pads, then FMC/QSPI1/2/SDMMC/
+  SAI/PIOC. Before starting one, check whether its driver is in `Peripheral/inc` at all — UHSIF's
+  was not, and that changed the shape of the whole task.
 - Gates last run: `validate_mcu` 0 · `verify_sdk_names` 0 · `coverage --gate` 6 of 6 ·
-  `validate_clock_selftest` 11/11 · `ledger --write` no change · `build.py` OK · suite ALL GREEN.
+  `validate_clock_selftest` 11/11 · `validate_params_selftest` 5/5 · `verify_sdk_names_selftest`
+  35/35 + 3 · `--strict` 0 on all 8 fixtures · `pio run` **SUCCESS** on CH32H417QEU6 with UHSIF
+  Master / Mapping 2 / Mapping 1 / /4 / 32-bit.
+
+**Current — 2026-09-13T02:00Z. UHSIF, and it is not shaped like the other 34.**
+
+- **Its driver is not in the SPL.** There is no `ch32h417_uhsif.h` in `Peripheral/inc`: UHSIF
+  ships as a prebuilt **`libUHSIF.a`** with its header beside it in an example folder. The API is
+  one five-argument call, `UHSIF_GPIO_Init(mode_select, port_rm, clk_rmm, clk_div, width_bit)`
+  (`ch32h417_uhsif.h:181`), not an init struct. Five `params:` rows, every value read out of the
+  header rather than typed — the 64 `RCC_UHSIFDIV_DIV*` options are generated from
+  `ch32h417.h:7920-7983`, so the list cannot acquire a typo.
+- **`verify_sdk_names.py` had to learn about driver headers outside `Peripheral/inc` first**, or
+  every `DEF_UHSIF_*` name would have been reported non-existent and the cheap way out would have
+  been to leave UHSIF unmodelled — a peripheral holding 49 pads and reaching no generated code.
+  **My first version of that rule matched 711 directories**, because every example ships
+  `main.h`/`main.c`; that would have let a stale example header vouch for a macro the SPL had
+  removed. Narrowed to "a header beside a prebuilt `.a` that follows the SPL's own `<prefix>_*.h`
+  naming" — **5 directories** — and the selftest now asserts both halves as invariants over every
+  indexed folder, each seen red under a deliberate re-widening.
+- **`check_param_list()` was never called for `peripherals.*.params`.** Its own docstring has said
+  "Shared by `peripherals.*.params` and `dma.channel_params`" since it was written, and there was
+  one call site, for DMA. So **every `params:` row on every part has been unchecked** — a missing
+  `default:`, a `default:` naming something that is not one of its own options, a duplicate `key:`,
+  a `min` above its `max`. I found it by writing `default: 0` where the options are named
+  "Slave, FPGA" / "Slave, SOC" / "Master" and watching **every gate pass**. Wiring it up found one
+  more on shipped data: `CH32V003.USART1.ck_enable` carried `const:` **and** `default:` with the
+  same value — a surviving mirror from the round-5 workaround. `tools/validate_params_selftest.py`,
+  5 planted breaks plus the positive half.
+- **A `const:` row legitimately has no `default:`**, and the newly-wired check accused 25 correct
+  rows (I2S2/I2S3/SDIO/SWPMI, CH32L103's three comparators) before that was taught to it. A check
+  being new does not make the data it accuses wrong.
+- **The defect UHSIF's own data cannot fix, demonstrated twice.** `Mode: Enabled` claims **all 49
+  pads regardless of `width_bit`**, so an 8-bit bus still takes 32 data pads it does not use and
+  cannot release. Enabling UHSIF on the QFN128 fixture produces **5 unresolved conflicts** and on
+  QFN68 **10** — it cannot be switched on in either shipped fixture. **This is very likely two of
+  the four QFN68 collisions `COLLISION_CEILING` has carried for three rounds.** The fix needs the
+  per-mapping, per-width pad table, which is in a PDF with no markdown conversion, behind a
+  binary driver. Not guessed. FINDING + TASKS line.
+
+Red, and who owns it: **nothing.** Compiled rather than asserted: `pio run` SUCCESS, and
+`--strict` is 0 on all eight shipped fixtures (it exits 2 on a hand-made UHSIF-on project, because
+those 49 pads have no `af:` and nothing declares them dedicated — recorded, pre-existing, now
+reachable).
 
 **Current — 2026-09-13T01:14Z and 01:52Z, two cycles. D's schema, then D's number.**
 

@@ -590,6 +590,12 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      mode_select: Slave, FPGA
+      uhsif_port_rm: Mapping 0
+      uhsif_clk_rmm: Mapping 0
+      clk_div: /1
+      width_bit: 32-bit
   USART4:
     settings:
       Mode: Disable

@@ -396,8 +396,8 @@ Where the six deliverables stand, in one line each (measured, `agents/STATUS.md`
 **The per-line list with its owner is `agents/STATUS.md` §2 and `TASKS.md`.** This is the short
 version, ordered by what blocks the most.
 
-1. **CH32H417's `params:` — 35 cells, 23 of which route pins** (DATA). Worst-first by how many
-   pads a missing block strands: UHSIF (49 routed signals), SERDES, FMC, QSPI1/2, SDMMC, SAI,
+1. **CH32H417's `params:` — 34 cells, 22 of which route pins** (DATA). UHSIF landed 2026-09-13;
+   next worst-first by how many pads a missing block strands: SERDES, FMC, QSPI1/2, SDMMC, SAI,
    PIOC, then CAN1–3, DAC, LPTIM1/2, GPHA, RTC. Five of them — FMC, ETH, ECDC, FMC_NAND,
    FMC_SDRAM — are blocked behind one APP change: a struct whose member is a **pointer** to a
    second struct that no SDK function takes alone.

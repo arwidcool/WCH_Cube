@@ -288,8 +288,87 @@ def main() -> int:
                 print("              got: " + (
                     "; ".join(Report_safe(p) for p in problems) or "nothing at all"))
 
+        missed += driver_header_cases(tmp, verbose=args.verbose)
+
         print(f"\n{len(cases)} planted break(s), {caught} caught, {missed} missed")
         return 1 if missed else 0
+
+
+def driver_header_cases(tmp: pathlib.Path, verbose: bool = False) -> int:
+    """The headers that ship OUTSIDE Peripheral/inc, and the rule that admits them.
+
+    Not every peripheral has an SPL driver. CH32H417's UHSIF ships as a prebuilt
+    `libUHSIF.a` with its header beside it in an example folder, so `evt_include_dirs()`
+    indexes a header that sits next to a `.a` and follows the SPL's own `<prefix>_*.h`
+    naming. Three things have to hold, and the first version of the rule failed the third:
+
+      1. POSITIVE - the UHSIF header's folder is indexed, or every `DEF_UHSIF_*` name in
+         the MCU file is reported as non-existent and the peripheral cannot be modelled.
+      2. END TO END - a planted bad macro in that header's namespace is actually NAMED.
+         Without this, (1) could pass while the file was read and its contents dropped.
+      3. NEGATIVE - an ordinary example folder is NOT indexed. The first version of the
+         rule ("a header next to a .c or .a of any name") matched 711 directories in this
+         one drop, because every example ships main.h/main.c. That does not merely add
+         noise: it lets a stale example's scratch header vouch for a macro the SPL has
+         removed, turning this gate from "the name exists in the SDK" into "the name
+         exists somewhere in the zip".
+    """
+    import verify_sdk_names as V                                      # noqa: PLC0415
+
+    evt = ROOT / "data" / "sources" / "H417" / "Evt"
+    part = ROOT / "data" / "mcus" / "CH32H417.yaml"
+    if not evt.is_dir() or not part.is_file():
+        print("  SKIP      driver-header cases: the H417 drop is not present")
+        return 0
+
+    missed = 0
+    found = V.evt_include_dirs(evt)
+    dirs = {p.as_posix() for p in found}
+    uhsif = (evt / "EXAM/UHSIF/UHSIF_SLAVE/Common").as_posix()
+
+    # The negative half is written as INVARIANTS OVER EVERY indexed directory, not as
+    # "this one example folder is absent". The first version did the latter, naming
+    # EXAM/ADC/ADC_DMA/Common - and when the rule was deliberately re-widened to 402
+    # directories it still passed, because that particular folder holds no main.c and the
+    # widening never reached it. A negative case that a real widening walks straight past
+    # is the defect this whole file is about, scored against the test instead of the tool.
+    spl = [p for p in found if p.name == "inc" and p.parent.name == "Peripheral"]
+    extra = [p for p in found if p not in spl]
+    no_lib = [p.as_posix() for p in extra if not any(p.glob("*.a"))]
+    no_prefixed_hdr = [p.as_posix() for p in extra
+                       if not any(h.stem.split("_", 1)[0].lower()
+                                  in {s.stem.split("_", 1)[0].lower()
+                                      for d in spl for s in d.glob("*_*.h")}
+                                  for h in p.glob("*_*.h"))]
+
+    for label, ok in (
+        (f"the library driver's header folder IS indexed ({len(dirs)} dirs)", uhsif in dirs),
+        (f"every indexed folder outside the SPL holds a prebuilt `.a`"
+         + (f" - {len(no_lib)} do not, e.g. {no_lib[:2]}" if no_lib else ""), not no_lib),
+        (f"every indexed folder outside the SPL holds an SPL-named `<prefix>_*.h`"
+         + (f" - {len(no_prefixed_hdr)} do not, e.g. {no_prefixed_hdr[:2]}" if no_prefixed_hdr else ""),
+         not no_prefixed_hdr),
+    ):
+        print(f"{'  caught  ' if ok else '  MISSED  '}{label}")
+        if not ok:
+            missed += 1
+
+    # End to end: a macro that only the library driver's header could vouch for.
+    doc = yaml.safe_load(part.read_text(encoding="utf-8"))
+    try:
+        opts = doc["peripherals"]["UHSIF"]["params"][0]["options"]
+        opts[-1]["sdk"] = str(opts[-1]["sdk"]) + "_NOPE"
+        planted = opts[-1]["sdk"]
+    except Exception as exc:                                          # noqa: BLE001
+        print(f"  MISSED    UHSIF end-to-end: could not plant it ({exc})")
+        return missed + 1
+    rep = run(doc, tmp.parent / "CH32H417.yaml")
+    hit = next((p for p in rep.errors + rep.warns if planted in p), None)
+    print(f"{'  caught  ' if hit else '  MISSED  '}a bad macro in the library driver's "
+          f"namespace is named")
+    if hit and verbose:
+        print("              " + Report_safe(hit))
+    return missed + (0 if hit else 1)
 
 
 def Report_safe(text: str) -> str:

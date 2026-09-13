@@ -397,6 +397,19 @@ def check_peripherals(doc: dict, r: Report) -> None:
         if not P.get("category"):
             r.warn(where, "no `category`; it will not appear under a heading in the tree")
 
+        # `check_param_list` has said "Shared by `peripherals.*.params` and
+        # `dma.channel_params`" since it was written, and it was called for the DMA half
+        # ONLY. So every `params:` row on every part - hundreds of them across six parts -
+        # went unchecked: a missing `default:`, a `default:` naming something that is not
+        # one of its own options, a duplicate `key:`, a min above a max. The function was
+        # right there, the docstring promised it, and one call site was missing.
+        # Found 2026-09-13 by writing a `default: 0` where the options are named
+        # "Slave, FPGA" / "Slave, SOC" / "Master" and watching every gate pass.
+        check_param_list(P.get("params"), f"{where}.params", r)
+        for grp, cp in (P.get("channel_params") or {}).items():
+            if isinstance(cp, dict):
+                check_param_list(cp.get("params"), f"{where}.channel_params.{grp}.params", r)
+
         remaps = P.get("remaps") or []
         if remaps and not isinstance(remaps, list):
             r.error(f"{where}.remaps", "must be a list")
@@ -891,8 +904,19 @@ def check_param_list(defs, where, r: Report) -> dict:
         opts = d.get("options")
         names = [o.get("name") if isinstance(o, dict) else o for o in opts or []]
         default = d.get("default")
+        # A `const:` row has no `default:` ON PURPOSE: its value is fixed by WHICH INSTANCE
+        # this is (CMP2's `CMP_NUM`, SDIO's bus width under a Mode row), the user cannot
+        # change it, and there is nothing for a default to mean. Requiring one here made
+        # 25 correct rows across I2S2/I2S3/SDIO/SWPMI and CH32L103's three comparators
+        # report an error the moment this function was first called for peripherals - the
+        # check being newly wired up does not make the data it accuses wrong.
+        has_const = "const" in d
+        if has_const and default is not None:
+            r.error(at, "has both `const` and `default` - a value fixed by the instance and "
+                        "a value the user starts from are two different answers to one question")
         if default is None:
-            r.error(at, "no `default`")
+            if not has_const:
+                r.error(at, "no `default`")
         elif opts and default not in names:
             r.error(at, f"default `{default}` is not one of its options ({', '.join(map(str, names))})")
         lo, hi = d.get("min"), d.get("max")
