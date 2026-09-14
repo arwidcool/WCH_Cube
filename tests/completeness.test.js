@@ -426,8 +426,15 @@ test('every peripheral of every real part has settings, params, a clock bit, and
       const real = settings.filter(s => s.type === 'checkboxes' || (s.choices || []).length > 1);
       if (!real.length) say(pid, 'settings', `${settings.length} setting(s), none offering a choice`);
 
-      // params — a block with at least one definition
-      if (!(P.params || []).length) say(pid, 'params', 'no params: block, so Parameter Settings has no rows for it');
+      // params — a block with at least one definition, `params:` OR `channel_params:`
+      // (DAC/OPA/SAI/SERDES/LTDC and siblings fill an init struct once per channel or
+      // instance instead of once per peripheral — `eng.channelParamDefs()` is the same
+      // function codegen and the Parameter Settings tab both read, so this credits
+      // exactly what the app already treats as "this peripheral has rows", not a
+      // reimplementation of the shape that could silently drift from it).
+      if (!(P.params || []).length && !eng.channelParamDefs(pid).length) {
+        say(pid, 'params', 'no params: or channel_params: block, so Parameter Settings has no rows for it');
+      }
 
       // clock — a bit in codegen.periph_clock, or generated C cannot enable it
       if (Object.keys(M.codegen || {}).length && !clockBits.has(pid)) {
