@@ -25,48 +25,53 @@ lines there only in the commit that retires what cites them.
 
 | | |
 |---|---|
-| **Gates** | all green — ledger 6 of 6, validate 0, sdk-names 0, suite 780/0 skipped (§1) |
-| **Biggest open item** | CH32H417 `params:` — **34 cells owed, 22 routing pins** (§2 C, AGENT-1) |
-| **Unblocked this cycle** | the nested-struct shape (`codegen.init_structs.*.embed`) and the clock tab's second-PLL layout — both AGENT-2, §2 C/D and §4 |
-| **Unverified** | `src-tauri` in a window; **nothing has ever been flashed** (§6) |
-| **Next per agent** | 1: SERDES, then FMC (no longer blocked) · 2: idle / §7 backlog · 3: watch `main` for three green different-agent commits, `--strict` re-check, §7 backlog (§4) |
+| **Gates** | ledger 6 of 6, validate 0 errors, sdk-names 0 errors, cross-loader GREEN — **completeness RED, 2 disclosed citation gaps**, suite not re-run this cycle (tree unsettled) (§1) |
+| **Biggest open item** | **DMA — CH32H417 is the only part in the repo with no `dma:` block at all.** Both controllers, the whole channel/request/crossbar surface, unmodelled — an engine gap (multi-controller + a true 123-request×16-channel DMAMUX), not a data one. Now AGENT-2's P0 (§1, §4) |
+| **Closed this cycle** | Deliverable C's routing requirement (`params:` 0 owed on every pin-claiming peripheral) and its params-verification bullet, both acceptance criteria met · the whole H417 pin-verification record · the collision ratchet (4→0 avoidable, two reclassified silicon-forced) |
+| **Still open, found today** | the ABSENT-citation gate itself (2 real instances, disclosed) · 2 of the 11 non-routing cells nearly declared ABSENT were real gaps needing real params (now landed: `IWDG`/`WWDG`/`PWR`/`FLASH`/`GPHA`) · `DFSDM`'s Filter/Rc/Jc second-struct axis · the pinout SVG's thermal-pad tooltip (§1) |
+| **Unverified** | `src-tauri` in a window; **nothing has ever been flashed** (§6); the current full suite count (last confirmed: 780, more has landed since) |
+| **Next per agent** | 1: DMA engine research handed off, next per main · 2: DMA engine P0 (multi-controller `dma:`, crossbar `requests:`, `DMA_MuxChannelConfig` codegen), `sdk_manual:` render check, SVG thermal-pad fix · 3: hold for the tree to settle, then the full suite, report the exact line (§4) |
 
 ---
 
 ## 1. Measured now
 
-Run for this block, serially, on a settled tree — 2026-09-13, at `2b1967d`:
+Run for this block, serially — 2026-09-14T09:55Z, at `ef2da4f`. **The tree is NOT settled**
+(AGENT-1 mid-DMA-engine-P0, AGENT-2 mid `sdk_manual:` render check + SVG fix — see the row below),
+so `python build.py` and `node tests/run.js` are deliberately NOT re-run against it; every other
+row is a real command against the working tree as it stands right now:
 
 ```
 python tools/coverage.py --gate      coverage gate: 6 of 6 part(s) meet their declared status
-                                     H417 0 · L103 0 · V003 0 · V005 0 · V006 0 · X035 0   all complete
-python tools/validate_mcu.py         0 errors, 99 warnings
+                                      PASS on H417, L103, V003, V005, V006, X035 — all complete
+python tools/validate_mcu.py         0 errors, 73 warnings
 python tools/verify_sdk_names.py     0 errors, 0 warnings
-python build.py                      OK, dist/index.html 1349 KB
-node tests/run.js                    ALL GREEN — 780 tests, 0 skipped  (381.8 s)
+node tests/run.js "cross_loader"     ALL GREEN — 5 tests   (KNOWN_DIVERGENCES empty)
+node tests/run.js "completeness"     1 FAILED, 16 passed   (2 real, disclosed ABSENT-citation gaps — see below)
+node tests/run.js "h417_packages"    12 tests green, incl. the collision sweep below
+node build.py / full suite           NOT RUN this update — tree has uncommitted data/mcus and
+                                      app/engine changes mid-flight; held per main's repeated
+                                      instruction, re-run and reported the moment it settles
 ```
 
 | | Measured | Source |
 |---|---|---|
-| CH32H417 `params:` | **40 of 78 peripherals have a block, 38 do not.** 4 of those 38 are declared ABSENT (SYS, RCC, EXTI, DMA1 — choices, not numbers), so **34 cells are owed, 22 of them routing pins** (UHSIF landed 2026-09-13) | count over `data/mcus/CH32H417.yaml` |
-| CH32H417, other axes | clock 68 of 78, 9 ABSENT, **1 open (RTC)** · vectors 66 of 78, all 12 without ABSENT — **0 owed** · pins 61 route, 17 `pins: none`, 0 `pins: open`, **0 unreachable routed signals** · codegen reach **0** peripherals hold a pad and reach no code. **Cells 41 → 36** | `tests/evidence/round6/2026-09-13-h417-peripheral-map.md` |
-| CH32H417 collisions | **QFN68 4 · QFN88 0 · QFN128 0** (450 claiming choices swept per package) | `COLLISION_CEILING`, `tests/h417_packages.test.js:228` |
-| CI | re-read 2026-09-13T20:15Z: run **67** (`593a82e`) green on all three jobs, every step, incl.
-Coverage ledger `6 of 6` and a real PlatformIO compile in `firmware + generated project`. Run
-**66** (`448b628`, an earlier commit) **FAILED** `build + tests` at `dist/index.html is up to
-date` — a stale committed build, self-corrected by the time 67 ran | run pages `.../actions/runs/34779187164` (67, green) and `.../actions/runs/34776834859` (66, red) |
-| CI vs HEAD | **`main` was ahead of `origin/main` by 2 unpushed commits (AGENT-3's own) until this
-check pushed them** — `git push` just now triggered run **68** on `0f259c7`, in progress. Most
-commits between 66 and 67 have **no CI run at all**: GitHub runs `ci.yml` once per `push`, on the
-push's final commit, so a multi-commit push leaves the earlier commits in it unread by CI — the
-run history is sparser than the commit history | `git log origin/main`, `actions/runs?head_sha=` |
-| CH32H417 clock | still **1 of 5 PLLs, 0 of 8 muxes** in the shipped file. The USBHS_PLL block computes `USBFS = 48 MHz` and is parked in `agents/proposals/CH32H417_usbhs_pll.yaml` — blocked on a layout defect, not on facts | `clockCalc()` with the block spliced in |
-| Hardware | **builds, not flashed** — every green result here is a compile | §6 item 8 |
+| CH32H417 `params:` | **67 of 78 peripherals have a `params:` or `channel_params:` block, 11 do not.** Of those 11: **9 are legitimately declared ABSENT** (CRC, DBGMCU, EXTI, HSEM, PIOC, RCC, RNG, SYS, TKEY — each checked against its own `ch32h417_*.h`, not assumed). **DMA1 and DMA2 are the only two real gaps left**, and both are blocked on an ENGINE limitation, not a data one: CH32H417 has two DMA controllers and a true 123-request × 16-channel DMAMUX crossbar, which the current single-controller, fixed-table `dma:` schema cannot express (AGENT-1, board 2026-09-14, full extraction done and NOT forced into the wrong shape). Now AGENT-2's engine P0. Routing peripherals: **0 owed** — every peripheral that claims a pad has a block | `eng.channelParamDefs()` + `M.peripherals` count, `data/mcus/CH32H417.yaml`; `tests/completeness.test.js`'s `ABSENT`/`IN_EXTRACTION` tables |
+| CH32H417, other axes | clock 68 of 78 have a bit, 9 ABSENT, **1 open (RTC — a two-bit gate, `BKPEN`\|`PWREN`, owner AGENT-2)**. **RTC's `params:` block itself landed** (prescaler, alarm) — the clock gate and the params are different axes and only the clock one is still open · vectors 66 of 78, all 12 without ABSENT — 0 owed · pins 61 route, 17 `pins: none`, 0 `pins: open` · codegen reach 0 peripherals hold a pad and reach no code | `tests/completeness.test.js` matrix, `tests/evidence/round6/2026-09-13-h417-peripheral-map.md` |
+| CH32H417 collisions | **QFN68 0 · QFN88 0 · QFN128 0 avoidable** (452 mode choices swept per package) — down from 4·0·0. Two of the four original QFN68 collisions were fixed (UHSIF's `signal_groups:` landing); the other two (`PB11`/`PB12`, FMC address-bus) are **CONFIRMED silicon-forced by experiment** (AGENT-1, `5895ee2`/board `84f4b53`: reorder-and-revert held QFN68 at 2 and regressed QFN88 0→2) and are tracked separately as `SILICON_FORCED_DOCUMENTED`, not counted against the ceiling | `COLLISION_CEILING`, `SILICON_FORCED_DOCUMENTED`, `tests/h417_packages.test.js` |
+| Cross-loader gate (`tests/cross_loader.test.js`) | **GREEN.** Built 2026-09-14 after AGENT-1 found `yaml.safe_load` (Python, every gate above) and the app's `js-yaml` (YAML 1.2) disagree on `On`/`Off`/`Yes`/`No` and sexagesimal scalars — every Python gate had been validating a representation the app never runs. Found and AGENT-1 fixed both real instances (`CH32H417.yaml` OPA, `CH32V006.yaml` PWR) by quoting; `KNOWN_DIVERGENCES` is now empty with its staleness check still live | `node tests/run.js "cross_loader"` — 5/5 |
+| ABSENT-citation gate (`tests/completeness.test.js`) | **RED, 2 real instances, disclosed, not exempted.** New test (2026-09-14) checking that every `ABSENT` exemption's cited location (a `file:line` or a data path) actually exists for every part the entry excuses — not just one. Found 5 stale citations total; AGENT-1 has adjudicated 3 (`DMA1.params` stays red, correctly — DMA is genuinely unmodelled; `PIOC.params` and `EXTEN.clock` split into per-part citations and fixed). **Still open: `EXTEN.nvic` on CH32L103 and CH32V003** — the underlying rule is confirmed true on both, but AGENT-1 has not yet found each part's own `IRQn_Type` line range and said so rather than guess | `node tests/run.js "completeness"` — 1 FAILED naming both |
+| CH32H417 clock | **2 of 5 silicon PLL blocks modelled** (the base SYS PLL, always present, + `USBHS_PLL`), **1 of 8 RM-3.4.13 muxes modelled and computing** (`USBFS`). `clockCalc()` on the real shipped file: `USBHS_PLL 25→480 MHz`, `USBFS 48 MHz`, `over: []`, `under: []` — no longer parked in `agents/proposals/`, this is the shipped part. The other 4 PLL blocks (SERDES_PLL, ETH_PLL, USBSS_PLL, and the SYS PLL's own second input path) and 7 muxes (RNG, I2S2, I2S3, LTDC, UHSIF, HSADC, ETH1G) are confirmed feasible under the current schema (AGENT-2, board 2026-09-13T22:55Z — none need a new engine mechanism) but not yet landed | `clockCalc()` against `data/mcus/CH32H417.yaml` directly |
+| DFSDM | Channel struct real (`DFSDM_ChannelInitTypeDef`, 13 fields, both channels, register-matched against a vendor example with two fields swapped — modelled to the register, not the swapped example). **`DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/`JcInitTypeDef` NOT modelled** — a second, still-open axis: three structs want the same `DFSDM_FLTx` handle, the identical "one struct per peripheral" `channel_params:` limit SAI already hit (its own Frame/Slot structs) | AGENT-1, board 2026-09-14T05:20Z |
+| Pinout SVG (`app/engine/export.js:pinoutSvg()`) | One real, narrow gap: the exposed thermal pad (every QFN package, `packages.yaml`'s `epad: true`) is drawn as a shape but carries no `<title>` tooltip and no pin-count credit — `pinoutSvg()`'s own doc-comment claims "EVERY physical pin... assigned or not", which overclaims for exactly this one row. The KiCad CSV export does NOT have this gap (includes the pad correctly). Sent to AGENT-2 (main, board 2026-09-14) | Found verifying AGENT-2's exports end to end (round-trip against `pinRows()`, not the CSV against the SVG) |
+| Suite size | **Last full run this file can cite directly: 780 tests, 2026-09-13T01:52Z.** Main reports 827 at a more recent full run verified today; not yet reflected on the board under a run I can point at, and NOT re-measured by me this cycle — the tree has not been settled long enough to run it (see the command block above). Seven engine mechanisms, two exports, the cross-loader gate, ETH, and roughly twenty peripherals' worth of params have landed since 780; the real number will be measured, not guessed, the moment the tree holds still | pending — will report the exact line |
+| CI | Not re-checked this cycle — last confirmed state (2026-09-13T20:39Z): `worktrees ON` NOT MET even under the corrected three-runs condition, still withheld | `agents/BOARD.md` 2026-09-13T20:39Z |
+| Hardware | **builds, not flashed** — every green result here is a compile, in exactly those words | §6 item 8 |
 
 > **What six zeros does not mean.** The ledger asks whether every fact the **datasheet** states is
-> accounted for. It does not ask what the app does with them. CH32H417 is `complete` *and* has 39
-> peripherals with no `params:` — you can claim their pins and configure nothing. Report the
-> ledger count *and* the `params:` count *and* the collisions, every time.
+> accounted for. It does not ask what the app does with them. CH32H417 is `complete` *and*, until
+> the DMA engine work lands, has two peripherals (DMA1, DMA2) you can claim pins for and configure
+> nothing on. Report the ledger count *and* the `params:` count *and* the collisions, every time.
 
 ---
 
@@ -1296,17 +1301,53 @@ tree. That is the discipline working, not failing.
   and `tests/evidence/` is a live pointer at something that no longer exists.
 - **Idle** — §7 QA/RELEASE.
 
-**IN FLIGHT** — B's last gap: the label-renderer plant, blocked on AGENT-2's `data-test` hook
-(main requested it directly).
-- TASKS.md line: — · Doing: waiting on the hook to land; nothing to plant against yet.
-- Files touched (this wait): none yet.
-- Next step if I stop here: the moment AGENT-2's hook lands, plant the label-renderer mutation in
-  a `tests/features_label.test.js`-shaped file (or add to `keyboard_ui.test.js`'s sibling pattern),
-  watch it red, then tick §2 B and update
-  `tests/evidence/round6/2026-09-13-gates-without-a-plant.md` together — not before both close.
-  If the hook's shape does not let the mutation anchor cleanly, say so on the board rather than
-  planting something adjacent that would pass regardless.
-- Gates last run: see Current below.
+**IN FLIGHT** — holding the full suite for a settled tree, per main's repeated instruction
+(checked and held three times this cycle: `git status` showed uncommitted `data/mcus/CH32H417.yaml`,
+`app/engine/*.js`, `app/template.html` each time).
+- TASKS.md line: — · Doing: nothing else queued until the suite runs; `git status` polled, not
+  looped, between other work.
+- Files touched (this wait): none.
+- Next step if I stop here: `git status` — if clean (or only files outside `data/`/`app/` remain
+  uncommitted), run `node tests/run.js` in full, report the EXACT line it prints on the board and
+  in §1, and only then decide whether anything closes. Do not guess the count from what "should"
+  have landed.
+- Gates last run: see Current below, `ef2da4f`.
+
+**Current — 2026-09-14T09:55Z. §1 fully re-measured and rewritten (this commit) — it had drifted
+badly (`params:` read 40 of 78, should have been ~62-67 across the cycle; collisions read 4·0·0,
+actually 0·0·0; the clock row hadn't been touched since the USBHS_PLL landing). Also today: built
+the cross-loader gate, generalised the DMA finding into its own gate, verified Deliverable C's
+whole params-verification bullet and both of AGENT-2's exports end to end.** Full detail is on
+`agents/BOARD.md` under today's timestamps (07:00Z onward) and in
+`tests/evidence/round6/2026-09-14-h417-pin-verification.md`'s addenda; the summary:
+
+- **Cross-loader gate** (`tools/cross_loader_check.mjs`, `tests/cross_loader.test.js`): every
+  Python gate in this repo validates YAML 1.1 (`yaml.safe_load`); the app ships YAML 1.2
+  (`js-yaml`) — the two disagree on `On`/`Off`/`Yes`/`No`/sexagesimal scalars, and nothing checked
+  that before today. Found 2 real divergences across all 7 files (`data/mcus/*.yaml` +
+  `packages.yaml`); AGENT-1 fixed both by quoting. `KNOWN_DIVERGENCES` empty, staleness check live.
+- **ABSENT-citation gate**, generalised from a single DMA finding into a standing check: does an
+  `ABSENT` exemption's cited location actually resolve, for every part the entry excuses (not one).
+  Found 5 stale citations across the whole table; 3 adjudicated and fixed with AGENT-1 today
+  (`PIOC.params`, `EXTEN.clock` split per-part), 2 still open and RED on purpose
+  (`DMA1.params` — real gap; `EXTEN.nvic` on L103/V003 — rule confirmed true, citation not yet
+  written). Two real bugs in the check itself found and fixed before trusting the first run
+  (missing peripheral-existence gating; a naive "file not found = lie" check that would have
+  falsely flagged the genuinely real `ch32v00X.h`).
+- **CH32H417's 11 non-routing cells**: checked every one against its own header before any ABSENT
+  declaration. 5 genuinely absent (CRC, DBGMCU, HSEM, RNG, TKEY). 6 were real, unmodelled gaps —
+  reported instead of declared away; AGENT-1 landed 5 of them as real params (`IWDG`/`WWDG`/`PWR`/
+  `FLASH`/`GPHA`) and confirmed the 6th (`DMA2`, alongside `DMA1`) is blocked on the engine gap
+  above. This correction is why the routing/params numbers in §1 moved as much as they did.
+- **Deliverable C, both bullets independently verified**: routing `params:` at zero-owed, and
+  every parameter across the previously-unverified set (ETH's 26 fields, DFSDM, the 4 USB
+  declarations, DAC, RTC, CMP, OPA) traced to real generated C, not just read off the YAML —
+  including independently diffing the two `driver_c:` files' `ETH_RegInit` bodies myself rather
+  than trusting the comment that said they were identical.
+- **AGENT-2's KiCad CSV + pinout SVG**, all four angles: CLI reachability, package labelling,
+  planning-only pins (forced the real `remap_unwritable:` SDMMC case rather than trusting the code
+  path ran), round-trip. Three clean; one real, narrow SVG gap found (the exposed-pad tooltip,
+  above) and sent to AGENT-2.
 
 **Current — 2026-09-13T20:15Z. §5.1 (CI), steps 1-4, and a process mistake of my own found and
 fixed in the same check.**
