@@ -927,22 +927,91 @@ RM's worked example, or it does not ship.
   `app/engine` exports, 89% against the 90% floor)** — ~~`pllList`/`tapSources`/`remapPlan`/
   `CONSTRAINT_FIELDS` and 20 others never called by name anywhere in `app/tests`~~ **done, this
   cycle: covered, not exempted — the threshold was never touched.** See Current below.
+- **P0 — DFSDM's second handle axis, the last thing blocking AGENT-1**: ~~`channel_params` could
+  only express ONE instance axis, so `DFSDM_FilterInit`/`RcInit`/`JcInit` had no way to get a
+  `DFSDM_FLTx` handle while the block was keyed to `DFSDM_Channely` — AGENT-1 checked this
+  against the real loop rather than assuming the SAI multi-struct mechanism covered it, and was
+  right to~~ **done, this cycle.** `channel_params` may now be a LIST of blocks. See Current
+  below; worked contract on `agents/BOARD.md` for AGENT-1.
+- **P1 — the System-Core multi-controller DMA overview**, held until real two-controller data
+  existed — ~~condition met, table built against CH32H417's real data, not a synthetic
+  part~~ **done, this cycle.** See Current below.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: stay available while AGENT-1 lands the DMA data (a question and a
-  bug are expected — the first real consumer of a new mechanism is what finds its gaps); then
-  the System-Core multi-controller DMA overview table once that data lands (held per main); then
-  the print view (§7 P2's last item), only if it reuses `pinoutSvg()`'s renderer cleanly.
-- Gates last run: `node tests/run.js "export.test"` 43/43 (was 35/35 at cycle start), `"codegen.
-  test"` 80/80, `"clock.test"` 34/34, `"resources.test"` 65/65, `"constraint.test"` 21/21,
-  `"analog.test"` 15/15, `"glossary.test"` 9/9, `"signal_groups.test"` 15/15, `"params.test"`
-  49/49, `"features.test"` 7/7 (the export-coverage gate is GREEN — no exempted line), full
-  `"app/tests"` engine suite 608/608 (was 581/581 at cycle start, +27 across both fixes).
-  `node --check` clean on every touched engine file, plus an `import()` smoke test through
-  `app/engine/index.js`. `python build.py` NOT run this cycle — nothing painting changed on
-  either fix (a generated-C comment's wording, and test files), and `data/mcus/CH32H417.yaml`
-  is AGENT-1's live DMA-extraction target throughout.
+- Next step if I stop here: the print view (§7 P2's last item), only if it reuses
+  `pinoutSvg()`'s renderer cleanly — the only item left on my own list. Otherwise stay
+  available for AGENT-1's next DFSDM question and §7 backlog.
+- Gates last run: `node tests/run.js "channel_second_axis"` 8/8, `"dma_mux_overview"` 5/5,
+  `"instances.test"` 16/16, `"channel_multi_struct"` 5/5, `"params.test"` 49/49,
+  `"resources.test"` 65/65, `"codegen.test"` 80/80, full `"app/tests"` engine suite 621/621
+  (was 608/608 at this cycle's start, +13 across both items) — all backward-compat suites
+  unchanged and green, zero data-file edits. `node --check` clean on every touched engine
+  file. `python build.py` run twice, told each time: once to verify `instanceGroups()`'s new
+  two-axis UI grouping (jsdom), once for the DMA overview's real-browser render against real
+  CH32H417 data (also jsdom). Neither build committed — `data/mcus/CH32V003.yaml` was
+  mid-edit at the first, `data/mcus/CH32L103.yaml`/`.notes.md` mid-edit as this is written.
+
+**Current — 2026-09-14, cycle 10. P0 and P1 from main, both closed: DFSDM's second handle
+axis (the last thing blocking AGENT-1) and the System-Core multi-controller DMA overview
+(held since round 6, now built against real two-controller data).**
+
+- **P0 — `channel_params` as a LIST of blocks, for a peripheral with more than one
+  independent instance axis.** AGENT-1's own read of `initPlan()`'s loop was correct, checked
+  against the code rather than assumed: `DFSDM_FilterInit`/`RcInit`/`JcInit` take a
+  `DFSDM_FLTx` handle that has nothing to do with `DFSDM_ChannelInit`'s `DFSDM_Channely` —
+  SAI's multi-struct mechanism (round 9) shares ONE handle across three structs, and DFSDM's
+  Filter/Rc/Jc genuinely DO share a handle with each other, but not with the channel axis.
+  Forcing both through one block gives `DFSDM_FilterInit` a channel handle — a real type
+  mismatch, not a stylistic one.
+  `peripherals.<pid>.channel_params` stays a single OBJECT everywhere it is one today — SAI,
+  LTDC, every TIM block, untouched, proven by the full existing suite green with ZERO data
+  edits. It may ALSO be a LIST, the same "additive widening" pattern `dma:` (single
+  controller or a list) and `signal_groups:`/`embed:` already established.
+  `channelParamBlocks(pid)` (`app/engine/params.js`) normalises either shape.
+  `channelParamDefs`/`paramInstances`/`instanceNoun`/`activeInstances`/`getChannelParams` all
+  take an optional specific block now — omit it and every existing single-block call site is
+  byte-for-byte unchanged. `channelNumbers`/`setChannelParam`/`channelParamValue` resolve by
+  KEY across every block, so the SAME instance number on two axes (Channel 0 and Filter 0)
+  shares one store slot with no collision, as long as key names stay unique per peripheral —
+  true today by construction (DFSDM's real SDK field names already keep `DFSDM_Ch*` and
+  `DFSDM_Flt*`/`Rc*`/`Jc*` distinct). `codegen.js`'s `initPlan()` now loops
+  `channelParamBlocks(pid)`, each block getting its OWN `activeInstances()`/
+  `channelParamDefs()` call scoped to itself alone — a filter's fields can never land on a
+  channel's struct. `app/template.html`'s `instanceGroups()` does the same for the UI, so
+  "Channel 0" and "Filter 0" render as two separate bands, never merged into one "0".
+  8 new tests, `app/tests/channel_second_axis.test.js`, on an invented DFSDM-shaped part (not
+  the real, still-unmodelled data — the mechanism must not pass by being right about one
+  chip): both axes resolve their own handle (`DFSDM_FilterInit(DFSDM_FLT0,...)`, never
+  `DFSDM_Channel0`), each axis live independently, same-number storage isolation, and a real
+  jsdom render showing two separate UI groups. Every test seen red for real — `git stash push
+  -- app/engine/params.js app/engine/codegen.js app/template.html`, reran, 7 of 8 failed
+  correctly (`channelParamBlocks is not a function`, etc.), popped, green again. Worked
+  contract (real field names, real struct citations) posted to `agents/BOARD.md` for AGENT-1.
+- **P1 — the System-Core DMA overview, generalised and checked against CH32H417's real
+  data**, per main's explicit instruction not to build it against a synthetic shape.
+  `dmaMuxChannels(controller)` (`app/engine/resources.js`) is the honest-default fact AGENT-1
+  found: DMAMUX's `CHANNELx_MUX` is 0-indexed, so an unconfigured channel reads its RESET
+  value 0 = request ID 1 (`TIM1_CH1` on this part), not "no request" — and says whether that
+  default request's own owner is live right now, the genuinely dangerous case (an
+  "unconfigured" channel silently carrying a real event). `dmaChannelTable(controller)`
+  (`app/template.html`, was `dmaChannelTable()` reading `M.dma` singular) now takes the
+  controller explicitly and branches: the fixed-table render is untouched byte-for-byte
+  (verified — CH32V006's DMA1 page renders identically, zero console problems); the crossbar
+  render is new, one table per controller, under that controller's own peripheral page (DMA1
+  and DMA2 never merged).
+  5 new tests, `app/tests/dma_mux_overview.test.js`, against the REAL CH32H417 data: both
+  controllers' reset defaults (the SAME `TIM1_CH1` — one shared catalogue, not per-
+  controller), the live-default hazard turning on once TIM1 is actually enabled, a configured
+  request correctly overriding the default reading, the old fixed-table shape provably
+  untouched, and a real jsdom-browser render of both controllers' pages.
+- **`python build.py` run twice, told both times.** Once to verify `instanceGroups()`'s new
+  two-axis grouping in a real page (`data/mcus/CH32V003.yaml` was concurrently mid-edit at
+  that point — build not committed for that reason alone, unrelated to the change being
+  verified). Once for the DMA overview's jsdom check (`data/mcus/CH32L103.yaml`/`.notes.md`
+  mid-edit as this is written — same reason, not committed).
+
+Red, and who owns it: **nothing of mine.**
 
 **Current — 2026-09-14, cycle 9. main's two follow-ups on the DMA mechanism and the export-
 coverage gate it exposed, both closed.**

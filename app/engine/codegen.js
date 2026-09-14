@@ -36,7 +36,7 @@ import {
 } from './model.js';
 import {
   paramDefs, paramValue, paramApplies, depProblems, manualNoteText,
-  channelParamBlock, channelParamDefs, channelParamValue, activeInstances,
+  channelParamBlock, channelParamBlocks, channelParamDefs, channelParamValue, activeInstances,
 } from './params.js';
 import {
   dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState,
@@ -1337,12 +1337,25 @@ export function initPlan(pid) {
   // its `fn:` comes from `codegen.init_structs.<that struct>.fn` - the same global table
   // every non-channel struct already uses - rather than from the per-instance `sdk_call`
   // table, which is the primary struct's mechanism and stays exactly as it was.
-  const cbl = channelParamBlock(pid);
-  if (cbl && cbl.struct) {
-    const plan = activeInstances(pid);
+  //
+  // ONE BLOCK, OR MORE THAN ONE INDEPENDENT AXIS. `channel_params` may be a single
+  // block (every peripheral above) or a LIST of blocks (`channelParamBlocks()`,
+  // params.js) - DFSDM's proven case: `DFSDM_FilterInit`/`RcInit`/`JcInit` take a
+  // `DFSDM_FLTx` handle that has NOTHING to do with the `DFSDM_Channely` handle
+  // `DFSDM_ChannelInit` takes, and "filter 0" is not "channel 0" wearing a different
+  // hat - two genuinely separate instance axes, not one axis two functions disagree
+  // about. Looping over every block gives each its OWN `activeInstances()`/
+  // `channelParamDefs()` call, scoped to THAT block alone (never the union), so a
+  // filter's fields can never land on a channel's struct or vice versa - the exact
+  // trap AGENT-1 checked for before assuming the single-block mechanism already
+  // covered it (board 2026-09-14): forcing DFSDM through one block gives
+  // `DFSDM_FilterInit` a `DFSDM_Channely` handle, a real type mismatch.
+  for (const cbl of channelParamBlocks(pid)) {
+    if (!cbl.struct) continue;
+    const plan = activeInstances(pid, cbl);
     if (plan.missing) problems.push(plan.missing);
     if (plan.note) notes.push(plan.note);
-    const chanDefs = channelParamDefs(pid);
+    const chanDefs = channelParamDefs(pid, cbl);
     for (const inst of plan.instances) {
       const byStruct = new Map();
       const primary = {

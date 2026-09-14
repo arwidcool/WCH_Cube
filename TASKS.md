@@ -1395,6 +1395,36 @@ bits, and a clock tree that models what the schema can hold.
       `.name`) by writing the new test to not depend on it, not by changing the shared harness
       mid-tree. `node tests/run.js "features.test"` 7/7 (export-coverage line green, no
       exemption), full `"app/tests"` engine suite 608/608 (was 587/587).
+- [x] (AGENT-2) **P0: DFSDM's second handle axis - `channel_params` may now be a LIST of
+      blocks, each its own instance axis.** AGENT-1 checked `initPlan()`'s loop directly and
+      found the existing multi-struct mechanism (SAI's Frame/Slot, one shared handle) cannot
+      express DFSDM's real shape: `DFSDM_FilterInit`/`RcInit`/`JcInit` take a `DFSDM_FLTx`
+      handle that has nothing to do with `DFSDM_ChannelInit`'s `DFSDM_Channely` - forcing both
+      through one block is a real type mismatch. `peripherals.<pid>.channel_params` stays a
+      single OBJECT everywhere it is one today (proven: zero data edits, every existing suite
+      green); it may ALSO be a LIST. `channelParamBlocks()` (app/engine/params.js) normalises
+      either shape; `channelParamDefs`/`paramInstances`/`instanceNoun`/`activeInstances`/
+      `getChannelParams` all take an optional specific block, every existing call site
+      (omitting it) unchanged; `channelNumbers`/`setChannelParam`/`channelParamValue` resolve
+      by KEY across every block, so the same instance number on two axes shares one store slot
+      without collision. `codegen.js`'s `initPlan()` and `template.html`'s `instanceGroups()`
+      both loop every block, each scoped to its own struct/handle/instances. 8 new tests,
+      `app/tests/channel_second_axis.test.js`, on an invented part (not DFSDM's real
+      still-unmodelled data): both axes get their own correct handle, independent liveness,
+      storage isolation, real jsdom UI render. Seen red for real (git stash, reran, 7/8
+      failed correctly, popped, green). Worked contract on `agents/BOARD.md` for AGENT-1.
+- [x] (AGENT-2) **P1: the System-Core multi-controller DMA overview, held since round 6,
+      built against CH32H417's real two-controller data per main's explicit instruction.**
+      `dmaMuxChannels()` (app/engine/resources.js) reports the honest fact AGENT-1 found:
+      DMAMUX's `CHANNELx_MUX` is 0-indexed, so an unconfigured channel reads its reset value
+      0 = request ID 1 (TIM1_CH1 on this part), not "no request" - and whether that default's
+      owner is live right now. `dmaChannelTable()` (template.html) now takes the controller
+      explicitly and branches fixed-table (untouched byte-for-byte) vs crossbar (new, one
+      table per controller, never merged). 5 new tests, `app/tests/dma_mux_overview.test.js`,
+      against REAL CH32H417 data: both controllers share one reset default, the live-hazard
+      flag, a configured request overriding the default, the old shape untouched, a real
+      jsdom render of both controllers' pages. `node tests/run.js "app/tests"` 621/621 (was
+      608/608).
 - [x] (AGENT-2) **The nested-struct shape (§3 REQUEST, 09-12T19:33Z): a member that is a POINTER
       to a second struct no SDK function takes alone.** `codegen.init_structs.<inner-struct>.embed`
       now maps a param's `embed: <key>` to `{ into: <outer-struct>, member: <pointer-field> }`.

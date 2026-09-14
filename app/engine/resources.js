@@ -174,6 +174,43 @@ export function dmaState() {
   };
 }
 
+/**
+ * Per-channel state for a MUX controller — the crossbar equivalent of `dmaState()`'s
+ * fixed-table `channels` map, which `dmaState()` deliberately skips for a `mux:`
+ * controller (`if (!d.requests) continue;`, above): a crossbar channel's set of LEGAL
+ * requests is not a small, fixed list worth enumerating (it is the WHOLE shared
+ * catalogue, every channel, `dmaLegalChannels()`'s own doc-comment), so what is worth
+ * showing per channel is not "what it could carry" but what it ACTUALLY carries.
+ *
+ * That is not simply "the configured request, or nothing": DMAMUX's `CHANNELx_MUX`
+ * field is 0-INDEXED (RM:13209-13228, "0000000: DMA request input 1") and
+ * `ch32h417_dma.c:625` writes `DMA_Requestx - 1` into it, so an UNCONFIGURED channel's
+ * register reads its RESET value, 0 — which decodes back to request ID 1, not "no
+ * request routed". Rendering an unconfigured channel as empty would claim the silicon
+ * does something it does not (main, board 2026-09-14, the same fact AGENT-1 used to
+ * confirm codegen's mux-before-struct-fill ordering is SAFER than the vendor's own).
+ * `resetRequest` names that ID-1 request so the overview can say so honestly, and
+ * `resetLive` says whether ITS OWN owner happens to be switched on right now — the
+ * exact condition under which an "unconfigured" channel is not actually idle.
+ */
+export function dmaMuxChannels(controller) {
+  if (!controller || !controller.mux) return [];
+  const base = controller.mux.base || 0, count = controller.mux.count || 0;
+  const catalogue = muxCatalogue(controller);
+  let resetRequest = null;
+  for (const [name, id] of Object.entries(catalogue)) if (Number(id) === 1) { resetRequest = name; break; }
+  const resetOwner = resetRequest ? requestOwner(resetRequest) : null;
+  const resetLive = !!(resetOwner && M.peripherals[resetOwner] && isEnabled(resetOwner));
+  const configuredByChannel = {};
+  for (const r of dmaRequests()) (configuredByChannel[r.channel] ||= []).push(r);
+  const out = [];
+  for (let i = 1; i <= count; i++) {
+    const channel = String(base + i);
+    out.push({ channel, configured: configuredByChannel[channel] || [], resetRequest, resetOwner, resetLive });
+  }
+  return out;
+}
+
 // =============================================================================
 //  DMA requests — what the user asked the controller to move
 // =============================================================================

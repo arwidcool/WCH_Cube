@@ -2473,8 +2473,11 @@ function renderCentre() {
     el.onchange = () => { setSignalPin(pid, el.dataset.afsig, el.value); renderAll(); });
 
   // The DMA controller's own entry is the one place that shows all its channels at
-  // once, so the overview hangs off it whatever tabs it happens to have.
-  const isDmaCtl = !!(M.dma && pid === M.dma.controller);
+  // once, so the overview hangs off it whatever tabs it happens to have. `M.dma` may be
+  // a single controller OBJECT or a LIST of them (CH32H417's two) - `dmaControllers()`
+  // is the one place that normalises either shape, so this reads the same regardless
+  // of how many controllers the part has, and finds the ONE this peripheral page IS.
+  const dmaCtl = (typeof dmaControllers === 'function' ? dmaControllers() : []).find(d => d.controller === pid);
   // With no tabs there is nothing to put here, and an empty panel under a "Configuration"
   // heading reads as something failing to load. Say where the peripheral's settings
   // actually are instead - which for most of these is the Mode panel just above.
@@ -2485,19 +2488,35 @@ function renderCentre() {
     : ctab === 'param' ? paramTable(pid)
       : ctab === 'nvic' ? nvicTable(nvicVectorsOf(pid), { showOwner: false })
         : ctab === 'dma' ? dmaTable(pid)
-          : isDmaCtl ? '' : nothing;
-  if (isDmaCtl) body.innerHTML += dmaChannelTable();
+          : dmaCtl ? '' : nothing;
+  if (dmaCtl) body.innerHTML += dmaChannelTable(dmaCtl);
 }
 
-// ---- DMA1 in System Core: every channel, what can use it, and what is on it ----
+// ---- a DMA controller in System Core: every channel, what can use it, and what is
+// on it ------------------------------------------------------------------------
 // `dmaState()` is the same engine call the shared-resource warnings come from and
 // `dmaConflicts()` is the hard "two requests, one channel" list, so this table and the
 // banners above it cannot disagree. Configuring a request is the DMA Settings tab on its
 // peripheral; this is the one place that shows every channel at once.
-function dmaChannelTable() {
-  const d = M.dma;
-  if (!d || !d.requests) return '';
+//
+// Two shapes, because a fixed-table channel and a crossbar channel answer a different
+// question. A fixed-table channel's legal requests are a small, silicon-wired list -
+// "what CAN this channel carry" is worth enumerating. A `mux:` channel can carry ANY
+// of its controller's whole shared catalogue (`dmaLegalChannels()`'s own doc-comment),
+// so the honest question is "what DOES it carry" - the configured request, or, for one
+// nothing was configured on, the crossbar's own 0-indexed reset default
+// (`dmaMuxChannels()`, resources.js) rather than a blank cell implying "nothing routed"
+// when the silicon disagrees.
+function dmaChannelTable(controller) {
+  const d = controller;
+  if (!d) return '';
+  return d.mux ? dmaMuxChannelTable(d) : dmaFixedChannelTable(d);
+}
+
+function dmaFixedChannelTable(d) {
+  if (!d.requests) return '';
   const st = hasDmaState() ? dmaState() : null;
+  const stCh = st && st.channels;
   const defs = d.request_defaults || {};
   const owner = r => (M.peripherals[r] ? r : String(r).split('_')[0]);
   const configured = {};                    // channel -> the requests the USER configured
@@ -2507,7 +2526,7 @@ function dmaChannelTable() {
   const rows = [];
   for (let ch = 1; ch <= (d.channels || Object.keys(d.requests).length); ch++) {
     const list = d.requests[ch] || d.requests[String(ch)] || [];
-    const live = (st && st.channels[ch]) ? st.channels[ch].live : [];
+    const live = (stCh && stCh[ch]) ? stCh[ch].live : [];
     const mine = (configured[String(ch)] || []).map(r => r.request);
     const cells = list.map(r => {
       const o = owner(r);
@@ -2525,7 +2544,8 @@ function dmaChannelTable() {
         : mine.length ? esc([...new Set((configured[String(ch)] || []).map(r => r.owner))].join(', '))
           : '<span class="ro">—</span>'}</td></tr>`);
   }
-  const off = st && !st.enabled
+  const on = typeof isEnabled === 'function' && d.controller ? isEnabled(d.controller) : true;
+  const off = !on
     ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing here reaches the generated code yet. Switch it on in its Mode panel above.</div>` : '';
   return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and what is configured on it.`
     + ` Configure a request on its peripheral's <b>DMA Settings</b> tab. A channel with two configured requests is outlined`
@@ -2533,6 +2553,53 @@ function dmaChannelTable() {
     + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Configured</th></tr></thead>`
     + `<tbody>${rows.join('')}</tbody></table>`;
 }
+
+// The crossbar shape: any of the whole shared catalogue on any channel, so what is
+// shown is what is ACTUALLY on the channel right now - configured, or the honest
+// reset default (see dmaMuxChannels()'s own doc-comment for why that is not "empty").
+function dmaMuxChannelTable(d) {
+  if (typeof dmaMuxChannels !== 'function') return '';
+  const rows_ = dmaMuxChannels(d);
+  if (!rows_.length) return '';
+  const clash = {};
+  if (hasDmaConflicts()) for (const c of dmaConflicts()) clash[String(c.channel)] = c;
+  const rows = rows_.map(r => {
+    const c = clash[r.channel];
+    let cell, owners;
+    if (c) {
+      cell = `<b class="clashowners">${esc(c.owners.join(' + '))}</b>`;
+      owners = c.owners.join(' + ');
+    } else if (r.configured.length) {
+      cell = r.configured.map(x => {
+        const link = M.peripherals[x.owner] ? `<a data-goto="${attr(x.owner)}" title="Go to ${attr(x.owner)}">${esc(x.request)}</a>` : esc(x.request);
+        const dir = dmaParamValue(x.id, 'dir');
+        return `<span class="dreq used" title="${attr(`${x.request} — owner ${x.owner}, configured on this channel${dir ? `, direction ${dir}` : ''}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
+      }).join('');
+      owners = [...new Set(r.configured.map(x => x.owner))].join(', ');
+    } else {
+      const link = r.resetOwner && M.peripherals[r.resetOwner]
+        ? `<a data-goto="${attr(r.resetOwner)}" title="Go to ${attr(r.resetOwner)}">${esc(r.resetRequest)}</a>` : esc(r.resetRequest || '?');
+      const why = r.resetLive
+        ? `nothing is configured on this channel, so it is still at the crossbar's power-on default — DMAMUX's mux field is 0-indexed and resets to 0, which IS request ${esc(r.resetRequest)} — and ${esc(r.resetOwner)} is switched on right now, so this is a live, unconfigured route`
+        : `nothing is configured on this channel, so it is still at the crossbar's power-on default — DMAMUX's mux field is 0-indexed and resets to 0, which IS request ${esc(r.resetRequest)} — ${esc(r.resetOwner || 'its owner')} is off, so nothing actually fires today`;
+      cell = `<span class="dreq unrouted${r.resetLive ? ' on' : ''}" title="${attr(why)}">${link}<small>reset default${r.resetLive ? ', LIVE' : ''}</small></span>`;
+      owners = '<span class="ro">—</span>';
+    }
+    return `<tr class="${c ? 'clash' : r.configured.length ? 'used' : r.resetLive ? 'on' : ''}"${c ? ` title="${attr(c.text)}"` : ''}>`
+      + `<td>${r.channel}</td><td>${cell}</td><td>${c ? `<b class="clashowners">${esc(c.owners.join(' + '))}</b>` : owners}</td></tr>`;
+  });
+  const on = typeof isEnabled === 'function' && d.controller ? isEnabled(d.controller) : true;
+  const off = !on
+    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing here reaches the generated code yet. Switch it on in its Mode panel above.</div>` : '';
+  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — any of ${Object.keys(muxCatalogue_(d)).length || '?'} requests can be routed to`
+    + ` any channel through the DMAMUX crossbar, so this shows what each channel ACTUALLY carries: configured, or the crossbar's own`
+    + ` power-on default — an unconfigured channel is NOT "no request", it reads as request 1 until something else is routed there`
+    + ` (RM ch.10; a channel marked <b>reset default, LIVE</b> has that default request's own owner switched on right now).`
+    + ` Configure a request on its peripheral's <b>DMA Settings</b> tab.</div>${off}`
+    + `<table class="dmach"><thead><tr><th>Channel</th><th>What's actually routed</th><th>Owner</th></tr></thead>`
+    + `<tbody>${rows.join('')}</tbody></table>`;
+}
+const muxCatalogue_ = d => (d.mux && d.mux.requests) || {};
 
 // ---- DMA Settings, per peripheral ---------------------------------------------
 //
@@ -2778,7 +2845,7 @@ function paramRowNote(r) {
 const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object' ? String(o.name) : String(o)));
 
 /**
- * The per-INSTANCE rows: one group of editors for each live channel or layer.
+ * The per-INSTANCE rows: one group of editors for each live channel, layer or block.
  *
  * `channel_params` fills one struct once per instance (`app/engine/params.js`), and until
  * now it had NO editor anywhere in this page — so the generator would have emitted values
@@ -2788,18 +2855,30 @@ const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object'
  * Only LIVE instances are shown. An instance whose setting is off has no struct emitted
  * for it, so an editor for it would be a control with no effect — the same rule the GPIO
  * table's pull column follows.
+ *
+ * A peripheral may have MORE THAN ONE independent instance axis (`channelParamBlocks()`
+ * - DFSDM's proven case: Channel 0/1 and Filter 0/1 are two genuinely different axes,
+ * not one number meaning two things). Looped per block so "Filter 0"'s group shows only
+ * the filter's own fields, never a channel field with the same instance number attached.
  */
 function instanceGroups(pid) {
-  if (typeof activeInstances !== 'function' || typeof getChannelParams !== 'function') return [];
-  let plan;
-  try { plan = activeInstances(pid); } catch (e) { console.error('activeInstances', pid, e); return []; }
-  const noun = plan.noun || 'channel';
-  const title = noun.charAt(0).toUpperCase() + noun.slice(1);
-  return plan.instances.map(inst => {
-    let rows = [];
-    try { rows = getChannelParams(pid, inst.n) || []; } catch (e) { console.error('getChannelParams', pid, e); }
-    return { n: inst.n, name: `${title} ${inst.n}`, rows };
-  }).filter(g => g.rows.length);
+  if (typeof channelParamBlocks !== 'function' || typeof activeInstances !== 'function'
+    || typeof getChannelParams !== 'function') return [];
+  let blocks = [];
+  try { blocks = channelParamBlocks(pid); } catch (e) { console.error('channelParamBlocks', pid, e); return []; }
+  const groups = [];
+  for (const cbl of blocks) {
+    let plan;
+    try { plan = activeInstances(pid, cbl); } catch (e) { console.error('activeInstances', pid, e); continue; }
+    const noun = plan.noun || 'channel';
+    const title = noun.charAt(0).toUpperCase() + noun.slice(1);
+    for (const inst of plan.instances) {
+      let rows = [];
+      try { rows = getChannelParams(pid, inst.n, cbl) || []; } catch (e) { console.error('getChannelParams', pid, e); }
+      if (rows.length) groups.push({ n: inst.n, name: `${title} ${inst.n}`, rows });
+    }
+  }
+  return groups;
 }
 
 function paramRows(pid) {

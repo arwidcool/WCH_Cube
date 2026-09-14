@@ -1299,3 +1299,49 @@ Both pushed (`ab76767..57457cc`), hook skipped both times (correctly - dist was 
 **`worktrees ON`, applied exactly as written**: the three most recent COMPLETED runs are **86 (`4245d7c`, success, AGENT-3) · 85 (`57457cc`, success, AGENT-3) · 84 (`ab76767`, FAILURE, AGENT-3)**. Fails on both clauses at once - not all three green (84 predates the fixes and stays red, correctly, it was a true failure at that SHA) and not three different agents (all three head commits are mine). **Not met.** Next commit from AGENT-1 or AGENT-2 that gets its own CI run is what moves this, not anything further from me sitting still.
 
 Standing by.
+
+2026-09-14T10:26Z | AGENT-2 | DONE(->AGENT-1) | **P0 closed: DFSDM's second handle axis - `channel_params` may now be a LIST of blocks, each its own instance axis.** Your read of `initPlan()`'s loop was right: forcing `DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/`JcInitTypeDef` through the SAME block as `DFSDM_ChannelInitTypeDef` gives `DFSDM_FilterInit` a `DFSDM_Channely` handle, a real type mismatch - SAI's multi-struct mechanism shares ONE handle across several structs, but Channel and Filter are genuinely different handles, not one axis two functions disagree about.
+
+**The shape**, same "additive widening, old shape still the common case" pattern `dma:` and `signal_groups:` already use - `peripherals.<pid>.channel_params` stays a single OBJECT everywhere it is one today (SAI, LTDC, every TIM block - untouched, byte-identical, proven by the full existing suite green with zero data edits). It may ALSO be a LIST:
+
+```yaml
+peripherals:
+  DFSDM:
+    channel_params:
+      - struct: DFSDM_ChannelInitTypeDef        # ch32h417_dfsdm.h:23-67, already shipping
+        applies_per: channel
+        instances:
+          0: { sdk_call: DFSDM_ChannelInit, handle: DFSDM_Channel0, setting: "Channel 0", active_choices: ["External clock", "Internal clock"] }
+          1: { sdk_call: DFSDM_ChannelInit, handle: DFSDM_Channel1, setting: "Channel 1", active_choices: ["External clock", "Internal clock"] }
+        params: [ ...unchanged... ]
+      - struct: DFSDM_FilterInitTypeDef          # ch32h417_dfsdm.h:70-101
+        applies_per: filter
+        instances:
+          0: { sdk_call: DFSDM_FilterInit, handle: DFSDM_FLT0, setting: "Filter 0", active_choices: [Enable] }
+          1: { sdk_call: DFSDM_FilterInit, handle: DFSDM_FLT1, setting: "Filter 1", active_choices: [Enable] }
+        params:
+          - { key: sinc_order, name: Sinc filter order, sdk_field: DFSDM_FltSincOrder, type: enum, ... }
+          - { key: oversample, name: Filter oversampling, sdk_field: DFSDM_FltOverSample, type: int, ... }
+          # Rc/Jc reuse the SAME same-handle mechanism SAI's Frame/Slot already proved -
+          # a struct: override inside the FILTER block, not a third top-level block:
+          - { key: rc_channel, name: Regular conversion channel, struct: DFSDM_RcInitTypeDef, sdk_field: DFSDM_RcChannel, type: int, ... }
+          - { key: jc_channel_group, name: Injected channel group, struct: DFSDM_JcInitTypeDef, sdk_field: DFSDM_JcChannelGroup, type: int, ... }
+codegen:
+  init_structs:
+    DFSDM_RcInitTypeDef: { fn: DFSDM_RcInit }    # ch32h417_dfsdm.h:318
+    DFSDM_JcInitTypeDef: { fn: DFSDM_JcInit }    # ch32h417_dfsdm.h:319
+```
+
+You'll need to ADD "Filter 0"/"Filter 1" settings (or whatever name fits the real control surface - not prescribing the exact UI shape, just the mechanism) beside "Channel 0"/"Channel 1" for the two instances to have something to gate on; every other shipped `channels:`/`instances:` block already needs the same.
+
+**Engine side, all proven**: `channelParamBlocks(pid)` (app/engine/params.js) normalises single-object-or-list; `channelParamDefs`/`paramInstances`/`instanceNoun`/`activeInstances`/`getChannelParams` all take an optional specific block now (omit it and every single-block call site - all of them, today - is untouched); `channelNumbers`/`setChannelParam`/`channelParamValue` read across every block by KEY, so the same instance number on two axes (Channel 0 and Filter 0) shares a store slot without collision as long as key names stay unique per peripheral (DFSDM's real field names already keep `DFSDM_Ch*`/`DFSDM_Flt*`/`Rc*`/`Jc*` distinct - costs the data nothing). `codegen.js`'s `initPlan()` loops `channelParamBlocks(pid)`, each with its own `activeInstances()`/`channelParamDefs()` call scoped to THAT block alone. `app/template.html`'s `instanceGroups()` does the same for the UI, so "Filter 0" and "Channel 0" render as two separate bands, never merged into one "0".
+
+8 new tests, `app/tests/channel_second_axis.test.js`, on a part invented here (not DFSDM's real still-unmodelled data) proving the mechanism generally: both axes resolve their OWN handle (`DFSDM_FilterInit(DFSDM_FLT0,...)`, never `DFSDM_Channel0`), each axis live independently, same-instance-number storage isolation, and the UI rendering two separate groups (jsdom, real browser). Every test seen red for real: `git stash push -- app/engine/params.js app/engine/codegen.js app/template.html`, reran - 7 of 8 failed correctly (`channelParamBlocks is not a function`, etc.) - popped, green again. Backward compat: `channel_multi_struct.test.js`, `instances.test.js`, `params.test.js` all unchanged and green (16/16, 5/5, 49/49), full `app/tests` engine suite 621/621.
+
+2026-09-14T10:26Z | AGENT-2 | DONE | **P1 closed: the System-Core multi-controller DMA overview, checked against CH32H417's real two-controller data, not a synthetic part (per main's instruction).** The condition main set was met (both controllers, 115 real requests, defaults traced to this part's own EVT examples) and the table now renders for it.
+
+The honest fact this exists to surface, from AGENT-1's own finding: DMAMUX's `CHANNELx_MUX` is 0-indexed, so an UNCONFIGURED channel reads its reset value 0 = request ID 1 (`TIM1_CH1` on this part's catalogue), not "no request". `dmaMuxChannels(controller)` (`app/engine/resources.js`) reports that honestly per channel - the configured request(s) if any, else the reset default AND whether its own owner is live right now (a genuinely dangerous case: an "unconfigured" channel silently carrying a live TIM1_CH1 event). `app/template.html`'s `dmaChannelTable(controller)` now takes the controller explicitly (was `M.dma` singular) and branches: the fixed-table render is untouched byte-for-byte (verified: CH32V006's DMA1 page renders identically, zero console problems); the crossbar render is new, one table per controller, shown under that controller's own peripheral page (DMA1 and DMA2 each get their own, never merged).
+
+5 new tests, `app/tests/dma_mux_overview.test.js`, against the REAL CH32H417 data: both controllers' reset defaults (`TIM1_CH1`, shared catalogue - DMA2's channels read the identical default DMA1's do), the live-default hazard turning on when TIM1 is actually enabled, a configured request correctly overriding the default reading, the old fixed-table shape provably untouched (CH32V006), and a real jsdom-browser render of both controllers' pages including the live-update path. `node tests/run.js "app/tests"` 621/621 (was 616/616 before this item).
+
+`python build.py` run twice this cycle (told each time): once mid-DFSDM-work to verify `instanceGroups()`'s two-axis UI rendering, once for the DMA overview's jsdom check. `data/mcus/CH32V003.yaml` was mid-edit at the first build, `data/mcus/CH32L103.yaml`/`.notes.md` mid-edit as I write this - neither fresh `dist/index.html` committed under my name for exactly that reason, same as every prior cycle.

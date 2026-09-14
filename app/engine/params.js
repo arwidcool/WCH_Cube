@@ -454,18 +454,55 @@ export function paramsObject(pid) {
 //  Storage is `S.periph[pid].channelParams[<channel>][<key>]`, keyed by the channel
 //  NUMBER the data uses, so nothing here has to parse a setting's display name.
 
-/** The `channel_params` block for a peripheral, or null. */
-export function channelParamBlock(pid) {
+/**
+ * Every `channel_params` BLOCK a peripheral has, normalised to a list.
+ *
+ * `peripherals.<pid>.channel_params` stays a single OBJECT, unchanged, on every part
+ * that has one instance axis - CH32H417 LTDC/SAI/OPA and every other shipped
+ * `channel_params` block, and every test against them, are untouched. It may ALSO be
+ * a LIST of blocks, for a peripheral with more than one INDEPENDENT instance axis -
+ * the same "additive widening, old shape still the common case" pattern `dma:`
+ * (single controller OBJECT, or a LIST) and `signal_groups:`/`embed:` already
+ * established. DFSDM is why this exists: `DFSDM_ChannelInit(DFSDM_Channely, &s)` and
+ * `DFSDM_FilterInit(DFSDM_FLTx, &s)` (`DFSDM_RcInit`/`DFSDM_JcInit` alongside it, the
+ * SAME same-handle multi-struct shape SAI's Frame/Slot already use) take DIFFERENT
+ * handles that do not correspond to the same instance number the way an LTDC layer or
+ * a TIM channel's function-vs-handle pair does — forcing them into ONE block gives
+ * `DFSDM_FilterInit` a `DFSDM_Channely` handle, a real type mismatch (AGENT-1, board
+ * 2026-09-14, checked against this exact loop before assuming the existing mechanism
+ * covered it).
+ */
+export function channelParamBlocks(pid) {
   const P = (M && M.peripherals && M.peripherals[pid]) || null;
   const cp = P && P.channel_params;
-  if (!cp || typeof cp !== 'object' || !Array.isArray(cp.params)) return null;
-  return cp;
+  if (!cp) return [];
+  const list = Array.isArray(cp) ? cp : [cp];
+  return list.filter(b => b && typeof b === 'object' && Array.isArray(b.params));
 }
 
-/** Its parameter definitions, normalised exactly like `params:` and `dma.channel_params`. */
-export function channelParamDefs(pid) {
-  const cp = channelParamBlock(pid);
-  return cp ? normaliseParamDefs(cp.params) : [];
+/** The FIRST (or only) `channel_params` block for a peripheral, or null - every
+ * single-axis caller's own view, unaffected by a second block existing. */
+export function channelParamBlock(pid) {
+  return channelParamBlocks(pid)[0] || null;
+}
+
+/**
+ * Its parameter definitions, normalised exactly like `params:` and `dma.channel_params`.
+ *
+ * Pass a specific BLOCK (from `channelParamBlocks()`) to get only THAT axis's own
+ * definitions — what `codegen.js`'s per-instance loop needs, so a filter's fields
+ * never land on a channel's struct or vice versa. With no block, every block's
+ * definitions are concatenated — identical to the single block's own list when
+ * there is only one (every shipped part today), and what a KEY-based lookup
+ * (`setChannelParam`, the UI's generic editor) needs regardless of which axis a key
+ * belongs to. Key names must stay unique across one peripheral's own blocks — the
+ * same "the data says what the silicon allows" rule the rest of this schema follows;
+ * DFSDM's real field names already keep `DFSDM_Ch*` and `DFSDM_Flt*`/`Rc*`/`Jc*`
+ * distinct, so this costs the data nothing to keep true.
+ */
+export function channelParamDefs(pid, cpIn) {
+  if (cpIn) return normaliseParamDefs(cpIn.params);
+  return channelParamBlocks(pid).flatMap(cp => normaliseParamDefs(cp.params));
 }
 
 const chanDefOf = (pid, key) => channelParamDefs(pid).find(d => d.key === key);
@@ -503,8 +540,8 @@ const chanDefOf = (pid, key) => channelParamDefs(pid).find(d => d.key === key);
  * number are also why one map is better: a channel present in one and absent from the
  * other is silently half-defined today.
  */
-export function paramInstances(pid) {
-  const cp = channelParamBlock(pid);
+export function paramInstances(pid, cpIn) {
+  const cp = cpIn || channelParamBlock(pid);
   if (!cp) return [];
   const rows = new Map();
   const at = n => rows.get(n) || rows.set(n, { n, fn: null, handle: null, setting: null, activeChoices: null }).get(n);
@@ -540,15 +577,23 @@ export function paramInstances(pid) {
   return [...rows.values()].sort((a, b) => a.n - b.n);
 }
 
-/** The noun this block repeats over — "channel" unless the data says otherwise. */
-export const instanceNoun = pid => {
-  const cp = channelParamBlock(pid);
+/** The noun a block repeats over — "channel" unless the data says otherwise. With no
+ * block, the FIRST block's noun (every single-axis caller's existing contract). */
+export const instanceNoun = (pid, cpIn) => {
+  const cp = cpIn || channelParamBlock(pid);
   return (cp && cp.applies_per) || 'channel';
 };
 
-/** The channel numbers this peripheral's data describes, in order. */
+/** The instance numbers this peripheral's data describes, across EVERY block, in
+ * order - what `setChannelParam` validates a channel/instance number against. Two
+ * blocks naming the same number (DFSDM's Channel 0 and Filter 0) is not a collision
+ * here: the STORE is keyed by (number, key), and key names stay unique per block
+ * (see `channelParamDefs()`), so the two axes' values share the slot without either
+ * overwriting the other. */
 export function channelNumbers(pid) {
-  return paramInstances(pid).map(r => r.n);
+  const out = new Set();
+  for (const cp of channelParamBlocks(pid)) for (const r of paramInstances(pid, cp)) out.add(r.n);
+  return [...out].sort((a, b) => a - b);
 }
 
 /**
@@ -572,11 +617,11 @@ export function activeChannels(pid) {
  * display string; so the block reports what it is short of and the generator turns that
  * into a named TODO rather than emitting an init for a channel nobody configured.
  */
-export function activeInstances(pid) {
-  const cp = channelParamBlock(pid);
+export function activeInstances(pid, cpIn) {
+  const cp = cpIn || channelParamBlock(pid);
   if (!cp) return { instances: [], missing: null, noun: 'channel' };
-  const noun = instanceNoun(pid);
-  const rows = paramInstances(pid);
+  const noun = instanceNoun(pid, cp);
+  const rows = paramInstances(pid, cp);
   const undescribed = rows.filter(r => !r.setting);
   // NOTHING in the block says which setting decides an instance. This is round 4's E2,
   // open on TASKS.md and the reason the per-channel emitter was parked in the first
@@ -641,10 +686,12 @@ export function channelParamDefaults(pid) {
   return out;
 }
 
-/** Everything a per-channel editor needs for one channel. */
-export function getChannelParams(pid, channel) {
+/** Everything a per-channel editor needs for one channel. Pass the BLOCK (from
+ * `channelParamBlocks()`) to list only that axis's own fields - what the UI needs so
+ * "Filter 0"'s group does not also show Channel 0's fields under the same number. */
+export function getChannelParams(pid, channel, cpIn) {
   const store = ((S.periph[pid] || {}).channelParams || {})[channel] || {};
-  return channelParamDefs(pid).map(d => ({
+  return channelParamDefs(pid, cpIn).map(d => ({
     ...d,
     value: store[d.key] !== undefined ? store[d.key] : d.default,
     // `channel` IS the instance number here - without it, an `instance_setting`
