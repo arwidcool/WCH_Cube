@@ -2211,7 +2211,17 @@ codegen:
     SPI_InitTypeDef:           { fn: SPI_Init }           # ch32v00X_spi.h:129
     I2C_InitTypeDef:           { fn: I2C_Init }           # ch32v00X_i2c.h:287
     ADC_InitTypeDef:           { fn: ADC_Init }           # ch32v00X_adc.h:156
-    DMA_InitTypeDef:           { fn: DMA_Init }           # ch32v00X_dma.h:162
+    # `cmd:`/`deinit:` MISSING until 2026-09-14 - a real, SILENT defect, not cosmetic:
+    # with `fn:` alone, `DMA_Init()` was called and applied but `DMA_Cmd()` (the
+    # channel's EN bit, DMA_CFGRx bit 0) was never emitted - the struct is configured
+    # and NEVER STARTED. Unlike a missing `fn:` (a visible TODO complaint), a missing
+    # `cmd:` produces NO complaint at all: `dmaSection()` only pushes the `spec.cmd`
+    # line `if (spec.cmd)`, no `else` branch. Confirmed by generating real C for a
+    # configured ADC1 DMA request: 0 conflicts/issues/complaints, `DMA_Init()` present,
+    # `DMA_Cmd()` absent. No shipped fixture configures a live DMA request (ships
+    # disabled, zero requests), so no gate ever exercised this. Found chasing the
+    # identical gap on CH32H417 (agents/BOARD.md 2026-09-14, AGENT-3's finding).
+    DMA_InitTypeDef:           { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32v00X_dma.h:161,162,164
     TIM_TimeBaseInitTypeDef:   { fn: TIM_TimeBaseInit }   # ch32v00X_tim.h:431
     # NOT TIM_TimeBaseInit, and not derivable from the struct name either. The dead-time
     # parameter lives in this struct and only TIM_BDTRConfig applies it.

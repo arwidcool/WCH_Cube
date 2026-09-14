@@ -10563,6 +10563,26 @@ codegen:
     SPI_InitTypeDef:         { fn: SPI_Init }           # ch32h417_spi.h:198
     I2C_InitTypeDef:         { fn: I2C_Init }           # ch32h417_i2c.h:302
     ADC_InitTypeDef:         { fn: ADC_Init }          # ch32h417_adc.h:174
+    # MISSING UNTIL 2026-09-14 - real defect, not a cosmetic gap: with no entry here,
+    # `dmaSection()` (app/engine/codegen.js) never emits DMA_Init() OR DMA_Cmd() for
+    # ANY configured DMA request on either controller - the mux routing was correct,
+    # the struct was filled, and the channel was never actually applied or started.
+    # `--strict` DOES catch it (a real TODO, "nothing applies this struct"), but no
+    # shipped fixture configures a live DMA request (both controllers ship disabled,
+    # zero requests), so the path was never exercised by any test - found by AGENT-3
+    # generating real C for a configured request, not by any existing gate. `cmd:
+    # DMA_Cmd` matters as much as `fn:` here: without it the struct is written and
+    # applied but the channel's EN bit is never set (DMA_CFGRx.EN, RM:13046-13053),
+    # so nothing transfers regardless of a correct DMA_Init() call. Confirmed the
+    # ORDER this produces (DeInit -> Init -> Cmd, all AFTER the mux routing call) is
+    # exactly the vendor's own internal three-step sequence, just relocated as a
+    # whole block relative to DMA_MuxChannelConfig - the ordering already checked and
+    # cited on the `dma:` block itself above (the 0-indexed-mux hazard reasoning).
+    #
+    # The SAME gap (missing `cmd:`, and on CH32L103 missing the whole entry) was
+    # found on all four other shipped parts once this one surfaced - fixed there too,
+    # each part's own commit.
+    DMA_InitTypeDef:         { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32h417_dma.h:274,276,273
     # `no_handle: true` is the data saying the Init takes the struct ALONE - these three
     # peripherals are singletons on this part, so their base address is compiled into the
     # SDK function rather than passed to it. Getting this wrong is not a compile error on

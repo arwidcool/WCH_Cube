@@ -2784,6 +2784,17 @@ codegen:
     ADC_InitTypeDef:         { fn: ADC_Init }
     CAN_InitTypeDef:         { fn: CAN_Init }
     LPTIM_TimeBaseInitTypeDef: { fn: LPTIM_TimeBaseInit }
+    # MISSING entirely until 2026-09-14 - a real defect, not cosmetic: with no entry
+    # here at all, `dmaSection()` never emits DMA_Init() OR DMA_Cmd() for a configured
+    # DMA request - a visible TODO ("nothing applies this struct"), confirmed by
+    # generating real C for a configured USART1_TX request. No shipped fixture
+    # configures a live DMA request, so no gate ever exercised the path. Same class of
+    # gap found across all five other shipped parts the same cycle (agents/BOARD.md
+    # 2026-09-14, AGENT-3's CH32H417 finding, then a sweep of the rest) - V006/V003/
+    # X035 had `fn:` but no `cmd:` (a SILENT gap, no TODO at all, since `dmaSection()`
+    # only emits `spec.cmd` `if (spec.cmd)` with no else branch); this part had
+    # neither.
+    DMA_InitTypeDef:           { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32l103_dma.h:168,169,171
     # THE COMPARATORS' STRUCT WAS NEVER APPLIED, and CMP1 has carried `params:` since the
     # part landed - the rows were filled in and then followed by `/* TODO: nothing applies
     # this struct */`, invisible because no fixture switched a comparator on. Modelling

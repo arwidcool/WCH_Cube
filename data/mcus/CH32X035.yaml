@@ -2117,6 +2117,37 @@ dma:
 
   init_struct: DMA_InitTypeDef
 
+  # MISSING ENTIRELY until 2026-09-14 - a real defect, not cosmetic: with no
+  # `register:` block, `dmaChannelHandle()` (app/engine/codegen.js) has no
+  # `channel_macro` to build a handle from, so EVERY configured DMA request on this
+  # part emitted a TODO ("dma.register.channel_macro — the SPL name of a channel")
+  # instead of DMA_Init()/DMA_Cmd() - even after the SEPARATE `cmd:` gap below is
+  # fixed, since `if (spec.fn && handle)` needs both. Confirmed by generating real C
+  # for a configured ADC1 request. The `channel_params:` rows below already reference
+  # `field: DIR`/`field: PL`/etc - clearly written expecting this block to exist -
+  # so this was an omission, not a choice. Address and field layout confirmed
+  # against THIS part's own header/RM (DMA1_Channel1_BASE = AHBPERIPH_BASE + 0x0008 =
+  # 0x40020008, ch32x035.h:602,625; offset 0x08 + (x-1)*20, CH32X035RM.md:1492) -
+  # identical to CH32V006's, same family, checked rather than assumed to carry over.
+  register:
+    name: DMA_CFGRx
+    address: 0x40020008
+    stride: 20
+    channel_macro: DMA1_Channel$CH
+    fields:
+      EN:      { lsb: 0,  bits: 1 }
+      TCIE:    { lsb: 1,  bits: 1 }
+      HTIE:    { lsb: 2,  bits: 1 }
+      TEIE:    { lsb: 3,  bits: 1 }
+      DIR:     { lsb: 4,  bits: 1 }
+      CIRC:    { lsb: 5,  bits: 1 }
+      PINC:    { lsb: 6,  bits: 1 }
+      MINC:    { lsb: 7,  bits: 1 }
+      PSIZE:   { lsb: 8,  bits: 2 }
+      MSIZE:   { lsb: 10, bits: 2 }
+      PL:      { lsb: 12, bits: 2 }
+      MEM2MEM: { lsb: 14, bits: 1 }
+
   # Ported from CH32V006 - DMA_InitTypeDef is member-for-member identical between
   # the two families - and re-checked against the X035 headers by verify_sdk_names.
   channel_params:
@@ -2399,7 +2430,12 @@ codegen:
     SPI_InitTypeDef:         { fn: SPI_Init }
     I2C_InitTypeDef:         { fn: I2C_Init }
     ADC_InitTypeDef:         { fn: ADC_Init }
-    DMA_InitTypeDef:         { fn: DMA_Init }
+    # `cmd:`/`deinit:` MISSING until 2026-09-14 - a real, SILENT defect, not cosmetic:
+    # DMA_Init() was called and applied but DMA_Cmd() (the channel's EN bit) was never
+    # emitted, no complaint, no shipped fixture ever configured a live request to
+    # exercise it. Same gap found on CH32H417 (agents/BOARD.md 2026-09-14), fixed here
+    # too rather than left for the next person to rediscover per part.
+    DMA_InitTypeDef:         { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32x035_dma.h:168,169,171
     TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }
     TIM_BDTRInitTypeDef:     { fn: TIM_BDTRConfig }
 

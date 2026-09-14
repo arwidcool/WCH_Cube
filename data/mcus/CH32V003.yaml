@@ -1884,7 +1884,12 @@ codegen:
     SPI_InitTypeDef:         { fn: SPI_Init }
     I2C_InitTypeDef:         { fn: I2C_Init }
     ADC_InitTypeDef:         { fn: ADC_Init }
-    DMA_InitTypeDef:         { fn: DMA_Init }
+    # `cmd:`/`deinit:` MISSING until 2026-09-14 - a real, SILENT defect, not cosmetic:
+    # DMA_Init() was called and applied but DMA_Cmd() (the channel's EN bit) was never
+    # emitted, no complaint, no shipped fixture ever configured a live request to
+    # exercise it. Same gap found on CH32H417 (agents/BOARD.md 2026-09-14), fixed here
+    # too rather than left for the next person to rediscover per part.
+    DMA_InitTypeDef:         { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32v00x_dma.h:161,162,164
     TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }
     TIM_BDTRInitTypeDef:     { fn: TIM_BDTRConfig }
     # OPA is a SINGLE-INSTANCE peripheral and OPA_Init takes the struct ALONE — there
