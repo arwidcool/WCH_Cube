@@ -1907,11 +1907,23 @@ codegen:
 
   # Signal name -> SDK macro, for a `sdk_repeat: channels` call.
   # ch32v00x_adc.h:67-79 defines ADC_Channel_0..9 with 8 and 9 aliased to
-  # ADC_Channel_Vrefint and ADC_Channel_Vcalint; this part bonds IN0..IN7 and the last
-  # two are internal, which is why the list stops at 7 rather than mirroring the header.
+  # ADC_Channel_Vrefint and ADC_Channel_Vcalint; this part bonds IN0..IN7 externally.
+  #
+  # IN8/IN9 ARE modelled below - they were not until 2026-09-14, even though ADC1's own
+  # `notes:` already cited the exact macros ("ADC_Channel_Vrefint = channel 8 and
+  # ADC_Channel_Vcalint = channel 9, ch32v00x_adc.h:78-79") and the settings choices
+  # ("IN8 (Vrefint, internal)"/"IN9 (Vcalint, internal)") already existed - the citation
+  # was correct and simply never reached this map, so ticking either compiled to a TODO.
+  # Found by `validate_mcu.py`'s new codegen.channel_macros check (added the same cycle,
+  # after the identical gap surfaced on CH32X035's ADC1 and a probe across all six parts
+  # for the same shape named this one too), not by reading this file cold - confirmed
+  # against the header before trusting the existing citation. Numeric spelling, matching
+  # CH32H417/CH32V006/CH32X035's own stated convention on this exact shape.
   channel_macros:
     ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
-            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7 }
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            "IN8 (Vrefint, internal)": ADC_Channel_8,
+            "IN9 (Vcalint, internal)": ADC_Channel_9 }
 
   # Which signals want GPIO_Mode_AIN rather than AF_PP. Without this the generator has
   # to guess from the peripheral's category, and it cannot tell ADC1_IN4 from

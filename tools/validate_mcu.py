@@ -1356,6 +1356,56 @@ def check_codegen(doc: dict, r: Report) -> None:
                            clock.get("hse_peripheral"), clock.get("hse_setting"),
                            ctlr["hse_choices"], exhaustive=True)
 
+    # `codegen.channel_macros.<pid>` backs any `params:` row using `sdk_repeat: channels`
+    # (ADC_RegularChannelConfig and the like: one call per TICKED channel, so the
+    # generator needs a macro per channel name, looked up by the checkbox choice's own
+    # name). Missing entirely on CH32X035's ADC1 until 2026-09-14: the `sample` param
+    # used `sdk_repeat: channels` and no `channel_macros.ADC1` existed anywhere, so
+    # ticking ANY of its 14 channels compiled to a TODO
+    # (`codegen.channel_macros.ADC1 — no macro for any channel`) - invisible to every
+    # existing gate, because nothing generates C with a channel ticked by default and
+    # `--strict` on an unconfigured default project exercises none of it. Found by
+    # generating real C for a throwaway project, not by this check - this check exists
+    # so the NEXT one is caught before a human has to think to do that.
+    #
+    # Reproduces app/engine/codegen.js's own `selectedChannels()` + `sdkCalls()` logic
+    # statically rather than inventing a second rule: a `type: checkboxes` setting
+    # supplies the channel NAMES (codegen.js's own rule for what counts as a channel,
+    # not a guess made here), and every `params:` row with `sdk_repeat: channels` needs
+    # a macro for every one of them - the exact pair the runtime function requires
+    # before it will emit anything but a TODO.
+    #
+    # Deliberately does NOT look at `dma.channel_params` - DMA's channels are a
+    # completely different mechanism (`dma.requests`/`dma.mux`, RM ch.10-shaped), never
+    # `selectedChannels()`, never this key. A probe that flagged DMA1 on the same crude
+    # "name contains 'channel'" heuristic (agents/BOARD.md 2026-09-14) was checked by
+    # hand and confirmed a false positive for exactly this reason before this check was
+    # written - so this check does not repeat that false positive structurally.
+    channel_macros = cg.get("channel_macros") or {}
+    for pid, P in periphs.items():
+        if not isinstance(P, dict):
+            continue
+        repeats = [p for p in (P.get("params") or [])
+                   if isinstance(p, dict) and p.get("sdk_repeat") == "channels"]
+        if not repeats:
+            continue
+        where = f"codegen.channel_macros.{pid}"
+        macros = channel_macros.get(pid)
+        channel_names = [str(c.get("name")) for s in (P.get("settings") or [])
+                         if isinstance(s, dict) and s.get("type") == "checkboxes"
+                         for c in (s.get("choices") or []) if isinstance(c, dict)]
+        keys = ", ".join(str(p.get("key", "?")) for p in repeats)
+        if not isinstance(macros, dict):
+            r.error(where, f"missing, but {pid}.params has a `sdk_repeat: channels` row "
+                           f"({keys}) - every channel ticked in the UI would compile to a "
+                           "TODO, invisible unless someone generates C with one selected")
+            continue
+        missing = [n for n in channel_names if n not in macros]
+        if missing:
+            r.error(where, f"has no macro for {', '.join(missing)} - {pid}'s own checkbox "
+                           f"choices name them ({keys} needs one per channel), ticking one "
+                           "of these would compile to a TODO")
+
 
 def _check_choice_keys(doc, r, where, pid, sname, mapping, exhaustive: bool = False) -> None:
     """A value map keyed by the NAME of a choice. Every key must still be a choice; with

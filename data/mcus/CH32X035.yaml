@@ -2503,6 +2503,17 @@ codegen:
             IN12: ADC_Channel_12, IN13: ADC_Channel_13,
             "IN15 (Vrefint, internal)": ADC_Channel_15 }
 
+  # Without this, ADC1's pads get GPIO_Mode_AIN correctly (`category: Analog` +
+  # `pins.<pin>.analog` is a working fallback) but the generated C says so with
+  # "analog mode inferred — add codegen.analog_signals to be certain" on every ADC1 pin -
+  # confirmed by generating C for a throwaway project before writing this. Not a defect
+  # (the mode was already right), just not authoritative - closed while in the file for
+  # the channel_macros fix, since both are the same "declare it, don't let the generator
+  # guess" question. IN15 (Vrefint) is deliberately absent: it has no pin (no `signals:`
+  # entry on its own settings choice), so it is not a signal any GPIO mode applies to.
+  analog_signals:
+    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13]
+
 # What this part offers, so no renderer has to know a part name.
 gpio:
   speeds:
