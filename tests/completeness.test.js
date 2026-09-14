@@ -87,7 +87,15 @@ const ABSENT = {
   'RCC.params': 'the clock tree is configured on the Clock tab; RCC has no per-peripheral parameters',
   'EXTI.params': 'notes.md: "the per-line trigger edge (EXTI_RTENR / EXTI_FTENR, RM 6.4.3), eight lines, no signals" — eight choices, no numbers',
   'DMA1.params': 'DMA parameters are per-REQUEST and live in the top-level dma.channel_params, not on the peripheral. FORMAT.md forbids modelling one fact twice',
-  'PIOC.params': 'no ch32h417_pioc.c exists and no function of any kind applies PIOC_TypeDef; PIOC is a second, embedded RISC8B CPU configured by loading an assembly program into its own ROM, not an init struct (RM ch.34, CH32H417RM.md:49360-49399)',
+  // PIOC.params used to be one generic entry, citing only CH32H417's own files - true for
+  // CH32H417, silently wrong the moment CH32X035's PIOC (a real, separate peripheral) fell
+  // through the same generic key via lookup()'s fallback. Found by the ABSENT-citation gate
+  // (2026-09-14, checking every entry against every part it actually excuses); split into
+  // per-part keys on AGENT-1's adjudication (board, same day) rather than left generic a
+  // second time - the shape that broke is "one citation, two parts", so the fix is not
+  // "a better shared citation", it is "no shared citation".
+  'CH32H417.PIOC.params': 'no ch32h417_pioc.c exists and no function of any kind applies PIOC_TypeDef; PIOC is a second, embedded RISC8B CPU configured by loading an assembly program into its own ROM, not an init struct (RM ch.34, CH32H417RM.md:49360-49399)',
+  'CH32X035.PIOC.params': 'no ch32x035_pioc.c exists and no function of any kind applies PIOC_TypeDef; PIOC is a second, embedded RISC core configured by loading an assembly program into its own ROM, not an init struct (RM ch.22, CH32X035RM.md:16942-16957)',
 
   // --- no clock-enable bit exists for it (ch32v00X_rcc.h:84-104)
   'SYS.clock': 'not a clocked peripheral: the debug pins and an option byte. No RCC_*Periph_SYS exists',
@@ -100,7 +108,20 @@ const ABSENT = {
   'EXTEN.clock': 'the extended-configuration unit sits on the HB domain and is clocked with it, '
     + 'with no gate of its own: `ch32v00X.h:438` puts it at `HBPERIPH_BASE + 0x3800` (= the RM\'s '
     + '0x40023800) and there is no RCC_*Periph_EXTEN anywhere in ch32v00X_rcc.h. Same shape as '
-    + 'FLASH, EXTI, TKEY and OPA1 above',
+    + 'FLASH, EXTI, TKEY and OPA1 above. TRUE FOR CH32V006 (the part `ch32v00X.h` is really '
+    + 'spelled for - confirmed by direct search, not assumed) - CH32L103 and CH32V003 each have '
+    + 'their own EXTEN and their own header, and lookup() silently applied this V006 citation '
+    + 'to both until the ABSENT-citation gate (2026-09-14) caught it. Their own citations are '
+    + 'below rather than folded into this one, the same reasoning as the PIOC split above.',
+  'CH32L103.EXTEN.clock': 'same rule as CH32V006\'s EXTEN.clock, checked against THIS part\'s '
+    + 'own header rather than assumed: `EXTEN_TypeDef` exists at `ch32l103.h:511-512`, its '
+    + 'register base at `:792`, and `grep RCC_.*Periph.*EXTEN ch32l103_rcc.h` returns nothing - '
+    + 'no bus clock gate exists for it on this part either (AGENT-1, board 2026-09-14)',
+  'CH32V003.EXTEN.clock': 'same rule as CH32V006\'s EXTEN.clock, checked against THIS part\'s '
+    + 'own header rather than assumed: `EXTEN_TypeDef` exists at `ch32v00x.h:338-339` (lowercase '
+    + '`x` - CH32V003\'s own real filename, not the `ch32v00X.h` capital-X file that is really '
+    + 'CH32V006\'s), its register base at `:378`, and `grep RCC_.*Periph.*EXTEN` against this '
+    + 'part\'s own rcc header returns nothing (AGENT-1, board 2026-09-14)',
   'EXTEN.params': 'both of its user-visible bits are switches, not numbers: LKUPEN on/off and '
     + 'TIM2_DMA_REMAP on/off. LKUPRST is deliberately not offered at all — it is a write-1-to-clear '
     + 'STATUS flag saying a lock-up already reset the part, which firmware reads at startup and a '
