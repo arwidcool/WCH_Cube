@@ -939,33 +939,93 @@ RM's worked example, or it does not ship.
 - **§7 P2's last item — the print view** — ~~held all cycle on "only if it can reuse
   `pinoutSvg()`'s renderer cleanly"~~ **done, this cycle: it does, proven by parsing both
   through the same DOM and comparing, not by looking similar.** See Current below.
-- **HSADC's per-channel call (main's finding, AGENT-1's new gate)** — `HSADC_ChannelConfig`
+- **HSADC's per-channel call (main's finding, AGENT-1's new gate)** — ~~`HSADC_ChannelConfig`
   is a ONE-ARGUMENT per-channel call (channel alone; no rank, no sample time), which
-  `sdk_repeat: channels` (the 4-arg `ADC_RegularChannelConfig` shape) cannot express. **Next.**
+  `sdk_repeat: channels` (the 4-arg `ADC_RegularChannelConfig` shape) could not express~~
+  **done, this cycle** — and a real overwrite hazard found while proving it, not assumed.
+  See Current below; contract on `agents/BOARD.md` for AGENT-1.
 
-**IN FLIGHT** — nothing.
+**IN FLIGHT** — nothing. **Session ending on main's explicit instruction** (board
+2026-09-14T~10:26-10:49Z window, then the wrap-up): commit what is finished, record what is
+open, push, stop. Nothing of mine is half-built — the print view and the HSADC fix are both
+complete, tested, planted-break-verified and committed (see Current below); there is no
+partial third renderer or half-landed mechanism left in the tree from me this session.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: the HSADC one-argument per-channel call shape (main, board
-  2026-09-14T10:26Z-ish) — a new `sdk_repeat` variant, additive beside the 4-arg one, with
-  the two things main flagged to get right: whether `rank` genuinely has no HSADC meaning
-  (check the RM before assuming the short signature means "absent"), and the mechanism must
-  not make AGENT-1's WARNING (not error) unconditionally satisfiable — TKEY/OPA1/CMP1-3
-  legitimately have checkboxes with no per-channel call, and the gate has to keep telling
-  those apart from "unmodelled".
-- Gates last run: `node tests/run.js "channel_second_axis"` 8/8, `"dma_mux_overview"` 5/5,
-  `"print_pinout"` 2/2, `"instances.test"` 16/16, `"channel_multi_struct"` 5/5, `"params.
-  test"` 49/49, `"resources.test"` 65/65, `"codegen.test"` 80/80, `"export.test"` 43/43 (one
-  transient module-load failure on an unrelated first run, `data/mcus/CH32H417.yaml`
-  mid-save under AGENT-1's own concurrent edit — clean on immediate re-run, disclosed not
-  hidden) — all backward-compat suites unchanged and green, zero data-file edits by me.
-  `node --check` clean on every touched engine file. `python build.py` run **three** times
-  this cycle total, told each time: twice for P0/P1 (already reported), once more for the
-  print view's first jsdom proof — that THIRD build happened before main's "nobody rebuild
-  until I call the settle" reached me; the print view's planted-break check afterward used a
-  string-mutated COPY of the already-built `dist/index.html` in memory, no further build. No
-  build has been committed by me all cycle — `data/mcus/CH32V003.yaml`, then
-  `CH32L103.yaml`/`.notes.md`, then `CH32H417.yaml` were each mid-edit in turn under
-  AGENT-1's own concurrent work at the moment in question.
+- Next step if I stop here, for the next session: (1) answer AGENT-1's DFSDM `channel_params`
+  list question if one is waiting — the "Filter 0"/"Filter 1" UI wording is the one thing
+  that contract deliberately left open, not a bug, just an open decision. (2) **HSADC is
+  engine-complete, data-open**: the 1-arg `sdk_call:` shape works and is tested, but
+  CH32H417's real `Channels` checkbox is still a multi-select that would silently keep only
+  the last ticked channel if wired to it as-is — AGENT-1's call on the board contract above.
+  (3) **CH32L103's `temp_vref_enable` is main's new finding, not yet looked at by me**: wired
+  but not conditional on channel selection, so ticking IN16/IN17 without it compiles clean
+  and reads garbage per RM 12.2.2 — main flagged it may need an engine shape (a param whose
+  emission depends on another PARAM's channel selection, not a setting) if the fix is not
+  purely data-side; unstarted, first thing to read next session, not carried in my head
+  beyond this line. (4) `mcu.fixture: true` — engine half landed 2026-09-11
+  (`isFixture()` still sniffs name/vendor instead), data half never landed; not touched this
+  session. (5) `dist` owes a rebuild once the tree is quiet and `CH32H417.yaml`'s CRLF
+  repair is done — not mine to run.
+- Gates last run: `node tests/run.js "codegen.test"` 82/82 (was 80/80 before the HSADC fix),
+  `"channel_second_axis"` 8/8, `"dma_mux_overview"` 5/5, `"print_pinout"` 2/2, `"instances.
+  test"` 16/16, `"channel_multi_struct"` 5/5, `"params.test"` 49/49, `"resources.test"`
+  65/65, `"export.test"` 43/43 (one transient module-load failure on an unrelated first run,
+  `data/mcus/CH32H417.yaml` mid-save under AGENT-1's own concurrent edit at that moment —
+  clean on immediate re-run, disclosed not hidden) — all backward-compat suites unchanged
+  and green, zero data-file edits by me. `node --check` clean on every touched engine file.
+  `python build.py` run **three** times this cycle total, told each time: twice for P0/P1
+  (already reported), once more for the print view's first jsdom proof — that THIRD build
+  happened before main's "nobody rebuild until I call the settle" reached me; every
+  planted-break check since (print view, HSADC) used `git stash` or a string-mutated COPY of
+  the already-built `dist/index.html` in memory, no further build. No build committed by me
+  all cycle — `data/mcus/CH32V003.yaml`, then `CH32L103.yaml`/`.notes.md`, then
+  `CH32H417.yaml`, and now several MCU files plus `tests/fixtures/*.wchproj` at once were
+  each mid-edit under AGENT-1's/AGENT-3's own concurrent work in turn.
+
+**Current — 2026-09-14, cycle 12. HSADC's one-argument per-channel call shape — done, and a
+real overwrite hazard found while proving it rather than assumed away.**
+
+- **The engine gap.** `sdkCalls()` (`app/engine/codegen.js`) ran `paramLiteral()`
+  unconditionally for every `sdk_call:` row, demanding a resolvable `$VALUE` even when a
+  row's own `sdk_args` never references `$VALUE` — `HSADC_ChannelConfig(uint8_t)`
+  (`ch32h417_hsadc.h:101`) takes the channel alone, no per-channel value the way
+  `ADC_RegularChannelConfig`'s trailing sample-time argument is one, so a param for this
+  shape has no `type:`/`default:`/`options:` at all and failed "no value" before the
+  per-channel repeat logic ever ran. Fixed: `$VALUE` resolves only when `sdk_args` actually
+  names it — every existing `sdk_call:` row (all of which do) unaffected, checked directly.
+  Also fixed the same trip while in there: `emitCall()`'s trailing comment printed the
+  literal string `undefined` for a no-`$VALUE` call — the exact class of defect the clock
+  summary report shipped earlier this cycle — now omitted cleanly, both call-sites' own
+  pre-existing separators (`:` / `=`) kept unchanged for the case that does have a value.
+- **Checked, not assumed: `rank` has no HSADC meaning, for a bigger reason than a short
+  signature.** Read `ch32h417_hsadc.c:184-188` directly: `HSADC_ChannelConfig()`
+  **overwrites** a single channel-select field (`CFGR &= ~CHSEL; CFGR |= Channel << 2`) —
+  there is no scan sequence at all, not "a sequence with no rank field". The one real EVT
+  example (`Evt/EXAM/HSADC/HSADC/Common/hardware.c:51`) confirms it: called exactly once,
+  before burst-mode DMA sampling starts on that one channel.
+- **The consequence, proven on an invented fixture, not left as a suspicion**: CH32H417's
+  shipped `HSADC.Channels` setting is a `checkboxes` (multi-select, `CH32H417.yaml:4504-
+  4513`). Wiring `sdk_repeat: channels` onto it as-is would emit one `HSADC_ChannelConfig()`
+  call per ticked channel — and on real silicon, only the LAST one survives; the others
+  compile clean with zero complaints and silently do nothing. Reproduced exactly: two
+  channels ticked on the test fixture, two individually-correct calls emitted, only one
+  live in hardware. This is a DATA-shape question (should `Channels` be single-choice
+  instead? does the RM describe multi-channel some other way I did not find?) flagged to
+  AGENT-1 on the board rather than guessed at or silently routed around.
+- **On the WARNING gate** (`tools/validate_mcu.py`'s `IN<n>`-checkbox-with-no-`sdk_repeat`
+  check): untouched by this fix — a pure data-pattern check. It stops firing for HSADC the
+  moment ANY `sdk_repeat: channels` row exists for it, correct or not, which is exactly why
+  the hazard above is spelled out on the board rather than left for the gate going quiet to
+  imply "closed correctly".
+- 2 new tests, `app/tests/codegen.test.js`, on an invented HSADC-shaped part (real data not
+  landed): the 1-arg shape emits cleanly with no `undefined` anywhere; the 4-arg shape's own
+  missing-value TODO is provably unaffected (same stash, opposite result — the regression
+  guard stayed green while the new test went red, proving it tests the untouched path).
+  `node tests/run.js "codegen.test"` 82/82 (was 80/80).
+- **`python build.py` NOT run for this item** — nothing painting changed, and `dist` was
+  already under main's hold regardless.
+
+Red, and who owns it: **nothing of mine.**
 
 **Current — 2026-09-14, cycle 11. §7 P2's last item, the print view — done, and it holds
 the standing condition: it genuinely reuses `pinoutSvg()`, no third renderer.**

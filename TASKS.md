@@ -1440,6 +1440,23 @@ bits, and a clock tree that models what the schema can hold.
       the already-built `dist/index.html` (main's hold on `dist` respected). `node tests/
       run.js "print_pinout"` 2/2. `python build.py` run once, before main's no-rebuild hold
       arrived - told on the board; not committed.
+- [x] (AGENT-2) **HSADC's one-argument per-channel call shape, and a real overwrite hazard
+      found while proving it.** `sdkCalls()` (app/engine/codegen.js) resolved `$VALUE`
+      unconditionally, so a `sdk_call:` row with no `type:`/`default:`/`options:` at all -
+      `HSADC_ChannelConfig(uint8_t)` (ch32h417_hsadc.h:101) takes the channel alone, no
+      value like `ADC_RegularChannelConfig`'s trailing sample-time - failed "no value"
+      before the per-channel repeat logic ran. Fixed: `$VALUE` resolves only when
+      `sdk_args` actually references it; every existing 4-arg `sdk_repeat: channels` row
+      unaffected. Also fixed `emitCall()` printing the literal string `undefined` for a
+      no-value call's trailing comment - same class of defect as the clock summary bug
+      earlier this cycle. CHECKED, not assumed: read `ch32h417_hsadc.c:184-188` directly -
+      `HSADC_ChannelConfig()` OVERWRITES a single channel-select field, no scan sequence at
+      all; the one real EVT example calls it exactly once. Proved on an invented fixture
+      that wiring `sdk_repeat: channels` onto CH32H417's CURRENT multi-select `Channels`
+      checkboxes would silently keep only the LAST ticked channel - flagged to AGENT-1 on
+      the board as a data-shape question, not silently routed around. 2 new tests,
+      `app/tests/codegen.test.js`, seen red on the exact planted break (git stash, reran,
+      restored). `node tests/run.js "codegen.test"` 82/82 (was 80/80).
 - [x] (AGENT-2) **The nested-struct shape (§3 REQUEST, 09-12T19:33Z): a member that is a POINTER
       to a second struct no SDK function takes alone.** `codegen.init_structs.<inner-struct>.embed`
       now maps a param's `embed: <key>` to `{ into: <outer-struct>, member: <pointer-field> }`.

@@ -1422,10 +1422,33 @@ export function initPlan(pid) {
  *     $RANK     1-based position in that repeat
  *     $INDEX    0-based position in that repeat
  * Anything else, or a placeholder that cannot be filled, becomes a TODO naming it.
+ *
+ * $VALUE is not always there to resolve. `HSADC_ChannelConfig(uint8_t HSADC_Channel)`
+ * (ch32h417_hsadc.h:101) takes the channel ALONE — the SELECTION is the whole
+ * configuration, unlike `ADC_RegularChannelConfig`'s trailing sample-time argument,
+ * which is a real per-channel VALUE. `paramLiteral()` used to run unconditionally, so a
+ * param with this shape (no `type:`/`default:`/`options:` — there is nothing for a user
+ * to set) failed "no value" before ever reaching the repeat logic below, even though
+ * `$VALUE` never appeared in its own `sdk_args`. Resolved only when the data's own
+ * `sdk_args` actually reference `$VALUE`, so every EXISTING `sdk_call:` row (all of
+ * which do) is unaffected — checked directly: `sdk_repeat emits one call per ticked
+ * channel, in rank order` (app/tests/codegen.test.js) passes unchanged.
+ *
+ * main's own finding, checked against the real header and the real EVT example before
+ * building this (`ch32h417_hsadc.c:184-188`, `HSADC->CFGR &= ~HSADC_CHSEL; CFGR |=
+ * Channel << 2`): this call OVERWRITES the channel-select field, and the one real
+ * example (`Evt/EXAM/HSADC/HSADC/Common/hardware.c:51`) calls it EXACTLY ONCE. It is
+ * not a scan sequence with no rank field — it is a single-channel selector, full stop.
+ * `sdk_repeat: channels` against a `type: checkboxes` (multi-select) setting would
+ * silently keep only the LAST ticked channel, exactly the "plausible-looking wrong
+ * code" this generator exists to refuse — flagged to AGENT-1 on the board, not solved
+ * by this function, because whether `HSADC`'s `Channels` setting should be single-
+ * choice instead is a DATA question this mechanism does not and should not decide.
  */
 function sdkCalls(pid, d, handle) {
-  const lit = paramLiteral(pid, d);
   const args = Array.isArray(d.sdk_args) ? d.sdk_args : null;
+  const needsValue = !!args && args.map(String).includes('$VALUE');
+  const lit = needsValue ? paramLiteral(pid, d) : null;
   // `sdk_call_order: before_structs` — most `sdk_call:` rows are an ordinary
   // "set this one thing", order-independent, so the default and the ONLY behaviour
   // before this existed is unchanged: every call after every struct block. But some
@@ -1442,10 +1465,12 @@ function sdkCalls(pid, d, handle) {
   // peripheral is filled and applied; anything else keeps today's order, unchanged.
   const order = d.sdk_call_order === 'before_structs' ? 'before' : 'after';
   const base = {
-    key: d.key, name: d.name, fn: d.sdk_call, value: paramValue(pid, d.key), note: d.sdk_note || '', order,
+    key: d.key, name: d.name, fn: d.sdk_call,
+    value: needsValue ? paramValue(pid, d.key) : undefined,
+    note: d.sdk_note || '', order,
   };
   if (!args) return [{ ...base, missing: 'the MCU file gives no sdk_args, so the argument list is unknown' }];
-  if (lit.missing) return [{ ...base, missing: lit.missing }];
+  if (needsValue && lit.missing) return [{ ...base, missing: lit.missing }];
 
   // One call per selected channel, or exactly one call.
   let repeats = [null];
@@ -1587,11 +1612,20 @@ function structGroups(structs) {
  * before/after split — a helper now only so the same rendering runs from both call
  * sites and cannot drift between them. */
 function emitCall(c, L) {
+  // `c.value` is `undefined` for a call whose whole configuration IS the call itself
+  // (HSADC_ChannelConfig(channel) — no separate value, see sdkCalls()'s own doc-comment)
+  // — printed as "undefined" here would be the exact class of defect the clock summary
+  // report shipped earlier this cycle (main's finding, 2026-09-14): a literal `undefined`
+  // reaching a comment a user reads. Each branch keeps its own pre-existing separator
+  // (`:` on the applied line, `=` on the TODO) exactly as it read before — only the
+  // no-value case is new.
   if (c.text) {
-    L.push(`    ${c.text}   /* ${c.name}: ${c.value}${c.channel ? ` on ${c.channel}` : ''} */`);
+    const detail = c.value !== undefined ? `${c.name}: ${c.value}` : c.name;
+    L.push(`    ${c.text}   /* ${detail}${c.channel ? ` on ${c.channel}` : ''} */`);
     return;
   }
-  L.push(`    /* TODO: ${c.name} = ${c.value} is applied by ${c.fn}(), not by an init struct,`);
+  const detail = c.value !== undefined ? `${c.name} = ${c.value}` : c.name;
+  L.push(`    /* TODO: ${detail} is applied by ${c.fn}(), not by an init struct,`);
   L.push(`       and ${c.missing}. */`);
   if (c.note) L.push(`    /* ${c.note} */`);
 }

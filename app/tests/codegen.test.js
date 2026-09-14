@@ -934,6 +934,90 @@ peripherals:
   ], '$RANK is 1-based, $INDEX is 0-based, and a non-placeholder is passed through literally');
 });
 
+// A ONE-ARGUMENT per-channel call — main's finding, HSADC_ChannelConfig(uint8_t)
+// (ch32h417_hsadc.h:101): the channel ALONE, no $VALUE at all, unlike
+// ADC_RegularChannelConfig's trailing sample-time argument above. `sdk_repeat: channels`
+// used to demand a resolvable $VALUE unconditionally (`paramLiteral()` ran before the
+// repeat logic even looked at `sdk_args`), so a param with no type:/default:/options: -
+// because there is nothing for a user to SET, the selection IS the configuration - failed
+// "no value" before it ever reached the per-channel loop. The part here is invented,
+// same discipline as the placeholder test above: a mechanism proven only against the one
+// chip it was built for cannot tell "it works" from "it works on that part".
+test('a per-channel call with NO $VALUE at all (HSADC\'s real shape) emits cleanly, one call per ticked channel', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: HSADC-ONEARG
+  family: test
+  default_package: QFN32
+  variants:
+    A32: { package: QFN32, flash_kb: 64, sram_kb: 8, temp: 85, io_count: 32 }
+packages:
+  QFN32:
+${Array.from({ length: 32 }, (_, i) => `    ${i + 1}: P${'AB'[Math.floor(i / 16)]}${i % 16}`).join('\n')}
+pins:
+${Array.from({ length: 32 }, (_, i) => `  P${'AB'[Math.floor(i / 16)]}${i % 16}: { type: io }`).join('\n')}
+codegen:
+  header: hsadconearg.h
+  sdk: { synthetic: true }
+  channel_macros:
+    HSADC: { IN0: HSADC_Channel_0, IN1: HSADC_Channel_1, IN2: HSADC_Channel_2 }
+peripherals:
+  HSADC:
+    category: Analog
+    settings:
+      - name: Channels
+        type: checkboxes
+        choices: [{ name: IN0, signals: [IN0] }, { name: IN1, signals: [IN1] }, { name: IN2, signals: [IN2] }]
+    signal_pins:
+      IN0: [{ pin: PA0 }]
+      IN1: [{ pin: PA1 }]
+      IN2: [{ pin: PA2 }]
+    params:
+      - key: chsel
+        name: Channel select
+        sdk_call: HSADC_ChannelConfig
+        sdk_args: [$CHANNEL]
+        sdk_repeat: channels
+`);
+  e.loadMcu('HSADC-ONEARG');
+  e.setPackage('QFN32');
+  e.toggleSetting('HSADC', 'Channels', 'IN0', true);
+  e.toggleSetting('HSADC', 'Channels', 'IN2', true);
+  e.compute();
+  const c = e.cSource();
+  const calls = [...c.matchAll(/HSADC_ChannelConfig\((.*?)\);/g)].map(m => m[1]);
+  assert.deepEqual(calls, ['HSADC_Channel_0', 'HSADC_Channel_2'], 'one call per ticked channel, the channel alone');
+  assert.doesNotMatch(c, /undefined/, 'no $VALUE was ever asked for, so none is missing - never printed as "undefined"');
+  assert.match(c, /HSADC_ChannelConfig\(HSADC_Channel_0\);\s*\/\* Channel select on IN0 \*\//,
+    'the trailing comment names the call and the channel, with no dangling ": value"');
+  assert.deepEqual(e.cComplaints().filter(x => /HSADC|Channel select/.test(x.text)), [], 'no TODO for a call that resolved cleanly');
+
+  // Nothing ticked: nothing emitted, same contract as the 4-arg shape (line ~1456 above).
+  e.toggleSetting('HSADC', 'Channels', 'IN0', false);
+  e.toggleSetting('HSADC', 'Channels', 'IN2', false);
+  e.compute();
+  assert.doesNotMatch(e.cSource(), /HSADC_ChannelConfig/);
+});
+
+// The 4-arg shape (ADC_RegularChannelConfig, tested above) must still fail exactly as it
+// always did when its OWN $VALUE cannot resolve - the no-$VALUE path must not accidentally
+// swallow a genuine missing-value TODO for a param that DOES need one.
+test('a per-channel call that DOES need $VALUE still reports a real "no value" TODO, unaffected by the one-argument shape', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.toggleSetting('ADC1', 'Channels', 'IN0', true);
+  // sample is left at its default deliberately NOT unset here - instead prove the
+  // pre-existing missing-macro path (channel_macros) still reports correctly, which is
+  // the OTHER "needsValue true, still fails" branch sdkCalls() can take.
+  const saved = e.M.codegen.channel_macros.ADC1;
+  delete e.M.codegen.channel_macros.ADC1;
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /TODO: Sampling time = 11\.5 cycles is applied by ADC_RegularChannelConfig\(\), not by an init struct,/,
+    'the ORIGINAL "name = value" wording is unchanged for a call that genuinely has a value');
+  e.M.codegen.channel_macros.ADC1 = saved;
+});
+
 // LPTIM ordering hazard (board, AGENT-2, RM 3.4.13/17.5.5 verified): LPTIM_TimeBaseInit()
 // writes CNTSTRT/SNGSTRT/OUTEN into the SAME register as ENABLE, preserving whatever
 // ENABLE already was — the RM says those three bits are "write only when ENABLE=1". The
