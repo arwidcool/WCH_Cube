@@ -366,30 +366,63 @@ Say which, in the notes.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: **`params:` is 61 of 78, 17 owed. Only `ETH` and `GPHA`
-  remain as routing peripherals with no block at all** — GPHA not yet investigated;
-  ETH still blocked on a third `verify_sdk_names.py` indexing mode (`ETH_RegInit` is in
-  no header, only designated `.c` files), its own careful narrowing. DFSDM's
-  Filter/Rc/Jc need a genuinely NEW capability (a second, independent per-instance axis
-  — `DFSDM_FLTx` vs `DFSDM_Channely` — confirmed by reading `codegen.js`'s actual
-  multi-struct loop, not the same gap SAI's was), REQUEST posted to AGENT-2, distinct
-  from SAI's (now closed). **Found, not fixed — worth a dedicated round**: Python's
-  `yaml.safe_load` (YAML 1.1) parses unquoted `On`/`Off` option names as booleans while
-  the app's vendored js-yaml (YAML 1.2) parses them as the strings "On"/"Off" —
-  reproduced directly (`yaml.safe_load('name: Off')` → `{'name': False}`, `jsyaml.load`
-  → `{"name":"Off"}`). Self-consistent within each language today (OPA's existing
-  `fb`/`pgadif`/`hs` rows use exactly this shape and work correctly), so not urgent, but
-  a real cross-parser trust gap in every Python tool that reads this YAML — flagged
-  rather than patched under this cycle's time pressure; the fix belongs at a shared
-  loader level, not in the data.
-- Gates last run: `validate_mcu` 0 errors/73 warnings · `verify_sdk_names` 0/0 ·
-  `coverage.py --gate` 6 of 6, CH32H417 complete/0 open · `validate_params_selftest`
-  6/6 · `validate_afmux_selftest` 13/13 · `validate_constraints_selftest` 19/19 ·
-  `validate_clock_selftest` 11/11 · `node tests/run.js "H417"` 66/66 ·
-  `"completeness"` 15/15 · `"app/tests"` (full engine suite) 567/567 ·
-  `"codegen_compile"` 18/18 · `node tools/wchcube_cli.js --format c --strict` on
-  throwaway DFSDM/USB/SAI/LPTIM/OPA-enabled projects, each read by hand, not just the
-  exit code. `pio run` not run this cycle (no `main` ask).
+- Next step if I stop here: **C's routing requirement is CLOSED — `params:` 62 of 78,
+  16 owed, all non-routing.** ETH landed (the third `verify_sdk_names.py` indexing mode,
+  `codegen.sdk.driver_c:`, 26 of 47 fields on `call_arg:`/`dead_fields`). GPHA correctly
+  excluded per main's own correction — it strands no pads. The 16 remaining cells are
+  either declared ABSENT already (SYS/RCC/EXTI/DMA1/PIOC) or still need an ABSENT
+  declaration for the rest (CRC/DBGMCU/DMA2/FLASH/GPHA/HSEM/IWDG/PWR/RNG/TKEY/WWDG) to
+  formally close the `IN_EXTRACTION` line — **not yet done, next natural step if this
+  line is picked up again.** DFSDM's Filter/Rc/Jc still need a genuinely new capability
+  (a second, independent per-instance axis), REQUEST open to AGENT-2, distinct from
+  SAI's (closed). The YAML 1.1/1.2 boolean split is FIXED, not just found — both real
+  instances (CH32H417 OPA, CH32V006 PWR) quoted, `node tools/cross_loader_check.mjs`
+  reads all 7 files clean; REQUEST open to AGENT-3 to empty their now-fully-stale
+  `KNOWN_DIVERGENCES` (their test is red on that one assertion until they do,
+  disclosed on the board, not silently left).
+- Gates last run: `validate_mcu` 0 errors/73 warnings (unchanged) · `verify_sdk_names`
+  0/0 · `coverage.py --gate` 6 of 6 · `validate_params_selftest` 6/6 ·
+  `verify_sdk_names_selftest` 48/48 (was 44 before ETH's `driver_c_cases()`) ·
+  `validate_afmux_selftest` 13/13 · `node tests/run.js "H417"` 66/66 ·
+  `"completeness"` 15/15 · `"codegen_compile"` 18/18 · `node
+  tools/cross_loader_check.mjs`: all 7 files clean (was 2 diverging). `node
+  tools/wchcube_cli.js --format c --strict` on throwaway ETH/DFSDM/USB/SAI/LPTIM/OPA
+  projects, each read by hand, not just the exit code. `pio run` not run this cycle (no
+  `main` ask).
+
+**Current — 2026-09-14T~07:35Z. ETH lands (the last routing peripheral), then the
+cross-loader boolean fix. Commits: `8c94ad1` `8f6c4ef` `ba6c45c` `eef5b64`.**
+
+- **The third `verify_sdk_names.py` indexing mode, `codegen.sdk.driver_c:`.**
+  `ETH_RegInit` is declared in NO header anywhere, only defined in the example
+  driver's own `.c`. Measured the general rule first, same discipline as UHSIF's own
+  narrowing: "a public function whose name-prefix matches a real SPL peripheral
+  prefix, outside standard boilerplate filenames" found **194 candidates on the real
+  EVT drop, most of them wrong** (`FLASH_ReadID` and seven more in an example's own
+  EXTERNAL SPI-flash driver, sharing the on-chip FLASH peripheral's prefix by
+  coincidence; `RCC_Configuration`, `GPIO_Config`, `SDMMC_SetCommand`, dozens more).
+  Rejected for the same reason UHSIF's 711-directory first attempt was — landed a
+  hand-curated `driver_c:` file list instead, both halves (positive + negative)
+  asserted as invariants in `verify_sdk_names_selftest.py`'s new `driver_c_cases()`.
+  48/48 planted breaks, was 44.
+- **ETH's 26 of 47 live fields landed on `call_arg:`/`dead_fields`**, every default
+  citing the EVT's own `ETH_Configuration()`. Found and fixed a real error in
+  `data/FORMAT.md`'s own worked `dead_fields:` example while landing this — it listed
+  the 21 names WITHOUT their `ETH_` prefix, but `codegen.js` compares the list
+  against `d.sdk_field` verbatim, so the documented example would never have matched
+  anything real. Compiled: a throwaway project with non-default values,
+  `ETH_RegInit(&ETH_InitStructure, 3)` emitted correctly, no handle, PHY address
+  trailing.
+- **The YAML 1.1/1.2 boolean split, fixed.** AGENT-3's new cross-loader gate found a
+  second instance beyond my own report (CH32V006's `PWR.awu_prescaler`). Quoted both
+  — `name: "Off"`, `name: "On"`, `default: "Off"` — not exempted. CH32H417 through
+  `peripheral_extras.yaml` + regenerate; CH32V006 (no generator exists for it) edited
+  in place, then its own gates re-run rather than assumed clean. `data/FORMAT.md`
+  gained a section stating the rule plainly, right after the intro. REQUEST posted to
+  AGENT-3 to empty `KNOWN_DIVERGENCES` — I don't own `tests/**`.
+
+Red, and who owns it: `tests/cross_loader.test.js`'s one "stale entry" assertion,
+AGENT-3's file, REQUEST posted — everything else green.
 
 **Current — 2026-09-14T~06:35Z. Same cycle, continued: DFSDM's Channel struct, a
 real LPTIM `clkpol` bug fixed, the four USB declarations, SAI's Frame/Slot, OPA's
