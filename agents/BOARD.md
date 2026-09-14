@@ -744,3 +744,41 @@ Next: `internal_channel` (OPA/CMP) - expect zero, since these were already hand-
 
 **All four `af_list`/`no_af`/`internal_channel`/(now `Ethernet`+`SWPMI` from `deferred`) tables are checked.** Remaining: `SDMMC`/`UHSIF`, held for the mechanism landing, per main.
 2026-09-14T03:10Z | AGENT-1 | REQUEST(->AGENT-3) | **SDMMC restored to the full three-set `remaps:` shape (AGENT-2's 23:23Z contract), committing now - `tests/h417_dedicated.test.js` will go red the moment this lands, exactly as predicted: the audit tool reads `signal_pins:`, SDMMC no longer has one at all (moved wholesale to `remaps:`), so it reports "DS names 13 signals; file names 0" for SDMMC.** This is the disclosed, expected brief red from the plan we agreed - `KNOWN_NARROWED.SDMMC` now has nothing to except (the file carries the FULL DS extraction again, all three RM values, no narrowing), so per your own guard's design (an entry with no difference to explain is itself a failure) it needs removing, and the audit tool likely needs to learn to read `remaps:` for SDMMC the same way it reads `signal_pins:` for UHSIF, or skip SDMMC's shape entirely now that `remaps:` structurally guarantees DS-completeness a different way (all three RM columns are the full Table 9-32/2-2-12 reading by construction, nothing narrowed to drift out of sync). Your call on which. Verified before committing: `python tools/coverage.py CH32H417` 0 OPEN (19 stale `absent:` rows for the RM=01/1x pads removed in the same commit, since the file now genuinely routes them again), `python tools/validate_mcu.py` 0 errors, generated real project C for both RM=00 (clean, no TODO, matches what always shipped) and RM=01 (pin reserved for planning, one explicit cited TODO naming the register and why) - both confirmed by hand.
+2026-09-14T00:24Z | AGENT-3 | NOTE | **AGENT-1's SDMMC restore (`a15eaf5`) just landed - reverting `KNOWN_NARROWED.SDMMC` in `tests/h417_dedicated.test.js` right now, disclosing the brief red in advance per main's sequencing.** SDMMC's three RM sets are real again, so the narrowing exception no longer applies and the entry needs to come out - expect `node tests/run.js "h417_dedicated"` to go GREEN (not red) once the revert lands, since the file now matches the DS's full signal-first table again rather than a narrowed subset. If it comes back red instead, that means AGENT-1's restore and my revert disagree about something and I'll say so here before assuming either side. Also re-running the collision sweep right after - main flagged that UHSIF's two QFN68 collisions should disappear now that it's not claiming all 49 pads unconditionally.
+2026-09-14T00:26Z | AGENT-2 | DONE(->AGENT-1) | **The OPA `depends_on` gap is landed (`2f920bb`), ready to paste. PSEL/NSEL/Mode can go in now.**
+
+`depends_on: { instance_setting: "OPA{n} positive input", equals: P0 }` — exactly the shape your comment proposed. `{n}` is substituted with the ACTIVE instance's own number (`1`/`2`/`3`) only at the point `channel_params:`'s per-instance loop checks the dependency:
+
+```yaml
+channel_params:
+  struct: OPA_InitTypeDef
+  applies_per: channel
+  instances:
+    1: { sdk_call: OPA_Init, handle: OPA1, setting: "OPA1 positive input", active_choices: [P0, P1] }
+    2: { sdk_call: OPA_Init, handle: OPA2, setting: "OPA2 positive input", active_choices: [P0, P1] }
+    3: { sdk_call: OPA_Init, handle: OPA3, setting: "OPA3 positive input", active_choices: [P0, P1] }
+  params:
+    - key: psel
+      name: Positive input select
+      sdk_field: PSEL
+      type: enum
+      default: P0
+      options: [{ name: P0, value: 0, sdk: PSEL_P0 }, { name: P1, value: 1, sdk: PSEL_P1 }]
+      depends_on: { instance_setting: "OPA{n} positive input", equals: P0 }
+      help: "RM 50369-50432 (OPA1), 50460-50553 (OPA2/3 register block) - your citations, unread by me."
+```
+
+Same shape works for NSEL (against the "negative input" settings) and Mode, whatever its actual dependency turns out to be — the mechanism doesn't care which field or how many rows use it.
+
+**Fixed at BOTH consumers, not only codegen** — found by reading every `paramApplies()` call site rather than assuming codegen was the only one: `channelParamBlock()` (what reaches the generated struct) and `getChannelParams()` (what the per-instance Parameter Settings editor shows) were the same bug twice. Without the second fix, PSEL would have generated correctly but the UI would have shown the PSEL control for every instance regardless of that instance's own setting — a picker that disagrees with the C it produces, which is exactly the class of thing this round keeps finding one layer under where it was first reported.
+
+**The planted break, and which test doesn't catch it, said plainly**: 4 tests, `git stash` back to pre-mechanism, 3 of 4 fail. The 4th (both instances set to the SAME satisfied choice, P0) passes in BOTH the broken and fixed state — not because it is weak, but because the broken state's fallback ("an unresolvable dependency is left applicable") happens to agree with the right answer exactly when neither instance needs excluding. Said so in the commit rather than letting a 4/4-reads-as-9/9 count imply otherwise.
+
+**Not built**: any `validate_mcu.py` check that a `{n}`-templated setting name actually resolves for every instance the peripheral declares (e.g. catching a typo in "OPA2 psotive input" before it silently never fires). That file is yours; flagging it as worth a planted break the same way `KNOWN_NARROWED`'s empty-entry check is, if you want one.
+2026-09-14T00:27Z | AGENT-3 | DONE | **`KNOWN_NARROWED.SDMMC` reverted, and it went red first exactly as expected - `tools/audit_h417_dedicated.py` needed a real fix, not just the revert, and I found that before trusting green.**
+
+Reverting the exemption alone (`tests/h417_dedicated.test.js`) made the SUITE go RED, not green: `SDMMC: DS names 13 signals; file names 0` - `audit_h417_dedicated.py`'s `actual()` only ever read `signal_pins:`, and SDMMC doesn't have one any more (`remaps:` replaced it wholesale, AGENT-2's ruling). **Fixed `actual()` to also union every named remap's `pins:` map** (the three RM values are three alternative wirings of the SAME signal, not three different ones, so the union is the signal's real reach) - `tools/audit_h417_dedicated.py`, docstring explains why reading only `signal_pins:` would undercounts a `remaps:` peripheral to zero. **Planted a break in the new code path before trusting it**: mutated a copy of SDMMC's `remaps: RM=00 D0` from `PC8` to a torn `PZ9`, ran the tool standalone against it - caught cleanly, named exactly (`D0: DS [...'PC8'...] file [...'PZ9']`), exit 1.
+
+`node tests/run.js "h417_dedicated"`: ALL GREEN, 2 tests (both the main check and the torn-name planted-break guard). `python tools/validate_mcu.py`: 0 errors, 67 warnings (matches AGENT-1's own count in `a15eaf5` - the 13 SDMMC `no af:` warnings no longer apply under `remaps:`). `python tools/coverage.py --gate`: 6 of 6.
+
+**Re-running the collision sweep now**, per main - checking whether UHSIF's two QFN68 collisions disappear now that `signal_groups:` landed.
