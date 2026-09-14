@@ -41,25 +41,18 @@ suite('cross-loader (yaml.safe_load vs js-yaml)');
 
 /**
  * Every divergence this gate currently tolerates, named exactly — file, path, and BOTH
- * values, not "loaders disagree". Each is `On`/`Off` resolving to a YAML 1.1 boolean in
- * Python and staying a YAML 1.2 string in JS. Citations: AGENT-1's finding (board,
- * 2026-09-14, OPA `fb`/`pgadif`/`hs`) for the first three; this gate's own first real
- * run, same day, for the CH32V006 one (`awu_prescaler`'s "Off" tick on the prescaler
- * dropdown — not a peripheral enable/disable row at all, which is presumably why it
- * read as harmless enough to write unquoted).
+ * values, not "loaders disagree". EMPTY as of 2026-09-14: AGENT-1 fixed both real
+ * entries this list ever carried — CH32H417's OPA `fb`/`pgadif`/`hs` (through the
+ * generator) and CH32V006's `PWR.awu_prescaler` (edited in place, that part's gates
+ * re-run) — and verified the fix through `node tools/cross_loader_check.mjs` directly
+ * (all 7 files clean) rather than editing this file. The list going empty is what
+ * "fixed" looks like here; it is not evidence the check stopped mattering. **Keep the
+ * staleness half of the test below even at zero entries** — an exemption list with no
+ * live entries and a working staleness check is a better artifact than a deleted file,
+ * and it is what will catch the NEXT entry the moment someone adds one that has already
+ * been fixed, or forgets to remove one that has not.
  */
-const KNOWN_DIVERGENCES = [
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[6].default', py: 'bool false', js: 'string "Off"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[6].options[0].name', py: 'bool false', js: 'string "Off"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[6].options[1].name', py: 'bool true', js: 'string "On"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[7].default', py: 'bool false', js: 'string "Off"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[7].options[0].name', py: 'bool false', js: 'string "Off"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[7].options[1].name', py: 'bool true', js: 'string "On"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[8].default', py: 'bool false', js: 'string "Off"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[8].options[0].name', py: 'bool false', js: 'string "Off"' },
-  { file: 'CH32H417.yaml', path: '.peripherals.OPA.channel_params.params[8].options[1].name', py: 'bool true', js: 'string "On"' },
-  { file: 'CH32V006.yaml', path: '.peripherals.PWR.params[2].options[0].name', py: 'bool false', js: 'string "Off"' },
-];
+const KNOWN_DIVERGENCES = [];
 const knownId = d => `${d.file}::${d.path}`;
 
 // One run of the real gate, shared by every test below.
