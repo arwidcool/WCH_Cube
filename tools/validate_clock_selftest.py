@@ -55,9 +55,29 @@ GOOD = """  plls:
 # (name, find, replace, substring the error must contain)
 CASES = [
     ("a mux source naming a node that does not exist",
-     "source: [AUX_PLL_CLK, PLLCLK]",
-     "source: [AUX_PLL_CLK, NOPE_CLK]",
+     "        - PLLCLK\n",
+     "        - NOPE_CLK\n",
      "is not an oscillator, a PLL output, another prescaler or SYSCLK"),
+
+    ("a mux-leg-divider object entry with no `source:`",
+     '{ name: "STEP_PLL_CLK /2", source: STEP_PLL_CLK, div: 2 }',
+     '{ name: "STEP_PLL_CLK /2", div: 2 }',
+     "needs a `source:`"),
+
+    ("a mux-leg-divider object entry with no `name:`",
+     '{ name: "STEP_PLL_CLK /2", source: STEP_PLL_CLK, div: 2 }',
+     '{ source: STEP_PLL_CLK, div: 2 }',
+     "needs a `name:`"),
+
+    ("a mux-leg-divider object entry with a zero divider",
+     '{ name: "STEP_PLL_CLK /2", source: STEP_PLL_CLK, div: 2 }',
+     '{ name: "STEP_PLL_CLK /2", source: STEP_PLL_CLK, div: 0 }',
+     "must be a positive number"),
+
+    ("two mux source entries with the same display name",
+     '{ name: "STEP_PLL_CLK /2", source: STEP_PLL_CLK, div: 2 }',
+     '{ name: "AUX_PLL_CLK", source: STEP_PLL_CLK, div: 2 }',
+     "names collide, must be unique"),
 
     ("a PLL with neither multipliers nor a fixed output",
      "      output_mhz: 480\n",
@@ -126,11 +146,21 @@ def with_block(base: str) -> str:
         "\n  prescalers:\n"
         "    USBFS:\n"
         '      label: USBFS 48 MHz\n'
-        "      source: [AUX_PLL_CLK, PLLCLK]\n"
+        "      source:\n"
+        "        - AUX_PLL_CLK\n"
+        "        - { name: \"STEP_PLL_CLK /2\", source: STEP_PLL_CLK, div: 2 }\n"
+        "        - PLLCLK\n"
         "      options: [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7.5, 8, 9.5, 10]\n"
         "      default: 10\n"
         "      default_source: AUX_PLL_CLK\n"
         "      target_mhz: 48\n"
+        # A bare mux - RM 3.4.13's RNG/I2S2/I2S3/HSADC shape on CH32H417: a source
+        # SELECT with no divider field in the register at all, so no `options:` line
+        # exists. Proves the relaxed rule (`options:` required only when there is
+        # NEITHER a mux nor a divider) admits the shape it was relaxed for.
+        "    RNG_LIKE:\n"
+        "      label: RNG-like bare mux\n"
+        "      source: [SYSCLK, PLLCLK]\n"
     )
     return out.replace("\n  prescalers:\n", tap, 1)
 

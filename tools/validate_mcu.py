@@ -712,17 +712,35 @@ RESERVED_CLOCK_NAMES = {
 
 
 def _source_list(node) -> list:
-    """A `source:` is one name, or a LIST of names meaning a mux the user chooses from.
-
-    The list form is what CH32H417 needs: RM 3.4.13 gives eight peripheral clocks their own
-    source select. Before this, a list was merely truthy and never in `known`, so every mux
-    reported "source is not another prescaler or SYSCLK" - the check read as strict and was
-    checking nothing at all about the thing it named.
+    """The UNDERLYING clock signal(s) a `source:` names - what a "known node" check
+    compares against. `source:` is one name, a LIST of names (a mux), or - since
+    AGENT-2's mux-leg-divider mechanism - a list that mixes bare strings with
+    `{name, source, div}` objects (a leg that carries its own built-in divider, e.g.
+    LTDC's "SERDES_PLL clock / 2" choice). An object entry's `source:` is the real
+    node; its `name:` is a display label that is NOT itself a graph node (`app/engine/
+    clock.js`'s own `tapSource()`/`normSrcEntry()` draw exactly this line - the tree's
+    edges and every frequency lookup follow `.source`, never `.name`, for an object
+    entry). Mirrored here so this check asks the same question the engine answers.
     """
     src = (node or {}).get("source")
     if src is None:
         return []
-    return list(src) if isinstance(src, list) else [src]
+    raw = src if isinstance(src, list) else [src]
+    return [e.get("source") if isinstance(e, dict) else e for e in raw]
+
+
+def _source_names(node) -> list:
+    """The NAMES a `source:` list offers - what `<select>` shows and what
+    `default_source:`/the saved project state actually stores (`clock.js`'s
+    `tapSources()`). For a bare string entry this is identical to `_source_list()`;
+    for an object entry (a leg with its own divider) the two differ on purpose - the
+    display name, not the underlying signal, is what a chosen value has to match.
+    """
+    src = (node or {}).get("source")
+    if src is None:
+        return []
+    raw = src if isinstance(src, list) else [src]
+    return [e.get("name") if isinstance(e, dict) else e for e in raw]
 
 
 def check_clock(doc: dict, r: Report) -> None:
@@ -809,11 +827,38 @@ def check_clock(doc: dict, r: Report) -> None:
         if name in RESERVED_CLOCK_NAMES:
             r.error(pw, f"`{name}` is a reserved name")
         opts = p.get("options")
-        if not opts:
-            r.error(pw, "no `options` (divider list)")
+        src_raw = p.get("source")
+        is_mux = isinstance(src_raw, list)
+        # A bare mux (RM 3.4.13's RNG/I2S2/I2S3/HSADC shape: a source SELECT with no
+        # divider field in the register at all) is a real, complete tap on its own -
+        # `clock.js`'s `divOf()` falls back to 1 when a tap declares no `options:`, and
+        # the UI draws no divider `<select>` for it (`preSel()`). `options:` is only
+        # required when there is neither a mux to choose from nor a divider to apply -
+        # a prescaler that is neither would configure nothing.
+        if not opts and not is_mux:
+            r.error(pw, "no `options` (divider list) and no `source:` list (mux) either "
+                        "- a prescaler needs at least one")
+        # Each list entry may be a bare string or `{name, source, div}` (a leg with its
+        # own built-in divider) - check the shape before trusting either derived list.
+        if is_mux:
+            for i, e in enumerate(src_raw):
+                if isinstance(e, dict):
+                    if not e.get("name"):
+                        r.error(f"{pw}.source[{i}]", "a mapping entry needs a `name:`")
+                    if not e.get("source"):
+                        r.error(f"{pw}.source[{i}]", "a mapping entry needs a `source:`")
+                    div = e.get("div", 1)
+                    if not isinstance(div, (int, float)) or div <= 0:
+                        r.error(f"{pw}.source[{i}]", f"`div: {div!r}` must be a positive number")
+                elif not e:
+                    r.error(f"{pw}.source[{i}]", "empty source entry")
+            names = _source_names(p)
+            dupes = {n for n in names if names.count(n) > 1}
+            if dupes:
+                r.error(pw, f"`source:` names collide, must be unique: {sorted(dupes)}")
         srcs = _source_list(p)
         for src in srcs:
-            if src not in known:
+            if src and src not in known:
                 r.error(pw, f"source `{src}` is not an oscillator, a PLL output, "
                             "another prescaler or SYSCLK")
         # A `default:` the engine cannot find is SILENT - it falls back to the first entry -
@@ -823,9 +868,10 @@ def check_clock(doc: dict, r: Report) -> None:
             r.error(pw, f"`default: {dflt}` is not one of its own `options:`")
         dsrc = p.get("default_source")
         if dsrc is not None:
-            if not srcs:
+            names = _source_names(p)
+            if not names:
                 r.error(pw, "`default_source:` but no `source:` list to choose from")
-            elif dsrc not in srcs:
+            elif dsrc not in names:
                 r.error(pw, f"`default_source: {dsrc}` is not one of its own `source:` entries")
     for i, d in enumerate(clock.get("derived") or []):
         nm = (d or {}).get("name")
