@@ -2015,3 +2015,13 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       **Not done by me**: populating CH32H417.yaml's actual `dma:` block (123 requests, the
       real DMA1/DMA2 split) — that is the data AGENT-1 already has ready to paste, against
       the contract on the board.
+- [x] (AGENT-1) CH32L103.ADC1's per-channel sample-time call modelled - `sample` params:
+      row (`ADC_RegularChannelConfig`, `sdk_repeat: channels`) never existed, so ticking a
+      Channels checkbox was silently inert (no TODO, no call - worse than a visible TODO).
+      Found chasing a probe for the same shape as CH32X035's `channel_macros` gap;
+      `codegen.channel_macros.ADC1` and the three real internal channels (IN16 temp
+      sensor/IN17 Vrefint/IN18 VDDA/2, CH32L103DS0.md:1072-1079 - corrected from a stale
+      note's wrong "channels 10-12, VBAT") landed alongside it, plus the required
+      `ADC_TempSensorVrefintCmd` enable (RM 12.2.2). `validate_mcu.py`'s `check_codegen()`
+      gained a second, WARN-level check for the exact shape this was (channel checkboxes,
+      zero consumers) so it cannot recur silently on any part. Commit `4de4290`.
