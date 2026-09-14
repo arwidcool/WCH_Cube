@@ -1829,3 +1829,116 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       the freshly built file is not safe to ship under this commit — exactly the mechanism that
       put `main` red three times before worktrees were suspended; left modified, uncommitted, in
       the working tree instead.
+
+- [x] (AGENT-2) **The `sdk_manual:` render check — main's demand, the first time this key had
+      real data behind it.** Two real UI defects found, both fixed, neither in `codegen.js`
+      (which already had this right — the generated C comment was correct all along).
+      1. `getParams()` (`app/engine/params.js`) excluded EVERY `const:` param from the
+      Parameter Settings tab, on the theory a const member is always a struct-field literal
+      with nothing to draw (true for OPA's `PSEL`-style consts). USBHS/USBSS/USBPD's "Device
+      bring-up" is a DIFFERENT use of `const:` — no `struct:` at all, the const string IS the
+      row's fixed display value for a pure `sdk_manual:` note — and the old filter dropped it
+      completely: those three peripherals' Parameter Settings tab read as "has no parameters
+      yet" while their generated C carried load-bearing bring-up instructions nothing in the
+      UI pointed at. Fixed: `d => !isConstParam(d) || d.sdk_manual`, with the row's `value`
+      now read through `paramValue()` (which already knew a const's value is `d.const`) and
+      `readonly` set to `d.readonly || isConstParam(d)` — additive, not a wider door: a plain
+      `const:` (no `sdk_manual:`) stays excluded exactly as before, tested explicitly.
+      2. **The deeper bug, found only by checking the ACTUAL rendered row rather than trusting
+      the first fix**: `app/template.html` has TWO separate, hand-duplicated note-builders —
+      `paramTableFrom()` (used only by the DMA Settings tab) and `paramTable()` (the
+      peripheral's OWN Parameter Settings tab, the one main was asking about) — despite
+      `paramTableFrom()`'s own doc-comment claiming "a change... cannot land in one and not
+      the other." It could, and had: `paramTable()`'s note never read `sdk_note`/`sdk_manual`
+      at all, so even after fix 1 the row showed a bare value with no register, no citation,
+      no `file:line` — exactly the "empty row, a broken row" failure main asked to rule out.
+      Closed with ONE shared `paramRowNote(r)` (new, `app/template.html`), called from both
+      `paramTable()` loops (peripheral + per-instance) and `paramTableFrom()`, which also
+      calls the new `manualNoteText(kind, d)` (`app/engine/params.js`) — the SAME function
+      `codegen.js`'s `initPlan()` now calls too (refactored from its own inline string), so
+      the generated C comment and the Parameter Settings row can no longer read two different
+      things about the same fact. Verified live: jsdom-booted `dist/index.html`, CH32H417/
+      QFN128, all four peripherals — USBFS's two checkboxes now carry their full
+      `sdk_note` beside them; USBHS/USBSS/USBPD's "Device bring-up" row now reads "set by
+      firmware: RCC_HBPeriphClockCmd(...)... [:183]..." in full, not a disabled empty number
+      input under a generic "Read-only: the engine has no setter yet" banner (the actual
+      broken rendering before this fix — confirmed, not assumed, before writing the fix).
+      6 new tests (`app/tests/params.test.js` ×4, `app/tests/sdk_manual.test.js` ×2), each
+      seen red on its own planted break: the filter reversion, `manualNoteText` losing its
+      `sdk_note` suffix (5 tests across both files went red on that one break, including two
+      PRE-EXISTING codegen tests — proof the shared function is genuinely load-bearing on
+      both sides now), and the pre-fix `getParams()`/`paramTable()` shapes. `node tests/run.js
+      "params.test"` 48/48, `"sdk_manual"` 8/8, `"app/tests"` (full engine suite) 572/572.
+- [x] (AGENT-2) **The pinout SVG's exposed-pad tooltip — AGENT-3's independent verification
+      caught it.** `pinoutSvg()`'s own doc-comment claimed "EVERY physical pin... assigned or
+      not"; the exposed-pad rectangle (drawn whenever `PACKAGES[pkg].epad`) carried no
+      `<title>` at all, silently the one exception to that claim. Fixed by wrapping it in a
+      `<g><title>` built from `pinRows()`'s own `num: ''` pad row (the same row the KiCad CSV
+      and plain CSV already include) — `VSS — exposed pad: GROUND`, confirmed in a real build.
+      1 new test in `app/tests/export.test.js`, seen red on the pre-fix code (the exact
+      regression AGENT-3 found), restored green. `node tests/run.js "export.test"` 35/35.
+
+- [x] (AGENT-2) **CH32H417's DMA — the engine mechanism for two controllers and a true
+      DMAMUX crossbar, the last real gap on the part.** AGENT-1 researched it fully (full
+      123-request table, `DMAy_CFGRx`/DMAMUX register layout, two EVT examples read end to
+      end) and refused to force it through as data — `dma.controller` was a single string
+      everywhere (`app/engine/resources.js`), and every existing `dma.requests:` block
+      encodes a FIXED per-channel table, while CH32H417's 16 channels route ANY of 123
+      named requests onto ANY channel via `DMA_MuxChannelConfig` — a register write no
+      part's codegen had ever made. Forcing the crossbar into the fixed-table shape would
+      have misrepresented one shared mux as 16 separate identical tables.
+      **Schema: `dma:` may now be a LIST of controllers, each optionally `mux:`-shaped
+      instead of `requests:`-shaped** — additive, the single-object shape all five existing
+      parts use is completely unchanged (verified: every pre-existing `resources.test.js`/
+      `codegen.test.js`/`codegen_compile.test.js` case green with ZERO edits). Full contract
+      posted to `agents/BOARD.md` for AGENT-1 to paste the 123-entry table into.
+      **Engine**: `dmaControllers()` normalises either shape; `dmaControllerFor(channel)`
+      resolves which controller owns a GLOBAL channel number (fixed-table: its own map's
+      keys; `mux:`: `base+1..base+count`) — the request itself never carries a second
+      `controller:` field, resolved instead, the same way a pin's owner is never stored
+      twice. Every existing single-controller function (`dmaLegalChannels`, `dmaAllRequests`,
+      `dmaParamDefs`, `dmaConflicts`, `dmaCouplingWarnings`, `dmaState`, `addDmaRequest`, …)
+      generalised to read through it — `app/engine/resources.js`.
+      **Codegen** (`app/engine/codegen.js` `dmaSection()`): each controller that owns a live
+      request gets its own clock enabled exactly once, in declaration order; each request's
+      OWN controller resolves its `init_struct`/`register.channel_macro` (a `mux:`
+      controller's channel MACRO substitution uses the LOCAL channel — DMA2's global channel
+      11 is its own local channel 3, verified against the real header's
+      `DMA1_Channel$CH`/`DMA2_Channel$CH` naming); a `mux:` request emits
+      `DMA_MuxChannelConfig(<macro>, <id>)` — confirmed against the REAL SDK signature
+      (`ch32h417_dma.h:284`, `void DMA_MuxChannelConfig(uint8_t, uint32_t)`) and against two
+      real EVT examples read end to end (`USART_DMA`, `DoubleBuffer_DMA`) for both the call
+      shape and the named-macro argument form (`DMA_MuxChannel7`, not a bare `7` —
+      `ch32h417_dma.h:246-261`, `mux.channel_macro: "DMA_MuxChannel$CH"`, same
+      `$CH`-substitution convention `dma.register.channel_macro` already uses). Missing
+      `mux.sdk_call`/a catalogue entry is a named TODO, never a call with a hole in it.
+      **UI** (`app/template.html`): `dmaRequestNamesOf()`, the DMA tab's per-request struct
+      panel, and the Tools-tab diagnostic rows all read through the generalised engine
+      functions instead of `M.dma` directly — verified live (jsdom, zero console errors): the
+      "Add" dropdown correctly offers "any of channels 1, 2, 3, 4" for a crossbar request,
+      adding one shows a real channel `<select>`, and the Tools tab correctly reports "DMA1,
+      DMA2" / channel and request counts across both controllers. **One real bug found and
+      fixed while smoke-testing, not guessed at**: a request name shared by two mux
+      controllers' catalogues (CH32H417's own case — the SAME 123 names on both DMA1 and
+      DMA2) produced TWO identical, indistinguishable options in the Add dropdown;
+      `dmaAllRequests()` now dedupes by name.
+      **Known, disclosed gap, not silently scoped out**: the System-Core "every channel at
+      once" overview table (`dmaChannelTable()`) stays fixed-table-only — it never renders
+      for a multi-controller part (`isDmaCtl` is false when `M.dma` is a list), so nothing
+      crashes or shows wrong data, but there is no channel-grid overview yet for DMA1/DMA2
+      together. The per-peripheral DMA Settings tab (the actual configuration surface) is
+      fully generalised and tested; this is a convenience view, not a capability gap.
+      **11 new tests** (`app/tests/resources.test.js`), each seen red on its own planted
+      break before being trusted: controller/channel resolution, crossbar legal-channel
+      union, local-channel macro substitution on the second controller, the real
+      `mux.channel_macro` form, per-controller clock enables (once each, never doubled),
+      the named-TODO fallback for a missing `mux.sdk_call`, a hard conflict naming the right
+      controller, and the dedup fix. `node tests/run.js "resources.test"` 63/63,
+      `"codegen.test"` 79/79, `"app/tests"` (full engine suite) 581/581 — every existing DMA/
+      NVIC/codegen test on all five shipped parts unchanged and still green, confirmed by
+      diffing against a clean stash of just this mechanism before trusting "additive."
+      `python build.py` run to verify in the real bundle (not committed — `data/mcus/
+      CH32H417.yaml` was mid-edit, AGENT-1's own DMA extraction, at build time).
+      **Not done by me**: populating CH32H417.yaml's actual `dma:` block (123 requests, the
+      real DMA1/DMA2 split) — that is the data AGENT-1 already has ready to paste, against
+      the contract on the board.

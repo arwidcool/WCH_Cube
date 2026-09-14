@@ -316,6 +316,178 @@ test('the Add control only offers what is not already configured', () => {
   assert.equal(left.some(r => r.request === 'ADC1'), false);
 });
 
+// ---- Multiple controllers + the DMAMUX crossbar (CH32H417's proven need) --------
+// main's P0: `M.dma` was a single object everywhere in the engine (`resources.js:76`
+// read `M.dma.controller` as a bare string), and every existing `dma.requests:` block
+// encodes a FIXED hardware table - channel N takes only its own small, silicon-wired
+// set. CH32H417 has TWO real controllers (DMA1, DMA2) and a true 16-channel DMAMUX
+// crossbar: any of 123 named requests onto ANY channel via `DMA_MuxChannelConfig`, a
+// register write no existing part's codegen has ever made. Forcing the crossbar into
+// the old fixed-table shape would misrepresent one shared mux as separate identical
+// tables - the exact "ships as done but isn't" failure this repo exists to prevent
+// (AGENT-1's finding, board 2026-09-14). `dma:` may now be a LIST of controllers, each
+// optionally `mux:`-shaped instead of `requests:`-shaped - additive, the single-object
+// shape every existing part uses is completely unchanged (see every test above, all
+// still green with zero changes).
+const DMA_MUX_PART = `
+mcu:
+  name: CH32V006-DMA-MUX
+  inherits: CH32V006
+  remove: [dma]
+dma:
+  - controller: DMA1
+    init_struct: DMA_InitTypeDef
+    register: { channel_macro: "DMA1_Channel$CH" }
+    mux:
+      base: 0
+      count: 2
+      sdk_call: DMA_MuxChannelConfig
+      requests: { ADC1: 5, SPI1_TX: 7 }
+    channel_params:
+      - key: dir
+        name: Direction
+        type: enum
+        sdk_field: DMA_DIR
+        default: Peripheral to memory
+        options:
+          - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+          - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+  - controller: DMA2
+    init_struct: DMA_InitTypeDef
+    register: { channel_macro: "DMA2_Channel$CH" }
+    mux:
+      base: 2
+      count: 2
+      sdk_call: DMA_MuxChannelConfig
+      requests: { ADC1: 5, SPI1_TX: 7 }
+    channel_params:
+      - key: dir
+        name: Direction
+        type: enum
+        sdk_field: DMA_DIR
+        default: Peripheral to memory
+        options:
+          - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+          - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+`;
+const withDmaMux = () => {
+  const e = fresh();
+  e.registerMcuFile(DMA_MUX_PART);
+  e.loadMcu('CH32V006-DMA-MUX');
+  return e;
+};
+
+test('dmaControllers() normalises a LIST, and dmaControllerFor() resolves a GLOBAL channel to the right one', () => {
+  const e = withDmaMux();
+  assert.equal(e.dmaControllers().length, 2);
+  assert.deepEqual(e.dmaControllers().map(c => c.controller), ['DMA1', 'DMA2']);
+  assert.equal(e.dmaControllerFor('1').controller, 'DMA1');
+  assert.equal(e.dmaControllerFor('2').controller, 'DMA1');
+  assert.equal(e.dmaControllerFor('3').controller, 'DMA2', 'DMA1 has 2 channels (base 0, count 2) - global 3 is DMA2\'s own channel 1');
+  assert.equal(e.dmaControllerFor('4').controller, 'DMA2');
+  assert.equal(e.dmaControllerFor('5'), null, 'past both controllers\' ranges');
+});
+
+test('a crossbar request can legally go on EVERY channel of a controller whose catalogue names it - not one fixed channel', () => {
+  const e = withDmaMux();
+  // Both controllers' mux.requests name ADC1, so it can go anywhere across all 4
+  // global channels - the actual hardware fact a true crossbar states, not a guess.
+  assert.deepEqual(e.dmaLegalChannels('ADC1'), ['1', '2', '3', '4']);
+});
+
+// The UI bug this closes, found while smoke-testing the real render, not guessed at:
+// both fixture controllers' catalogues name ADC1, and dmaAllRequests()/
+// dmaAddableRequests() used to return it TWICE - the "Add" dropdown showed two
+// identical "ADC1" options with no way to tell them apart.
+test('dmaAllRequests() lists a name ONE catalogue names twice (two mux controllers sharing it) only once', () => {
+  const e = withDmaMux();
+  const adc1Rows = e.dmaAllRequests().filter(r => r.request === 'ADC1');
+  assert.equal(adc1Rows.length, 1, 'ADC1 is in both DMA1 and DMA2 mux.requests, but is ONE addable option, not two');
+  assert.equal(e.dmaAddableRequests().filter(r => r.request === 'ADC1').length, 1);
+});
+
+test('adding a crossbar request onto the SECOND controller resolves its own LOCAL channel macro, not the global number', () => {
+  const e = withDmaMux();
+  e.addDmaRequest('ADC1', '3');   // global channel 3 = DMA2's own channel 1
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /DMA_MuxChannelConfig\(3, 5\)/, 'routes ADC1 (mux id 5) onto GLOBAL channel 3');
+  assert.match(c, /DMA2_Channel1\b/, 'the channel HANDLE is DMA2\'s own local numbering, not "DMA2_Channel3"');
+  assert.doesNotMatch(c, /DMA1_Channel/, 'this request never touches DMA1 at all');
+});
+
+// The bare GLOBAL number above is numerically correct but not how any real EVT
+// example spells it - CH32H417's own `ch32h417_dma.h:246-261` names 16
+// `DMA_MuxChannel1`..`DMA_MuxChannel16` macros, and real code
+// (`Evt/EXAM/USART/USART_DMA/Common/hardware.c:188`) calls
+// `DMA_MuxChannelConfig(DMA_MuxChannel7, 87)`, never a bare `7`. `mux.channel_macro`
+// is the data's way to say so, using the SAME `$CH`-substitution `dma.register.
+// channel_macro` already uses one level up.
+test('mux.channel_macro, when the data gives one, is used verbatim instead of a bare number', () => {
+  const e = fresh();
+  e.registerMcuFile(DMA_MUX_PART.replaceAll(
+    'sdk_call: DMA_MuxChannelConfig',
+    'sdk_call: DMA_MuxChannelConfig\n      channel_macro: "DMA_MuxChannel$CH"'));
+  e.loadMcu('CH32V006-DMA-MUX');
+  e.addDmaRequest('ADC1', '3');
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /DMA_MuxChannelConfig\(DMA_MuxChannel3, 5\)/,
+    'the macro name carries the GLOBAL channel number, exactly as the real SDK header spells it');
+  assert.doesNotMatch(c, /DMA_MuxChannelConfig\(3,/, 'never falls back to the bare number once the data names a macro');
+});
+
+test('each controller that owns a live request gets its OWN clock enabled once - never doubled, never the wrong one', () => {
+  const e = withDmaMux();
+  e.addDmaRequest('ADC1', '1');     // DMA1
+  e.addDmaRequest('SPI1_TX', '2');  // DMA1 again - same controller, must not double the RCC call
+  e.compute();
+  const c = e.cSource();
+  const hb = c.match(/RCC_HBPeriphClockCmd\(RCC_HBPeriph_DMA1, ENABLE\);/g) || [];
+  assert.equal(hb.length, 1, 'DMA1 enabled exactly once, however many requests it carries');
+  // DMA2 is not configured at all here, so it must not appear.
+  assert.doesNotMatch(c, /DMA2/);
+});
+
+test('DMA2 (no codegen.periph_clock bit on this synthetic part) gets a NAMED TODO, not a silently wrong or missing clock enable', () => {
+  const e = withDmaMux();
+  e.addDmaRequest('ADC1', '3');   // DMA2
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /TODO: DMA2 has no clock enable bit in codegen\.periph_clock/);
+});
+
+test('two requests on one GLOBAL channel is a hard conflict naming the right controller, even across two of them', () => {
+  const e = withDmaMux();
+  e.addDmaRequest('ADC1', '3');
+  // setDmaRequest moves the SAME channel a second request already occupies -
+  // exercised through the public API precisely like features.test.js's UI would.
+  e.addDmaRequest('SPI1_TX', '4');
+  e.setDmaRequest('SPI1_TX', { channel: '3' });
+  const conflicts = e.dmaConflicts();
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].channel, '3');
+  assert.match(conflicts[0].text, /^DMA2 channel 3 is configured for/, 'names DMA2, not DMA1 or a bare "DMA"');
+});
+
+// PLANTED BREAK: the mechanism must fall back to a named TODO, never a call with a
+// missing/garbage argument, when the data names a request's numeric mux ID but not
+// the SDK function that would consume it - the same discipline every other codegen
+// gap in this file already follows (a name nobody compiled is a guess).
+test('a crossbar controller missing mux.sdk_call gets a named TODO, never a call to nothing', () => {
+  const e = fresh();
+  e.registerMcuFile(DMA_MUX_PART.replace(
+    'mux:\n      base: 0\n      count: 2\n      sdk_call: DMA_MuxChannelConfig\n      requests: { ADC1: 5, SPI1_TX: 7 }',
+    'mux:\n      base: 0\n      count: 2\n      requests: { ADC1: 5, SPI1_TX: 7 }'));  // DMA1's own sdk_call: dropped
+  e.loadMcu('CH32V006-DMA-MUX');
+  e.addDmaRequest('ADC1', '1');   // still legal - the catalogue entry is untouched
+  e.compute();
+  const c = e.cSource();
+  assert.doesNotMatch(c, /DMA_MuxChannelConfig/, 'no call is emitted with a hole in it');
+  assert.match(c, /TODO: ADC1 is on a DMAMUX controller, but dma\.mux is missing/);
+  assert.match(c, /mux\.sdk_call — nothing routes this channel/);
+});
+
 test('a part with no dma block answers with empty lists rather than throwing', () => {
   const e = fresh();
   e.registerMcuFile(`

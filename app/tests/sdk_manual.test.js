@@ -87,6 +87,35 @@ test('sdk_manual: with no sdk_note is still a note, not a struct field or a TODO
   assert.equal((c.match(/TODO/g) || []).length, 0);
 });
 
+// The OTHER shape `sdk_manual:` ships in, live on CH32H417 today: `const:` carrying a
+// fixed DISPLAY value for a row that is pure information (USBHS/USBSS/USBPD's "Device
+// bring-up" - no struct:, no sdk_field:, just a long fixed register sequence). Before
+// this fix, `getParams()` excluded EVERY `const:` row on the theory that it was always
+// a struct-field literal with nothing useful to draw - true for OPA_NUM, false here: the
+// three real peripherals' Parameter Settings tab read as "has no parameters yet" while
+// their generated C carried the load-bearing bring-up sequence in full (main's render
+// check, 2026-09-14).
+test('sdk_manual: + const: reaches the Parameter Settings row, read-only, note and all - not silently dropped', () => {
+  load(
+    `      - key: bringup
+        name: Device bring-up
+        const: "fixed register sequence, see sdk_note"
+        sdk_manual: true
+        sdk_note: "RCC_HBPeriphClockCmd(...) [rcc.c:183]; USBHSD->CONTROL = ... [usbhs.c:208]"
+`);
+  eng.compute();
+  const c = eng.cSource();
+  assert.match(c, /Device bring-up = fixed register sequence, see sdk_note — set by firmware: RCC_HBPeriphClockCmd/,
+    'unchanged: the generated C already had this right');
+  const row = eng.getParams('DISP').find(r => r.key === 'bringup');
+  assert.ok(row, 'the row must reach the UI list - this is the exact defect main found: a real, cited fact with nowhere to be seen');
+  assert.equal(row.readonly, true, 'a const value is not a user choice');
+  assert.equal(row.value, 'fixed register sequence, see sdk_note');
+  assert.equal(eng.manualNoteText('sdk_manual', row),
+    'set by firmware: RCC_HBPeriphClockCmd(...) [rcc.c:183]; USBHSD->CONTROL = ... [usbhs.c:208]',
+    'the same actionable text the generated C carries must be available to build the row note from');
+});
+
 test('WHY sdk_manual exists: the pre-existing workaround still reads self-contradicting', () => {
   // Same parameter, same intent, written the way it HAD to be before this key: sdk_none
   // plus a correcting note. This is not a hypothetical — it is byte-for-byte the shape

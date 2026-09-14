@@ -35,10 +35,13 @@ import {
   gpioInputModes, isEnabled, pinExists, signalPins, signalAf, canon,
 } from './model.js';
 import {
-  paramDefs, paramValue, paramApplies, depProblems,
+  paramDefs, paramValue, paramApplies, depProblems, manualNoteText,
   channelParamBlock, channelParamDefs, channelParamValue, activeInstances,
 } from './params.js';
-import { dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState } from './resources.js';
+import {
+  dmaRequests, dmaParamDefs, dmaParamValue, dmaConflicts, nvicState,
+  dmaControllers, dmaControllerFor,
+} from './resources.js';
 import { E, compute } from './engine.js';
 import { generatorOption, userSection } from './export.js';
 import { clockCalc, firstPre, pllList, pllState, tapSource, tapSources, tapSourceEntry } from './clock.js';
@@ -1172,13 +1175,11 @@ export function initPlan(pid) {
     // whether the SDK exposes the setting at all, and `sdk_none` read over a
     // `sdk_manual` case would tell a reader the SDK has no such setter when it does.
     if (d.sdk_manual) {
-      notes.push(`${d.name} = ${paramValue(pid, d.key)} — set by firmware`
-        + (d.sdk_note ? `: ${d.sdk_note}` : ''));
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — ${manualNoteText('sdk_manual', d)}`);
       continue;
     }
     if (d.sdk_none) {
-      notes.push(`${d.name} = ${paramValue(pid, d.key)} — the SDK exposes nothing for it`
-        + (d.sdk_note ? `: ${d.sdk_note}` : ''));
+      notes.push(`${d.name} = ${paramValue(pid, d.key)} — ${manualNoteText('sdk_none', d)}`);
       continue;
     }
     if (d.sdk_call) {
@@ -1723,10 +1724,16 @@ function periphSection() {
 //  choice, and CubeMX does not ask for them either. They are emitted as named TODOs
 //  so the file says what the application still has to fill in.
 
-function dmaChannelHandle(channel) {
-  const reg = ((M.dma || {}).register) || {};
+// `controller` is the raw `M.dma` entry (`dmaControllerFor()`'s return), not a
+// name — CH32H417's two controllers each have their OWN `register.channel_macro`
+// (`DMA1_Channel$CH` / `DMA2_Channel$CH`), and `$CH` is the LOCAL channel number
+// (1-8), never the GLOBAL one `dmaControllerFor()` resolves controllers BY - a
+// `mux:` controller's global channel 11 is DMA2's own local channel 3.
+function dmaChannelHandle(controller, channel) {
+  const reg = (controller && controller.register) || {};
   if (!reg.channel_macro) return null;
-  return String(reg.channel_macro).replace('$CH', String(channel));
+  const local = controller && controller.mux ? Number(channel) - (controller.mux.base || 0) : channel;
+  return String(reg.channel_macro).replace('$CH', String(local));
 }
 
 function dmaSection() {
@@ -1741,18 +1748,29 @@ function dmaSection() {
     L.push('}');
     return L.join('\n');
   }
-  const ctrl = (M.dma || {}).controller;
-  const clk = ctrl ? clockBitOf(ctrl) : null;
-  if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
-  else L.push(`    /* TODO: ${ctrl || 'the DMA controller'} has no clock enable bit in codegen.periph_clock. */`);
+  // Every controller that owns at least one configured request gets its clock
+  // enabled ONCE, in the order `dma:` declares controllers - not once per
+  // request (two requests on the same controller must not double the RCC call),
+  // and not only the first controller (every existing single-controller part
+  // still gets exactly the one line it always has, since `dmaControllers()`
+  // there is a one-element list).
+  const live = new Set(rows.map(r => (dmaControllerFor(r.channel) || {}).controller).filter(Boolean));
+  for (const c of dmaControllers()) {
+    if (!c.controller || !live.has(c.controller)) continue;
+    const clk = clockBitOf(c.controller);
+    if (clk && clk.fn) L.push(`    ${clk.fn}(${clk.macro}, ENABLE);`);
+    else L.push(`    /* TODO: ${c.controller} has no clock enable bit in codegen.periph_clock. */`);
+  }
   L.push('');
 
-  const spec = (cfg().init_structs || {})[(M.dma || {}).init_struct] || {};
-  const defs = dmaParamDefs();
   for (const r of rows) {
-    const handle = dmaChannelHandle(r.channel);
-    const st = (M.dma || {}).init_struct;
-    L.push(`    /* ---- ${r.request} on ${ctrl || 'DMA'} channel ${r.channel} (${r.owner}) ${'-'.repeat(Math.max(0, 20 - r.request.length))} */`);
+    const controller = dmaControllerFor(r.channel);
+    const ctrlName = (controller && controller.controller) || 'DMA';
+    const handle = dmaChannelHandle(controller, r.channel);
+    const st = controller && controller.init_struct;
+    const spec = (cfg().init_structs || {})[st] || {};
+    const defs = dmaParamDefs(r.channel);
+    L.push(`    /* ---- ${r.request} on ${ctrlName} channel ${r.channel} (${r.owner}) ${'-'.repeat(Math.max(0, 20 - r.request.length))} */`);
     if (!st) {
       L.push('    /* TODO: the MCU file has no dma.init_struct, so no struct can be declared. */');
       L.push('');
@@ -1760,6 +1778,32 @@ function dmaSection() {
     }
     const varName = structVar(st);
     L.push('    {');
+    // A `mux:` controller's channel<->request binding is a USER CHOICE (the
+    // DMAMUX crossbar, RM ch.10), not silicon-fixed like every other shipped
+    // part's `requests:` table - so, unlike a fixed-table request, it needs a
+    // register write of its own before the channel is touched at all. Emitted
+    // FIRST, inside the same scope, the same "precondition before the struct
+    // write" shape `sdk_call_order: before_structs` already uses one level up.
+    if (controller.mux) {
+      const reqValue = (controller.mux.requests || {})[r.request];
+      if (controller.mux.sdk_call && reqValue !== undefined) {
+        // `mux.channel_macro` names the SDK's own per-channel macro (CH32H417:
+        // `DMA_MuxChannel$CH`, confirmed against `ch32h417_dma.h:246-261` AND
+        // against two real EVT examples that call it exactly this way, e.g.
+        // `DMA_MuxChannelConfig(DMA_MuxChannel7, 87)` in USART_DMA's
+        // `hardware.c`) - the same `$CH`-substitution convention
+        // `dma.register.channel_macro` already uses one level up. Falls back to
+        // the bare global channel number when the data has not named one yet,
+        // which is numerically identical (the macros are just named constants)
+        // and still compiles, only less idiomatic than the real examples.
+        const argMacro = controller.mux.channel_macro
+          ? String(controller.mux.channel_macro).replace('$CH', String(r.channel)) : r.channel;
+        L.push(`        ${controller.mux.sdk_call}(${argMacro}, ${reqValue});   /* route ${r.request} onto this channel — RM ch.10 */`);
+      } else {
+        L.push(`        /* TODO: ${r.request} is on a DMAMUX controller, but dma.mux is missing`);
+        L.push(`           ${controller.mux.sdk_call ? `a numeric ID for "${r.request}" in mux.requests` : 'mux.sdk_call'} — nothing routes this channel. */`);
+      }
+    }
     L.push(`        ${st} ${varName} = {0};`);
     for (const d of defs) {
       const value = dmaParamValue(r.id, d.key);

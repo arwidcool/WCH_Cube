@@ -195,6 +195,12 @@ test('pinoutSvg covers both package shapes - quad (with an exposed pad) and dual
   let svg = e.pinoutSvg();
   assert.ok(xmlBalance(svg));
   assert.ok(svg.includes('#2b3444'), 'a quad package with an exposed pad draws the pad rectangle');
+  // AGENT-3's independent verification (2026-09-14) caught this: the pad rectangle
+  // was drawn but carried no <title>, contradicting the function's own doc-comment
+  // ("EVERY physical pin… assigned or not"). The pad is `pinRows()`'s own num:'' row
+  // (always ground/thermal) - it needs a tooltip exactly like every numbered pin does.
+  assert.match(svg, /<title>[^<]*exposed pad[^<]*<\/title>/,
+    'the exposed pad must have its own <title>, the same as every other physical pin');
 
   e.setPackage('TSSOP20');
   e.compute();

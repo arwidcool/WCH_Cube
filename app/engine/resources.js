@@ -70,28 +70,108 @@ export function extiState() {
 // The peripheral a DMA request name belongs to: SPI1_RX -> SPI1, ADC1 -> ADC1.
 const requestOwner = name => (M.peripherals[name] ? name : String(name).split('_')[0]);
 
-export function dmaState() {
-  const d = M.dma;
-  if (!d || !d.requests) return null;
-  const controller = d.controller && M.peripherals[d.controller] ? d.controller : null;
-  const on = !!(controller && isEnabled(controller));
-  const channels = {}, issues = [];
-  for (const [ch, requests] of Object.entries(d.requests)) {
-    const live = (requests || []).filter(r => {
-      const pid = requestOwner(r);
-      return M.peripherals[pid] && isEnabled(pid);
-    });
-    channels[ch] = { requests: requests || [], live };
-    if (!on || live.length < 2) continue;
-    const owners = [...new Set(live.map(requestOwner))];
-    if (owners.length < 2) continue;                  // one peripheral, several of its own events
-    issues.push({
-      kind: 'dma', severity: 'warning', channel: ch,
-      owners: [...new Set([controller, ...owners])],   // the controller carries the warning too
-      text: `${d.controller} channel ${ch} is shared by ${live.join(', ')} — only one of them can drive it`,
-    });
+// =============================================================================
+//  Multiple controllers — CH32H417 is the first part with two (DMA1 and DMA2,
+//  RM ch.10), and it needed a second real capability at the same time: its 16
+//  channels are a true DMAMUX crossbar (ANY of 123 named requests onto ANY
+//  channel, via DMA_MuxChannelConfig), not the small per-channel fixed table
+//  every other shipped part has. `M.dma` stays a single controller OBJECT,
+//  unchanged, on every part that has one - CH32V006/CH32L103/CH32X035's own
+//  `dma:` blocks and every test against them are untouched. It may ALSO be a
+//  LIST of controller objects; `dmaControllers()` is the one place that
+//  normalises either shape, so every function below reads the same shape
+//  regardless of how many controllers the part has - the same "additive
+//  widening, old shape still the common case" pattern `signal_groups:` and
+//  `embed:` already established.
+//
+//  A controller entry carries EITHER `requests:` (the fixed hardware table
+//  every existing part uses - channel -> its own small, silicon-wired list)
+//  OR `mux:` (the crossbar shape - see below), never both.
+//
+//  `mux:` shape:
+//    mux:
+//      base: 8                    # this controller's channels are GLOBAL
+//      count: 8                   # numbers base+1 .. base+count - DMA1 base 0
+//                                  # count 8 (channels 1-8), DMA2 base 8 count 8
+//                                  # (channels 9-16), matching the RM's own mux
+//                                  # numbering (RM ch.10) so a channel number
+//                                  # alone resolves its controller with no extra
+//                                  # field on the stored request.
+//      sdk_call: DMA_MuxChannelConfig   # fn(globalMuxChannel, requestValue)
+//      requests: { ADC1: 5, ADC2: 6, ... }   # name -> DMAMUX's own numeric ID
+//                                              # (RM Table 10-2), the SAME shared
+//                                              # catalogue every mux controller
+//                                              # on the part can route.
+export const dmaControllers = () => {
+  const d = M && M.dma;
+  if (!d) return [];
+  return Array.isArray(d) ? d : [d];
+};
+
+/**
+ * The controller object that owns a GLOBAL channel number - resolved, never
+ * stored a second time on the request itself (the same "derive it, don't
+ * duplicate it" rule `pinNum()` follows for a pin's owner). A fixed-table
+ * controller owns whatever channel keys its own `requests:` map has (channel
+ * numbers there have always been local strings, e.g. "1".."8" on every
+ * single-controller part today - unaffected); a `mux:` controller owns
+ * `base+1 .. base+count`.
+ */
+export function dmaControllerFor(channel) {
+  const ch = String(channel);
+  for (const c of dmaControllers()) {
+    if (c.mux) {
+      const base = c.mux.base || 0, count = c.mux.count || 0, n = Number(ch);
+      if (Number.isFinite(n) && n > base && n <= base + count) return c;
+    } else if (c.requests && ch in c.requests) {
+      return c;
+    }
   }
-  return { controller: d.controller, channels, enabled: on, issues };
+  return null;
+}
+
+/** Every request name a `mux:` controller can route, name -> its numeric ID. */
+const muxCatalogue = c => (c.mux && c.mux.requests) || {};
+
+export function dmaState() {
+  const controllers = dmaControllers();
+  if (!controllers.length) return null;
+  const channels = {}, issues = [], enabledControllers = [];
+  for (const d of controllers) {
+    const controller = d.controller && M.peripherals[d.controller] ? d.controller : null;
+    const on = !!(controller && isEnabled(controller));
+    if (on && controller) enabledControllers.push(controller);
+    // The "hardware wires two peripherals to one channel" soft warning is a
+    // FIXED-TABLE question - a `mux:` controller's channel is a user CHOICE
+    // (dmaConflicts() below already catches two requests explicitly aimed at
+    // the same channel as a hard conflict), so there is nothing to precompute
+    // here for it.
+    if (!d.requests) continue;
+    for (const [ch, requests] of Object.entries(d.requests)) {
+      const live = (requests || []).filter(r => {
+        const pid = requestOwner(r);
+        return M.peripherals[pid] && isEnabled(pid);
+      });
+      channels[ch] = { requests: requests || [], live };
+      if (!on || live.length < 2) continue;
+      const owners = [...new Set(live.map(requestOwner))];
+      if (owners.length < 2) continue;                  // one peripheral, several of its own events
+      issues.push({
+        kind: 'dma', severity: 'warning', channel: ch,
+        owners: [...new Set([controller, ...owners])],   // the controller carries the warning too
+        text: `${controller} channel ${ch} is shared by ${live.join(', ')} — only one of them can drive it`,
+      });
+    }
+  }
+  // `controller`/`enabled` stay singular for the single-controller case - every
+  // existing caller (the DMA tab's own header, mainly) reads them as scalars,
+  // and a part with exactly one controller must answer them exactly as before.
+  return {
+    controller: controllers.length === 1 ? controllers[0].controller : null,
+    controllers: controllers.map(d => d.controller),
+    channels, enabled: controllers.length === 1 ? enabledControllers.includes(controllers[0].controller) : enabledControllers.length > 0,
+    enabledControllers, issues,
+  };
 }
 
 // =============================================================================
@@ -113,23 +193,61 @@ export function dmaState() {
 //  be added twice, so it is its own identity, it survives a .wchproj round trip
 //  unchanged, and a human reading the saved file can tell what it is.
 
-const dmaCfg = () => (M && M.dma) || {};
+// The sole controller, for a caller that has not been (and does not need to be)
+// generalised — kept working byte-for-byte on every single-controller part, since
+// `dmaControllers()` there is always a one-element list holding the exact object
+// `M.dma` already was.
+const dmaCfg = () => dmaControllers()[0] || {};
 
-/** Request name -> the channels that can serve it, from the hardware map. */
+/**
+ * Request name -> the channels that can serve it. A fixed-table controller
+ * answers from its own hardware map, unchanged; a `mux:` controller answers its
+ * WHOLE channel range for any request its catalogue names, because the crossbar
+ * really can route any of them to any of its channels — that IS the hardware
+ * fact, not a placeholder for one.
+ */
 export function dmaLegalChannels(request) {
   const out = [];
-  for (const [ch, list] of Object.entries(dmaCfg().requests || {})) {
-    if ((list || []).map(String).includes(String(request))) out.push(String(ch));
+  for (const c of dmaControllers()) {
+    if (c.requests) {
+      for (const [ch, list] of Object.entries(c.requests)) {
+        if ((list || []).map(String).includes(String(request))) out.push(String(ch));
+      }
+    } else if (c.mux && String(request) in muxCatalogue(c)) {
+      const base = c.mux.base || 0, count = c.mux.count || 0;
+      for (let i = 1; i <= count; i++) out.push(String(base + i));
+    }
   }
-  return out.sort((a, b) => Number(a) - Number(b));
+  return [...new Set(out)].sort((a, b) => Number(a) - Number(b));
 }
 
-/** Every request this part has, in channel order. */
+/** Every request this part has. A `mux:` request has no ONE home channel — it
+ * carries `channel: ''`, and `dmaLegalChannels()` above is the real answer for
+ * "where can this go"; a fixed-table request keeps its one true channel exactly
+ * as before, since that IS the hardware fact for that shape. */
 export function dmaAllRequests() {
   const out = [];
-  for (const [ch, list] of Object.entries(dmaCfg().requests || {})) {
-    for (const r of list || []) {
-      out.push({ request: String(r), channel: String(ch), owner: requestOwner(r) });
+  const seen = new Set();
+  for (const c of dmaControllers()) {
+    if (c.requests) {
+      for (const [ch, list] of Object.entries(c.requests)) {
+        for (const r of list || []) {
+          const name = String(r);
+          if (seen.has(name)) continue;    // a name a second controller (or channel) also names is the SAME request, not a second one - dmaLegalChannels() is the real answer for "where can it go"
+          seen.add(name);
+          out.push({ request: name, channel: String(ch), owner: requestOwner(r) });
+        }
+      }
+    } else if (c.mux) {
+      // A crossbar's catalogue is typically shared across every mux controller on
+      // the part (CH32H417: the SAME 123 names, routable through DMA1 or DMA2) - the
+      // first controller to name a request wins the list entry, since which channel
+      // it is offered "at" is meaningless for a crossbar row anyway (channel: '').
+      for (const r of Object.keys(muxCatalogue(c))) {
+        if (seen.has(r)) continue;
+        seen.add(r);
+        out.push({ request: r, channel: '', owner: requestOwner(r) });
+      }
     }
   }
   return out.sort((a, b) => (a.channel === b.channel ? a.request.localeCompare(b.request) : Number(a.channel) - Number(b.channel)));
@@ -139,23 +257,28 @@ export function dmaAllRequests() {
 export const dmaAddableRequests = () =>
   dmaAllRequests().filter(r => !(S.dma.requests || []).some(x => x.id === r.request));
 
-/** Normalised DMA_InitTypeDef parameter definitions — the same schema as params:. */
-export function dmaParamDefs() {
-  const list = dmaCfg().channel_params;
+/** Normalised DMA_InitTypeDef parameter definitions for ONE controller — the same
+ * schema as params:. `channel` resolves which controller (`dmaControllerFor()`),
+ * because two real controllers may not share one `channel_params:` block, even
+ * though on CH32H417 today they happen to (same struct, same fields, twice). */
+export function dmaParamDefs(channel) {
+  const c = channel !== undefined ? dmaControllerFor(channel) : dmaCfg();
+  const list = c && c.channel_params;
   if (!Array.isArray(list)) return [];
   return normaliseParamDefs(list);
 }
 
-const dmaDefOf = key => dmaParamDefs().find(d => d.key === key);
+const dmaDefOf = (key, channel) => dmaParamDefs(channel).find(d => d.key === key);
 
 /** Starting values for a request: the definition defaults, then dma.request_defaults. */
-export function dmaRequestDefaults(request) {
+export function dmaRequestDefaults(request, channel) {
   const out = {};
-  for (const d of dmaParamDefs()) out[d.key] = d.default;
-  const seed = (dmaCfg().request_defaults || {})[request];
+  for (const d of dmaParamDefs(channel)) out[d.key] = d.default;
+  const c = channel !== undefined ? dmaControllerFor(channel) : dmaCfg();
+  const seed = c && (c.request_defaults || {})[request];
   if (seed && typeof seed === 'object') {
     for (const [k, v] of Object.entries(seed)) {
-      const d = dmaDefOf(k);
+      const d = dmaDefOf(k, channel);
       if (!d) continue;                       // the data names a parameter that is gone
       try { out[k] = validateParam(d, v, `dma.request_defaults.${request}.${k}`); }
       catch (e) { /* a bad starting value is not worth refusing to load the part for */ }
@@ -169,7 +292,7 @@ const byChannelThenName = (a, b) =>
 
 /** Everything the DMA Settings tab renders, one row per added request. */
 export function dmaRequests() {
-  if (!dmaCfg().requests) return [];
+  if (!dmaControllers().length) return [];
   return (S.dma.requests || []).map(r => ({
     id: r.id,
     request: r.request,
@@ -199,7 +322,7 @@ export function addDmaRequest(request, channel) {
   const ch = channel === undefined ? legal[0] : String(channel);
   if (!legal.includes(ch)) throw new Error(`DMA request ${name} cannot use channel ${ch} — it is wired to ${legal.join(', ')}`);
   record(`Add DMA ${name}`);
-  (S.dma.requests ||= []).push({ id: name, request: name, channel: ch, params: dmaRequestDefaults(name) });
+  (S.dma.requests ||= []).push({ id: name, request: name, channel: ch, params: dmaRequestDefaults(name, ch) });
   S.dma.requests.sort(byChannelThenName);
   return name;
 }
@@ -228,9 +351,9 @@ export function setDmaRequest(id, patch) {
 export function setDmaParam(id, key, value) {
   const r = findRequest(id);
   if (!r) throw new Error(`No DMA request "${id}" is configured`);
-  const d = dmaDefOf(key);
+  const d = dmaDefOf(key, r.channel);
   if (!d) {
-    const known = dmaParamDefs().map(x => x.key).join(', ');
+    const known = dmaParamDefs(r.channel).map(x => x.key).join(', ');
     throw new Error(`DMA has no parameter "${key}"${known ? ` (has: ${known})` : ''}`);
   }
   if (d.readonly) throw new Error(`DMA.${d.name} is fixed by the hardware and cannot be set`);
@@ -244,13 +367,14 @@ export function dmaParamValue(id, key) {
   const r = findRequest(id);
   if (!r) return undefined;
   if (r.params && r.params[key] !== undefined) return r.params[key];
-  const d = dmaDefOf(key);
+  const d = dmaDefOf(key, r.channel);
   return d ? d.default : undefined;
 }
 
 /** The register encoding behind a chosen option, for codegen. */
 export function dmaParamRegisterValue(id, key) {
-  const d = dmaDefOf(key);
+  const r = findRequest(id);
+  const d = dmaDefOf(key, r && r.channel);
   if (!d) return undefined;
   const v = dmaParamValue(id, key);
   if (!d.options) return v;
@@ -270,11 +394,12 @@ export function dmaConflicts() {
   const out = [];
   for (const [channel, rows] of Object.entries(byCh)) {
     if (rows.length < 2) continue;
+    const owner = dmaControllerFor(channel);
     out.push({
       channel,
       ids: rows.map(r => r.id),
       owners: [...new Set(rows.map(r => r.owner))],
-      text: `${dmaCfg().controller || 'DMA'} channel ${channel} is configured for ${rows.map(r => r.request).join(' and ')}`
+      text: `${(owner && owner.controller) || 'DMA'} channel ${channel} is configured for ${rows.map(r => r.request).join(' and ')}`
         + ' — one channel serves one request at a time',
     });
   }
@@ -295,8 +420,9 @@ function dmaCouplingWarnings() {
     const psize = dmaParamValue(r.id, 'psize'), msize = dmaParamValue(r.id, 'msize');
     if (psize === undefined && msize === undefined) continue;
     if (String(psize) === 'Half Word' && String(msize) === 'Half Word') continue;
+    const owner = dmaControllerFor(r.channel);
     out.push({
-      kind: 'dma', severity: 'warning', owners: [r.owner, dmaCfg().controller].filter(Boolean),
+      kind: 'dma', severity: 'warning', owners: [r.owner, owner && owner.controller].filter(Boolean),
       text: `${r.owner} moves 16-bit data but ${r.request} transfers ${psize} / ${msize}`
         + ' — both widths should be Half Word or the transfer is misaligned',
     });
@@ -577,11 +703,14 @@ export function resourceState() {
   const exti = extiState();
   const dma = dmaState();
   const nvic = nvicState();
-  const hard = dmaConflicts().map(c => ({
-    kind: 'dma', severity: 'conflict', channel: c.channel,
-    owners: [...new Set([dmaCfg().controller, ...c.owners].filter(Boolean))],
-    text: c.text,
-  }));
+  const hard = dmaConflicts().map(c => {
+    const owner = dmaControllerFor(c.channel);
+    return {
+      kind: 'dma', severity: 'conflict', channel: c.channel,
+      owners: [...new Set([owner && owner.controller, ...c.owners].filter(Boolean))],
+      text: c.text,
+    };
+  });
   const issues = [
     ...((exti && exti.issues) || []),
     ...((dma && dma.issues) || []),

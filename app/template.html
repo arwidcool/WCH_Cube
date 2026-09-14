@@ -2327,16 +2327,25 @@ const periphPins = pid => Object.entries(E.pins)
 /** The vectors this peripheral owns. `system: true` ones belong to the NVIC entry itself. */
 const nvicVectorsOf = pid => (hasNvic() ? nvicVectors() : ((M.nvic || {}).vectors || []))
   .filter(v => (pid === 'NVIC' ? true : v.peripheral === pid));
-/** The DMA request names owned by this peripheral, with the channels each can use. */
+/**
+ * The DMA request names owned by this peripheral, with the channels each can use.
+ * Reads through `dmaAllRequests()` (the engine, `app/engine/resources.js`) rather
+ * than `M.dma.requests` directly, because that is the one place that already knows
+ * how to read EITHER a fixed hardware table (channel -> its own small, silicon-
+ * wired list, every part before CH32H417) OR a `mux:`-shaped crossbar controller
+ * (any of its catalogue's names, on any of its own channels) - reading `M.dma`
+ * raw here would need the same branch a second time, and a `mux:` peripheral's
+ * DMA Settings tab would silently never appear (`M.dma.requests` is undefined on
+ * an ARRAY, and CH32H417's own controllers may have no `requests:` key at all).
+ */
 function dmaRequestNamesOf(pid) {
-  const reqs = (M.dma || {}).requests || {};
+  if (typeof dmaAllRequests !== 'function' || typeof dmaLegalChannels !== 'function') return [];
   const out = [];
-  for (const [ch, list] of Object.entries(reqs)) {
-    for (const r of list || []) {
-      if (r !== pid && String(r).split('_')[0] !== pid) continue;
-      const hit = out.find(o => o.request === r);
-      if (hit) hit.channels.push(+ch); else out.push({ request: r, channels: [+ch] });
-    }
+  for (const r of dmaAllRequests()) {
+    if (r.owner !== pid) continue;
+    const hit = out.find(o => o.request === r.request);
+    if (hit) continue;                    // dmaAllRequests() already lists one row per (channel, request); collapse to one entry per request
+    out.push({ request: r.request, channels: dmaLegalChannels(r.request).map(Number) });
   }
   return out;
 }
@@ -2570,23 +2579,33 @@ function dmaTable(pid) {
   }
   h += `<table class="dmatab"><thead><tr><th>Request</th><th>Channel</th><th>Direction</th><th>Priority</th><th></th></tr></thead>`
     + `<tbody>${rows || `<tr><td colspan="5" class="ro">No DMA request configured for ${esc(pid)} yet.</td></tr>`}</tbody></table>`;
+  // A fixed-table request has ONE home channel (`r.channel`); a crossbar request
+  // (`dmaAllRequests()`'s own `channel: ''` for a `mux:` catalogue entry - it has no
+  // ONE home) shows its full legal range instead of a blank "channel " - the real
+  // hardware fact, not a placeholder.
+  const addLabel = r => r.channel ? `channel ${r.channel}`
+    : (typeof dmaLegalChannels === 'function' ? `any of channels ${dmaLegalChannels(r.request).join(', ')}` : 'any channel');
   h += `<div class="dmaadd">`
     + (addable.length
       ? `<select id="dma-add" aria-label="DMA request to add">`
-        + addable.map(r => `<option value="${attr(r.request)}">${esc(r.request)} — channel ${esc(r.channel)}</option>`).join('')
+        + addable.map(r => `<option value="${attr(r.request)}">${esc(r.request)} — ${esc(addLabel(r))}</option>`).join('')
         + `</select><button id="dma-add-go">Add</button>`
       : `<span class="ro">${mine.length ? `Every DMA request ${esc(pid)} has is configured.` : `${esc(pid)} has no DMA request on this part.`}</span>`)
     + `</div>`;
 
   // The selected row's DMA_InitTypeDef fields, through the Parameter Settings editors.
+  // Resolved from the SELECTED REQUEST's own controller, not `M.dma` directly - on a
+  // part with more than one controller (CH32H417: DMA1/DMA2), `M.dma` is a LIST and
+  // `.init_struct`/`.request_notes` live on each entry, possibly differently.
   const sel = mine.find(r => r.id === dmaPick);
   if (sel) {
-    const defs = hasDmaParams() ? dmaParamDefs() : [];
-    h += `<div class="section-h">${esc(sel.request)} — ${esc((M.dma || {}).init_struct || 'DMA_InitTypeDef')}</div>`
+    const selCtrl = (typeof dmaControllerFor === 'function' && dmaControllerFor(sel.channel)) || {};
+    const defs = hasDmaParams() ? dmaParamDefs(sel.channel) : [];
+    h += `<div class="section-h">${esc(sel.request)} — ${esc(selCtrl.init_struct || 'DMA_InitTypeDef')}</div>`
       + paramTableFrom(defs.map(d => Object.assign({}, d, { value: dmaParamValue(sel.id, d.key) })), {
         owner: sel.id, head: `${sel.request} on channel ${sel.channel}`,
         attrs: { o: 'dp', k: 'dn' }, keyPrefix: 'DMA',
-        note: (M.dma.request_notes || {})[sel.request] || '',
+        note: (selCtrl.request_notes || {})[sel.request] || '',
       });
   }
   return h;
@@ -2738,6 +2757,23 @@ const paramsClosed = new Set();          // "PID/Group" bands the user folded aw
 const paramLabel = d => String(d.name !== undefined ? d.name : d.key);
 const paramNote = d => d.help || d.notes || '';
 const paramReadonly = d => !!(d.readonly || d.computed);
+// The note text EVERY parameter row shares: its own `help`/`notes`, plus - when
+// `sdk_manual:`/`sdk_none:` says this value lives outside the generated struct -
+// the SAME actionable text (register, value, `file:line`) the generated C comment
+// carries (`manualNoteText()`, app/engine/params.js, called from both there and
+// here). ONE function, called from both places a parameter row is drawn
+// (`paramTable()`, the peripheral's own Parameter Settings tab, and
+// `paramTableFrom()`, the DMA Settings tab's shared renderer) - they used to build
+// this text twice, by hand, and the second copy never learned about `sdk_manual:`
+// at all: `sdk_note` reached the generated C in full and stopped there, so
+// USBHS/USBSS/USBPD's "Device bring-up" row read as a bare value with no
+// explanation while the identical fact sat one click away in Generate (main's
+// render check, CH32H417, 2026-09-14).
+function paramRowNote(r) {
+  const manual = r.sdk_manual ? manualNoteText('sdk_manual', r)
+    : r.sdk_none ? manualNoteText('sdk_none', r) : '';
+  return [paramNote(r), manual, r.register ? `register: ${r.register}` : ''].filter(Boolean).join(' — ');
+}
 // options are either ['A','B'] or [{name:'A',value:0}]
 const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object' ? String(o.name) : String(o)));
 
@@ -2848,7 +2884,11 @@ function paramTableFrom(rows, { owner, head, attrs = { o: 'pp', k: 'pn' }, live 
     if (shut) continue;
     for (const r of groups.get(g)) {
       const cls = paramReadonly(r) ? 'calc' : '';
-      const rn = [paramNote(r), r.register ? `register: ${r.register}` : '', r.sdk_field ? `DMA_InitTypeDef.${r.sdk_field}` : '']
+      // The DMA struct-field name is appended AFTER the shared note (`paramRowNote()`
+      // above) rather than folded into it: "DMA_InitTypeDef.<field>" is only true for
+      // THIS caller, the DMA Settings tab - printing it for an ordinary peripheral
+      // param (`paramTable()`, below) would name the wrong struct entirely.
+      const rn = [paramRowNote(r), r.sdk_field ? `DMA_InitTypeDef.${r.sdk_field}` : '']
         .filter(Boolean).join(' — ');
       h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${rn ? `<span class="pnote">${esc(rn)}</span>` : ''}</td>`
         + `<td>${paramEditor(owner, r, live, attrs)}</td></tr>`;
@@ -2917,7 +2957,7 @@ function paramTable(pid) {
     for (const r of groups.get(g)) {
       const on = paramActive(pid, r, byName);
       const cls = [on ? '' : 'off', paramReadonly(r) ? 'calc' : ''].filter(Boolean).join(' ');
-      const note = [paramNote(r), r.register ? `register: ${r.register}` : ''].filter(Boolean).join(' — ');
+      const note = paramRowNote(r);
       h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${note ? `<span class="pnote">${esc(note)}</span>` : ''}</td>` +
         `<td>${paramEditor(pid, r, live && on)}</td></tr>`;
     }
@@ -2933,7 +2973,7 @@ function paramTable(pid) {
     for (const r of g.rows) {
       const on = paramActive(pid, r, byInstName);
       const cls = [on ? '' : 'off', paramReadonly(r) ? 'calc' : ''].filter(Boolean).join(' ');
-      const note = [paramNote(r), r.register ? `register: ${r.register}` : ''].filter(Boolean).join(' — ');
+      const note = paramRowNote(r);
       h += `<tr${cls ? ` class="${cls}"` : ''}><td>${esc(paramLabel(r))}${note ? `<span class="pnote">${esc(note)}</span>` : ''}</td>`
         + `<td>${paramEditor(pid, r, liveInst && on, { o: 'cp', k: 'cn', extra: ` data-ci="${attr(g.n)}"` })}</td></tr>`;
     }
@@ -3645,8 +3685,13 @@ function renderTools() {
   if (!vectors.length) note('no interrupt vectors', 'the NVIC entry and every NVIC Settings tab are absent');
 
   // --- DMA, clocks, codegen
-  const dma = M.dma || {};
-  if (!dma.requests) note('no DMA request map', 'the DMA1 channel table and every DMA Settings tab are absent');
+  // `dmaControllers()` reads EITHER shape - a single fixed-table object (every part
+  // before CH32H417) or a LIST that may hold a `mux:`-shaped crossbar controller
+  // (CH32H417's DMA1/DMA2) - so this warning fires only when the part truly has no
+  // DMA surface at all, not merely because `M.dma` is not the single-object shape
+  // this check used to assume.
+  const dmaCtrls = typeof dmaControllers === 'function' ? dmaControllers() : [];
+  if (!dmaCtrls.length) note('no DMA request map', 'the DMA1 channel table and every DMA Settings tab are absent');
   if (!(M.gpio || {}).speeds) note('no gpio.speeds', 'the output-speed column falls back to codegen.speeds');
   if (!M.codegen) note('no codegen: block', 'generated C will carry TODOs instead of register writes');
   else if (!M.codegen.header) note('codegen.header is missing', 'generated C will not know which SDK header to include');
@@ -3704,9 +3749,12 @@ function renderTools() {
     + row('Vectors', vectors.length ? String(vectors.length) : '<span class="ro">none</span>')
     + row('Priority bits', ((M.nvic || {}).scheme || {}).priority_bits !== undefined
       ? String(M.nvic.scheme.priority_bits) : '<span class="ro">not stated</span>')
-    + row('DMA controller', dma.controller ? esc(dma.controller) : '<span class="ro">none</span>')
-    + row('DMA channels', dma.requests ? String(dma.channels || Object.keys(dma.requests).length) : '<span class="ro">none</span>')
-    + row('DMA requests', dma.requests ? String(Object.values(dma.requests).reduce((n, l) => n + (l || []).length, 0)) : '<span class="ro">none</span>')
+    + row('DMA controller', dmaCtrls.length ? esc(dmaCtrls.map(c => c.controller).filter(Boolean).join(', ')) : '<span class="ro">none</span>')
+    + row('DMA channels', dmaCtrls.length
+      ? String(dmaCtrls.reduce((n, c) => n + (c.mux ? (c.mux.count || 0) : Object.keys(c.requests || {}).length), 0))
+      : '<span class="ro">none</span>')
+    + row('DMA requests', dmaCtrls.length && typeof dmaAllRequests === 'function'
+      ? String(dmaAllRequests().length) : '<span class="ro">none</span>')
     + row('EXTI lines', ((M.exti || {}).lines) ? String(Object.keys(M.exti.lines).length) : '<span class="ro">none</span>')
     + `</table></section>`
     + `<section class="toolsgaps"><h4>Not stated by this file <span class="ro">${gaps.length}</span></h4>`

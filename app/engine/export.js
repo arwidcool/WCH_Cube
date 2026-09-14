@@ -278,6 +278,14 @@ const xmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').repla
 export function pinoutSvg() {
   const rows = pinRows();
   const byNum = new Map(rows.filter(r => r.num !== '').map(r => [+r.num, r]));
+  // `pinRows()`'s own exposed-pad row: `num === ''`, always ground/thermal, no side/
+  // number geometry of its own (it is the decorative square drawn below, not a
+  // member of `L.pins`). Every OTHER row gets a `<title>` tooltip; this doc-comment
+  // says "EVERY physical pin… assigned or not" and the pad is a real physical pin,
+  // so it needs one too (AGENT-3's independent verification caught the gap,
+  // 2026-09-14 — the pad was drawn but silently untitled, contradicting this
+  // comment's own claim of completeness).
+  const padRow = rows.find(r => r.num === '');
   const L = svgLayout(S.pkg, rows);
   const b = L.body;
   const title = `${M.mcu.name} ${S.pkg}`;
@@ -285,7 +293,9 @@ export function pinoutSvg() {
   g.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${SVG_COLOR.body}" rx="4"/>`);
   if (L.pk.epad) {
     const ex = b.x + b.w * .3, ey = b.y + b.h * .3, ew = b.w * .4, eh = b.h * .4;
-    g.push(`<rect x="${ex}" y="${ey}" width="${ew}" height="${eh}" fill="${SVG_COLOR.bodyDark}" rx="3"/>`);
+    const padTip = padRow ? `${padRow.name} — exposed pad${padRow.signal ? `: ${padRow.signal}` : ''}` : 'Exposed pad';
+    g.push(`<g><title>${xmlEsc(padTip)}</title>`
+      + `<rect x="${ex}" y="${ey}" width="${ew}" height="${eh}" fill="${SVG_COLOR.bodyDark}" rx="3"/></g>`);
   }
   g.push(`<circle cx="${b.x + 14}" cy="${b.y + 14}" r="4.5" fill="${SVG_COLOR.dot}"/>`);
   const nameFs = Math.max(SVG_MIN_FS, Math.min(20, b.w / 9));

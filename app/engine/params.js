@@ -331,13 +331,44 @@ export function depProblems(pid, def) {
 }
 
 /** Everything the UI needs to draw the Parameter Settings tab for one peripheral. */
+/**
+ * The note text for an `sdk_manual:`/`sdk_none:` parameter — the same phrase
+ * `initPlan()` prints in the generated C comment ("set by firmware" / "the SDK
+ * exposes nothing for it"), plus the data's own `sdk_note:` when it gives one. ONE
+ * function, called from codegen's comment AND the Parameter Settings row's note, so
+ * the two can never read differently about the same fact — main's render check
+ * found the UI simply never looked at `sdk_note` at all: a `sdk_manual:` row showed
+ * a bare control with no register, no value, no `file:line`, while the identical
+ * fact reached the generated C in full. `kind` is `'sdk_manual'` or `'sdk_none'`;
+ * anything else returns ''.
+ */
+export function manualNoteText(kind, d) {
+  const phrase = kind === 'sdk_manual' ? 'set by firmware'
+    : kind === 'sdk_none' ? 'the SDK exposes nothing for it' : '';
+  if (!phrase) return '';
+  return phrase + (d.sdk_note ? `: ${d.sdk_note}` : '');
+}
+
 export function getParams(pid) {
-  const store = (S.periph[pid] && S.periph[pid].params) || {};
   // A `const:` member is never a control: there is exactly one value it can take, and it
-  // is the one codegen will write. Drawing it would offer a choice the silicon lacks.
-  return paramDefs(pid).filter(d => !isConstParam(d)).map(d => ({
+  // is the one codegen will write. Drawing it would offer a choice the silicon lacks -
+  // UNLESS it is also `sdk_manual:` (USBHS/USBSS/USBPD's "Device bring-up"), in which
+  // case there is no struct field being hidden at all: `const:` is carrying the row's
+  // fixed DISPLAY value for a pure informational note, not a value codegen writes into
+  // a struct. Excluding it left three peripherals' Parameter Settings tab reading as
+  // "has no parameters yet" while their generated C carried real, load-bearing bring-up
+  // instructions nothing in the UI pointed at (main's finding, 2026-09-14).
+  return paramDefs(pid).filter(d => !isConstParam(d) || d.sdk_manual).map(d => ({
     ...d,
-    value: store[d.key] !== undefined ? store[d.key] : d.default,
+    // `paramValue()` already knows a const param's value is `d.const`, not `d.default`
+    // - reusing it here (rather than re-deriving `store[d.key] ?? d.default` by hand, as
+    // this used to) is what closes the same "const rows were never expected to reach
+    // this branch" gap for the value itself, not only for the filter above.
+    value: paramValue(pid, d.key),
+    // A const row that DOES reach here has exactly one value, same as any other const
+    // - `d.readonly` already folds in `d.computed` (normaliseParamDefs), so this only
+    // ADDS the const case, never removes an existing readonly/computed reason.
+    readonly: d.readonly || isConstParam(d),
     applicable: paramApplies(pid, d),
   }));
 }

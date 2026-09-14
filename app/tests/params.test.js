@@ -429,6 +429,80 @@ test('a const: member cannot be set, by a control or by a file', () => {
   assert.equal(e.paramValue('USART1', 'baud'), 9600, 'the settable one beside it still applied');
 });
 
+// ---- sdk_manual: + const: - main's render check on CH32H417 USBFS/USBHS/USBSS/USBPD --
+// `getParams()`'s const-exclusion was written for a struct-field literal (OPA_NUM: a
+// register value codegen writes, the UI has nothing useful to draw). USBHS/USBSS/USBPD's
+// "Device bring-up" is a DIFFERENT use of `const:`: no `struct:`, no `sdk_field:` - the
+// const string IS the row's fixed display value for a pure `sdk_manual:` note, and the
+// old filter dropped it from the Parameter Settings tab entirely, which is why three
+// peripherals' tab read as if they had nothing to configure while their generated C
+// carried load-bearing bring-up instructions. USBFS's own two params are the OTHER
+// shape - `sdk_manual:` with no `const:` at all, a real editable choice whose value the
+// generator cannot itself apply - and both shapes need to keep working.
+const MANUAL_PARAM = `
+mcu:
+  name: CH32V006-SDK-MANUAL
+  inherits: CH32V006
+peripherals:
+  USART1:
+    params:
+      - key: bringup
+        name: Device bring-up
+        const: "fixed register sequence, see sdk_note"
+        sdk_manual: true
+        sdk_note: "USART_Cmd(USART1, ENABLE) [driver.c:42]"
+      - key: lowspeed
+        name: Low speed mode
+        sdk_manual: true
+        type: bool
+        default: false
+        sdk_note: "R8_USB_CTRL.LOW_SPEED (0x40) [usb.h:1006]"
+`;
+const withManual = () => {
+  const e = fresh();
+  e.registerMcuFile(MANUAL_PARAM);
+  e.loadMcu('CH32V006-SDK-MANUAL');
+  e.compute();
+  return e;
+};
+
+test('a const: + sdk_manual: row is drawn, read-only, at its const value - not silently dropped', () => {
+  const e = withManual();
+  const rows = e.getParams('USART1');
+  const bringup = rows.find(r => r.key === 'bringup');
+  assert.ok(bringup, 'the const row must still reach the UI - this is the exact bug main found');
+  assert.equal(bringup.readonly, true, 'a const value is not a user choice, even under sdk_manual:');
+  assert.equal(bringup.value, 'fixed register sequence, see sdk_note', 'its value is the const literal, not undefined');
+  assert.equal(bringup.sdk_manual, true);
+  assert.equal(bringup.sdk_note, 'USART_Cmd(USART1, ENABLE) [driver.c:42]',
+    'sdk_note must reach the row the UI renders, not only the one codegen reads');
+});
+
+test('a plain sdk_manual: row (no const:) stays editable - the OTHER shape, USBFS\'s own', () => {
+  const e = withManual();
+  const lowspeed = e.getParams('USART1').find(r => r.key === 'lowspeed');
+  assert.ok(lowspeed);
+  assert.equal(lowspeed.readonly, false, 'a real per-project choice, not fixed by the silicon');
+  assert.equal(lowspeed.value, false, 'the ordinary default, not a const literal');
+});
+
+test('a const: member with no sdk_manual: is still excluded - the fix is additive, not a wider door', () => {
+  const e = withConst();
+  assert.deepEqual(e.getParams('USART1').map(p => p.key), ['baud'],
+    'OPA_NUM-style const still has nothing useful to draw and is still hidden');
+});
+
+test('manualNoteText is the one function codegen and the UI both call - no room for two wordings', () => {
+  const e = withManual();
+  const bringup = e.paramDefs('USART1').find(d => d.key === 'bringup');
+  assert.equal(e.manualNoteText('sdk_manual', bringup),
+    'set by firmware: USART_Cmd(USART1, ENABLE) [driver.c:42]');
+  assert.equal(e.manualNoteText('sdk_none', bringup),
+    'the SDK exposes nothing for it: USART_Cmd(USART1, ENABLE) [driver.c:42]');
+  assert.equal(e.manualNoteText('sdk_manual', { sdk_note: '' }), 'set by firmware',
+    'no sdk_note: still a real, if shorter, note - never an empty string');
+});
+
 // The predicate lives in util.js precisely because `initState()` (model.js) and
 // `paramDefaults()` (params.js) both need it and params.js imports model.js, so
 // model.js cannot import it back. This is the assertion that keeps the two honest: the

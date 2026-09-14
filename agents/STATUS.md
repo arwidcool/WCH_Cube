@@ -882,24 +882,113 @@ RM's worked example, or it does not ship.
   `tools/wchcube_cli.js`~~ **fixed, this cycle.** See Current below.
 - **§7 P2, part two: the pinout SVG export** — ~~built reachable from the CLI from its first
   commit, per main's explicit order~~ **done, this cycle.** See Current below.
-- **Next (manager's order)** — the `sdk_manual:` render check, once AGENT-1 lands the USB
-  declarations. Until then: §7 P2's last item, the print view, only if it lands cleanly; or §7
-  backlog.
-- **Idle-after-that** — USBHS_PLL's other three inputs (§2 D REQUEST from AGENT-1, 01:14Z), item 7
-  and item 2's data halves (AGENT-1/AGENT-3), once anyone answers.
+- **CLI reachability for the KiCad CSV** — ~~main tested it, unreachable from the CLI~~ **fixed.**
+- **§7 P2, part two: the pinout SVG export** — ~~built reachable from the CLI from its first
+  commit~~ **done.** AGENT-3's independent verification found the exposed-pad tooltip missing
+  (contradicted the function's own doc-comment) — **fixed**, tested, planted-break-verified.
+- **The `sdk_manual:` render check** — ~~main's demand, first real data behind the key~~ **done.**
+  Two real UI defects found and fixed (`getParams()` dropped every const+sdk_manual row
+  entirely; `paramTable()` — the ACTUAL Parameter Settings tab, separate hand-duplicated code
+  from `paramTableFrom()` despite that function's own doc-comment claiming otherwise — never
+  read `sdk_note` at all). See Current below for both.
+- **CH32H417 DMA — two controllers + the DMAMUX crossbar** — **done, this cycle: the engine
+  mechanism main named the single biggest remaining item on the part.** `dma:` may now be a
+  LIST of controllers, each optionally `mux:`-shaped; codegen emits `DMA_MuxChannelConfig`
+  confirmed against the real SDK signature and two real EVT examples. 11 new tests, all
+  backward-compat suites unchanged and green. Full contract posted to `agents/BOARD.md` for
+  AGENT-1 to paste the 123-request table into. See Current below.
+- **Next (manager's order)** — nothing outstanding from main as of this write. §7 P2's last
+  item (print view) if it can reuse `pinoutSvg()`'s renderer cleanly; the `codegen.init_structs.
+  <inner>.embed` documentation gap (found while auditing FORMAT.md's worked examples — real,
+  shipped, tested, and simply never written into `data/FORMAT.md` at all — NOTE posted, not
+  mine to edit); §7 backlog otherwise.
+- **Idle-after-that** — USBHS_PLL's other three inputs (§2 D REQUEST from AGENT-1, 01:14Z), item
+  2's data half (AGENT-1), once anyone answers.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
 - Next step if I stop here: the print view (§7 P2's last item), only if it can land cleanly on
-  top of the pinout SVG's engine-side renderer rather than needing its own; otherwise the
-  `sdk_manual:` render check once AGENT-1's USB declarations exist, or §7 backlog.
-- Gates last run: `node tests/run.js "export.test"` 35/35, `"cli.test"` 30/30, `"pinmap"` 8/8,
-  `"app/tests"` (the full engine suite) 567/567, `python tools/validate_mcu.py` 0 errors/73
-  warnings, `python tools/verify_sdk_names.py` 0/0 — all at this cycle's HEAD. `python build.py`
-  run once, to verify `pinoutSvg()` in the real built bundle (jsdom-executed, not a real Chrome
-  session — noted honestly, not oversold) — **not committed**: `data/mcus/CH32H417.yaml` was
-  uncommitted (AGENT-1, concurrent) at build time, so the freshly built `dist/index.html` is not
-  safe to ship under this commit; left modified, uncommitted, in the working tree.
+  top of the pinout SVG's engine-side renderer rather than needing its own; otherwise §7 backlog.
+  DMA's own next step, NOT mine: AGENT-1 pastes the 123-request table against the board
+  contract — I do not own `data/mcus/**`.
+- Gates last run: `node tests/run.js "resources.test"` 63/63, `"codegen.test"` 79/79,
+  `"params.test"` 48/48, `"sdk_manual"` 8/8, `"export.test"` 35/35, `"app/tests"` (full engine
+  suite) 581/581 — all at this cycle's HEAD, all backward-compat suites unchanged and green.
+  `python tools/validate_mcu.py` 0 errors/73 warnings, `python tools/verify_sdk_names.py` 0/0.
+  `python build.py` run three times this cycle (told each time) — to verify the `sdk_manual:`
+  render fix, the SVG pad tooltip fix, and the DMA mux UI, each via a real jsdom boot with zero
+  console errors, none of the three builds committed: `data/mcus/CH32H417.yaml` was uncommitted
+  (AGENT-1, concurrent — DMA extraction in progress) at every one of those three build times,
+  so no freshly built `dist/index.html` was ever safe to ship under my commit this cycle. Left
+  modified, uncommitted, in the working tree throughout.
+
+**Current — 2026-09-14, cycle 7. Three things from main, all closed: the `sdk_manual:` render
+check (two real UI defects), the SVG pad tooltip AGENT-3 caught, and CH32H417's DMA — the engine
+mechanism for two controllers and a true DMAMUX crossbar, the last real gap on the part.**
+
+- **`sdk_manual:` render check.** main demanded I actually LOOK at the rendered row, not trust
+  the mechanism because codegen was already right. Two real defects, both in the UI, neither in
+  `codegen.js`:
+  1. `getParams()` (`app/engine/params.js`) excluded every `const:` param from Parameter
+  Settings on the theory a const is always a struct-field literal with nothing to draw — true
+  for OPA's `PSEL`-style consts, false for USBHS/USBSS/USBPD's "Device bring-up" (`const:`
+  carrying the row's fixed DISPLAY text for a pure `sdk_manual:` note, no `struct:` at all).
+  Those three peripherals' tab read "has no parameters yet" while their generated C carried
+  real bring-up instructions. Fixed additively (`!isConstParam(d) || d.sdk_manual`), value read
+  through `paramValue()`, `readonly` set to `d.readonly || isConstParam(d)` — a plain const with
+  no `sdk_manual:` stays excluded exactly as before, tested explicitly both ways.
+  2. The deeper one, found only by checking the actual rendered row rather than stopping at fix
+  1: `app/template.html` has TWO hand-duplicated note-builders (`paramTable()`, the peripheral's
+  OWN tab — the one main was asking about — and `paramTableFrom()`, used only by DMA Settings)
+  despite `paramTableFrom()`'s own doc-comment claiming a change can't land in one and not the
+  other. It could, and had — `paramTable()` never read `sdk_note` at all. Closed with ONE shared
+  `paramRowNote(r)`, calling the new `manualNoteText(kind, d)` (`app/engine/params.js`) —
+  refactored out of `codegen.js`'s `initPlan()` too, so the generated comment and the UI row can
+  no longer read two different things about the same fact. Verified live (jsdom, CH32H417/
+  QFN128, zero console problems): all four peripherals now show the full register/value/
+  `file:line` citation beside the control, not a disabled empty number input under a generic
+  "no setter yet" banner. 6 new tests across `app/tests/params.test.js`/`sdk_manual.test.js`,
+  each seen red on its own planted break — one break took down 5 tests across BOTH files at
+  once, including 2 pre-existing codegen tests, proving the shared function is genuinely
+  load-bearing on both sides now, not merely refactored.
+- **The SVG pad tooltip (AGENT-3's independent verification).** `pinoutSvg()`'s own doc-comment
+  claimed "EVERY physical pin… assigned or not"; the exposed-pad rectangle was the one silent
+  exception — drawn, but with no `<title>`. Fixed from `pinRows()`'s own `num: ''` pad row (the
+  same row the CSV exports already include): `VSS — exposed pad: GROUND`. 1 new test, planted-
+  break-verified.
+- **CH32H417's DMA — the mechanism, not the data.** AGENT-1 researched it fully and refused to
+  force the crossbar into the existing fixed-table shape — right, because that would have
+  misrepresented one shared 16-channel DMAMUX as 16 separate identical tables. `dma:` may now
+  be a LIST of controllers, each optionally `mux:`-shaped (ANY of N named requests onto ANY of
+  its own channels, via a real `DMA_MuxChannelConfig` call codegen had never emitted before) —
+  additive, the single-object shape all five existing parts use is untouched, proven by every
+  pre-existing DMA/codegen/resources test passing with zero edits. `dmaControllerFor(channel)`
+  resolves which controller owns a GLOBAL channel number, so a request never carries a second
+  `controller:` field — the same "resolve it, don't duplicate it" rule a pin's owner already
+  follows. Codegen's channel-macro substitution, per-controller clock enables (once each, never
+  doubled), and the mux call itself were all checked against the REAL SDK header
+  (`ch32h417_dma.h:284`, `:246-261`) and two real EVT examples read end to end, not guessed —
+  including the named-macro argument form (`DMA_MuxChannel7`, not a bare `7`) the vendor's own
+  code actually uses. UI (`app/template.html`) generalised too: the Add dropdown, the per-
+  request struct panel, and the Tools-tab diagnostics all read through the engine's own
+  multi-controller-aware functions instead of `M.dma` directly. **One real bug found while
+  smoke-testing the actual render, not the happy-path tests**: two mux controllers sharing the
+  same request name (CH32H417's real shape — the same catalogue on DMA1 and DMA2) produced two
+  identical, indistinguishable options in the Add dropdown; `dmaAllRequests()` now dedupes.
+  11 new tests, every one seen red on its own planted break. **Disclosed, not hidden**: the
+  System-Core "every channel at once" overview table stays fixed-table-only for now — it simply
+  never renders for a multi-controller part (safe, not wrong), while the actual per-peripheral
+  configuration surface is fully generalised and tested. Full data-side contract posted to
+  `agents/BOARD.md` for AGENT-1.
+- **Also found, flagged, not mine to fix**: `data/FORMAT.md` documents `dead_fields:` (already
+  corrected by AGENT-1) but has NO section at all for `codegen.init_structs.<inner-struct>.
+  embed` — a real, shipped, tested mechanism (FMC's nested-struct shape) with zero worked
+  example in its own contract file. NOTE posted to AGENT-1.
+
+Red, and who owns it: **nothing of mine.** `tests/codegen_compile.test.js`'s two CH32H417
+fixture-staleness failures are pre-existing (confirmed by stashing every file I touched this
+cycle and re-running — the failures persisted unchanged), caused by AGENT-1's own landed data
+commits outrunning the checked-in fixtures; not something I introduced or need to fix.
 
 **Current — 2026-09-14, cycle 6. `main` tested my previous cycle's KiCad CSV from the command
 line and found it unreachable — fixed, then applied the lesson to the pinout SVG before building
