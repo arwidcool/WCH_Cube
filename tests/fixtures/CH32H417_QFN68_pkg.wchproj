@@ -851,6 +851,9 @@ peripherals:
       Mode: Disable
       OTG pins: []
     remap: 0
+    params:
+      lowspeed: false
+      pullup: true
   USBHS:
     settings:
       Mode: Disable

@@ -859,6 +859,9 @@ peripherals:
         - VBUS (bus voltage sense)
         - ID (role detect)
     remap: 0
+    params:
+      lowspeed: false
+      pullup: true
   USBHS:
     settings:
       Mode: Disable

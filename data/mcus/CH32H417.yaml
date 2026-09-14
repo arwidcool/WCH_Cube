@@ -4704,7 +4704,7 @@ peripherals:
         sdk_field: LPTIM_ClockPolarity
         type: enum
         default: Rising
-        depends_on: { param: encoder, equals: false }
+        depends_on: { param: encoder, equals: Disable }
         options:
           - { name: Rising,         value: 0, sdk: LPTIM_ClockPolarity_Rising }
           - { name: Falling,        value: 1, sdk: LPTIM_ClockPolarity_Falling }
@@ -4966,7 +4966,7 @@ peripherals:
         sdk_field: LPTIM_ClockPolarity
         type: enum
         default: Rising
-        depends_on: { param: encoder, equals: false }
+        depends_on: { param: encoder, equals: Disable }
         options:
           - { name: Rising,         value: 0, sdk: LPTIM_ClockPolarity_Rising }
           - { name: Falling,        value: 1, sdk: LPTIM_ClockPolarity_Falling }
@@ -8628,6 +8628,41 @@ peripherals:
       DP: [{ pin: PA12, notes: "OTG_DP, DS Table 2-2-18 and Table 2-1-1 - no AF code: the pad's own function" }]
       ID: [{ pin: PA10, notes: "OTG_ID, DS Table 2-2-18 and Table 2-1-1 - likewise" }]
       VBUS: [{ pin: PA9, notes: "OTG_VBUS, DS Table 2-2-18 and Table 2-1-1 - likewise" }]
+    notes: >
+      No *_InitTypeDef/Init() exists for the USBFSD/USBFSH register block at all
+      (ch32h417_usb.h has only USB descriptor structs) - device bring-up (endpoint
+      mode, DMA buffer addresses/sizes) is DIFFERENT in every one of this part's 8
+      shipped USBFS device examples (md5-different across CH372Device,
+      CompatibilityHID, CompositeKM, CompositeKM_LowSpeed, MSC_CD-ROM, MSC_U-Disk,
+      SimulateCDC, SimulateCDC-HID - Evt/EXAM/USBFS/DEVICE/*/Common/
+      ch32h417_usbfs_device.c), because USBFS_Device_Endp_Init() hard-codes endpoint
+      modes and DMA buffers specific to whichever USB class that example implements.
+      This generator does not choose a USB class for you - write
+      USBFS_RCC_Init/USBFS_Device_Endp_Init/USBFS_Device_Init yourself, following
+      the shipped example closest to your device class. The two params below are
+      the only part of bring-up confirmed the SAME regardless of class.
+    params:
+      - key: lowspeed
+        name: Low speed mode
+        sdk_manual: true
+        type: bool
+        default: false
+        sdk_note: >
+          R8_USB_CTRL.USBFS_UC_LOW_SPEED (0x40, ch32h417_usb.h:1006). 7 of 8 shipped
+          device examples leave it clear (full speed); the eighth,
+          CompositeKM_LowSpeed, sets it (Common/ch32h417_usbfs_device.c:111,
+          `USBFSD->BASE_CTRL = ... | USBFS_UC_LOW_SPEED`) - a real per-project
+          choice, checked across every example rather than assumed constant.
+      - key: pullup
+        name: Device pull-up
+        sdk_manual: true
+        type: bool
+        default: true
+        sdk_note: >
+          R8_USB_CTRL.USBFS_UC_DEV_PU_EN (0x20, ch32h417_usb.h:1007) - presents the
+          D+ pull-up so a host detects the device. Set identically in all 8 shipped
+          device examples (e.g. Evt/EXAM/USBFS/DEVICE/CH372Device/Common/
+          ch32h417_usbfs_device.c:127, `USBFSD->BASE_CTRL = USBFS_UC_DEV_PU_EN | ...`).
   USBHS:
     category: Connectivity
     settings:
@@ -8639,6 +8674,21 @@ peripherals:
     signal_pins:
       DM: [{ pin: PB9, notes: "USBHS_DM, DS Table 2-2-19 and Table 2-1-1 - likewise, shared with SWIO/SWDIO" }]
       DP: [{ pin: PB8, notes: "USBHS_DP, DS Table 2-2-19 and Table 2-1-1 - no AF code: the pad's own function, shared with SWCLK" }]
+    params:
+      - key: bringup
+        name: Device bring-up
+        const: "fixed register sequence, see sdk_note"
+        sdk_manual: true
+        sdk_note: >
+          RCC_HBPeriphClockCmd(RCC_HBPeriph_USBHS, ENABLE) [:183]; RCC_UTMIcmd(ENABLE)
+          [:181]; USBHSD->CONTROL = USBHS_UD_RST_LINK|USBHS_UD_PHY_SUSPENDM [:208];
+          USBHSD->INT_EN = USBHS_UDIE_BUS_RST|USBHS_UDIE_SUSPEND|USBHS_UDIE_BUS_SLEEP|
+          USBHS_UDIE_LPM_ACT|USBHS_UDIE_TRANSFER|USBHS_UDIE_LINK_RDY [:209];
+          USBHSD->BASE_MODE = USBHS_UD_SPEED_HIGH [:211]; USBHSD->CONTROL =
+          USBHS_UD_DEV_EN|USBHS_UD_DMA_EN|USBHS_UD_LPM_EN|USBHS_UD_PHY_SUSPENDM [:212].
+          Evt/EXAM/USBHS/DEVICE/CH372Device/Common/ch32h417_usbhs_device.c,
+          USBHS_RCC_Init (:166-194) + USBHS_Device_Init (:203-221); identical in all
+          8 shipped USBHS device examples (md5-checked).
   USBPD:
     category: Connectivity
     settings:
@@ -8651,6 +8701,20 @@ peripherals:
     signal_pins:
       CC1: [{ pin: PB3, af: 4 }]
       CC2: [{ pin: PB4, af: 4 }]
+    params:
+      - key: bringup
+        name: Device bring-up
+        const: "fixed register sequence, see sdk_note"
+        sdk_manual: true
+        sdk_note: >
+          RCC_HBPeriphClockCmd(RCC_HBPeriph_USBPD, ENABLE) [:184]; USBPD->CONFIG =
+          PD_DMA_EN [:192]; USBPD->STATUS =
+          BUF_ERR|IF_RX_BIT|IF_RX_BYTE|IF_RX_ACT|IF_RX_RESET|IF_TX_END [:193].
+          Evt/EXAM/USBPD/USBPD_SNK/Common/PD_Process.c, PD_Init() (:180-193);
+          identical bring-up in USBPD_SRC/Common/PD_Process.c. The Source/Sink pull
+          direction (PORT_CC1/2 = CC_CMP_66|CC_PU_330 vs CC_CMP_66|CC_PD) is NOT part
+          of this fixed sequence - it is the existing Mode setting (Source/Sink/DRP),
+          PD_SRC_Init/PD_SINK_Init at :135-160, not a separate param.
   USBSS:
     category: Connectivity
     settings:
@@ -8664,6 +8728,24 @@ peripherals:
       RXB: [{ pin: SSRXB, notes: "DS Table 2-1-1, pin type USB3.0 - likewise" }]
       TXA: [{ pin: SSTXA, notes: "DS Table 2-1-1, pin type USB3.0 - a dedicated pad with no AF" }]
       TXB: [{ pin: SSTXB, notes: "DS Table 2-1-1, pin type USB3.0 - likewise" }]
+    params:
+      - key: bringup
+        name: Device bring-up
+        const: "fixed register sequence, see sdk_note"
+        sdk_manual: true
+        sdk_note: >
+          RCC_HBPeriphClockCmd(RCC_HBPeriph_USBSS, ENABLE) [:36]; RCC_UTMIcmd(ENABLE)
+          [:38]; RCC_USBSS_PLLCmd(ENABLE) [:39]; USBSSD->LINK_CFG =
+          LINK_RX_EQ_EN|LINK_TX_DEEMPH_MASK|LINK_PHY_RESET [:65]; USBSSD->LINK_CTRL =
+          LINK_P2_MODE|LINK_GO_DISABLED [:66]; USBSSD->LINK_CFG =
+          LINK_RX_EQ_EN|LINK_TX_DEEMPH_MASK|LINK_LTSSM_MODE|LINK_TOUT_MODE [:67];
+          USBSSD->USB_CONTROL = USBSS_UIE_TRANSFER|USBSS_UDIE_SETUP|USBSS_UDIE_STATUS|
+          USBSS_DMA_EN|USBSS_SETUP_FLOW [:91]. Evt/EXAM/USBSS/DEVICE/CH372Device/
+          Common/ch32h417_usbss_device.c, USBSS_RCC_Init (:31-51) + USBSS_Device_Init
+          (:59-...); identical to the UVC-DVP device example (md5-checked). ~20 more
+          LINK_* writes exist between :67 and :97 (U1/U2 allow, wake timers,
+          compliance) - the six above are the ones that actually gate device-mode
+          operation, listed in the file itself for the rest.
   WWDG:
     category: System Core
     settings:

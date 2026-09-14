@@ -816,10 +816,19 @@ _params:
   # (ch32h417_lptim.h:28-34, literal C `union{}`). `LPTIM_EncoderMode` has NO macro
   # values defined ANYWHERE in the header (checked: `grep LPTIM_EncoderMode` finds only
   # the struct comment) and neither shipped EVT example enables Encoder mode, so it is
-  # NOT modelled - a name nobody checked is a guess. `clkpol` is `depends_on: encoder
-  # equals false`, so enabling `encoder` (a real, separate bool at a different bit)
-  # correctly stops anything writing that shared slot rather than guessing encmode's
-  # bits. TASKS.md line for encmode if real values ever surface.
+  # NOT modelled - a name nobody checked is a guess. `clkpol` is `depends_on: { param:
+  # encoder, equals: Disable }` - `encoder` is an ENUM (Disable/Enable option NAMES,
+  # not a bool), and `equals:` against an enum has to name the OPTION, not `true`/
+  # `false` (`compare()`, app/engine/params.js:209-223: `equals: false` only ever
+  # matches a bool-typed value via `Boolean(have) === want`; against a string it falls
+  # through to `String(have) === String(want)`, so `equals: false` compares against
+  # the literal text "false" and never matches "Disable" or "Enable" either way - found
+  # by AGENT-3, generating real C with `clkpol` explicitly set to a non-default option
+  # and watching `LPTIM_ClockPolarity` never appear; invisible before that because the
+  # struct's zero-init happens to equal the field's own default, Rising). So enabling
+  # `encoder` (a real, separate bit at a different offset) correctly stops anything
+  # writing that shared slot rather than guessing encmode's bits. TASKS.md line for
+  # encmode if real values ever surface.
   #
   # Field defaults are the vendor's own PWM/One-Pulse example,
   # Evt/EXAM/LPTIM/PWM_OnePulse_SingleMode/Common/hardware.c:57-93 - the shipped example
@@ -856,7 +865,7 @@ _params:
         sdk_field: LPTIM_ClockPolarity
         type: enum
         default: Rising
-        depends_on: { param: encoder, equals: false }
+        depends_on: { param: encoder, equals: Disable }
         options:
           - { name: Rising,         value: 0, sdk: LPTIM_ClockPolarity_Rising }
           - { name: Falling,        value: 1, sdk: LPTIM_ClockPolarity_Falling }
@@ -1841,6 +1850,129 @@ extras:
             min: -8388608
             max: 8388607
             help: "CFGR2.CALIBOFF, ch32h417_dfsdm.h:23-25 (24-bit signed). Not exercised by any shipped DFSDM example; default matches the reset/POR value (0)."
+
+  # USBHS/USBSS/USBPD - no *_InitTypeDef exists for any of the three (ch32h417_usb*.h
+  # has descriptor structs only), so bring-up is a FIXED sequence of raw register
+  # writes in each EVT example's own Common/ch32h417_usb{hs,ss}_device.c or
+  # PD_Process.c - `sdk_manual: true`, one row each, the note transcribing the actual
+  # writes/values/file:lines rather than describing them, so a reader can act on it
+  # without reopening the EVT (main's condition: "set by firmware" alone is
+  # `sdk_none:`'s failure wearing a better label). `const:` fits all three - checked,
+  # not assumed: md5-diffed every shipped device example's own bring-up function
+  # before writing any of this (AGENT-3, board 2026-09-13T22:54Z) - USBHS identical
+  # across all 8 device examples, USBSS identical to its second (UVC-DVP) example,
+  # USBPD's PD_Init() identical between USBPD_SRC and USBPD_SNK (the Source/Sink pull
+  # direction that DOES differ is already the existing Mode setting, not this row).
+  USBHS:
+    yaml: |
+      params:
+        - key: bringup
+          name: Device bring-up
+          const: "fixed register sequence, see sdk_note"
+          sdk_manual: true
+          sdk_note: >
+            RCC_HBPeriphClockCmd(RCC_HBPeriph_USBHS, ENABLE) [:183]; RCC_UTMIcmd(ENABLE)
+            [:181]; USBHSD->CONTROL = USBHS_UD_RST_LINK|USBHS_UD_PHY_SUSPENDM [:208];
+            USBHSD->INT_EN = USBHS_UDIE_BUS_RST|USBHS_UDIE_SUSPEND|USBHS_UDIE_BUS_SLEEP|
+            USBHS_UDIE_LPM_ACT|USBHS_UDIE_TRANSFER|USBHS_UDIE_LINK_RDY [:209];
+            USBHSD->BASE_MODE = USBHS_UD_SPEED_HIGH [:211]; USBHSD->CONTROL =
+            USBHS_UD_DEV_EN|USBHS_UD_DMA_EN|USBHS_UD_LPM_EN|USBHS_UD_PHY_SUSPENDM [:212].
+            Evt/EXAM/USBHS/DEVICE/CH372Device/Common/ch32h417_usbhs_device.c,
+            USBHS_RCC_Init (:166-194) + USBHS_Device_Init (:203-221); identical in all
+            8 shipped USBHS device examples (md5-checked).
+
+  USBSS:
+    yaml: |
+      params:
+        - key: bringup
+          name: Device bring-up
+          const: "fixed register sequence, see sdk_note"
+          sdk_manual: true
+          sdk_note: >
+            RCC_HBPeriphClockCmd(RCC_HBPeriph_USBSS, ENABLE) [:36]; RCC_UTMIcmd(ENABLE)
+            [:38]; RCC_USBSS_PLLCmd(ENABLE) [:39]; USBSSD->LINK_CFG =
+            LINK_RX_EQ_EN|LINK_TX_DEEMPH_MASK|LINK_PHY_RESET [:65]; USBSSD->LINK_CTRL =
+            LINK_P2_MODE|LINK_GO_DISABLED [:66]; USBSSD->LINK_CFG =
+            LINK_RX_EQ_EN|LINK_TX_DEEMPH_MASK|LINK_LTSSM_MODE|LINK_TOUT_MODE [:67];
+            USBSSD->USB_CONTROL = USBSS_UIE_TRANSFER|USBSS_UDIE_SETUP|USBSS_UDIE_STATUS|
+            USBSS_DMA_EN|USBSS_SETUP_FLOW [:91]. Evt/EXAM/USBSS/DEVICE/CH372Device/
+            Common/ch32h417_usbss_device.c, USBSS_RCC_Init (:31-51) + USBSS_Device_Init
+            (:59-...); identical to the UVC-DVP device example (md5-checked). ~20 more
+            LINK_* writes exist between :67 and :97 (U1/U2 allow, wake timers,
+            compliance) - the six above are the ones that actually gate device-mode
+            operation, listed in the file itself for the rest.
+
+  USBPD:
+    yaml: |
+      params:
+        - key: bringup
+          name: Device bring-up
+          const: "fixed register sequence, see sdk_note"
+          sdk_manual: true
+          sdk_note: >
+            RCC_HBPeriphClockCmd(RCC_HBPeriph_USBPD, ENABLE) [:184]; USBPD->CONFIG =
+            PD_DMA_EN [:192]; USBPD->STATUS =
+            BUF_ERR|IF_RX_BIT|IF_RX_BYTE|IF_RX_ACT|IF_RX_RESET|IF_TX_END [:193].
+            Evt/EXAM/USBPD/USBPD_SNK/Common/PD_Process.c, PD_Init() (:180-193);
+            identical bring-up in USBPD_SRC/Common/PD_Process.c. The Source/Sink pull
+            direction (PORT_CC1/2 = CC_CMP_66|CC_PU_330 vs CC_CMP_66|CC_PD) is NOT part
+            of this fixed sequence - it is the existing Mode setting (Source/Sink/DRP),
+            PD_SRC_Init/PD_SINK_Init at :135-160, not a separate param.
+
+  # USBFS - a DIFFERENT shape from the three above, checked rather than assumed the
+  # same: no *_InitTypeDef/Init() exists for the USBFSD/USBFSH block either
+  # (ch32h417_usb.h has only descriptor structs), but unlike USBHS/USBSS/USBPD its
+  # bring-up is NOT one fixed sequence - `md5sum` across all 8 shipped USBFS device
+  # examples (CH372Device, CompatibilityHID, CompositeKM, CompositeKM_LowSpeed,
+  # MSC_CD-ROM, MSC_U-Disk, SimulateCDC, SimulateCDC-HID) returns 8 DIFFERENT hashes:
+  # USBFS_Device_Endp_Init() hard-codes endpoint modes and DMA buffer addresses/sizes
+  # specific to whichever USB class that example implements, so this generator cannot
+  # safely write it for an arbitrary configuration - `const:` would claim a single
+  # fixed recipe that does not exist here, so it is NOT used (unlike the three above).
+  # Two bits ARE confirmed the same shape as a real, editable choice rather than a
+  # fixed recipe - checked across all 8 examples, not assumed from one:
+  # `USBFS_UC_DEV_PU_EN` is set identically in EVERY example (grepped all 8 device.c
+  # files' own `USBFSD->BASE_CTRL = ...` line); `USBFS_UC_LOW_SPEED` is CLEAR in 7 of 8
+  # and SET in exactly the one named for it (`CompositeKM_LowSpeed/Common/
+  # ch32h417_usbfs_device.c:111`) - a real per-project toggle, not a constant, which is
+  # why it gets `default:` and a `type: bool`, not `const:`.
+  USBFS:
+    yaml: |
+      notes: >
+        No *_InitTypeDef/Init() exists for the USBFSD/USBFSH register block at all
+        (ch32h417_usb.h has only USB descriptor structs) - device bring-up (endpoint
+        mode, DMA buffer addresses/sizes) is DIFFERENT in every one of this part's 8
+        shipped USBFS device examples (md5-different across CH372Device,
+        CompatibilityHID, CompositeKM, CompositeKM_LowSpeed, MSC_CD-ROM, MSC_U-Disk,
+        SimulateCDC, SimulateCDC-HID - Evt/EXAM/USBFS/DEVICE/*/Common/
+        ch32h417_usbfs_device.c), because USBFS_Device_Endp_Init() hard-codes endpoint
+        modes and DMA buffers specific to whichever USB class that example implements.
+        This generator does not choose a USB class for you - write
+        USBFS_RCC_Init/USBFS_Device_Endp_Init/USBFS_Device_Init yourself, following
+        the shipped example closest to your device class. The two params below are
+        the only part of bring-up confirmed the SAME regardless of class.
+      params:
+        - key: lowspeed
+          name: Low speed mode
+          sdk_manual: true
+          type: bool
+          default: false
+          sdk_note: >
+            R8_USB_CTRL.USBFS_UC_LOW_SPEED (0x40, ch32h417_usb.h:1006). 7 of 8 shipped
+            device examples leave it clear (full speed); the eighth,
+            CompositeKM_LowSpeed, sets it (Common/ch32h417_usbfs_device.c:111,
+            `USBFSD->BASE_CTRL = ... | USBFS_UC_LOW_SPEED`) - a real per-project
+            choice, checked across every example rather than assumed constant.
+        - key: pullup
+          name: Device pull-up
+          sdk_manual: true
+          type: bool
+          default: true
+          sdk_note: >
+            R8_USB_CTRL.USBFS_UC_DEV_PU_EN (0x20, ch32h417_usb.h:1007) - presents the
+            D+ pull-up so a host detects the device. Set identically in all 8 shipped
+            device examples (e.g. Evt/EXAM/USBFS/DEVICE/CH372Device/Common/
+            ch32h417_usbfs_device.c:127, `USBFSD->BASE_CTRL = USBFS_UC_DEV_PU_EN | ...`).
 
   SDIO:
     comment: |
