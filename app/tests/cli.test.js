@@ -47,6 +47,53 @@ test('the CSV and the clock summary come out of the same functions', () => {
   assert.equal(clk.out.trimEnd(), e.clockSummaryMarkdown().trimEnd());
 });
 
+// The KiCad Symbol Editor Pin Table CSV was reachable through the Generate button
+// (export.js's generateAll()/projectFiles()) but not through the CLI at all - the
+// code existed and the feature did not, for exactly the headless use the owner
+// asked for ("plan a product and get board pin definitions"). Guards both the
+// format existing on its own and `all` actually including it, so it cannot regress
+// silently a second time.
+test('--format pins-kicad is reachable from the CLI and matches the app export byte for byte', () => {
+  const e = fresh('CH32V006', 'QFN32');
+  const r = run(['CH32V006', '--package', 'QFN32', '--format', 'pins-kicad', '--quiet']);
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.out, e.kicadPinCsv(), 'CLI output must be the same function, same bytes, as the app');
+  assert.match(r.out, /^# CH32V006 QFN32 —/, 'states its part and package, headlessly too');
+});
+
+test('--format all includes the KiCad CSV, not only the plain one', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-cli-'));
+  try {
+    const r = run(['CH32V006', '--package', 'QFN32', '--format', 'all', '--out', dir, '--quiet']);
+    assert.equal(r.code, 0, r.err);
+    assert.ok(fs.readdirSync(dir).includes('CH32V006_QFN32_kicad_pins.csv'),
+      '"all" silently dropping a format is exactly the failure mode this test exists to catch');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The pinout SVG (app/engine/export.js:pinoutSvg()), built reachable from the CLI
+// from its FIRST commit - the KiCad CSV two tests up landed correct in the engine
+// and unreachable from the CLI for a whole cycle, and that is the mistake this
+// pair exists to not repeat.
+test('--format pins-svg is reachable from the CLI and matches the app export byte for byte', () => {
+  const e = fresh('CH32V006', 'QFN32');
+  e.compute();
+  const r = run(['CH32V006', '--package', 'QFN32', '--format', 'pins-svg', '--quiet']);
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.out, e.pinoutSvg(), 'CLI output must be the same function, same bytes, as the app');
+  assert.match(r.out, /<!-- CH32V006 QFN32 —/, 'states its part and package, headlessly too');
+});
+
+test('--format all includes the pinout SVG too', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-cli-'));
+  try {
+    const r = run(['CH32V006', '--package', 'QFN32', '--format', 'all', '--out', dir, '--quiet']);
+    assert.equal(r.code, 0, r.err);
+    assert.ok(fs.readdirSync(dir).includes('CH32V006_QFN32_pinout.svg'),
+      'a THIRD reachability regression on the same "all" list is exactly what this test guards');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('--format c writes the two init files, --out puts them on disk', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wchcube-cli-'));
   try {

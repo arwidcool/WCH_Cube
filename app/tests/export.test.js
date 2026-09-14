@@ -158,6 +158,101 @@ peripherals:
   assert.match(pd6[6], /planning only/, 'marked, so a board house does not read it as firmware-driven today');
 });
 
+// ---- pinout SVG ---------------------------------------------------------------
+// Built reachable from the CLI from the start (main's finding on the KiCad CSV,
+// this cycle): a second, plainer, self-contained renderer - not a clone of the
+// canvas's live DOM - so `pinoutSvg()` needs no browser and no page theme.
+
+// A tiny well-formedness check: every element opened is closed, in order. Cheaper
+// than a real XML parser and catches exactly the failure mode a string-built SVG
+// is prone to - an unbalanced tag from a copy-paste or a missing closing `</g>`.
+function xmlBalance(xml) {
+  const stack = [];
+  const tagRe = /<(\/?)([a-zA-Z][\w:-]*)([^>]*)>/g;
+  let m;
+  while ((m = tagRe.exec(xml))) {
+    const [full, closing, name, rest] = m;
+    if (full.startsWith('<?') || full.startsWith('<!')) continue;
+    if (closing) { if (stack.pop() !== name) return false; }
+    else if (!/\/\s*$/.test(rest)) stack.push(name);
+  }
+  return stack.length === 0;
+}
+
+test('pinoutSvg is well-formed and states its part and package', () => {
+  const e = fresh('CH32V006', 'QFN32');
+  e.compute();
+  const svg = e.pinoutSvg();
+  assert.ok(xmlBalance(svg), 'every opened element must be closed - a string-built SVG has no parser to catch this for us');
+  assert.match(svg, /^<\?xml version="1\.0"/, 'a real XML document, not a markup fragment');
+  assert.match(svg, /<!-- CH32V006 QFN32 —/, 'states its part and package in a leading comment, same rule as the KiCad CSV');
+  assert.match(svg, /<title>CH32V006 QFN32 —/, 'and in an SVG-native <title> element too, for a viewer that shows it');
+});
+
+test('pinoutSvg covers both package shapes - quad (with an exposed pad) and dual', () => {
+  const e = fresh('CH32V006', 'QFN20');
+  e.compute();
+  let svg = e.pinoutSvg();
+  assert.ok(xmlBalance(svg));
+  assert.ok(svg.includes('#2b3444'), 'a quad package with an exposed pad draws the pad rectangle');
+
+  e.setPackage('TSSOP20');
+  e.compute();
+  svg = e.pinoutSvg();
+  assert.ok(xmlBalance(svg), 'the dual-package layout branch is well-formed too, not only the quad one');
+});
+
+test('pinoutSvg carries every assigned pin, marks conflicts, and never hides a remap_unwritable pin', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.assignSignal('PC0', { periph: 'USART1', signal: 'TX', remap: 3 });
+  e.S.gpio.PC0 = { mode: 'Alternate Function Push Pull', pull: 'Pull-up', speed: 'High', label: 'DEBUG_TX' };
+  e.compute();
+  let svg = e.pinoutSvg();
+  assert.match(svg, /DEBUG_TX/, 'a user label reaches the diagram');
+  assert.match(svg, /USART1_TX/, 'so does the assigned signal');
+
+  // The same known conflict export.test.js's markdown test above uses: TX collides
+  // with SYS_SWIO on PD1.
+  e.S.periph.USART1.settings.Mode = 'Asynchronous';
+  e.S.periph.USART1.remap = 4;
+  e.compute();
+  svg = e.pinoutSvg();
+  assert.match(svg, /CONFLICT/, 'a conflict is visible in the export, not silently drawn like any other pin');
+
+  // remap_unwritable, same fixture shape as the KiCad test above.
+  const f = fresh();
+  f.registerMcuFile(`
+mcu:
+  name: CH32V006-UNWRITABLE-REMAP-SVG
+  inherits: CH32V006
+peripherals:
+  TESTPERIPH:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: On, signals: [SIG] }
+    remaps:
+      - { name: "00 Default", pins: { SIG: PD5 } }
+      - { name: "01", pins: { SIG: PD6 } }
+    remap_unwritable: "AFIO_PCFR1.TESTPERIPH_RM[1:0] - not writable on this part"
+`);
+  f.loadMcu('CH32V006-UNWRITABLE-REMAP-SVG');
+  f.setPackage('TSSOP20');
+  f.setSetting('TESTPERIPH', 'Mode', 'On');
+  f.setRemap('TESTPERIPH', 1);
+  f.compute();
+  const svg2 = f.pinoutSvg();
+  assert.match(svg2, /planning only/, 'a remap_unwritable pin is drawn and named as planning-only, never dropped');
+  // The tooltip text alone does not prove the pin reads differently at a glance -
+  // assert the colour too, so a break in the fill-selection branch (as opposed to
+  // the tooltip-building one) cannot pass this test by accident. Found exactly this
+  // gap while planting a break during development: the tooltip assertion alone
+  // stayed green with `svgPinColors()`'s planningOnly branch deleted entirely.
+  assert.ok(svg2.includes('#e0a53f'), 'and coloured distinctly from an ordinary assigned pin, not merely annotated');
+});
+
 test('the clock summary reports every node and the out-of-spec ones', () => {
   const e = fresh();
   e.S.clock.sys = 'PLLCLK';
@@ -186,9 +281,9 @@ test('generateAll names its files after the part and package', () => {
   assert.deepEqual(out.map(f => f.name), [
     'wchcube_init.h', 'wchcube_init.c', 'BoardPins.h',
     'CH32V006_QFN32_pinout.md', 'CH32V006_QFN32_pinout.csv', 'CH32V006_QFN32_kicad_pins.csv',
-    'CH32V006_QFN32_clocks.md',
+    'CH32V006_QFN32_pinout.svg', 'CH32V006_QFN32_clocks.md',
   ], 'the reports are named after the part; the C files keep fixed include names');
-  assert.deepEqual(out.map(f => f.language), ['c', 'c', 'c', 'markdown', 'csv', 'csv', 'markdown']);
+  assert.deepEqual(out.map(f => f.language), ['c', 'c', 'c', 'markdown', 'csv', 'csv', 'svg', 'markdown']);
   for (const f of out) assert.ok(f.text.length > 100, `${f.name} has content`);
   for (const f of out) {
     const named = f.name.includes('CH32V006_QFN32');
@@ -218,7 +313,7 @@ test('generateAll obeys the generator options, and only the ones that exist', ()
   assert.deepEqual(e.generateAll().map(f => f.name), ['wchcube_init.h', 'wchcube_init.c', 'BoardPins.h'],
     'one undo brings the pin map back and leaves the reports off');
   e.undo();
-  assert.equal(e.generateAll().length, 7, 'and each is one undo step like everything else');
+  assert.equal(e.generateAll().length, 8, 'and each is one undo step like everything else');
 
   assert.throws(() => e.setGeneratorOption('no_such_option', true),
     /No generator option "no_such_option"/);

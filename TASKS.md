@@ -1670,8 +1670,8 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       assertion alone stayed green with the colour branch deleted entirely, a real gap closed
       before shipping, not a hypothetical one) + 2 CLI tests (byte-identical to `eng.pinoutSvg()`;
       `--format all` includes it). Every one of the 7 new tests across both files seen red on
-      its own planted break, then restored: `node tests/run.js "export.test"` 40/40,
-      `"cli.test"` 32/32, `"pinmap"` 8/8 (file-count assertions there and in `export.test.js`
+      its own planted break, then restored: `node tests/run.js "export.test"` 35/35,
+      `"cli.test"` 30/30, `"pinmap"` 8/8 (file-count assertions there and in `export.test.js`
       updated for the new file), `node tests/run.js "app/tests"` (full engine suite) 567/567.
       `python tools/validate_mcu.py` 0 errors/73 warnings, `python tools/verify_sdk_names.py`
       0/0. `python build.py` run once to verify in a real bundle (not committed — see below):

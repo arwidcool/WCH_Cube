@@ -3,7 +3,7 @@
 //  First real output of the Generate button (Phase 3). C code generation will
 //  join these once the pin table is trusted.
 // =============================================================================
-import { M, S, pinType, gpioSpeedFor, signalAf, sigName } from './model.js';
+import { M, S, PACKAGES, pinType, gpioSpeedFor, signalAf, sigName } from './model.js';
 import { validateParam } from './params.js';
 import { record } from './history.js';
 import { E, compute } from './engine.js';
@@ -160,6 +160,182 @@ export function kicadPinCsv() {
     ].map(esc).join(','));
   }
   return lines.join('\n') + '\n';
+}
+
+// ---- Pinout SVG ----------------------------------------------------------------
+//  A self-contained, headless-renderable pinout diagram — built reachable from the
+//  CLI from its first commit, unlike the KiCad CSV, which shipped correct but
+//  unreachable from `tools/wchcube_cli.js` and needed a second pass to fix (main's
+//  finding, this cycle).
+//
+//  Deliberately NOT the file the canvas's own "Export SVG" button writes
+//  (`app/template.html`'s `exportSvg()`, cloning the live `renderChip()` DOM): that
+//  one is the rich, themed, interactive drawing, and it depends on two things a
+//  headless process does not have — the page's own `<style>` sheet (for `var(--x)`
+//  colours) and a browser to MEASURE text in (`fitSvgTexts()` shrinks a label to
+//  fit by reading real glyph widths off a rendered `<text>`, which does not exist
+//  without a DOM). Porting that renderer here would mean either dragging a DOM
+//  polyfill into the engine or silently dropping its text-fit precision — both
+//  worse than what this is: a second, independent, PLAINER renderer built from the
+//  same `pinRows()` data and the package geometry alone, self-styled with concrete
+//  colours because there is no page here to read a theme from. The interactive
+//  button is unaffected; this is what `generateAll()`, `projectFiles()` and the CLI
+//  reach instead.
+const SVG_PITCH = 22, SVG_PLEN = 40, SVG_MARGIN = 26, SVG_MIN_FS = 7.5;
+
+// Room outside the body for the longest signal/label pair, from the DATA rather
+// than a live DOM measurement — same idea as the canvas's own `labelRoom()`.
+function svgLabelRoom(rows) {
+  let n = 8;
+  for (const r of rows) {
+    const text = (r.signal || '') + (r.signal && r.label ? ' . ' : '') + (r.label || '');
+    n = Math.max(n, text.length);
+  }
+  return Math.max(120, Math.min(420, 34 + n * 6.6));
+}
+
+/**
+ * Pure pin geometry for the CURRENT package — the same layout math the canvas's
+ * own `layout()` uses (quad: pins on all four sides; dual: two sides only), minus
+ * the live view's rotate/mirror, which is UI-only "chrome" state (`U.rot`/`U.flip`
+ * in `app/template.html`) with no meaning for a one-shot export: there is no
+ * "current" orientation to ask a headless process for, so this always draws pin 1
+ * top-left, unrotated — a fixed, predictable default rather than a guess at intent.
+ */
+function svgLayout(pkg, rows) {
+  const label = svgLabelRoom(rows);
+  const pk = PACKAGES[pkg] || { kind: 'quad', pins: rows.length };
+  const n = pk.pins || rows.length;
+  const pins = [];
+  if (pk.kind === 'quad') {
+    const ps = n / 4, B = ps * SVG_PITCH + 2 * SVG_MARGIN, x0 = label + SVG_PLEN, y0 = label + SVG_PLEN;
+    for (let i = 0; i < n; i++) {
+      const side = Math.floor(i / ps), k = i % ps;
+      const p = { num: i + 1, side, w: side % 2 ? SVG_PITCH - 3 : SVG_PLEN, h: side % 2 ? SVG_PLEN : SVG_PITCH - 3 };
+      if (side === 0) { p.x = x0 - SVG_PLEN; p.y = y0 + SVG_MARGIN + k * SVG_PITCH; }
+      if (side === 1) { p.x = x0 + SVG_MARGIN + k * SVG_PITCH; p.y = y0 + B; }
+      if (side === 2) { p.x = x0 + B; p.y = y0 + B - SVG_MARGIN - (k + 1) * SVG_PITCH; }
+      if (side === 3) { p.x = x0 + B - SVG_MARGIN - (k + 1) * SVG_PITCH; p.y = y0 - SVG_PLEN; }
+      pins.push(p);
+    }
+    return { pk, pins, body: { x: x0, y: y0, w: B, h: B }, W: 2 * (label + SVG_PLEN) + B, H: 2 * (label + SVG_PLEN) + B };
+  }
+  const ps = n / 2, BW = 200, BH = ps * SVG_PITCH + 2 * SVG_MARGIN, x0 = label + SVG_PLEN, y0 = 40;
+  for (let i = 0; i < n; i++) {
+    const side = i < ps ? 0 : 2, k = i % ps;
+    const p = { num: i + 1, side, w: SVG_PLEN, h: SVG_PITCH - 3 };
+    if (side === 0) { p.x = x0 - SVG_PLEN; p.y = y0 + SVG_MARGIN + k * SVG_PITCH; }
+    else { p.x = x0 + BW; p.y = y0 + BH - SVG_MARGIN - (k + 1) * SVG_PITCH; }
+    pins.push(p);
+  }
+  return { pk, pins, body: { x: x0, y: y0, w: BW, h: BH }, W: 2 * (label + SVG_PLEN) + BW, H: BH + 80 };
+}
+
+// A fixed palette, spelled as concrete hex — there is no page and no theme to read
+// a `var(--x)` from here, so a viewer opening the file cold always sees the same
+// thing rather than an unstyled fallback.
+const SVG_COLOR = {
+  body: '#3a4658', bodyDark: '#2b3444', bg: '#151a22', dot: '#e8ebf0',
+  title: '#eef1f6', subtitle: '#aab4c4',
+  unassigned: '#e7ebf1', unassignedStroke: '#7c8798',
+  assigned: '#3f7fe0', assignedStroke: '#2c5eb0',
+  conflict: '#d9463d', conflictStroke: '#a8332c',
+  planning: '#e0a53f', planningStroke: '#b07f2c',
+  fixed: '#b9a3e0', fixedStroke: '#8a70b8',
+  pinText: '#1c2430', pinNum: '#5a6577',
+};
+
+// Fill/stroke for one pin row, worst-first: a CONFLICT is shown even on a
+// `remap_unwritable:` pin (both are true things about it, and a conflict is the
+// more urgent one to see); planning-only next, because it is the one state this
+// export exists to NOT hide; then a fixed-function pin, then assigned, then bare.
+function svgPinColors(r) {
+  if (r.conflict) return [SVG_COLOR.conflict, SVG_COLOR.conflictStroke];
+  if (r.planningOnly) return [SVG_COLOR.planning, SVG_COLOR.planningStroke];
+  if (r.type !== 'io') return [SVG_COLOR.fixed, SVG_COLOR.fixedStroke];
+  if (r.signal) return [SVG_COLOR.assigned, SVG_COLOR.assignedStroke];
+  return [SVG_COLOR.unassigned, SVG_COLOR.unassignedStroke];
+}
+
+const xmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * The current configuration's pinout as a standalone SVG file — EVERY physical pin
+ * of the current package, assigned or not, exactly like `pinRows()` itself.
+ *
+ * States its own part and package twice, for two different readers: a `<title>`
+ * element (the SVG-native answer — most viewers show it as the window/tab title)
+ * for whoever opens the file, and a leading XML comment for whoever greps it or
+ * pastes it somewhere that only shows raw text — the same "a CSV that does not say
+ * QFN68 from QFN128 is a trap" reasoning `kicadPinCsv()`'s header comment follows.
+ *
+ * A `remap_unwritable:` pin (SDMMC/UHSIF's proven shape) is drawn like any other
+ * assigned pin plus a distinct colour and its `<title>` tooltip says "(planning
+ * only)" — present, not hidden, exactly as the KiCad export and the plain CSV
+ * already treat it, so the three exports cannot disagree about which pins those
+ * are.
+ */
+export function pinoutSvg() {
+  const rows = pinRows();
+  const byNum = new Map(rows.filter(r => r.num !== '').map(r => [+r.num, r]));
+  const L = svgLayout(S.pkg, rows);
+  const b = L.body;
+  const title = `${M.mcu.name} ${S.pkg}`;
+  const g = [];
+  g.push(`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${SVG_COLOR.body}" rx="4"/>`);
+  if (L.pk.epad) {
+    const ex = b.x + b.w * .3, ey = b.y + b.h * .3, ew = b.w * .4, eh = b.h * .4;
+    g.push(`<rect x="${ex}" y="${ey}" width="${ew}" height="${eh}" fill="${SVG_COLOR.bodyDark}" rx="3"/>`);
+  }
+  g.push(`<circle cx="${b.x + 14}" cy="${b.y + 14}" r="4.5" fill="${SVG_COLOR.dot}"/>`);
+  const nameFs = Math.max(SVG_MIN_FS, Math.min(20, b.w / 9));
+  const pkgFs = Math.max(SVG_MIN_FS, Math.min(16, b.w / 11));
+  g.push(`<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 - 4}" text-anchor="middle" font-size="${nameFs}" `
+    + `font-weight="700" fill="${SVG_COLOR.title}" font-family="sans-serif">${xmlEsc(M.mcu.name)}</text>`);
+  g.push(`<text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 + 14}" text-anchor="middle" font-size="${pkgFs}" `
+    + `font-style="italic" fill="${SVG_COLOR.subtitle}" font-family="sans-serif">${xmlEsc(S.pkg)}</text>`);
+
+  const vert = p => p.side === 1 || p.side === 3;
+  for (const p of L.pins) {
+    const r = byNum.get(p.num);
+    if (!r) continue;                          // the exposed pad has no side/number geometry
+    const [fill, stroke] = svgPinColors(r);
+    const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+    const tip = [`${r.name} — pin ${p.num}`, r.signal || (r.type === 'io' ? 'Unassigned' : r.type),
+      r.planningOnly ? '(planning only — selected for the pad, not yet written by the generated C)' : '',
+      r.conflict ? '(CONFLICT)' : '', r.label ? `Label: "${r.label}"` : '']
+      .filter(Boolean).join(' — ');
+    g.push(`<g><title>${xmlEsc(tip)}</title>`);
+    g.push(`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" fill="${fill}" stroke="${stroke}" stroke-width="1" rx="2"/>`);
+    const nameFs2 = r.name.length > 4 ? Math.max(SVG_MIN_FS, 9.5 - (r.name.length - 4) * 0.9) : 9.5;
+    const nameTag = vert(p)
+      ? `<text transform="translate(${cx + 3.5},${cy}) rotate(-90)" text-anchor="middle" font-size="${nameFs2}" fill="${SVG_COLOR.pinText}" font-family="sans-serif">${xmlEsc(r.name)}</text>`
+      : `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="${nameFs2}" fill="${SVG_COLOR.pinText}" font-family="sans-serif">${xmlEsc(r.name)}</text>`;
+    g.push(nameTag);
+    const numPos = p.side === 0 ? [p.x - 8, cy + 3, 'end'] : p.side === 2 ? [p.x + p.w + 8, cy + 3, 'start'] : null;
+    g.push(numPos
+      ? `<text x="${numPos[0]}" y="${numPos[1]}" text-anchor="${numPos[2]}" font-size="8" fill="${SVG_COLOR.pinNum}" font-family="sans-serif">${p.num}</text>`
+      : `<text transform="translate(${cx + 2.5},${p.side === 3 ? p.y - 6 : p.y + p.h + 6}) rotate(-90)" text-anchor="${p.side === 3 ? 'start' : 'end'}" font-size="8" fill="${SVG_COLOR.pinNum}" font-family="sans-serif">${p.num}</text>`);
+    g.push('</g>');
+    const label = (r.signal || '') + (r.signal && r.label ? ' · ' : '') + (r.label || '');
+    if (label) {
+      const off = 22, lc = r.conflict ? SVG_COLOR.conflict : SVG_COLOR.pinText;
+      const at = { 0: [p.x - off, cy + 4, 'end', null], 2: [p.x + p.w + off, cy + 4, 'start', null],
+        3: [cx + 4, p.y - off, 'start', -90], 1: [cx + 4, p.y + p.h + off, 'end', -90] }[p.side];
+      const [lx, ly, anchor, rot] = at;
+      g.push(rot
+        ? `<text transform="translate(${lx},${ly}) rotate(${rot})" text-anchor="${anchor}" font-size="9" fill="${lc}" font-family="sans-serif">${xmlEsc(label)}</text>`
+        : `<text x="${lx}" y="${ly}" text-anchor="${anchor}" font-size="9" fill="${lc}" font-family="sans-serif">${xmlEsc(label)}</text>`);
+    }
+  }
+  const pad = 12, W = Math.ceil(L.W + pad * 2), H = Math.ceil(L.H + pad * 2);
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + `<!-- ${xmlEsc(title)} — pinout, generated by WCHCube -->\n`
+    + `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`
+    + `<title>${xmlEsc(title)} — pinout</title>`
+    + `<rect width="${W}" height="${H}" fill="${SVG_COLOR.bg}"/>`
+    + `<g transform="translate(${pad},${pad})">${g.join('')}</g>`
+    + '</svg>\n';
 }
 
 // ---- BoardPins.h -------------------------------------------------------------
@@ -364,8 +540,8 @@ const GENERATOR_OPTIONS = [
     name: 'Also generate the pin table and clock summary',
     type: 'bool',
     default: true,
-    help: 'Writes <part>_<package>_pinout.md, _pinout.csv, _kicad_pins.csv and _clocks.md '
-      + 'beside the C. '
+    help: 'Writes <part>_<package>_pinout.md, _pinout.csv, _kicad_pins.csv, _pinout.svg and '
+      + '_clocks.md beside the C. '
       + 'They document the configuration; nothing compiles them.',
   },
   {
@@ -553,6 +729,7 @@ export function generateAll() {
       out.push({ name: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
       out.push({ name: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
       out.push({ name: `${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
+      out.push({ name: `${base}_pinout.svg`, language: 'svg', text: pinoutSvg() });
       out.push({ name: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
     }
     return out;
@@ -565,6 +742,7 @@ export function generateAll() {
     out.push({ name: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
     out.push({ name: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
     out.push({ name: `${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
+    out.push({ name: `${base}_pinout.svg`, language: 'svg', text: pinoutSvg() });
     out.push({ name: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
   }
   return out;
@@ -901,6 +1079,7 @@ export function projectFiles() {
       out.push({ path: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
       out.push({ path: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
       out.push({ path: `${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
+      out.push({ path: `${base}_pinout.svg`, language: 'svg', text: pinoutSvg() });
       out.push({ path: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
     }
     return out.map(f => ({ ...f, name: f.path.slice(f.path.lastIndexOf('/') + 1) }));
@@ -931,6 +1110,7 @@ export function projectFiles() {
   if (generatorOption('reports')) {
     out.push({ path: `docs/${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
     out.push({ path: `docs/${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
+    out.push({ path: `docs/${base}_pinout.svg`, language: 'svg', text: pinoutSvg() });
     out.push({ path: `docs/${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
   }
   return out.map(f => ({ ...f, name: f.path.slice(f.path.lastIndexOf('/') + 1) }));

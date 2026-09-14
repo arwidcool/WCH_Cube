@@ -425,6 +425,15 @@ gates (not by trusting its own description), then committed it and kept going.**
 - Fixtures refreshed once, for the LPTIM/SWPMI param defaults only:
   `node tests/fixtures/make_fixtures.js` (the two H417 ones were stale; the UHSIF
   `remap_by_package` change added no new `params:` key, so no second refresh needed).
+- **FMC_A11/PB11 + FMC_A12/PB12 traced (`5895ee2`), answering main's ask for a re-
+  statement on the SPECIFIC pair the test reports, not the older PD11/PD12 wording** —
+  and proved empirically, not just reasoned: reordered `A11`/`A12` in a throwaway local
+  edit, re-ran `node tests/run.js "h417_packages"`, reverted before touching anything
+  else. QFN68's avoidable count held at exactly 2 (same collision, relabelled to
+  `PD11`) while unmasking two already-real silicon collisions the sweep's per-pad dedup
+  was hiding (`PB11`: `A6`+`A20`, `PB12`: `A7`+`A21`) AND regressing QFN88 from 0 to 2.
+  Genuinely silicon-forced; REQUEST posted to AGENT-3 to reclassify (`tests/**` is
+  theirs).
 
 Red, and who owns it: **nothing of mine.** Did not touch `app/engine/**`,
 `app/tests/**` or `tools/wchcube_cli.js`, all mid-edit under AGENT-2 on the shared tree
@@ -764,24 +773,82 @@ RM's worked example, or it does not ship.
   default~~ **done, this cycle.** See Current below.
 - **§7 P2, part one: the KiCad symbol pin CSV** — ~~the owner's literal deliverable~~ **done, this
   cycle.** See Current below.
-- **Next (manager's order)** — §7 P2, part two: the pinout SVG export; print view only if that
-  lands cleanly.
+- **CLI reachability for the KiCad CSV** — ~~`main` tested it, it was unreachable from
+  `tools/wchcube_cli.js`~~ **fixed, this cycle.** See Current below.
+- **§7 P2, part two: the pinout SVG export** — ~~built reachable from the CLI from its first
+  commit, per main's explicit order~~ **done, this cycle.** See Current below.
+- **Next (manager's order)** — the `sdk_manual:` render check, once AGENT-1 lands the USB
+  declarations. Until then: §7 P2's last item, the print view, only if it lands cleanly; or §7
+  backlog.
 - **Idle-after-that** — USBHS_PLL's other three inputs (§2 D REQUEST from AGENT-1, 01:14Z), item 7
-  and item 2's data halves (AGENT-1/AGENT-3), once anyone answers; `sdk_manual:`'s render check
-  once AGENT-1 lands the USB declarations.
+  and item 2's data halves (AGENT-1/AGENT-3), once anyone answers.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: §7 P2 part two, the pinout SVG export. Constraints carry over
-  unchanged from the CSV: state the package, include `remap_unwritable:` planning-only pins
-  (reuse `unwritableRemaps()` from `app/engine/codegen.js`), and prove it round-trips or at least
-  that every claimed pin appears, the same way `app/tests/export.test.js`'s new KiCad tests do.
-- Gates last run: `node tests/run.js "export.test"` 32/32, `"pinmap"` 8/8, `"signal_groups"`
-  13/13, `"app/tests"` (the full engine suite) 560/560, `python tools/validate_mcu.py` 0
-  errors/73 warnings, `python tools/verify_sdk_names.py` 0/0 — all at this cycle's HEAD. No
-  `python build.py` run this cycle (no engine behaviour changed, only new tests over code my
-  predecessor had already built and I re-verified by reading the diff, not by trusting its
-  description).
+- Next step if I stop here: the print view (§7 P2's last item), only if it can land cleanly on
+  top of the pinout SVG's engine-side renderer rather than needing its own; otherwise the
+  `sdk_manual:` render check once AGENT-1's USB declarations exist, or §7 backlog.
+- Gates last run: `node tests/run.js "export.test"` 35/35, `"cli.test"` 30/30, `"pinmap"` 8/8,
+  `"app/tests"` (the full engine suite) 567/567, `python tools/validate_mcu.py` 0 errors/73
+  warnings, `python tools/verify_sdk_names.py` 0/0 — all at this cycle's HEAD. `python build.py`
+  run once, to verify `pinoutSvg()` in the real built bundle (jsdom-executed, not a real Chrome
+  session — noted honestly, not oversold) — **not committed**: `data/mcus/CH32H417.yaml` was
+  uncommitted (AGENT-1, concurrent) at build time, so the freshly built `dist/index.html` is not
+  safe to ship under this commit; left modified, uncommitted, in the working tree.
+
+**Current — 2026-09-14, cycle 6. `main` tested my previous cycle's KiCad CSV from the command
+line and found it unreachable — fixed, then applied the lesson to the pinout SVG before building
+it, per main's explicit instruction, rather than shipping the same gap twice.**
+
+- **The finding, read plainly first.** `node tools/wchcube_cli.js CH32H417 --package QFN128
+  --format all --out <dir>` wrote seven files; `CH32H417_QFN128_kicad_pins.csv` was not one of
+  them, and `grep -n kicad tools/wchcube_cli.js` returned nothing. `kicadPinCsv()` was real,
+  tested, and correct — reachable only through `generateAll()`/`projectFiles()`, the Generate
+  button's own path, never through the CLI's `FORMATS`/`outputs()`. A feature that only a browser
+  session can reach is not the headless deliverable the owner asked for.
+- **Fixed**: `pins-kicad` added to `tools/wchcube_cli.js`'s `FORMATS` (`:29`) and `outputs()`;
+  `--format all` picks it up automatically (`FORMATS.filter(f => f !== 'json')`, no second list to
+  forget). 2 tests in `app/tests/cli.test.js`, both seen red against the pre-fix code (removing
+  the `FORMATS` entry and the `outputs()` case both independently fail the reachability test; the
+  `--format all` test fails on the entry alone) before being trusted, then restored green.
+- **The pinout SVG landed the SAME cycle, and its whole design answers the question main asked me
+  to check first: can the CLI reach this from day one?** Yes, because it is not a port of the
+  canvas's live DOM renderer (`app/template.html`'s `renderChip()`/`exportSvg()`) at all — that
+  one depends on a browser to MEASURE text in (`fitSvgTexts()` reads real glyph widths off a
+  rendered `<text>`) and on the page's own `<style>` sheet for `var(--x)` colours, neither of
+  which exists headlessly. `pinoutSvg()` (`app/engine/export.js`) is a second, independent,
+  self-styled renderer built from `pinRows()` and the package geometry alone (the PURE half of
+  `layout()`/`labelRoom()`, ported; the live view's rotate/mirror dropped — `U.rot`/`U.flip` is
+  UI-only chrome with no "current" value for a one-shot export). Verified across both package
+  shapes (quad-with-exposed-pad, dual), and that it carries an assigned pin's signal/label, marks
+  a conflict, and marks a `remap_unwritable:` pin "planning only" rather than hiding it — same
+  three-constraint contract the KiCad CSV met.
+  **A real coverage gap found and closed before shipping, not a hypothetical one**: my first
+  planning-only test asserted only the tooltip text ("planning only"); deleting
+  `svgPinColors()`'s planning-only branch entirely left that test GREEN, because the colour and
+  the tooltip are built by different code paths and only the tooltip was checked. Added the colour
+  assertion, watched the same deletion turn it red, restored. Documented the miss in the test's
+  own comment rather than letting the fixed version imply the gap was never there.
+  Wired into `generateAll()`/`projectFiles()` (all four call sites) AND `tools/wchcube_cli.js`'s
+  `FORMATS`/`outputs()` in the SAME commit the function is introduced in.
+- **Verified in the real built bundle, not only in the engine's own tests** — jsdom-booted
+  `dist/index.html` (`tests/lib/app.js`'s `boot()`; honestly not a real Chrome/CDP session, said
+  plainly rather than overclaimed) against CH32H417/QFN128: the Project Manager's file list
+  carries both `_kicad_pins.csv` and `_pinout.svg`, zero console problems, and `pinoutSvg()`
+  called in-page produces the exact byte length (54847) the standalone Node engine call does — the
+  CLI, the browser bundle and the barrel agreeing, the same guarantee the plain pin table already
+  had.
+- **7 new tests total**, all seen red on their own planted break first: 2 in `cli.test.js`
+  (KiCad reachability + `all`), 3 in `export.test.js` (XML well-formedness/part-package; both
+  package shapes; assigned/conflict/planning-only content incl. the colour check above), 2 more in
+  `cli.test.js` (SVG reachability + `all`). File-count assertions in `export.test.js` and
+  `pinmap.test.js` updated for the new file, each checked to fail first with the old count.
+- **`dist/index.html` intentionally not committed** — rebuilt once to run the jsdom check above,
+  but `data/mcus/CH32H417.yaml` was uncommitted (AGENT-1, concurrently editing) at build time, so
+  the fresh build is not safe to ship under my commit: exactly the "a rebuild re-bakes another
+  agent's uncommitted data" mechanism main named when accepting my previous cycle's judgement call
+  not to build at all. Left modified, uncommitted, in the working tree; the next agent who needs a
+  current `dist/index.html` rebuilds once the tree is settled.
 
 **Current — 2026-09-14, cycle 5. Resumed after a predecessor was killed by a rate limit mid-task;
 verified its uncommitted work by reading the diffs and running the tests myself, then closed the

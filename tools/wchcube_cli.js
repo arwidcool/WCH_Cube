@@ -26,7 +26,7 @@ import * as eng from '../app/engine/index.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DATA = path.join(ROOT, 'data');
 
-const FORMATS = ['pins-md', 'pins-csv', 'pins-h', 'clocks-md', 'c', 'json'];
+const FORMATS = ['pins-md', 'pins-csv', 'pins-kicad', 'pins-svg', 'pins-h', 'clocks-md', 'c', 'json'];
 
 const USAGE = `wchcube — headless pinout, clocks and code generation
 
@@ -184,6 +184,17 @@ function outputs(formats) {
   for (const f of formats) {
     if (f === 'pins-md') files[`${base}_pinout.md`] = eng.pinTableMarkdown();
     else if (f === 'pins-csv') files[`${base}_pinout.csv`] = eng.pinTableCsv();
+    // The KiCad Symbol Editor Pin Table CSV (app/engine/export.js:kicadPinCsv()) - the
+    // same file the Generate button writes, reachable headlessly too, because a
+    // verified pinout retyped by hand into a schematic is exactly where a correct pin
+    // assignment becomes a wrong footprint, and a human pasting from the app's
+    // download is one avoidable step of that same risk.
+    else if (f === 'pins-kicad') files[`${base}_kicad_pins.csv`] = eng.kicadPinCsv();
+    // A standalone pinout diagram (app/engine/export.js:pinoutSvg()) - built engine-
+    // side and wired into the CLI from its first commit, on the lesson the KiCad CSV
+    // just cost: an export that only the Generate button can reach is a feature that
+    // does not exist for a headless user.
+    else if (f === 'pins-svg') files[`${base}_pinout.svg`] = eng.pinoutSvg();
     else if (f === 'pins-h') files['BoardPins.h'] = eng.pinMapHeader();
     else if (f === 'clocks-md') files[`${base}_clocks.md`] = eng.clockSummaryMarkdown();
     else if (f === 'c') Object.assign(files, eng.cFiles());
