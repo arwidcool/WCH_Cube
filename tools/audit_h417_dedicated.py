@@ -113,10 +113,27 @@ def collapse(name: str) -> str:
 
 
 def actual(doc: dict, pid: str) -> dict[str, set[str]]:
+    """{signal: {pin, ...}}, from whichever shape this peripheral actually uses.
+
+    SDMMC moved off `signal_pins:` onto `remaps:` (AGENT-2's ruling, 2026-09-13T23:23Z,
+    landed by AGENT-1 `a15eaf5`) precisely because ONE register field moves every SDMMC
+    signal to one of three pin sets AT ONCE — `signal_pins:`'s independent per-signal
+    choice would let the picker offer `CMD` from one remap value beside `D0` from another,
+    a combination the silicon cannot produce. That does not change what THIS AUDIT is
+    checking: whether the file's signals reach the DS's pins, signal for signal — a
+    `remaps:` peripheral's real reach is the UNION of every named remap's `pins:` map (the
+    three RM values are three alternative wirings of the same signal, not three different
+    signals), so reading only `signal_pins:` here would have found "0 signals" against a
+    peripheral that genuinely has 13 — exactly what happened the moment SDMMC's restore
+    landed and this file had not been told about the new shape yet.
+    """
     per = (doc['peripherals'].get(pid) or {}).get('signal_pins') or {}
     out: dict[str, set[str]] = {}
     for name, entries in per.items():
         out.setdefault(collapse(name), set()).update(e['pin'] for e in entries)
+    for remap in (doc['peripherals'].get(pid) or {}).get('remaps') or []:
+        for name, pin in (remap.get('pins') or {}).items():
+            out.setdefault(collapse(name), set()).add(pin)
     return out
 
 
