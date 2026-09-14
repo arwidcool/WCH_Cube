@@ -1032,6 +1032,29 @@ bits, and a clock tree that models what the schema can hold.
             `channel_params` (or a sibling key) to carry more than one struct against the same
             `instances:` map. REQUEST posted to AGENT-2 in `data/sources/H417/peripheral_extras.yaml`
             (SAI comment block).
+      **2026-09-14: DFSDM landed - 56 -> 57 of 78 have a block.** `DFSDM_ChannelInitTypeDef`
+      (13 fields) modelled via `channel_params.instances`, keyed `0`/`1` to the two real
+      register-block instances (`DFSDM_Channel0`/`DFSDM_Channel1`, `ch32h417.h:1781-1782`) and
+      this part's own "Channel 0"/"Channel 1" settings - `DFSDM_ChannelInit(DFSDM_Channely, &s)`
+      is the E-shaped, one-struct-one-call-per-instance case exactly. Compiled, not asserted: a
+      throwaway `.wchproj` enabling `Channel 0: External clock`, `node tools/wchcube_cli.js
+      --format c --strict` exits 0, `DFSDM_ChannelInit(DFSDM_Channel0, &DFSDM_ChannelInitStructure)`
+      with all 13 fields, `CKIN0`/`DATIN0` configured `GPIO_Mode_IN_FLOATING` AF3, matching the
+      shipped `DFSDM_SerialSPI` example digit for digit. **Found a real bug in that same vendor
+      example while tracing defaults, not copied**: `Evt/EXAM/DFSDM/DFSDM_SerialSPI/Common/
+      hardware.c:118-119` assigns `DFSDM_ChSerialInterface = DFSDM_ExternalClkIn` and
+      `DFSDM_ChSPIClockSource = DFSDM_SPIRising` - the two fields hold each OTHER's value group
+      (confirmed against `DFSDM_ChannelInit()`'s own register math, `ch32h417_dfsdm.c:161-174`,
+      and the header's own doc comments). Invisible in the shipped example only because both
+      chosen constants are `0x0000` - modelled to match the REGISTER (header's pairing), not the
+      example's swapped field names; recorded in the peripheral's own comment so it doesn't read
+      as copied from a source that has it backwards.
+      **`DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/`JcInitTypeDef` are NOT modelled - the SAME
+      schema gap as SAI's line above, not a second one.** All three apply to a `DFSDM_FLTx`
+      handle (`DFSDM_FilterInit`/`RcInit`/`JcInit`, `ch32h417_dfsdm.h:317-319`) - THREE structs
+      wanting the SAME instance (`DFSDM_FLT0`/`DFSDM_FLT1`), and `channel_params:` still holds
+      exactly one `struct:` per peripheral. Consolidated with SAI's REQUEST rather than filed
+      again; `params:` stays at just the Channel struct for DFSDM until that mechanism exists.
       - [ ] (AGENT-1) **SDMMC's DDR-mode structs are not modelled**: `SDMMC_IOInputDelayDDRTypeDef`
             / `SDMMC_IOOutputDelayDDRTypeDef` (eight 4-bit per-line delay taps each,
             `ch32h417_sdmmc.h:111-177`) are real init-time settings, but neither of this part's

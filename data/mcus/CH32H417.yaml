@@ -2624,6 +2624,151 @@ peripherals:
       CKOUT: [{ pin: PB0, af: 6 }, { pin: PC2, af: 6 }, { pin: PD10, af: 3 }, { pin: PD3, af: 3 }, { pin: PE9, af: 3 }]
       DATIN0: [{ pin: PC1, af: 3 }]
       DATIN1: [{ pin: PB1, af: 6 }, { pin: PB12, af: 6 }, { pin: PC3, af: 3 }, { pin: PD6, af: 4 }]
+    channel_params:
+      struct: DFSDM_ChannelInitTypeDef
+      applies_per: channel
+      instances:
+        0: { sdk_call: DFSDM_ChannelInit, handle: DFSDM_Channel0, setting: "Channel 0", active_choices: ["External clock", "Internal clock"] }
+        1: { sdk_call: DFSDM_ChannelInit, handle: DFSDM_Channel1, setting: "Channel 1", active_choices: ["External clock", "Internal clock"] }
+      params:
+        - key: datmpx
+          name: Input data source
+          sdk_field: DFSDM_ChDataMultiplexer
+          type: enum
+          default: Serial
+          options:
+            - { name: Serial,   value: 0,      sdk: DFSDM_SerialInput }
+            - { name: ADC,      value: 4096,   sdk: DFSDM_ADCInput }
+            - { name: Internal, value: 8192,   sdk: DFSDM_InternalInput }
+          help: >
+            CFGR1.DATMPX[13:12], ch32h417_dfsdm.h:154-157. Serial is the pin-routed path
+            this peripheral's own signal_pins: (CKIN/DATIN) exist for; ADC/Internal read
+            from ADC1/ADC2 or another on-chip source instead and claim no pad - offered
+            here since the header defines real values for them, but this part's two
+            modelled settings ("External clock"/"Internal clock") only route pins for
+            the Serial case, so ADC/Internal need the setting active regardless
+            (`active_choices`) even though the field itself can express more.
+        - key: spiclksrc
+          name: SPI clock source
+          sdk_field: DFSDM_ChSPIClockSource
+          type: enum
+          default: External
+          options:
+            - { name: External,             value: 0,  sdk: DFSDM_ExternalClkIn }
+            - { name: "Internal, output",    value: 4,  sdk: DFSDM_InternalClkOut }
+            - { name: "Internal, falling",   value: 8,  sdk: DFSDM_InternalHalfFall }
+            - { name: "Internal, rising",    value: 12, sdk: DFSDM_InternalHalfRise }
+          help: >
+            CFGR1.SPICKSEL[3:2], ch32h417_dfsdm.h:162-165 (register math confirmed
+            against ch32h417_dfsdm.c:161-168 and ch32h417.h's own CFGR1_SPICKSEL mask
+            0xC - see the peripheral comment for the vendor example's swapped field
+            names, not repeated here). "External" is what the shipped SerialSPI example
+            runs and matches this channel's own CKIN pin being routed.
+        - key: siface
+          name: Serial interface edge
+          sdk_field: DFSDM_ChSerialInterface
+          type: enum
+          default: Rising
+          options:
+            - { name: Rising,  value: 0, sdk: DFSDM_SPIRising }
+            - { name: Falling, value: 1, sdk: DFSDM_SPIFalling }
+          help: "CFGR1.SITP[1:0], ch32h417_dfsdm.h:168-170. EVT DFSDM_SerialSPI example, value 0 either way (see peripheral comment)."
+        - key: datpack
+          name: Data packing
+          sdk_field: DFSDM_ChDataPackMode
+          type: enum
+          default: Standard
+          options:
+            - { name: Standard,   value: 0,     sdk: DFSDM_StandardMode }
+            - { name: Interleave, value: 16384, sdk: DFSDM_InterleaveMode }
+            - { name: Dual,       value: 32768, sdk: DFSDM_DualMode }
+          help: "CFGR1.DATPACK[15:14], ch32h417_dfsdm.h:149-152. EVT DFSDM_SerialSPI example: Standard (hardware.c:117)."
+        - key: chinsel
+          name: Input pin select
+          sdk_field: DFSDM_ChInPinSelect
+          type: enum
+          default: This channel
+          options:
+            - { name: This channel, value: 0,   sdk: DFSDM_SelectCurrent }
+            - { name: Next channel, value: 256, sdk: DFSDM_SelectNext }
+          help: >
+            CFGR1.CHINSEL, ch32h417_dfsdm.h:158-160. Lets channel y read the (y+1) pin
+            pair instead of its own - EVT DFSDM_SerialSPI example: This channel
+            (hardware.c:121).
+        - key: ckabdet
+          name: Clock absence detector
+          sdk_field: DFSDM_ChClockAbsenceDetMode
+          sdk_enabled: ENABLE
+          sdk_disabled: DISABLE
+          type: bool
+          default: false
+          help: "CFGR1.CKABEN (bit 6), ch32h417_dfsdm.h:63-64. EVT DFSDM_SerialSPI example: DISABLE (hardware.c:120)."
+        - key: scddet
+          name: Short-circuit detector
+          sdk_field: DFSDM_ChShortCircuitDetMode
+          sdk_enabled: ENABLE
+          sdk_disabled: DISABLE
+          type: bool
+          default: true
+          help: "CFGR1.SCDEN (bit 5), ch32h417_dfsdm.h:66-67. EVT DFSDM_SerialSPI example: ENABLE (hardware.c:119)."
+        - key: scdthr
+          name: Short-circuit detector threshold
+          sdk_field: DFSDM_ChSCDCntthreshold
+          type: int
+          default: 220
+          min: 0
+          max: 255
+          help: "AWSCDR.SCDT[7:0], ch32h417_dfsdm.h:56-57. EVT DFSDM_SerialSPI example: 220 (hardware.c:118)."
+        - key: scdbksig
+          name: Short-circuit break signal
+          sdk_field: DFSDM_ChSCDBreakSignal
+          type: enum
+          default: None
+          options:
+            - { name: None,        value: 0,     sdk: DFSDM_SCD_BK_None }
+            - { name: "BK0",       value: 4096,  sdk: DFSDM_SCD_BK_0 }
+            - { name: "BK1",       value: 8192,  sdk: DFSDM_SCD_BK_1 }
+            - { name: "BK0 + BK1", value: 12288, sdk: DFSDM_SCD_BK_0_1 }
+          help: "AWSCDR.BKSCD[13:12], ch32h417_dfsdm.h:51-54. Not exercised by any shipped DFSDM example; default matches the reset/POR value (0)."
+        - key: awdsincorder
+          name: Watchdog Sinc filter order
+          sdk_field: DFSDM_ChAWDSincFilterOrder
+          type: enum
+          default: FastSinc
+          options:
+            - { name: FastSinc, value: 0, sdk: DFSDM_AWD_FastSinc }
+            - { name: Sinc1,    value: 1, sdk: DFSDM_AWD_Sinc1 }
+            - { name: Sinc2,    value: 2, sdk: DFSDM_AWD_Sinc2 }
+            - { name: Sinc3,    value: 3, sdk: DFSDM_AWD_Sinc3 }
+          help: "AWSCDR.AWFORD[23:22], ch32h417_dfsdm.h:45-46. Not exercised by any shipped DFSDM example; default matches the reset/POR value (0)."
+        - key: awdoversample
+          name: Watchdog filter oversample ratio
+          sdk_field: DFSDM_ChAWDFilterOverSample
+          type: int
+          default: 1
+          min: 1
+          max: 32
+          help: >
+            AWSCDR.AWFOSR[20:16], ch32h417_dfsdm.h:59-60. The driver writes
+            `(value - 1) << offset` (ch32h417_dfsdm.c:183), so 1 (the header's own
+            "bypassed" value, @ref AWD_Filter_Bypass) writes 0 - matches the reset/POR
+            value; not exercised by any shipped DFSDM example.
+        - key: rbitshift
+          name: Data right bit-shift
+          sdk_field: DFSDM_ChDataRightBitShift
+          type: int
+          default: 0
+          min: 0
+          max: 31
+          help: "CFGR2.DTRBS[7:3], ch32h417_dfsdm.h:53-55. Not exercised by any shipped DFSDM example; default matches the reset/POR value (0)."
+        - key: caliboffset
+          name: Calibration offset
+          sdk_field: DFSDM_ChCalibrationOffset
+          type: int
+          default: 0
+          min: -8388608
+          max: 8388607
+          help: "CFGR2.CALIBOFF, ch32h417_dfsdm.h:23-25 (24-bit signed). Not exercised by any shipped DFSDM example; default matches the reset/POR value (0)."
   DMA1:
     category: System Core
     settings:
@@ -8952,6 +9097,11 @@ codegen:
     # register block. LPTIM_Cmd's sdk_call_order: before_structs (peripheral_extras.yaml)
     # is what makes the enable-before-init ordering hazard (RM 17.5.5) come out right.
     LPTIM_TimeBaseInitTypeDef: { fn: LPTIM_TimeBaseInit }   # ch32h417_lptim.h:176
+    # DFSDM_ChannelInit(DFSDM_Channely, DFSDM_ChannelInitTypeDef*) (ch32h417_dfsdm.h:316)
+    # also takes a PER-INSTANCE handle (DFSDM_Channel0/DFSDM_Channel1) - like OPA above,
+    # not in `periph_handle` (one entry per peripheral); the handle comes from
+    # `channel_params.instances.<n>.handle` (peripheral_extras.yaml DFSDM comment).
+    DFSDM_ChannelInitTypeDef: { fn: DFSDM_ChannelInit }   # ch32h417_dfsdm.h:316
 
   periph_handle:
     # CAN1/CAN2/CAN3 are the SDK's own register-block names (ch32h417.h:1743-1747 casts
