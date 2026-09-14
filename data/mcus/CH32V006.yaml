@@ -2242,11 +2242,28 @@ codegen:
   # Signal name -> SDK macro, for a `sdk_repeat: channels` call. ADC_RegularChannelConfig
   # takes a channel and a rank, so sampling time is set per CHANNEL rather than once per
   # peripheral, and the generator needs the macro for each. ch32v00X_adc.h lines 67-76
-  # define ADC_Channel_0..9; this part bonds IN0..IN7, and IN8/IN9 are the internal
-  # references, which is why the list stops at 7 and does not simply mirror the header.
+  # define ADC_Channel_0..9; IN0..IN7 are the pinned external channels.
+  #
+  # IN8/IN9 ARE modelled below - they were not until 2026-09-14. The settings choices
+  # "IN8 (Vrefint, internal)"/"IN9 (OPA output, internal)" existed with no macro behind
+  # them (no `signals:`, so no pad either), which meant ticking one compiled to a TODO in
+  # the generated C - a real gap, not a deliberate omission, found once CH32H417 proved
+  # the same shape (its own IN16/IN17) CAN be modelled with a real macro. Checked against
+  # THIS part's own datasheet before porting the shape across, not assumed to carry over -
+  # DS0.md 1.4.11 (CH32V006DS0.md:558-567): "up to 8 external channels and 2 internal
+  # channels... The internal channel of ADC is ADC_IN8~ADC_IN9. The internal reference
+  # voltage VREF... is connected to the IN8 input channel; the OPA internal output channel
+  # is connected to the IN9 input channel" - confirmed a second time at register level,
+  # RM:6684-6687. Both are genuinely pinless (no `signals:` entry, same as the settings
+  # choice already had it) and use the NUMERIC macro spelling, matching CH32H417's own
+  # stated convention ("the numeric spelling is used so the list reads as the sequence
+  # the datasheet numbers") rather than the header's `ADC_Channel_Vrefint`/`_OPA` aliases
+  # (ch32v00X_adc.h:78-79) - same identifier, chosen for the same reason on both parts.
   channel_macros:
     ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
-            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7 }
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            "IN8 (Vrefint, internal)": ADC_Channel_8,
+            "IN9 (OPA output, internal)": ADC_Channel_9 }
 
   # Which signals want GPIO_Mode_AIN rather than AF_PP. Without this the generator has
   # to guess from the peripheral's category, and it cannot tell ADC1_IN4 from

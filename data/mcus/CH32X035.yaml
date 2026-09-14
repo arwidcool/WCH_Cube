@@ -1636,11 +1636,25 @@ peripherals:
   ADC1:
     category: Analog
     notes: >
-      Fourteen channels. DS note 1 is a SILICON-REVISION caveat, not a package or
-      variant fact: "Channel 3, channel 7, channel 11, channel 15 and I2C functions of
-      the ADC are not available for products with a lot number with a penultimate 5
-      digit of 0". It cannot be expressed per package or per variant and we cannot know
-      which lot a user has, so it is recorded and neither silently applied nor dropped.
+      Fourteen EXTERNAL channels plus ONE internal channel, DS0.md 1.4.12
+      (CH32X035DS0.md:578-585): "providing up to 14 external channels and 1 internal
+      channel sample... ADC internal channels are internal reference supply voltage
+      sampling channels." RM:6029-6031 names it precisely - "VREFINT internal reference
+      voltage: connected to ADC_IN15 channel" - confirmed against ch32x035_adc.h:88,90
+      (ADC_Channel_15, aliased ADC_Channel_Vrefint) and modelled below as the
+      "IN15 (Vrefint, internal)" choice, pinless like CH32H417's own IN16/IN17 and
+      CH32V006's IN8/IN9 - but ONE internal channel here, not two: this part's OPA
+      output reaches the ADC through a DIFFERENT mechanism (OPA_CTLR1's MODEx field
+      selecting the OPA's output onto an EXISTING external I/O pin, RM ch.17.2.1,
+      CH32X035RM.md:13628-13631), not a dedicated internal channel number - a separate
+      modelling question, not this one. DS note 1 is a SILICON-REVISION caveat, not a
+      package or variant fact: "Channel 3, channel 7, channel 11, channel 15 and I2C
+      functions of the ADC are not available for products with a lot number with a
+      penultimate 5 digit of 0" (CH32X035DS0.md:589-590) - channel 15 IS the Vrefint
+      channel above, so on affected silicon the internal channel is unavailable too, not
+      only the four external ones. Cannot be expressed per package or per variant and we
+      cannot know which lot a user has, so it is recorded here and neither silently
+      applied nor dropped.
     settings:
       - name: Channels
         type: checkboxes
@@ -1659,6 +1673,7 @@ peripherals:
           - { name: IN11, signals: [IN11] }
           - { name: IN12, signals: [IN12] }
           - { name: IN13, signals: [IN13] }
+          - { name: "IN15 (Vrefint, internal)" }
     params:
       # CH32V006's macro names DO NOT EXIST HERE, and neither do its cycle counts. That
       # part spells them ADC_SampleTime_CyclesMode0..7 and means 3.5 .. 239.5 cycles;
@@ -2467,6 +2482,26 @@ codegen:
       clock enable can never name hardware the tree does not offer. Every bit number here
       is the bit position of the macro in ch32x035_rcc.h, not a guess: RCC_APB1Periph_I2C1
       is 0x00200000, which is bit 21.
+
+  # Signal name -> SDK macro, for ADC1's `sample` param (sdk_repeat: channels,
+  # ADC_RegularChannelConfig). THIS BLOCK DID NOT EXIST until 2026-09-14, which meant
+  # ticking ANY ADC1 channel - not just the internal one - compiled to a TODO
+  # (`codegen.channel_macros.ADC1 — no macro for any channel`, confirmed by generating
+  # real C for a throwaway project with IN0/IN3 ticked before writing this: `wchcube_cli.js
+  # --format c` on tests/fixtures/CH32X035_QFN28_full.wchproj with Channels: [IN0, IN3]
+  # gave exactly that TODO). Found chasing the Vrefint gap, not the reason for it - IN0..
+  # IN13 are the ordinary external channels (ch32x035_adc.h:73-86, ADC_Channel_0..13);
+  # IN15 is the internal Vrefint channel this cycle's own work added the settings choice
+  # for (see ADC1's own `notes:` for the citations) - ADC_Channel_14 is a real macro in
+  # the header (0x0E) but the datasheet documents only "1 internal channel" (Vrefint), so
+  # it is not modelled: a 15th name with no datasheet meaning would be exactly the
+  # plausible-looking guess this repo exists to refuse.
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            IN8: ADC_Channel_8, IN9: ADC_Channel_9, IN10: ADC_Channel_10, IN11: ADC_Channel_11,
+            IN12: ADC_Channel_12, IN13: ADC_Channel_13,
+            "IN15 (Vrefint, internal)": ADC_Channel_15 }
 
 # What this part offers, so no renderer has to know a part name.
 gpio:
