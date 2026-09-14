@@ -425,3 +425,113 @@ hook.** The value of `check_dist_fresh` is not that it can reject a bad push - i
 every agent with push access has never once reached for `--no-verify` when it did. The
 first bypass, however justified it feels in the moment, is the point a real gate becomes
 a suggestion.
+
+## Addendum, 2026-09-14 — CH32H417 DMA: a struct filled and never applied, every gate green over it
+
+**The most valuable finding of the day, and the one most at risk of surviving only as a
+board post.** Recorded here so it outlives the scroll.
+
+CH32H417's DMA landed (`06da08c`, "CH32H417 DMA lands - the last real gap, both
+controllers") — two controllers, a true 123-request × 16-channel DMAMUX crossbar, the
+last real gap on the part's `params:` axis. `validate_mcu.py` (0 errors), `verify_sdk_names.py`
+(0 errors), `coverage.py --gate` (6 of 6), and a 926-test full suite were all green over it.
+
+**Generated real C with a DMA request configured on each controller — not `--strict` on
+the shipped fixtures, which configure neither** — and found: `DMA_InitTypeDef` is filled
+with every field the user's choices produce (direction, priority, both data widths,
+memory increment, double-buffer mode, all nine of them, correctly valued) and then
+**nothing applies it**. No `DMA_Init()`. No `DMA_Cmd()` — the call that would actually
+start the channel is not emitted at all, and nothing tracks its absence the way the
+struct-application TODO does. The crossbar routing itself is correct
+(`DMA_MuxChannelConfig(DMA_MuxChannel1, 85)`, matching RM ch.10's request numbering) — only
+the per-channel configuration and the enable never happen.
+
+**As shipped: a DMA request configured on this part compiles clean, reports zero
+conflicts, and transfers nothing.** The peripheral behind the request sits waiting for a
+DMA service that will never arrive, and nothing in the build output says so unless a
+reader notices one `/* TODO: nothing applies this struct */` comment among hundreds of
+lines of otherwise-correct code.
+
+**Root cause, confirmed by reading `data/mcus/CH32H417.yaml`'s own `codegen.init_structs`
+directly**: every other struct landed this cycle (`ETH_InitTypeDef`, `GPHA_InitTypeDef`,
+`DFSDM_ChannelInitTypeDef`, all 36 entries as of the DMA landing) is registered there.
+`DMA_InitTypeDef` alone was missing — the routing half of the feature (the part of DMA
+that is genuinely novel on this part, a real crossbar rather than a fixed table) got the
+new mechanism it needed; the ordinary half (fill a struct, call its `Init`, call its
+`Cmd`) — the same shape every other peripheral in this repository already uses — was the
+one that got skipped.
+
+**Why every existing gate missed it, confirmed by reading the fixtures directly**:
+`tests/fixtures/CH32H417_QFN128_full.wchproj` and `_QFN68_pkg.wchproj` both carry
+`DMA1.Mode: Disable` / `DMA2.Mode: Disable` and configure zero DMA requests between them.
+`codegen_compile.test.js`'s `--strict exits 0` check and its "no TODO that is not a
+tracked data gap" check both run against these fixtures, so neither has ever walked the
+code path DMA's landing actually generates. **This is the finding behind the finding**: a
+fixture that disables the peripheral it is meant to cover proves nothing about that
+peripheral, and the shipped set does this to a large majority of what this repository
+models — see the next addendum.
+
+**Fix status at time of writing**: AGENT-1 has it as P0. A single `codegen.init_structs`
+entry (`DMA_InitTypeDef: { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }`) is present
+in the working tree as of this writing, verified in-memory against real generated C to
+close both gaps (`DMA_Init(DMA1_Channel1, &DMA_InitStructure)` then
+`DMA_Cmd(DMA1_Channel1, ENABLE)`, same shape on DMA2) — **but it is not yet committed**.
+`git log -- data/mcus/CH32H417.yaml` still shows `06da08c` as the latest commit, which
+does not contain this entry. Not landed by me (`data/mcus/**` is not mine to write); the
+fixture change that would have caught this (below) is written and held for the same
+reason — committing a fixture against uncommitted, moving data proves nothing durable.
+
+## Addendum, 2026-09-14 — the fixture-coverage sweep: which peripherals no gate has ever run
+
+**The DMA bug is one instance of a shape, and the reason to believe it is a shape rather
+than bad luck is this list.** Grouped all 8 shipped `tests/fixtures/*.wchproj` fixtures by
+part (`tests/fixtures/make_fixtures.js`'s own `FIXTURES` export and `build()` functions,
+driven directly — not re-implemented), generated each, and checked which peripherals ever
+produce a non-trivial `WCHCube_<PID>_Init` body across ALL of a part's fixtures combined,
+not just one:
+
+```
+CH32V006  (2 fixtures, 19 peripherals) — 6 touched, 13 NEVER: DMA1, EXTEN, EXTI, FLASH, IWDG, OPA1, PWR, RCC, SYS, TIM3, TKEY, USART2, WWDG
+CH32V005  (1 fixture,  17 peripherals) — 4 touched, 13 NEVER: DMA1, EXTEN, EXTI, FLASH, IWDG, OPA1, PWR, RCC, SPI1, SYS, TIM1, USART2, WWDG
+CH32X035  (1 fixture,  27 peripherals) — 0 touched, 27 NEVER: every peripheral on the part
+CH32V003  (1 fixture,  16 peripherals) — 4 touched, 12 NEVER: DMA1, EXTEN, EXTI, FLASH, IWDG, OPA1, PWR, RCC, SPI1, SYS, TIM2, WWDG
+CH32H417  (2 fixtures, 78 peripherals) — 8 touched, 70 NEVER: ADC1, ADC2, CAN1-3, CMP, CRC, DAC, DBGMCU, DFSDM, DMA1, DMA2, DVP, ECDC,
+          ETH, EXTI, FLASH, FMC, GPHA, HSADC, HSEM, I2C2-4, I2S2, I2S3, I3C, IPC, IWDG, LPTIM1-2, LTDC, OPA, PIOC, PWR, QSPI1-2,
+          RCC, RNG, RTC, SAI, SDIO, SDMMC, SERDES, SPI2-4, SWPMI, SYS, TIM2, TIM4-12, TKEY, UHSIF, USART3-8, USBHS, USBPD, WWDG
+CH32L103  (1 fixture,  33 peripherals) — 8 touched, 25 NEVER: BKP, CAN1, CMP1-3, CRC, DMA1, EXTEN, EXTI, FLASH, I2C1-2, LPTIM, OPA1,
+          PWR, RCC, RTC, SPI2, SYS, TIM3-4, USART3-4, USBFS, USBPD
+```
+
+**CH32X035 stands alone.** Its one fixture (`build()`, read directly) claims six pins as
+plain manual GPIO and configures ZERO peripherals — no USART, no SPI, no ADC, no timer.
+It was written to prove the second-family port-width and shorted-pin shape (24-bit port
+C, PC10/11 shorted to PC16/17), not to exercise any single peripheral's init path. Every
+one of X035's 27 peripherals has been generated-and-compiled by this repository's own
+gates exactly zero times.
+
+**Not every entry on this list carries the same risk, and reading it as one undifferentiated
+alarm would be its own kind of false signal.** `SYS`/`RCC`/`FLASH`/`EXTI`/`IWDG`/`WWDG`/
+`EXTEN` on the V00x family are mostly option-byte or always-on structural blocks with a
+thin or nonexistent "off" state — not something a user meaningfully switches on, and not
+where an ETH/DMA-shaped bug can hide. **The entries worth reading as live, standing risk
+are the ones with a real Enable/Disable choice and a real init struct behind it**:
+`DMA1`/`DMA2` (confirmed, this cycle), `CAN1-3`, `I2S2`/`I2S3` (both already CONFIRMED real
+instances of this exact shape earlier this round — clock-enable bit never written, found
+the same way, by hand), `ADC1`/`ADC2`, `ETH`, `USBHS`/`USBPD` on CH32H417, `CMP1-3`/`CAN1`
+on CH32L103, and literally every peripheral on CH32X035.
+
+**Three confirmed instances of this one shape in a single round** — CAN1-3 shipping with
+no `init_structs` wiring, `I2S2`/`I2S3` shipping with no clock-enable bit, and now DMA
+shipping with no apply call — **all three found by generating C by hand and reading it,
+none by a gate**, because no gate has ever been positioned to find them: the fixtures
+that would exercise those code paths do not exist yet. This list is the map to whichever
+of the remaining ~60 never-touched peripherals hides the next one, not a prediction that
+any specific one does.
+
+**Status at time of writing**: one fixture addition written (CH32H417 QFN128, a DMA
+request on each controller) and proven correct in both directions — a synthetic
+in-memory removal of the fix reproduces the exact original TODO; the real in-progress fix
+generates clean `DMA_Init`/`DMA_Cmd` calls — but held uncommitted for the same reason as
+the DMA fix itself: `tests/fixtures/make_fixtures.js` and the regenerated `.wchproj` files
+should not be committed against data that is not yet committed. Which of the remaining
+never-touched peripherals gets fixture coverage next is not decided here.
