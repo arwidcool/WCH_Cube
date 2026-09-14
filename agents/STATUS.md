@@ -402,11 +402,17 @@ revert cleanly, then stop").
      add `codegen.init_structs.DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/
      `JcInitTypeDef` (also already drafted), generate real C for a Filter 0
      config and read it, then the usual gates.
-  3. **CH32H417's HSADC** — real pins, a real per-channel function
-     (`HSADC_ChannelConfig(uint8_t)`) nothing calls, but it's a ONE-argument
-     call, not the `(channel, rank, sampletime)` shape `sdk_repeat: channels`
-     handles. Needs new engine work - hand to AGENT-2, do not force a data patch
-     behind the existing mechanism to silence the warning.
+  3. **CH32H417's HSADC — engine-complete, DATA-OPEN, not "needs data."** AGENT-2
+     shipped the one-argument call shape (`828c96e`) and found the reason not to
+     wire it up yet while building it: `HSADC_ChannelConfig()` OVERWRITES its
+     channel-select field rather than appending, and the one real EVT example
+     calls it exactly once. HSADC's current data shape is `Channels:` MULTI-SELECT
+     checkboxes (IN0-IN6) - wiring the new mechanism onto that as-is would
+     silently keep only the LAST ticked channel, a wrong answer that would pass
+     every gate. The open question is the DATA SHAPE (single-select? a real
+     per-channel loop the hardware doesn't support at all?), not a missing
+     mechanism - do not force a `channel_macros`-style patch through the existing
+     multi-select checkboxes to close this.
   4. **CH32L103's `temp_vref_enable`** — correctly wired, not conditional on
      channel selection, so ticking IN16/IN17 without separately flipping it
      compiles clean and reads garbage. Disclosed in the row's own help text.
