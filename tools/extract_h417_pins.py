@@ -117,6 +117,21 @@ SPLIT_NAME = re.compile(r'([A-Z][A-Za-z0-9_]*) ([A-Z][A-Za-z0-9_]*)\((AF\d+)\)')
 #  needed: `(A` ends no signal name and `F<digits>)` begins none, so the join is forced.
 SPLIT_AF = re.compile(r'\(A\s+F(\d+)\)')
 
+#  ...and a third shape, the break landing right before the CLOSING PAREN:
+#
+#      ## I2C4_SMBA(AF2)/SDRAM_RAS_N(AF12
+#      ## )
+#
+#  which accumulates to `SDRAM_RAS_N(AF12 )` - a space before `)` that the row-joiner's
+#  own `" " + body` insertion put there. `AF` requires `)` immediately after the digits,
+#  so this one is ALSO silently dropped, same failure shape as SPLIT_AF: no wrong name,
+#  just PF11's SDRAM_RAS_N(AF12) never emitted - found because Table 2-2-15 lists it
+#  (CH32H417DS0.md:7179) and Table 2-1-1's read did not (main 2026-09-14, EVT
+#  Evt/EXAM/FMC/SDRAM_16bit/Common/hardware.c:161-162 confirms the same pin+AF). No
+#  repair dictionary needed here either: a digit run immediately before `<space>)` is
+#  never anything but a torn AF code.
+SPLIT_AF_CLOSE = re.compile(r'\(AF(\d+) \)')
+
 
 def known_signal_names(text: str) -> set:
     """Every signal name the DS uses, from its own peripheral-first tables 2-2-x.
@@ -213,6 +228,7 @@ def parse(ds_path):
     af_repairs = []
     for r in rows:
         fixed = SPLIT_AF.sub(lambda m: f"(AF{m.group(1)})", r["text"])
+        fixed = SPLIT_AF_CLOSE.sub(lambda m: f"(AF{m.group(1)})", fixed)
         if fixed != r["text"]:
             af_repairs.append((r["name"], fixed))
             r["text"] = fixed

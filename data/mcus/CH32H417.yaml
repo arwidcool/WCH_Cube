@@ -3203,7 +3203,7 @@ peripherals:
       NOE: [{ pin: PD4, af: 12 }]
       NWAIT: [{ pin: PD6, af: 12 }]
       NWE: [{ pin: PD5, af: 12 }]
-      RAS_N: [{ pin: PC15, af: 9 }, { pin: PF3, af: 3 }, { pin: PE5, af: 9 }, { pin: PC10, af: 1 }]
+      RAS_N: [{ pin: PC15, af: 9 }, { pin: PF11, af: 12 }, { pin: PF3, af: 3 }, { pin: PE5, af: 9 }, { pin: PC10, af: 1 }]
       WE_N: [{ pin: PA7, af: 12 }, { pin: PC1, af: 15 }, { pin: PC0, af: 12 }]
     settings:
       # ONE dropdown for both jobs, because the alternative is two that can disagree.
