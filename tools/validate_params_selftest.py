@@ -42,6 +42,16 @@ def row(doc, key):
     raise KeyError(f"{PERIPH}.{key} is not in {PART.name} any more")
 
 
+def channel_row(doc, pid, key):
+    """A row in `peripherals.<pid>.channel_params.params`, not `.params` - a
+    DIFFERENT list this function's sibling call site did not check at all until
+    2026-09-14 (see `tools/validate_mcu.py`'s own comment beside the fix)."""
+    for p in doc["peripherals"][pid]["channel_params"]["params"]:
+        if p.get("key") == key:
+            return p
+    raise KeyError(f"{pid}.channel_params.{key} is not in {PART.name} any more")
+
+
 # (label, mutate(doc), substring the refusal must contain)
 CASES = [
     ("a default that is not one of its own options",
@@ -63,6 +73,10 @@ CASES = [
     ("a numeric default below its own min",
      lambda d: row(d, "clk_div").update({"default": -1, "min": 0, "max": 63, "options": None}),
      "below min"),
+
+    ("a channel_params.params row (not the peripheral's own params:) with a bad default",
+     lambda d: channel_row(d, "OPA", "fb").__setitem__("default", "NotAnOption"),
+     "is not one of its options"),
 ]
 
 

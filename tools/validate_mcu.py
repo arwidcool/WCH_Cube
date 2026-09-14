@@ -407,9 +407,22 @@ def check_peripherals(doc: dict, r: Report) -> None:
         # Found 2026-09-13 by writing a `default: 0` where the options are named
         # "Slave, FPGA" / "Slave, SOC" / "Master" and watching every gate pass.
         check_param_list(P.get("params"), f"{where}.params", r)
-        for grp, cp in (P.get("channel_params") or {}).items():
-            if isinstance(cp, dict):
-                check_param_list(cp.get("params"), f"{where}.channel_params.{grp}.params", r)
+        # `channel_params:` is ONE block per peripheral - `struct:`/`applies_per:`/
+        # `instances:`/`params:` - not a map of named sub-blocks the way this loop
+        # used to assume (`dma.channel_params` IS shaped that way; a peripheral's
+        # never has been, checked against every shipped example: SERDES, OPA, SAI,
+        # DFSDM, DAC, LTDC's layers, TIM's PWM channels, CMP). `.items()` over that
+        # single dict iterated its OWN top-level keys ("struct", "instances", "params"
+        # as if each were a group name, and `cp.get("params")` on the "instances" map
+        # or the "params" LIST itself (not a dict, so `isinstance(cp, dict)` was
+        # False and it was skipped outright) never reached the real row list either
+        # way - so `channel_params.params:` on every peripheral that has one has been
+        # completely unchecked since `check_param_list` was written. Found the same
+        # way the sibling `peripherals.*.params` gap was: planted a default naming an
+        # option that does not exist (OPA's `fb`) and watched `validate_mcu.py` exit 0.
+        cpl = P.get("channel_params")
+        if isinstance(cpl, dict):
+            check_param_list(cpl.get("params"), f"{where}.channel_params.params", r)
 
         remaps = P.get("remaps") or []
         if remaps and not isinstance(remaps, list):
