@@ -30,16 +30,38 @@ test('at least one shipped part is AF-muxed, or this whole gate is vacuous', () 
   assert.ok(names.length, 'no shipped part uses signal_pins: — the AF checks below prove nothing');
 });
 
+/**
+ * The signal names a peripheral's `signal_groups:` moves together (UHSIF's PORT0-7, one
+ * shared register field, `data/FORMAT.md`'s `signal_groups` section). A grouped signal's
+ * candidate list has ONE slot per remap value (RM=00/01/1x for UHSIF) — a repeated pin
+ * across two slots is not dead data, it is the silicon: `validate_mcu.py` was taught the
+ * same fact when UHSIF landed (its own duplicate check relaxed, narrowly, for grouped
+ * signals only — everywhere else a repeated pin still fails). This mirrors that, in the
+ * one other place a plain duplicate-pin check reads the same list and did not learn the
+ * same lesson: CH32H417 UHSIF's PORT0/1/2/5/6/7 read as six data errors here until now,
+ * over a fact `validate_mcu.py` already knows is real hardware.
+ */
+function groupedSignals(P) {
+  const s = new Set();
+  for (const g of P.signal_groups || []) for (const sig of g.signals || []) s.add(sig);
+  return s;
+}
+
 test('every signal_pins entry names a real pin and a four-bit AF code', () => {
   const bad = [];
   for (const { name, doc } of afParts()) {
     for (const [pid, P] of Object.entries(doc.peripherals || {})) {
+      const grouped = groupedSignals(P);
       for (const [sig, opts] of Object.entries(P.signal_pins || {})) {
         assert.ok(Array.isArray(opts) && opts.length, `${name}.${pid}.${sig}: empty option list`);
         const seen = new Set();
         for (const o of opts) {
           if (!doc.pins[o.pin]) bad.push(`${name} ${pid}_${sig}: ${o.pin} is not in pins:`);
-          if (seen.has(o.pin)) bad.push(`${name} ${pid}_${sig}: ${o.pin} listed twice`);
+          // A grouped signal has one slot per remap value, and two remap values legitimately
+          // sharing a pad is a real hardware fact (see groupedSignals() above) - flagged only
+          // for a signal that is NOT part of any signal_groups: entry, exactly as narrow as
+          // validate_mcu.py's own relaxation.
+          if (seen.has(o.pin) && !grouped.has(sig)) bad.push(`${name} ${pid}_${sig}: ${o.pin} listed twice`);
           seen.add(o.pin);
           if (o.af !== undefined && (!Number.isInteger(o.af) || o.af < 0 || o.af > 15)) {
             bad.push(`${name} ${pid}_${sig}: af ${o.af} does not fit GPIOx_AFRy's four bits`);
@@ -49,6 +71,35 @@ test('every signal_pins entry names a real pin and a four-bit AF code', () => {
     }
   }
   assert.deepEqual(bad, [], 'signal_pins entries that name something that does not exist');
+});
+
+test('planted break: a duplicate pin on a signal OUTSIDE any signal_groups: still fails', () => {
+  // The relaxation above must stay narrow. Plant a repeated pin on a signal this part's own
+  // data does NOT list in any signal_groups: entry (CAN1's TX, an ordinary AF-muxed signal,
+  // no group anywhere near it) and confirm it is still caught - a blanket relaxation would
+  // blind this check to a real duplicate-pin data error, which is the failure mode grouping
+  // this narrowly exists to avoid.
+  const part = afParts().find(({ name }) => name === 'CH32H417');
+  assert.ok(part, 'CH32H417 not found among afParts() - this plant needs it specifically');
+  const doc = structuredClone(part.doc);
+  const opts = doc.peripherals.CAN1.signal_pins.TX;
+  assert.ok(Array.isArray(opts) && opts.length >= 1, 'CAN1.TX has no signal_pins to plant a duplicate into');
+  assert.ok(!groupedSignals(doc.peripherals.CAN1).has('TX'), 'planted precondition failed: CAN1.TX IS in a signal_groups: entry - pick a genuinely ungrouped signal instead');
+  opts.push({ ...opts[0] }); // repeat the first candidate pin - same shape as the real UHSIF case, on an ungrouped signal
+
+  const bad = [];
+  for (const [pid, P] of Object.entries(doc.peripherals || {})) {
+    const grouped = groupedSignals(P);
+    for (const [sig, os] of Object.entries(P.signal_pins || {})) {
+      const seen = new Set();
+      for (const o of os) {
+        if (seen.has(o.pin) && !grouped.has(sig)) bad.push(`CH32H417 ${pid}_${sig}: ${o.pin} listed twice`);
+        seen.add(o.pin);
+      }
+    }
+  }
+  assert.ok(bad.some(b => b.includes('CAN1_TX')), `expected the planted CAN1_TX duplicate to be caught, got: ${JSON.stringify(bad)}`);
+  console.log(`      planted refusal (ungrouped duplicate): ${bad.find(b => b.includes('CAN1_TX'))}`);
 });
 
 test('a part declares one mux shape, and the style matches the peripherals', () => {
