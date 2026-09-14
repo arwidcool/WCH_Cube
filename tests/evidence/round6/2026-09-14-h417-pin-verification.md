@@ -47,11 +47,13 @@ SDMMC + UHSIF — every peripheral on this part that routes a pad — independen
 Table 2-1-1. One real pin defect found and fixed (`FMC.RAS_N`). One reversed differential pair
 caught in a datasheet table before it could be copied into the file (`SerDes`). Four disagreements
 between the DS's own two tables remain genuinely unresolved and are recorded as `disagreements:`
-entries, not guessed at. Two FMC pad collisions on QFN68 are unresolved as to whether they are
-fixable or silicon-forced — say which is claimed, and be exact. UHSIF on QFN68 only reaches 5 of
-its 8 grouped ports under the RM's own recommended mapping — a real constraint for anyone
-choosing that package, not a bug, and not something the default now being set should be read as
-having fixed.**
+entries, not guessed at. Two FMC pad collisions on QFN68 (`PB11`, `PB12`) are now CONFIRMED
+silicon-forced — by AGENT-1's reorder-and-revert experiment, independently re-checked here against
+the engine and the file directly, not accepted on argument — and each pad's real contention is
+three claimants, not the two the original defect text named (see "What is NOT clean" §4). UHSIF on
+QFN68 only reaches 5 of its 8 grouped ports under the RM's own recommended mapping — a real
+constraint for anyone choosing that package, not a bug, and not something the default now being
+set should be read as having fixed.**
 
 ---
 
@@ -202,22 +204,65 @@ The clock remap (`UHSIF_CLK_RM`, a separate 4-way register field from `UHSIF_POR
 folded into `signal_groups:`; `CLK`'s four candidates are still a flat, ungrouped list — a smaller,
 separate open item from the port-bonding constraint above.
 
-### 4. Two FMC pad collisions on QFN68 — status genuinely open, corrected mid-cycle
+### 4. Two FMC pad collisions on QFN68 — now CONFIRMED silicon-forced, by experiment not argument
 
-`tests/h417_packages.test.js`'s `COLLISION_CEILING` for QFN68 dropped from 4 to 2 once UHSIF's
-`signal_groups:` landed (the two collisions that fell were both UHSIF's, confirmed by re-running
-the sweep, not assumed). **The two that remain: `FMC_A11` defaulting onto a pad shared with
-`FMC_A6` on `PB11`, and `FMC_A12` shared with `FMC_A7` on `PB12`, both under the `"Address
-lines" = "A0-A15"` choice.** The sweep's own classifier calls both **avoidable** (an alternative,
-unclaimed pad exists for each), not silicon-forced — but this has NOT been independently
-confirmed by AGENT-1's trace. **A specific correction, made by main, is recorded here rather than
-silently folded in**: an earlier summary of this file's status named a *different* pair
-(`PD11`/`PD12`) as the one AGENT-1 had traced silicon-forced; that trace was about different pins
-than the ones this ratchet actually holds (`PB11`/`PB12`). The two-kind split
-(silicon-forced-and-documented versus fixable-and-owed) that main wants for this ratchet is
-**not applied to this pair** until AGENT-1 states which kind `FMC_A11`/`PB11` and `FMC_A12`/`PB12`
-actually are, checked against Table 2-2-14 specifically, not inferred from a different pair's
-result.
+**Updated 2026-09-14, second pass, closing the open question section 4 previously ended on.**
+AGENT-1 traced both pairs by experiment (`5895ee2`, board `84f4b53`): reorder `signal_pins:` and
+revert, watch what the sweep reports. Result: QFN68 held at 2 collisions throughout (only the
+*label* on the colliding pad changed, to `PD11`/`PD12`), while QFN88 — which has no collision here
+today — regressed from 0 to 2 under the same reorder. A collision that survives every ordering of
+the same file, and that appears on a *different* package the instant the ordering changes, is not
+an artefact of which candidate the generator happened to try first; it is the pad budget itself.
+**Both pairs are silicon-forced, not fixable defects, and `tests/h417_packages.test.js` now says
+so by name** (`SILICON_FORCED_DOCUMENTED`, committed `b4154cb`), with `COLLISION_CEILING.QFN68`
+lowered from 2 to 0 now that both entries are accounted for individually instead of by count.
+
+**Independently re-verified before trusting the citation** (not taken on AGENT-1's word alone):
+queried the engine directly for QFN68's bonded-pad set — `PA10`, `PE4`, `PA11`, `PE5` are NOT
+bonded on QFN68; `PB11`, `PB12`, `PD11`, `PD12` ARE — and re-read `FMC`'s `signal_pins:` entries
+for every signal in the chain below directly out of `data/mcus/CH32H417.yaml`. `git show 5895ee2
+--stat` confirms the commit exists and its message matches what it is cited as saying.
+
+**The finding inside the finding, found while doing that independent re-check**: the sweep's own
+per-pad collision report **dedupes to two claimant names and was hiding a third on each pad**.
+The dedup is real and intentional (it keeps the ratchet's count stable across insertion order —
+see the guard added alongside it), but the auto-generated defect text upstream of this record
+under-reported what is actually contending for each pin:
+
+| Pad | Named in the original defect text | Actually contends (3 claimants each) | Why each loses its own alternate |
+|---|---|---|---|
+| `PB11` | `FMC_A6` + `FMC_A11` | `FMC_A6` + `FMC_A11` **+ `FMC_A20`** | `A6`'s only alternate is `PA10` — not bonded on QFN68. `A20`'s only alternate is `PE4` — not bonded on QFN68. Both have nowhere to go but `PB11`. `A11`'s only alternate, `PD11`, is itself `A16`'s *only* pad — claimed alongside `A11` the instant the widest `"Address lines" = "A0-A25"` choice is selected. |
+| `PB12` | `FMC_A7` + `FMC_A12` | `FMC_A7` + `FMC_A12` **+ `FMC_A21`** | Mirror of the above: `A7`'s only alternate `PA11` and `A21`'s only alternate `PE5` are both unbonded on QFN68; `A12`'s only alternate `PD12` collides with `A17` the same way `A11`'s collides with `A16`. |
+
+Confirmed directly against the file's own `signal_pins:` lists: `A11: [{pin:PB11,af:12},
+{pin:PD11,af:0}]`, `A16: [{pin:PD11,af:12}]` (one candidate, full stop), `A6: [{pin:PA10,af:10},
+{pin:PB11,af:0}]`, `A20: [{pin:PE4,af:12},{pin:PB11,af:2}]`, and the mirrored `A12`/`A17`/`A7`/`A21`
+rows. **The report a reader sees names two claimants per pad; the real contention is three.** This
+does not change the verdict (still silicon-forced either way — a 3-way collision with two dead
+alternates is if anything a stronger case for it, not a weaker one) but it does mean anyone reading
+only the collision-count summary, not this table, would under-state how tight QFN68's FMC address
+bus actually is. `SILICON_FORCED_DOCUMENTED`'s citation in `tests/h417_packages.test.js` now
+carries this table's claimant lists.
+
+---
+
+### 5. A third instance this cycle of one agent's uncommitted content riding inside another's commit
+
+Recorded per main's instruction, not because it needed fixing by me. AGENT-1's `STATUS.md`
+addition documenting the `5895ee2` trace above was, at the time AGENT-2 next committed, still
+sitting uncommitted in the working tree — and rode along inside AGENT-2's `f787852` commit rather
+than AGENT-1's own. This is the third time this cycle a shared-tree commit picked up another
+agent's file (the first two: my own bare-`git commit` incident earlier this session, and a
+separate case where my own already-modified file was swept into AGENT-1's commit). **The pattern
+in this third instance is different from the first two**: it is not caused by a bare `git commit`
+on the committer's side — AGENT-2's own commit-with-pathspec discipline may have been followed
+correctly — because the exposure is on the *other* side of the operation. **The pathspec-on-commit
+rule protects the committer's own commit from picking up strangers' staged changes; it does not
+protect a file that a different agent has already modified in the working tree from being staged
+and swept in by whoever commits next, pathspec or not, if that file is sitting there uncommitted
+when someone else's commit runs.** No git-history damage resulted (the content was correct and
+intended for landing, just attributed to the wrong commit), so this is a record of a process gap,
+not a repair.
 
 ---
 
@@ -229,8 +274,11 @@ result.
   2026-09-14T00:22Z; search those timestamps for the verbatim tool output this table summarises).
 - `node tests/run.js "h417_dedicated"` — ALL GREEN, 2 tests (SDMMC + UHSIF vs Table 2-2-12/16,
   plus the torn-name planted-break guard).
-- `node tests/run.js "h417_packages"` — ALL GREEN, 11 tests (collision sweep at the current
-  ceiling, both planted breaks).
+- `node tests/run.js "h417_packages"` — ALL GREEN, 12 tests as of `b4154cb` (collision sweep at
+  the current ceiling — `QFN68` now 0 — the two-kind split, the unused-exception guard on
+  `SILICON_FORCED_DOCUMENTED`, and all three planted breaks; the newest one — a stale `PB99` entry
+  in a scratch copy — watched failing first with `SILICON_FORCED_DOCUMENTED names a pad that never
+  matched a real collision this run: QFN68:PB99` (exit 1) before the scratch file was deleted).
 - `python tools/validate_mcu.py` — 0 errors, 73 warnings.
 - `python tools/coverage.py --gate` — 6 of 6.
 
