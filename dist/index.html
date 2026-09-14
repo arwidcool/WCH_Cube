@@ -10259,6 +10259,851 @@ peripherals:
         min: 64
         max: 127
         help: "ch32h417_wwdg.h:34. WWDG_Enable takes the counter as its argument, so this value and switching the watchdog on are the same call. Below 64 the counter has already underflowed and the part resets at once."
+dma:
+  # CH32H417 has TWO DMA controllers (DMA1, DMA2, RM ch.10, CH32H417RM.md:12100-13370)
+  # feeding a single 16-channel DMAMUX crossbar: DMAMUX channels 1-8 are DMA1's own
+  # channels 1-8, DMAMUX channels 9-16 are DMA2's own channels 1-8 (RM 10.2.3,
+  # CH32H417RM.md:12506-12514). Any of 123 named requests (RM Table 10-2,
+  # CH32H417RM.md:12515-12564) can be routed onto ANY of the 16 channels via
+  # DMA_MuxChannelConfig(DMA_MuxChannelx, DMA_Requestx) (ch32h417_dma.h:284,
+  # implementation ch32h417_dma.c:610-645) - unlike every other shipped part's small,
+  # silicon-fixed per-channel table, so this is `mux:`, not `requests:` (mechanism
+  # landed by AGENT-2, agents/BOARD.md 2026-09-14T06:44Z; this block is the data half).
+  #
+  # Confirmed against TWO real EVT examples read end to end, not just the header:
+  # USART_DMA/Common/hardware.c:118-191 (four channels, DMA_Cmd/USART_Cmd BEFORE
+  # DMA_MuxChannelConfig - see the ordering note on codegen's own mux-before-struct-fill
+  # choice, below) and DMA/DoubleBuffer_DMA/Common/hardware.c (double-buffer fields).
+  #
+  # DMA_InitTypeDef itself differs from every other shipped part's
+  # (ch32h417_dma.h:23-67): `DMA_Memory0BaseAddr` (not `DMA_MemoryBaseAddr` - this part
+  # has a SECOND memory pointer, `DMA_Memory1BaseAddr`, for double-buffer mode) and a
+  # 4th data-width option (`_256`, a genuine 256-bit/32-byte transfer per DMAy_CFGRx
+  # PSIZE/MSIZE `11` (RM:12979-12996), not a burst-count trick). Both are new
+  # `channel_params:` rows below - no engine change needed for either (AGENT-2,
+  # agents/BOARD.md 2026-09-14T06:44Z, items 1-2).
+  #
+  # ORDERING: codegen (app/engine/codegen.js dmaSection()) emits DMA_MuxChannelConfig
+  # BEFORE the DMA_InitTypeDef struct fill and DMA_Cmd, which is NOT the order either
+  # real EVT example uses (both call DMA_Init -> DMA_Cmd(ENABLE) -> ... ->
+  # DMA_MuxChannelConfig -> the peripheral's own DMA-request-enable call, e.g.
+  # USART_DMACmd/TIM_DMACmd). Checked this against the RM before trusting either
+  # order: DMAMUX1_4_CFGR's CHANNELx_MUX field is 0-INDEXED (RM:13209-13228 -
+  # "0000000: DMA request input 1") and ch32h417_dma.c:625 writes `DMA_Requestx - 1`,
+  # so an UNCONFIGURED channel's mux resets to 0 = request 1 = TIM1_CH1, not "no
+  # request". Both real examples enable their channel (DMA_Cmd) BEFORE routing it,
+  # which is only safe because in both cases the peripheral generating TIM1_CH1's
+  # request (TIM1) is not yet counting at that point (USART_DMA: TIM1 never
+  # initialised at all; DoubleBuffer_DMA: TIM_Cmd(TIM1, ENABLE) is the LAST call,
+  # after DMA_MuxChannelConfig). Configuring the mux FIRST, as codegen does, closes
+  # that window outright instead of relying on TIM1 happening to be silent - SAFER
+  # than the vendor's own order, not merely "still safe" as originally flagged for
+  # review. No RM text states an ordering requirement either way.
+  - controller: DMA1
+    init_struct: DMA_InitTypeDef                    # ch32h417_dma.h:23-67
+    register:
+      name: DMA_CFGRx
+      address: 0x40020008          # R32_DMA1_CFGR1, RM Table 10-4 (CH32H417RM.md:12590); offset 0x08+(x-1)*20
+      stride: 20
+      channel_macro: "DMA1_Channel$CH"
+      fields:                      # RM 10.3.3, CH32H417RM.md:12915-13054
+        EN:            { lsb: 0,  bits: 1 }
+        TCIE:          { lsb: 1,  bits: 1 }
+        HTIE:          { lsb: 2,  bits: 1 }
+        TEIE:          { lsb: 3,  bits: 1 }
+        DIR:           { lsb: 4,  bits: 1 }
+        CIRC:          { lsb: 5,  bits: 1 }
+        PINC:          { lsb: 6,  bits: 1 }
+        MINC:          { lsb: 7,  bits: 1 }
+        PSIZE:         { lsb: 8,  bits: 2 }
+        MSIZE:         { lsb: 10, bits: 2 }
+        PL:            { lsb: 12, bits: 2 }
+        MEM2MEM:       { lsb: 14, bits: 1 }
+        DOUBLE_MODE:   { lsb: 15, bits: 1 }   # new on this part - RM:12956-12962
+        FLAG_CUR_MEM:  { lsb: 16, bits: 1 }   # new on this part - RM:12937-12955 (RW to pick the start memory; hardware-driven status flag once the channel is enabled)
+    mux:
+      base: 0             # DMA1's channels are global mux channels 1-8 (RM:12513-12514)
+      count: 8
+      sdk_call: DMA_MuxChannelConfig        # ch32h417_dma.h:284
+      channel_macro: "DMA_MuxChannel$CH"    # ch32h417_dma.h:246-261 (global channel number, 0x00-0x0F);
+                                             # confirmed against real calls, e.g.
+                                             # DMA_MuxChannelConfig(DMA_MuxChannel7, 87) in
+                                             # USART_DMA/Common/hardware.c:188 - never a bare integer
+      requests:          # RM Table 10-2, CH32H417RM.md:12515-12564. Same catalogue on DMA2
+                          # below - the RM states one shared request list for the whole crossbar,
+                          # not a per-controller subset.
+        TIM1_CH1: 1
+        TIM1_CH2: 2
+        TIM1_CH3: 3
+        TIM1_CH4: 4
+        TIM1_UP: 5
+        TIM1_COM: 6
+        TIM1_TRIG: 7
+        TIM2_CH1: 8
+        TIM2_CH2: 9
+        TIM2_CH3: 10
+        TIM2_CH4: 11
+        TIM2_UP: 12
+        TIM2_TRIG: 13
+        TIM3_CH1: 14
+        TIM3_CH2: 15
+        TIM3_CH3: 16
+        TIM3_CH4: 17
+        TIM3_UP: 18
+        TIM3_TRIG: 19
+        TIM4_CH1: 20
+        TIM4_CH2: 21
+        TIM4_CH3: 22
+        TIM4_CH4: 23
+        TIM4_UP: 24
+        TIM4_TRIG: 25
+        TIM5_CH1: 26
+        TIM5_CH2: 27
+        TIM5_CH3: 28
+        TIM5_CH4: 29
+        TIM5_UP: 30
+        TIM5_TRIG: 31
+        TIM8_CH1: 32
+        TIM8_CH2: 33
+        TIM8_CH3: 34
+        TIM8_CH4: 35
+        TIM8_UP: 36
+        TIM8_COM: 37
+        TIM8_TRIG: 38
+        TIM9_CH1: 39
+        TIM9_CH2: 40
+        TIM9_CH3: 41
+        TIM9_CH4: 42
+        TIM9_UP: 43
+        TIM9_TRIG: 44
+        TIM10_CH1: 45
+        TIM10_CH2: 46
+        TIM10_CH3: 47
+        TIM10_CH4: 48
+        TIM10_UP: 49
+        TIM10_TRIG: 50
+        TIM11_CH1: 51
+        TIM11_CH2: 52
+        TIM11_CH3: 53
+        TIM11_CH4: 54
+        TIM11_UP: 55
+        TIM11_TRIG: 56
+        TIM12_CH1: 57
+        TIM12_CH2: 58
+        TIM12_CH3: 59
+        TIM12_CH4: 60
+        TIM12_UP: 61
+        TIM12_TRIG: 62
+        SPI1_TX: 63
+        SPI1_RX: 64
+        SPI2_TX: 65
+        SPI2_RX: 66
+        SPI3_TX: 67
+        SPI3_RX: 68
+        SPI4_TX: 69
+        SPI4_RX: 70
+        QSPI1_DMA: 71
+        QSPI2_DMA: 72
+        I2C1_TX: 73
+        I2C1_RX: 74
+        I2C2_TX: 75
+        I2C2_RX: 76
+        I2C3_TX: 77
+        I2C3_RX: 78
+        I2C4_TX: 79
+        I2C4_RX: 80
+        I3C_RS: 81        # RM Table 10-2 abbreviates I3C's four DMA requests; full names
+        I3C_TC: 82        # (I3C_RS_DMA/I3C_TC_DMA/I3C_TX_DMA/I3C_RX_DMA) are in the I3C
+        I3C_TX: 83        # chapter itself, CH32H417RM.md:25558-25562. Id 84 is printed
+        I3C_RX: 84        # "I3X_RX" in Table 10-2's own markdown conversion - corrected to
+                           # I3C_RX against that second citation (not a second real name).
+        USART1_TX: 85
+        USART1_RX: 86
+        USART2_TX: 87
+        USART2_RX: 88
+        USART3_TX: 89
+        USART3_RX: 90
+        USART4_TX: 91
+        USART4_RX: 92
+        USART5_TX: 93
+        USART5_RX: 94
+        USART6_TX: 95
+        USART6_RX: 96
+        USART7_TX: 97
+        USART7_RX: 98
+        USART8_TX: 99
+        USART8_RX: 100
+        SWPMI_TX: 101
+        SWPMI_RX: 102
+        DAC1: 103          # DAC's two channels (DAC_Channel_1/2, ch32h417_dac.h:90-91) - one
+        DAC2: 104          # real peripheral ("DAC" in this file), not two instances
+        DFSDM_DMA0: 107
+        DFSDM_DMA1: 108
+        SDIO: 111
+        SAI_A_TX: 112
+        SAI_A_RX: 113
+        SAI_B_TX: 114
+        SAI_B_RX: 115
+        ADC1: 120
+        ADC2: 121
+        TIM6_UP: 122
+        TIM7_UP: 123
+        # Ids 105,106,109,110,116-119 are omitted: RM Table 10-2 marks them "Reserved",
+        # so offering them as a UI choice would be a fake request nothing drives.
+    channel_params:
+      - key: dir
+        name: Direction
+        type: enum
+        group: Basic
+        field: DIR
+        sdk_field: DMA_DIR
+        default: Peripheral to memory
+        options:
+          - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+          - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+        help: "DMA_CFGRx DIR, bit 4 (RM:13018-13022). Same encoding as every other shipped part; ch32h417_dma.h keeps the SPL's PeripheralSRC/PeripheralDST naming."
+      - key: priority
+        name: Priority
+        type: enum
+        group: Basic
+        field: PL
+        sdk_field: DMA_Priority
+        default: Low
+        options:
+          - { name: Low,       value: 0, sdk: DMA_Priority_Low }
+          - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
+          - { name: High,      value: 2, sdk: DMA_Priority_High }
+          - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
+        help: "DMA_CFGRx PL[13:12] (RM:12970-12978). Ties broken by channel number, lowest wins (RM 10.1)."
+      - key: mode
+        name: Mode
+        type: enum
+        group: Basic
+        field: CIRC
+        sdk_field: DMA_Mode
+        default: Normal
+        options:
+          - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
+          - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
+        help: "DMA_CFGRx CIRC, bit 5 (RM:13011-13017). Circular is not available with memory-to-memory (RM 10.2, same rule as every other shipped part)."
+      - key: pinc
+        name: Increment peripheral address
+        type: bool
+        group: Basic
+        field: PINC
+        sdk_field: DMA_PeripheralInc
+        default: false
+        sdk_enabled: DMA_PeripheralInc_Enable
+        sdk_disabled: DMA_PeripheralInc_Disable
+        help: "DMA_CFGRx PINC, bit 6 (RM:13004-13010)."
+      - key: minc
+        name: Increment memory address
+        type: bool
+        group: Basic
+        field: MINC
+        sdk_field: DMA_MemoryInc
+        default: true
+        sdk_enabled: DMA_MemoryInc_Enable
+        sdk_disabled: DMA_MemoryInc_Disable
+        help: "DMA_CFGRx MINC, bit 7 (RM:12997-13003)."
+      - key: psize
+        name: Peripheral data width
+        type: enum
+        group: Basic
+        field: PSIZE
+        sdk_field: DMA_PeripheralDataSize
+        default: Byte
+        options:
+          - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
+          - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
+          - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
+          - { name: 256-bit,   value: 3, sdk: DMA_PeripheralDataSize_256 }
+        help: "DMA_CFGRx PSIZE[9:8] (RM:12988-12996): 00 8-bit, 01 16-bit, 10 32-bit, 11 256-bit. The 4th option is new on this part (ch32h417_dma.h:85) - a genuine 256-bit/32-byte transfer, not a burst-count trick."
+      - key: msize
+        name: Memory data width
+        type: enum
+        group: Basic
+        field: MSIZE
+        sdk_field: DMA_MemoryDataSize
+        default: Byte
+        options:
+          - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
+          - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
+          - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
+          - { name: 256-bit,   value: 3, sdk: DMA_MemoryDataSize_256 }
+        help: "DMA_CFGRx MSIZE[11:10], same encoding as PSIZE (ch32h417_dma.h:91)."
+      - key: m2m
+        name: Memory to memory
+        type: bool
+        group: Advanced
+        field: MEM2MEM
+        sdk_field: DMA_M2M
+        default: false
+        sdk_enabled: DMA_M2M_Enable
+        sdk_disabled: DMA_M2M_Disable
+        help: "DMA_CFGRx MEM2MEM, bit 14 (RM:12963-12969). A hardware request must leave this off."
+      - key: buffer_mode
+        name: Double-buffer mode
+        type: bool
+        group: Advanced
+        field: DOUBLE_MODE
+        sdk_field: DMA_BufferMode
+        default: false
+        sdk_enabled: DMA_DoubleBufferMode
+        sdk_disabled: DMA_SingleBufferMode
+        help: "DMA_CFGRx DOUBLE_MODE, bit 15 (RM:12956-12962, new on this part). Enabling it auto-enters circular mode and switches between DMA_MADDRx/DMA_M1ADDRx after each cycle (RM 10.2.4). DMA_Memory1BaseAddr (the second pointer) is application-owned, same as DMA_Memory0BaseAddr - see codegen's own USER ACTION comment."
+      - key: double_buffer_start
+        name: Double-buffer start memory
+        type: enum
+        group: Advanced
+        field: FLAG_CUR_MEM
+        sdk_field: DMA_DoubleBuffer_StartMemory
+        default: Memory 0
+        options:
+          - { name: Memory 0, value: 0, sdk: DMA_DoubleBufferMode_Memory_0 }
+          - { name: Memory 1, value: 1, sdk: DMA_DoubleBufferMode_Memory_1 }
+        when: { param: buffer_mode, equals: true }
+        help: "DMA_CFGRx FLAG_CUR_MEM, bit 16 (RM:12937-12955, new on this part). Which memory pointer the channel starts from; only meaningful with double-buffer mode on (DoubleBuffer_DMA/Common/hardware.c:119 sets DMA_DoubleBufferMode_Memory_0)."
+    request_defaults:
+      TIM1_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_COM: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_COM: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI1_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI1_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SPI2_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI2_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SPI3_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI3_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SPI4_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI4_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      QSPI1_DMA: { dir: Peripheral to memory, psize: Word, msize: Word }
+      QSPI2_DMA: { dir: Peripheral to memory, psize: Word, msize: Word }
+      I2C1_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C1_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I2C2_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C2_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I2C3_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C3_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I2C4_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C4_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I3C_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I3C_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART1_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART1_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART2_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART2_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART3_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART3_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART4_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART4_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART5_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART5_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART6_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART6_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART7_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART7_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART8_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART8_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      SWPMI_TX: { dir: Memory to peripheral, psize: Word, msize: Word }
+      SWPMI_RX: { dir: Peripheral to memory, psize: Word, msize: Word }
+      DAC1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word, mode: Circular }
+      DAC2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word, mode: Circular }
+      DFSDM_DMA0: { dir: Peripheral to memory, psize: Word, msize: Word }
+      DFSDM_DMA1: { dir: Peripheral to memory, psize: Word, msize: Word }
+      SDIO: { dir: Peripheral to memory, psize: Word, msize: Word }
+      SAI_A_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SAI_A_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SAI_B_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SAI_B_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      ADC1: { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Normal }
+      ADC2: { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Normal }
+      TIM6_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM7_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      # I3C_RS/I3C_TC (ids 81-82) deliberately have no defaults here: neither shipped
+      # I3C DMA example (I3C_DMA_Controller, I3C_DMA_Target) configures a channel
+      # against either, so a direction/width would be invented, not extracted. They
+      # still route (mux.requests above), and validate_mcu.py only WARNS about a
+      # request with no request_defaults, it does not refuse the file.
+    request_notes:
+      TIM: >
+        Every TIMx_CH*/UP/COM/TRIG request defaults to Memory to peripheral, Half Word,
+        confirmed on THIS part (not carried over from another): DoubleBuffer_DMA's
+        TIM1_DMA_Init (Common/hardware.c:111-112) sets
+        DMA_PeripheralDataSize_HalfWord/DMA_MemoryDataSize_HalfWord for a TIM1 channel
+        feeding TIM1_CH2CVR. Input capture is the same request line read the other way;
+        nothing in the data can decide which the user wants, so the default is the
+        common (PWM/compare) case and the user flips `dir` for capture.
+      SPI: >
+        Half Word on both sides, confirmed on THIS part - SPI_DMA/Common/hardware.c:144-145,178-179.
+      I2C: >
+        Byte on both sides, confirmed on THIS part - I2C_DMA/Common/hardware.c:97-98,131-132.
+      I3C: >
+        Byte on both sides for TX/RX, confirmed on THIS part -
+        I3C_DMA_Controller/Common/hardware.c:210-215 (TX),:244-249 (RX).
+      USART: >
+        Byte on both sides, confirmed on THIS part - USART_DMA/Common/hardware.c:140-151
+        (TX),:154-158 (RX).
+      QSPI: >
+        Word, confirmed on THIS part - QSPI_FLASH_DMA/Common/hardware.c:182-209. Each
+        QSPIn_DMA request is genuinely bidirectional (the same example uses BOTH
+        DMA_DIR_PeripheralSRC and _PeripheralDST on different calls) - default is the
+        read direction, the user flips it for a write.
+      SWPMI: >
+        Word, confirmed on THIS part - SWPMI_MultiBUffering/Common/hardware.c:79-84,112-117.
+      DAC: >
+        Memory to peripheral, Half Word, Circular, confirmed on THIS part -
+        DAC_DMA/Common/hardware.c:62-70 (targets DAC->R12BDHR1, a 32-bit register whose
+        DMA transfer is nonetheless configured Half Word by the vendor's own example).
+      DFSDM: >
+        Peripheral to memory, Word, confirmed on THIS part -
+        DFSDM_InternalStandardMode/Common/hardware.c:43-48.
+      SDIO: >
+        Word, confirmed on THIS part - SD_DMA_Config(), SDIO_SD/Common/sdio.c:2007-2021.
+        Genuinely bidirectional (the direction is the function's own argument, called
+        both ways at sdio.c:726/906 read and :1120/1362 write) - default is read.
+      SAI: >
+        Half Word, TX direction confirmed on THIS part - SAI_Play/Common/hardware.c:143-148.
+        RX is the symmetric case (not independently exercised by the one shipped SAI
+        example, which only plays audio out).
+      ADC: >
+        Peripheral to memory, Half Word, Normal, confirmed on THIS part -
+        ADC_DMA/Common/hardware.c:114-122. Differs from CH32V006's own ADC1 default
+        (Circular there) - this part's own shipped example uses Normal, and the two
+        parts' data are not averaged; CH32V006's stays as its own citation states.
+  - controller: DMA2
+    init_struct: DMA_InitTypeDef
+    register:
+      name: DMA_CFGRx
+      address: 0x40020408          # R32_DMA2_CFGR1, RM Table 10-5 (CH32H417RM.md:12636); DMA1's own block + 0x400 (RM:12918's (y-1)*0x400 term)
+      stride: 20
+      channel_macro: "DMA2_Channel$CH"
+      fields:                      # identical layout to DMA1's - RM 10.3.3 covers both (x=1..8, y=1/2)
+        EN:            { lsb: 0,  bits: 1 }
+        TCIE:          { lsb: 1,  bits: 1 }
+        HTIE:          { lsb: 2,  bits: 1 }
+        TEIE:          { lsb: 3,  bits: 1 }
+        DIR:           { lsb: 4,  bits: 1 }
+        CIRC:          { lsb: 5,  bits: 1 }
+        PINC:          { lsb: 6,  bits: 1 }
+        MINC:          { lsb: 7,  bits: 1 }
+        PSIZE:         { lsb: 8,  bits: 2 }
+        MSIZE:         { lsb: 10, bits: 2 }
+        PL:            { lsb: 12, bits: 2 }
+        MEM2MEM:       { lsb: 14, bits: 1 }
+        DOUBLE_MODE:   { lsb: 15, bits: 1 }
+        FLAG_CUR_MEM:  { lsb: 16, bits: 1 }
+    mux:
+      base: 8              # DMA2's channels are global mux channels 9-16 (RM:12513-12514)
+      count: 8
+      sdk_call: DMA_MuxChannelConfig
+      channel_macro: "DMA_MuxChannel$CH"
+      requests:            # SAME catalogue as DMA1's above - RM Table 10-2 names one shared
+                            # request list for the whole 16-channel crossbar, not two.
+        TIM1_CH1: 1
+        TIM1_CH2: 2
+        TIM1_CH3: 3
+        TIM1_CH4: 4
+        TIM1_UP: 5
+        TIM1_COM: 6
+        TIM1_TRIG: 7
+        TIM2_CH1: 8
+        TIM2_CH2: 9
+        TIM2_CH3: 10
+        TIM2_CH4: 11
+        TIM2_UP: 12
+        TIM2_TRIG: 13
+        TIM3_CH1: 14
+        TIM3_CH2: 15
+        TIM3_CH3: 16
+        TIM3_CH4: 17
+        TIM3_UP: 18
+        TIM3_TRIG: 19
+        TIM4_CH1: 20
+        TIM4_CH2: 21
+        TIM4_CH3: 22
+        TIM4_CH4: 23
+        TIM4_UP: 24
+        TIM4_TRIG: 25
+        TIM5_CH1: 26
+        TIM5_CH2: 27
+        TIM5_CH3: 28
+        TIM5_CH4: 29
+        TIM5_UP: 30
+        TIM5_TRIG: 31
+        TIM8_CH1: 32
+        TIM8_CH2: 33
+        TIM8_CH3: 34
+        TIM8_CH4: 35
+        TIM8_UP: 36
+        TIM8_COM: 37
+        TIM8_TRIG: 38
+        TIM9_CH1: 39
+        TIM9_CH2: 40
+        TIM9_CH3: 41
+        TIM9_CH4: 42
+        TIM9_UP: 43
+        TIM9_TRIG: 44
+        TIM10_CH1: 45
+        TIM10_CH2: 46
+        TIM10_CH3: 47
+        TIM10_CH4: 48
+        TIM10_UP: 49
+        TIM10_TRIG: 50
+        TIM11_CH1: 51
+        TIM11_CH2: 52
+        TIM11_CH3: 53
+        TIM11_CH4: 54
+        TIM11_UP: 55
+        TIM11_TRIG: 56
+        TIM12_CH1: 57
+        TIM12_CH2: 58
+        TIM12_CH3: 59
+        TIM12_CH4: 60
+        TIM12_UP: 61
+        TIM12_TRIG: 62
+        SPI1_TX: 63
+        SPI1_RX: 64
+        SPI2_TX: 65
+        SPI2_RX: 66
+        SPI3_TX: 67
+        SPI3_RX: 68
+        SPI4_TX: 69
+        SPI4_RX: 70
+        QSPI1_DMA: 71
+        QSPI2_DMA: 72
+        I2C1_TX: 73
+        I2C1_RX: 74
+        I2C2_TX: 75
+        I2C2_RX: 76
+        I2C3_TX: 77
+        I2C3_RX: 78
+        I2C4_TX: 79
+        I2C4_RX: 80
+        I3C_RS: 81
+        I3C_TC: 82
+        I3C_TX: 83
+        I3C_RX: 84
+        USART1_TX: 85
+        USART1_RX: 86
+        USART2_TX: 87
+        USART2_RX: 88
+        USART3_TX: 89
+        USART3_RX: 90
+        USART4_TX: 91
+        USART4_RX: 92
+        USART5_TX: 93
+        USART5_RX: 94
+        USART6_TX: 95
+        USART6_RX: 96
+        USART7_TX: 97
+        USART7_RX: 98
+        USART8_TX: 99
+        USART8_RX: 100
+        SWPMI_TX: 101
+        SWPMI_RX: 102
+        DAC1: 103
+        DAC2: 104
+        DFSDM_DMA0: 107
+        DFSDM_DMA1: 108
+        SDIO: 111
+        SAI_A_TX: 112
+        SAI_A_RX: 113
+        SAI_B_TX: 114
+        SAI_B_RX: 115
+        ADC1: 120
+        ADC2: 121
+        TIM6_UP: 122
+        TIM7_UP: 123
+    # Same channel_params/request_defaults shape as DMA1 - one shared DMA_InitTypeDef,
+    # one shared request catalogue, nothing about the struct or the widths differs
+    # between the two controllers (RM 10.3.3 covers both with the same field layout).
+    channel_params:
+      - key: dir
+        name: Direction
+        type: enum
+        group: Basic
+        field: DIR
+        sdk_field: DMA_DIR
+        default: Peripheral to memory
+        options:
+          - { name: Peripheral to memory, value: 0, sdk: DMA_DIR_PeripheralSRC }
+          - { name: Memory to peripheral, value: 1, sdk: DMA_DIR_PeripheralDST }
+        help: "DMA_CFGRx DIR, bit 4 (RM:13018-13022)."
+      - key: priority
+        name: Priority
+        type: enum
+        group: Basic
+        field: PL
+        sdk_field: DMA_Priority
+        default: Low
+        options:
+          - { name: Low,       value: 0, sdk: DMA_Priority_Low }
+          - { name: Medium,    value: 1, sdk: DMA_Priority_Medium }
+          - { name: High,      value: 2, sdk: DMA_Priority_High }
+          - { name: Very high, value: 3, sdk: DMA_Priority_VeryHigh }
+        help: "DMA_CFGRx PL[13:12] (RM:12970-12978)."
+      - key: mode
+        name: Mode
+        type: enum
+        group: Basic
+        field: CIRC
+        sdk_field: DMA_Mode
+        default: Normal
+        options:
+          - { name: Normal,   value: 0, sdk: DMA_Mode_Normal }
+          - { name: Circular, value: 1, sdk: DMA_Mode_Circular }
+        help: "DMA_CFGRx CIRC, bit 5 (RM:13011-13017)."
+      - key: pinc
+        name: Increment peripheral address
+        type: bool
+        group: Basic
+        field: PINC
+        sdk_field: DMA_PeripheralInc
+        default: false
+        sdk_enabled: DMA_PeripheralInc_Enable
+        sdk_disabled: DMA_PeripheralInc_Disable
+        help: "DMA_CFGRx PINC, bit 6 (RM:13004-13010)."
+      - key: minc
+        name: Increment memory address
+        type: bool
+        group: Basic
+        field: MINC
+        sdk_field: DMA_MemoryInc
+        default: true
+        sdk_enabled: DMA_MemoryInc_Enable
+        sdk_disabled: DMA_MemoryInc_Disable
+        help: "DMA_CFGRx MINC, bit 7 (RM:12997-13003)."
+      - key: psize
+        name: Peripheral data width
+        type: enum
+        group: Basic
+        field: PSIZE
+        sdk_field: DMA_PeripheralDataSize
+        default: Byte
+        options:
+          - { name: Byte,      value: 0, sdk: DMA_PeripheralDataSize_Byte }
+          - { name: Half Word, value: 1, sdk: DMA_PeripheralDataSize_HalfWord }
+          - { name: Word,      value: 2, sdk: DMA_PeripheralDataSize_Word }
+          - { name: 256-bit,   value: 3, sdk: DMA_PeripheralDataSize_256 }
+        help: "DMA_CFGRx PSIZE[9:8] (RM:12988-12996)."
+      - key: msize
+        name: Memory data width
+        type: enum
+        group: Basic
+        field: MSIZE
+        sdk_field: DMA_MemoryDataSize
+        default: Byte
+        options:
+          - { name: Byte,      value: 0, sdk: DMA_MemoryDataSize_Byte }
+          - { name: Half Word, value: 1, sdk: DMA_MemoryDataSize_HalfWord }
+          - { name: Word,      value: 2, sdk: DMA_MemoryDataSize_Word }
+          - { name: 256-bit,   value: 3, sdk: DMA_MemoryDataSize_256 }
+        help: "DMA_CFGRx MSIZE[11:10] (ch32h417_dma.h:91)."
+      - key: m2m
+        name: Memory to memory
+        type: bool
+        group: Advanced
+        field: MEM2MEM
+        sdk_field: DMA_M2M
+        default: false
+        sdk_enabled: DMA_M2M_Enable
+        sdk_disabled: DMA_M2M_Disable
+        help: "DMA_CFGRx MEM2MEM, bit 14 (RM:12963-12969)."
+      - key: buffer_mode
+        name: Double-buffer mode
+        type: bool
+        group: Advanced
+        field: DOUBLE_MODE
+        sdk_field: DMA_BufferMode
+        default: false
+        sdk_enabled: DMA_DoubleBufferMode
+        sdk_disabled: DMA_SingleBufferMode
+        help: "DMA_CFGRx DOUBLE_MODE, bit 15 (RM:12956-12962)."
+      - key: double_buffer_start
+        name: Double-buffer start memory
+        type: enum
+        group: Advanced
+        field: FLAG_CUR_MEM
+        sdk_field: DMA_DoubleBuffer_StartMemory
+        default: Memory 0
+        options:
+          - { name: Memory 0, value: 0, sdk: DMA_DoubleBufferMode_Memory_0 }
+          - { name: Memory 1, value: 1, sdk: DMA_DoubleBufferMode_Memory_1 }
+        when: { param: buffer_mode, equals: true }
+        help: "DMA_CFGRx FLAG_CUR_MEM, bit 16 (RM:12937-12955)."
+    request_defaults:
+      TIM1_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_COM: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM1_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM2_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM3_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM4_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM5_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_COM: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM8_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM9_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM10_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM11_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH3: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_CH4: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM12_TRIG: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI1_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI1_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SPI2_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI2_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SPI3_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI3_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SPI4_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SPI4_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      QSPI1_DMA: { dir: Peripheral to memory, psize: Word, msize: Word }
+      QSPI2_DMA: { dir: Peripheral to memory, psize: Word, msize: Word }
+      I2C1_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C1_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I2C2_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C2_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I2C3_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C3_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I2C4_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I2C4_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      I3C_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      I3C_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART1_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART1_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART2_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART2_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART3_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART3_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART4_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART4_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART5_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART5_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART6_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART6_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART7_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART7_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      USART8_TX: { dir: Memory to peripheral, psize: Byte, msize: Byte }
+      USART8_RX: { dir: Peripheral to memory, psize: Byte, msize: Byte }
+      SWPMI_TX: { dir: Memory to peripheral, psize: Word, msize: Word }
+      SWPMI_RX: { dir: Peripheral to memory, psize: Word, msize: Word }
+      DAC1: { dir: Memory to peripheral, psize: Half Word, msize: Half Word, mode: Circular }
+      DAC2: { dir: Memory to peripheral, psize: Half Word, msize: Half Word, mode: Circular }
+      DFSDM_DMA0: { dir: Peripheral to memory, psize: Word, msize: Word }
+      DFSDM_DMA1: { dir: Peripheral to memory, psize: Word, msize: Word }
+      SDIO: { dir: Peripheral to memory, psize: Word, msize: Word }
+      SAI_A_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SAI_A_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      SAI_B_TX: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      SAI_B_RX: { dir: Peripheral to memory, psize: Half Word, msize: Half Word }
+      ADC1: { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Normal }
+      ADC2: { dir: Peripheral to memory, psize: Half Word, msize: Half Word, mode: Normal }
+      TIM6_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
+      TIM7_UP: { dir: Memory to peripheral, psize: Half Word, msize: Half Word }
 nvic:
   controller: PFIC
   scheme:
@@ -27782,10 +28627,15 @@ function periphSection() {
 //  channel handle from `dma.register.channel_macro`. A channel the user booked
 //  twice is an #error in cSource(), not last-wins code.
 //
-//  DMA_PeripheralBaseAddr, DMA_MemoryBaseAddr and DMA_BufferSize are deliberately
-//  absent from the data: they are the application's buffer, not a configuration
-//  choice, and CubeMX does not ask for them either. They are emitted as named TODOs
-//  so the file says what the application still has to fill in.
+//  DMA_PeripheralBaseAddr, the memory address field(s) and DMA_BufferSize are
+//  deliberately absent from the data: they are the application's buffer, not a
+//  configuration choice, and CubeMX does not ask for them either. Emitted as a named
+//  USER ACTION comment, not a TODO, so the file says what the application still has
+//  to fill in - and the FIELD NAMES it names are derived per part, not one fixed set:
+//  CH32H417's `DMA_InitTypeDef` splits the memory pointer into `DMA_Memory0BaseAddr`
+//  / `DMA_Memory1BaseAddr` (double-buffer mode); every other shipped part has one
+//  plain `DMA_MemoryBaseAddr`. See the comment beside `doubleBuffer` below for what
+//  in the data tells the two apart.
 
 // `controller` is the raw `M.dma` entry (`dmaControllerFor()`'s return), not a
 // name — CH32H417's two controllers each have their OWN `register.channel_macro`
@@ -27883,10 +28733,33 @@ function dmaSection() {
     // fails CI on that. A buffer address is not missing from the data - it is not a
     // configuration choice at all, and CubeMX does not ask for it either. Marking it
     // TODO would make every project with a DMA request fail --strict forever.
+    //
+    // The FIELD NAMES are not the same on every part: `DMA_InitTypeDef` reuses one type
+    // name for two different C shapes (ch32h417_dma.h:23-67 vs. every other shipped
+    // part's, e.g. ch32v00X_dma.h:23-40) - CH32H417 has `DMA_Memory0BaseAddr` +
+    // `DMA_Memory1BaseAddr` (a second pointer, for double-buffer mode), every other part
+    // has one plain `DMA_MemoryBaseAddr`. main caught this hardcoded to the single-buffer
+    // names on CH32H417 (board 2026-09-14): the comment told the user to fill in a field
+    // that does not exist and never mentioned the one they need. Derived from the data,
+    // not hardcoded again: `channel_params`' own `DMA_BufferMode` row only exists on a
+    // part whose struct HAS the split Memory0/Memory1 pair (the same fact the data's own
+    // comment already states - CH32H417.yaml:9391/9665, "DMA_Memory1BaseAddr ... same as
+    // DMA_Memory0BaseAddr - see codegen's own USER ACTION comment") - so its presence in
+    // THIS request's own `defs` is the signal, not a part-name list this function would
+    // have to be told to update by hand for the next part that adds the same shape.
+    const doubleBuffer = defs.some(d => d.sdk_field === 'DMA_BufferMode');
     L.push('        /* USER ACTION: the application owns the addresses and the length —');
-    L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_MemoryBaseAddr and`);
-    L.push('           .DMA_BufferSize before this call. They are a buffer, not a');
-    L.push('           configuration choice, so the configurator does not ask for them. */');
+    if (doubleBuffer) {
+      L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_Memory0BaseAddr and`);
+      L.push('           .DMA_BufferSize before this call (plus .DMA_Memory1BaseAddr too,');
+      L.push('           if DMA_BufferMode above turns double-buffer mode on). They are a');
+      L.push('           buffer, not a configuration choice, so the configurator does not');
+      L.push('           ask for them. */');
+    } else {
+      L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_MemoryBaseAddr and`);
+      L.push('           .DMA_BufferSize before this call. They are a buffer, not a');
+      L.push('           configuration choice, so the configurator does not ask for them. */');
+    }
     if (handle && spec.deinit) L.push(`        ${spec.deinit}(${handle});`);
     if (spec.fn && handle) {
       L.push(`        ${spec.fn}(${handle}, &${varName});`);
