@@ -18,6 +18,28 @@ consistent with itself, `coverage.py` proves it accounts for everything the sour
 file can pass the first and fail the second — that is how 207 dead pads shipped on one part —
 so a part is not done until both exit 0.
 
+## Quote `On`/`Off`/`Yes`/`No`/`y`/`n`, and anything shaped like `HH:MM` — always
+
+**Every Python gate in this repository (`validate_mcu.py`, `coverage.py`,
+`verify_sdk_names.py`, every `*_selftest.py`) reads this file with `yaml.safe_load`
+(PyYAML, YAML 1.1). The app reads the SAME bytes with the vendored `js-yaml`'s default
+schema (YAML 1.2).** 1.1's implicit typing is wider than 1.2's: an UNQUOTED
+`On`/`Off`/`Yes`/`No`/`y`/`n`/`True`/`False` (any case) resolves to a BOOLEAN in 1.1 and
+stays a plain STRING in 1.2; a bare scalar shaped like `HH:MM` resolves to a sexagesimal
+NUMBER in 1.1 (`1:30` → 90) and stays a string in 1.2. Write `name: On` where the schema
+wants a display name and Python reads `True` while the app reads `"On"` — self-consistent
+within each language, which is exactly why it is invisible until a value crosses from one
+side to the other, and every green Python gate this repository has ever run has been
+validating the 1.1 reading while the product ships the 1.2 one.
+
+**The fix is a quoted string, always — `name: "On"`, `default: "Off"` — never an
+exemption.** `tests/cross_loader.test.js` (`node tools/cross_loader_check.mjs` to run it
+directly) diffs a real `yaml.safe_load` parse against a real `js-yaml` parse of every
+shipped file and fails on ANY new divergence; its `KNOWN_DIVERGENCES` list exists only for
+what has not been fixed yet; adding to it instead of quoting the value is fixing the wrong
+file. Found on OPA's `fb`/`pgadif`/`hs` (CH32H417) and `PWR.awu_prescaler`'s `Off` option
+(CH32V006) — both fixed by quoting, board 2026-09-14.
+
 ## The one idea that shapes everything else
 
 **Alternate functions are never listed per pin.** They live only in each peripheral's

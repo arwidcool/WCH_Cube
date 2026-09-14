@@ -3195,30 +3195,30 @@ extras:
             struct: OPA_InitTypeDef
             sdk_field: FB
             type: enum
-            default: Off
+            default: "Off"
             options:
-              - { name: Off, value: 0, sdk: FB_OFF }
-              - { name: On,  value: 1, sdk: FB_ON }
+              - { name: "Off", value: 0, sdk: FB_OFF }
+              - { name: "On",  value: 1, sdk: FB_ON }
             help: "R32_OPA_CTLR1 FB_EN1 bit 8 (CH32H417RM.md:50396-50400, OPA1's register; OPA2/3 have the analogous FB_EN2/3 in their own CTLR). Default matches the register reset (0)."
           - key: pgadif
             name: PGA differential input mode
             struct: OPA_InitTypeDef
             sdk_field: PGADIF
             type: enum
-            default: Off
+            default: "Off"
             options:
-              - { name: Off, value: 0, sdk: DIF_OFF }
-              - { name: On,  value: 1, sdk: DIF_ON }
+              - { name: "Off", value: 0, sdk: DIF_OFF }
+              - { name: "On",  value: 1, sdk: DIF_ON }
             help: "R32_OPA_CTLR1 PGADIF1 bit 9 (CH32H417RM.md:50388-50395). Connects the N terminal to OPA<n>_CHN1 for differential PGA use. Default matches the register reset (0)."
           - key: hs
             name: High-speed mode
             struct: OPA_InitTypeDef
             sdk_field: HS
             type: enum
-            default: Off
+            default: "Off"
             options:
-              - { name: Off, value: 0, sdk: HS_OFF }
-              - { name: On,  value: 1, sdk: HS_ON }
+              - { name: "Off", value: 0, sdk: HS_OFF }
+              - { name: "On",  value: 1, sdk: HS_ON }
             help: "R32_OPA_CTLR1 HS1 bit 10 (CH32H417RM.md:50378-50383). Default matches the register reset (0)."
 
   DAC:

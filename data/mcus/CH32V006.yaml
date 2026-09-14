@@ -461,7 +461,7 @@ peripherals:
         group: Basic
         default: /4096
         options:
-          - { name: Off,     value: 0 }
+          - { name: "Off",   value: 0 }
           - { name: /2,      value: 2 }
           - { name: /4,      value: 3 }
           - { name: /8,      value: 4 }
