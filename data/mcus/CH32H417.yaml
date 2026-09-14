@@ -8060,8 +8060,23 @@ peripherals:
       PORT45: [{ pin: PF5 }]
       PORT46: [{ pin: PE0 }]
       PORT47: [{ pin: PE1 }]
+    # `remap_by_package:` - the RM states a per-package recommendation outright, not
+    # left to be inferred from bonding alone: CH32H417RM.md:11839-11845, right after
+    # Table 9-33's own three mapping columns - "Note: The chip packaged with 56/68
+    # pins is recommended to use the mapping configuration of 01b; It is recommended
+    # to use 1xb mapping configuration for chips packaged as 88 pins." Index 0 (RM=00,
+    # this part's reset default) bonds NONE of PORT0-7 on QFN68 at all (its pins are
+    # PF12/PF13/PE7/PE8/PE9/PE10/PE11/PE12, none of which exist on that package -
+    # checked against data/packages/packages.yaml's own QFN68 pin list). Index 1
+    # (RM=01) still leaves PORT0-2 unbonded there (PF12/PF13/PE7 again), but bonds
+    # PORT3-7 (PC1/PC2/PC3/PB0/PB1, all real QFN68 pads) - the RM's own recommendation,
+    # not a full fix, and not claimed as one. Index 2 (RM=1x) is a full fix on QFN88:
+    # PC1/PC2/PC3/PB0/PB1/PE10/PE11/PE12 are ALL bonded there, checked the same way.
+    # QFN128 needs no override - its own bonding already has every RM=00 pin, matching
+    # the reset default it would otherwise silently rely on.
     signal_groups:
       - signals: [PORT0, PORT1, PORT2, PORT3, PORT4, PORT5, PORT6, PORT7]
+        remap_by_package: { QFN68: 1, QFN88: 2 }
     notes: >
       Its driver is a prebuilt libUHSIF.a (Evt/EXAM/UHSIF/UHSIF_SLAVE/Common) rather than
       SPL source, so UHSIF_GPIO_Init's body cannot be read directly - `uhsif_port_rm`/

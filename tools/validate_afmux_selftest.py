@@ -86,6 +86,20 @@ CASES = [
      "    style: af\n    fn: GPIO_PinAFConfig",
      "    style: macro\n    fn: GPIO_PinAFConfig",
      "the AF emitter only runs on `style: af`"),
+
+    # `signal_groups[].remap_by_package:` - landed alongside UHSIF's own QFN68/QFN88
+    # override (CH32H417RM.md:11839-11845). Same shape as a peripheral-level
+    # `remap_by_package:` (already covered above via `remaps:`, a different code path -
+    # this is the `signal_groups:` one, and nothing exercised it before this pair).
+    ("a `signal_groups` remap_by_package naming a package this MCU does not have",
+     "        remap_by_package: { QFN68: 1, QFN88: 2 }",
+     "        remap_by_package: { QFN68: 1, QFN99: 2 }",
+     "`QFN99` is not a package of this MCU"),
+
+    ("a `signal_groups` remap_by_package index out of range for the group's own options",
+     "        remap_by_package: { QFN68: 1, QFN88: 2 }",
+     "        remap_by_package: { QFN68: 9, QFN88: 2 }",
+     "remap index 9 is out of range"),
 ]
 
 

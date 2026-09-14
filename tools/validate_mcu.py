@@ -17,8 +17,9 @@ What it checks
   pin-existence      every pin named in a remap table, in a package map, or in the EXTI
                      table exists in `pins:`
   remap-consistency  every signal a setting can ask for is routed by at least one remap,
-                     every remap_by_package index is in range, and remap tables agree
-                     with each other about which signals they carry
+                     every remap_by_package index is in range (on a `remaps:` peripheral
+                     and on a `signal_groups:` entry alike), and remap tables agree with
+                     each other about which signals they carry
   dead pins          the reverse direction: every signal that IS routed to a pin is
                      claimable by some setting choice, or that pad can never be assigned
   pins declaration   a peripheral that routes nothing says so - `pins: { none: true,
@@ -443,6 +444,29 @@ def check_peripherals(doc: dict, r: Report) -> None:
                 r.error(gw, f"members do not all offer the same number of options - index N "
                             f"means a different remap value for different members otherwise, "
                             f"and the group would silently mis-drag one of them ({detail})")
+
+            # `remap_by_package:` - same key and shape `remaps:` already validates above
+            # (a package -> index override read by `groupDefaultIndex()`,
+            # app/engine/model.js:319). CH32H417 UHSIF is why this exists: PORT0-7
+            # default to index 0 on every package, but QFN68's own bonding wants index 1
+            # and QFN88's wants index 2 (CH32H417RM.md:11839-11845's own package
+            # recommendation) - an unchecked override could name a package this MCU
+            # does not have, or an index no member actually offers, and nothing else
+            # here reads this key to notice.
+            grp_rbp = grp.get("remap_by_package") if isinstance(grp, dict) else None
+            if grp_rbp is not None:
+                option_count = max(counts.values()) if counts else 0
+                if not isinstance(grp_rbp, dict):
+                    r.error(f"{gw}.remap_by_package", "must be a mapping package -> remap index")
+                else:
+                    for pkg, idx in grp_rbp.items():
+                        if pkg not in packages:
+                            r.error(f"{gw}.remap_by_package",
+                                    f"`{pkg}` is not a package of this MCU")
+                        if not isinstance(idx, int) or not (0 <= idx < max(option_count, 1)):
+                            r.error(f"{gw}.remap_by_package.{pkg}",
+                                    f"remap index {idx} is out of range "
+                                    f"(0..{option_count - 1})")
 
         sig_pins = P.get("signal_pins")
         af_routed: set[str] = set()

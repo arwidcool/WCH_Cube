@@ -877,6 +877,28 @@ on how many options they have is a data defect, not something the engine guesses
 - A signal outside every group (`CLK`, `PORT8`-`PORT47` above) is completely unaffected:
   it keeps picking its own pin exactly as an ordinary `signal_pins:` signal always has.
 
+**`remap_by_package:`** — the same key and shape a whole-peripheral `remaps:` already has
+(above), now on one `signal_groups:` entry instead of the peripheral: a package -> index
+override for the group's default, read only when a member has no stored explicit choice
+yet, so it can never override a choice the user already made.
+
+```yaml
+    signal_groups:
+      - signals: [PORT0, PORT1, PORT2, PORT3, PORT4, PORT5, PORT6, PORT7]
+        remap_by_package: { QFN68: 1, QFN88: 2 }
+```
+
+CH32H417 UHSIF is why this exists: `PORT0`-`PORT7` default to index 0 on every package,
+but index 0's pins (`PF12`/`PF13`/`PE7`/...) are not bonded on QFN68 at all — the group
+was correctly SHOWN as unbonded there (not silently mixed the way independent per-signal
+defaults used to) but not USABLE. The RM states a per-package recommendation outright
+(`CH32H417RM.md:11839-11845`: "The chip packaged with 56/68 pins is recommended to use
+the mapping configuration of 01b; It is recommended to use 1xb mapping configuration for
+chips packaged as 88 pins."), so `remap_by_package` names index 1 for QFN68 and index 2
+for QFN88 rather than leaving the picker to default both to a combination this part's own
+manual says not to use. `validate_mcu.py` checks the package exists and the index is in
+range, the same way it does for a peripheral-level `remap_by_package`.
+
 ## `exti`
 
 ```yaml
