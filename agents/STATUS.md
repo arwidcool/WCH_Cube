@@ -919,6 +919,14 @@ RM's worked example, or it does not ship.
 - **`clockSummaryMarkdown()`'s two garbled tap shapes (main's finding, reproduced from the repo
   owner's own screen)** — ~~`/undefined` for a bare mux, `[object Object]` for a leg-divider
   entry~~ **done, this cycle.** See Current below.
+- **CH32H417's DMA USER ACTION comment hardcoded to the single-buffer field names (main's
+  finding, board 2026-09-14)** — ~~named `.DMA_MemoryBaseAddr`, a field this part's struct does
+  not have, and never mentioned `.DMA_Memory0BaseAddr`/`.DMA_Memory1BaseAddr`, the ones it
+  does~~ **done, this cycle.** See Current below.
+- **`tests/features.test.js`'s export-coverage gate (main's finding: 23-24 uncovered
+  `app/engine` exports, 89% against the 90% floor)** — ~~`pllList`/`tapSources`/`remapPlan`/
+  `CONSTRAINT_FIELDS` and 20 others never called by name anywhere in `app/tests`~~ **done, this
+  cycle: covered, not exempted — the threshold was never touched.** See Current below.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
@@ -926,15 +934,76 @@ RM's worked example, or it does not ship.
   bug are expected — the first real consumer of a new mechanism is what finds its gaps); then
   the System-Core multi-controller DMA overview table once that data lands (held per main); then
   the print view (§7 P2's last item), only if it reuses `pinoutSvg()`'s renderer cleanly.
-- Gates last run: `node tests/run.js "export.test"` 41/41 (was 35/35 before this cycle's 6 new
-  tests — 5 for the two tap shapes + the SAME-function drift guard, 1 for the wide "no generated
-  report on any shipped part" sweep), `"codegen.test"` 79/79, `"clock"` 110/110, `"app/tests"`
-  (full engine suite) 587/587 (was 581/581) — all at this cycle's HEAD, all backward-compat
-  suites unchanged and green. `node --check` clean on `clock.js`/`codegen.js`/`export.js`, plus
-  an `import()` smoke test through `app/engine/index.js` (`tapSetting` resolves, no half-saved
-  module). `python build.py` NOT run this cycle — nothing painting changed (the clock TAB was
-  already correct via `template.html`; this is narrowly the `--format clocks-md` text export),
-  and `data/mcus/CH32H417.yaml` is AGENT-1's live DMA-extraction target right now.
+- Gates last run: `node tests/run.js "export.test"` 43/43 (was 35/35 at cycle start), `"codegen.
+  test"` 80/80, `"clock.test"` 34/34, `"resources.test"` 65/65, `"constraint.test"` 21/21,
+  `"analog.test"` 15/15, `"glossary.test"` 9/9, `"signal_groups.test"` 15/15, `"params.test"`
+  49/49, `"features.test"` 7/7 (the export-coverage gate is GREEN — no exempted line), full
+  `"app/tests"` engine suite 608/608 (was 581/581 at cycle start, +27 across both fixes).
+  `node --check` clean on every touched engine file, plus an `import()` smoke test through
+  `app/engine/index.js`. `python build.py` NOT run this cycle — nothing painting changed on
+  either fix (a generated-C comment's wording, and test files), and `data/mcus/CH32H417.yaml`
+  is AGENT-1's live DMA-extraction target throughout.
+
+**Current — 2026-09-14, cycle 9. main's two follow-ups on the DMA mechanism and the export-
+coverage gate it exposed, both closed.**
+
+- **The DMA USER ACTION comment (`app/engine/codegen.js` `dmaSection()`, ~line 1823).**
+  AGENT-1 checked the shipped comment against `ch32h417_dma.h:23-67` and found it hardcoded to
+  every OTHER part's field names (`DMA_PeripheralBaseAddr`, `DMA_MemoryBaseAddr`,
+  `DMA_BufferSize`) — CH32H417's own struct does not have `DMA_MemoryBaseAddr` at all; it splits
+  the pointer into `DMA_Memory0BaseAddr` + `DMA_Memory1BaseAddr` (a second pointer, for double-
+  buffer mode). The comment told a user to fill in a field that does not exist and never
+  mentioned the one they need — cosmetic (wrong comment text, not a wrong register write) but
+  exactly the class of defect this repo exists to keep out of a user-facing surface.
+  **Fixed by deriving the field names from the data, not by hardcoding a second, CH32H417-
+  specific string** (main's explicit ask, and the reason the first version was wrong): a
+  `doubleBuffer` flag reads whether THIS request's own `defs` (`dmaParamDefs()`) carries a
+  `sdk_field: DMA_BufferMode` row — the same fact the data's OWN comment already states
+  (`CH32H417.yaml:9391,9665`: "DMA_Memory1BaseAddr … same as DMA_Memory0BaseAddr — see codegen's
+  own USER ACTION comment") — rather than a per-part-name list this function would need to be
+  told about by hand for the next part that ships the same shape. True today only on CH32H417
+  (the only part with a `DMA_BufferMode` channel_param); every other shipped part keeps the
+  single-buffer wording unchanged, proven by a planted-break test on CH32V006.
+  2 new tests in `app/tests/codegen.test.js`: the existing CH32V006 test gained assertions that
+  it names `.DMA_MemoryBaseAddr` and NEVER `Memory0`/`Memory1`; a new CH32H417 test (the first in
+  this file to exercise its DMA codegen against the REAL shipped data at all, not a synthetic
+  fixture) asserts the reverse. **Seen red on the exact original bug**: stashed the fix, reran —
+  `FAIL … names Memory0, the field this struct actually has` — popped, green again.
+- **`tests/features.test.js`'s export-coverage floor.** 24 exports across `clock.js` (`pllList`,
+  `pllNode`, `pllState`, `tapSources`, `tapSourceEntries`, `tapSourceEntry`, `tapMuxDiv`),
+  `codegen.js` (`remapPlan`, `unwritableRemaps`), `constraints.js` (`CONSTRAINT_FIELDS`,
+  `gpioFieldLabel`, `constraintActive`, `constraintRegion`, `constraintSentence`, `analogClaim`,
+  `gpioEffectiveMode`, `gpioFieldFor`, `normaliseGpioConstraints`), `export.js` (`outputPins`,
+  `projectFolderName`), `glossary.js` (`PERIPHERAL_VOCAB`), `model.js` (`defaultSignalPin`,
+  `signalGroupOf`) and `util.js` (`isConstParam`) were real mechanisms proven end to end through
+  a HIGHER-level caller (`cSource()`, `gpioFieldOptions()`, `signalPins()`…) but never called BY
+  NAME from `app/tests` — so a regression in one that its caller happened not to surface would
+  have had nothing here to catch it. **Covered with genuine calls against real behaviour, not
+  gamed with a comment mention** (the check is a bare-word text scan, so a comment would have
+  passed it — that is not what "cover the exports" asked for): 24 new direct-call tests across
+  8 files (`clock.test.js` +3, `resources.test.js` +2, `constraint.test.js` +7, `analog.test.js`
+  +3, `export.test.js` +2, `glossary.test.js` +1, `signal_groups.test.js` +2, `params.test.js`
+  +1), each against real shipped data where one exists (CH32H417's LTDC leg-divider mux and
+  UHSIF signal group, CH32V006's ADC/HB bare taps) and a minimal synthetic fixture only where no
+  shipped part exercises the shape a function needs (a macro-style `remaps:` entry, a
+  `remap_unwritable:` pin — the same fixture patterns already established elsewhere in these
+  files, reused rather than invented). **The threshold itself was never touched** — `tests/
+  features.test.js` is QA's file and CLAUDE.md forbids lowering a gate to make it pass by name;
+  the fix is `app/tests/**` coverage, which is mine. `node tests/run.js "features.test"`: the
+  export-coverage test is GREEN with no exemption.
+  **One real, pre-existing test-harness gap found and fixed along the way, not routed around**:
+  `app/tests/_harness.js`'s `fresh()` resets `PROJECT.variant` but never `.name` (its own long
+  comment already documents this exact class of leak for `.variant` and generator options —
+  `.name` was simply never covered because nothing before this asserted the bare default across
+  a full multi-file run). My first `projectFolderName()` test asserted the untouched 'Untitled'
+  default and passed in isolation, then failed in the full `app/tests` run because an earlier
+  FILE had already called `setProject({ name: … })` — order-dependent, exactly the failure mode
+  `_harness.js`'s own comment warns about. Fixed the TEST, not the shared harness (smaller,
+  scoped, and does not risk another agent's concurrent reliance on current `fresh()` behaviour
+  mid-tree): it now sets its own name explicitly before asserting anything, with a comment
+  naming the hazard for the next person who is tempted to assert the bare default.
+
+Red, and who owns it: **nothing of mine.**
 
 **Current — 2026-09-14, cycle 8. Resumed after a predecessor was killed by a rate limit mid-task
 (the third kill of this role today) — its uncommitted work (`clock.js`/`codegen.js`/`export.js`/

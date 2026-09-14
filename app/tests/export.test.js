@@ -84,6 +84,34 @@ test('the CSV has a header plus one line per pin and quotes what it must', () =>
   assert.ok(pc0.includes('"A,B ""quoted"""'), `CSV quoting: ${pc0}`);
 });
 
+test('outputPins() lists only the pins the user set as a manual GPIO output, not every claimed pin', () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.assignSignal('PC0', { gpio: 'GPIO_Output' });
+  e.assignSignal('PC1', { periph: 'USART1', signal: 'TX', remap: 3 });   // claimed, but not a manual output
+  e.compute();
+  const out = e.outputPins();
+  assert.equal(out.length, 1, 'exactly the one manual GPIO_Output pin');
+  assert.equal(out[0].pin, 'PC0');
+  assert.deepEqual(Object.keys(out[0]).sort(), ['bit', 'label', 'mode', 'pin', 'port'].sort());
+  assert.equal(out.some(p => p.pin === 'PC1'), false, 'a peripheral signal is not an output pin, however it is wired');
+});
+
+test("projectFolderName() is the project's own name, made safe for a filesystem path", () => {
+  // NOTE: `fresh()` resets `PROJECT.variant` but not `.name` (`_harness.js`'s own long
+  // comment on this exact class of leak - "one test's leftover everybody else's
+  // starting condition"), so this sets the name explicitly rather than asserting the
+  // untouched 'Untitled' default, which is not guaranteed once another file in the
+  // same run has called setProject({ name: ... }) first.
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.setProject({ name: 'Simple' });
+  assert.equal(e.projectFolderName(), 'Simple', 'an already-safe name is passed through unchanged');
+  e.setProject({ name: 'My Weird/Project!! Name' });
+  assert.equal(e.projectFolderName(), 'My_Weird_Project_Name',
+    'every run of unsafe characters collapses to ONE underscore, not one per character');
+  e.setProject({ name: '' });
+  assert.equal(e.projectFolderName(), 'wchcube_project', 'an empty name falls back rather than producing an empty path');
+});
+
 // ---- KiCad symbol pin table --------------------------------------------------
 // The owner's literal deliverable, and its three named constraints: it must state
 // which package it is for, it must carry a `remap_unwritable:` planning-only pin

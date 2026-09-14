@@ -380,3 +380,82 @@ test('assigning an output stores the part\'s OWN name for the mode, not another 
     'and the macro is looked up in that same list, so the C still compiles');
   assert.ok(e.gpioFieldOptions('PA0', 'mode').includes('Output Push-Pull'));
 });
+
+// ---- direct coverage of constraints.js's smaller exports ---------------------
+// Everything above exercises the mechanism end to end through `gpioFieldOptions()`/
+// `cSource()`/`cComplaints()`; nothing called these building blocks BY NAME, so a
+// regression one of the higher-level callers happened not to expose would have
+// nothing here to catch it (tests/features.test.js's export-coverage sweep,
+// main 2026-09-14).
+
+test('CONSTRAINT_FIELDS/gpioFieldLabel() name exactly the three GPIO-table columns a constraint can restrict', () => {
+  assert.deepEqual(eng.CONSTRAINT_FIELDS, ['mode', 'pull', 'speed']);
+  assert.equal(eng.gpioFieldLabel('mode'), 'GPIO mode');
+  assert.equal(eng.gpioFieldLabel('pull'), 'GPIO pull-up/pull-down');
+  assert.equal(eng.gpioFieldLabel('speed'), 'output speed');
+  assert.equal(eng.gpioFieldLabel('bogus'), 'bogus', 'an unknown field is named literally, not silently dropped');
+});
+
+test('constraintActive() checks BOTH gates a constraint can carry: packages: and when:', () => {
+  let e = load(undefined, 'QFN28');
+  let c = e.gpioConstraints().find(x => x.id === 'probe-shorted-no-output');
+  assert.equal(e.constraintActive(c), true, 'QFN28 is named by packages:');
+
+  e = load(undefined, 'QFN20');
+  c = e.gpioConstraints().find(x => x.id === 'probe-shorted-no-output');
+  assert.equal(e.constraintActive(c), false, 'not active on a package the constraint does not name');
+
+  e = load(undefined, 'QFN28');
+  c = e.gpioConstraints().find(x => x.id === 'probe-usb-floating');
+  assert.equal(e.constraintActive(c), false, 'USBFS is off, so a when: peripheral/enabled gate is not satisfied yet');
+  usbOn(e);
+  e.compute();
+  assert.equal(e.constraintActive(c), true, 'and it is active once USBFS is actually on');
+});
+
+test('constraintRegion() treats only_on: as an allow-list and not_on: as a deny-list - opposite directions', () => {
+  const e = load();
+  const allow = e.gpioConstraints().find(x => x.id === 'probe-pull-down-pins');   // only_on: [...]
+  assert.equal(e.constraintRegion(allow, 'PA0'), false, 'PA0 IS named by only_on:, so it is NOT in the refused region');
+  assert.equal(e.constraintRegion(allow, 'PB5'), true, 'PB5 is not named, so it falls in the refused (complement) region');
+
+  const deny = e.gpioConstraints().find(x => x.id === 'probe-shorted-no-output');  // not_on: [...]
+  assert.equal(e.constraintRegion(deny, 'PC17'), true, 'PC17 IS named by not_on:, so it IS in the refused region');
+  assert.equal(e.constraintRegion(deny, 'PA0'), false, 'PA0 is not named, so it is outside the refused region');
+
+  assert.equal(e.constraintRegion({ id: 'no-region-stated' }, 'PA0'), true,
+    'no region stated at all: every pin is inside it (constraints.js:162)');
+});
+
+test('constraintSentence() names the pin, the field, the value and the id, with the reason when there is one', () => {
+  const e = load();
+  const c = e.gpioConstraints().find(x => x.id === 'probe-pull-down-pins');
+  assert.equal(e.constraintSentence(c, 'PB5', 'pull', 'Pull-down'),
+    'PB5: pull "Pull-down" is not available on this pin - Pull-down is available on PA0-PA3 and PC16-PC17 only [probe-pull-down-pins]');
+  assert.equal(e.constraintSentence({ id: 'x' }, 'PA0', 'mode', 'Analog'),
+    'PA0: mode "Analog" is not available on this pin [x]', 'no reason:, so it is cleanly omitted, never "undefined"');
+});
+
+test('gpioFieldFor() keeps a still-legal stored value and falls back to the first legal one otherwise', () => {
+  const e = load();   // PB5's pull is refused "Pull-down" - the allow-list names PA0-3/PC16-17 only
+  assert.equal(e.gpioFieldFor('PB5', 'pull', 'Pull-down'), 'No pull',
+    'a now-illegal stored value is replaced by the first legal option, not kept');
+  assert.equal(e.gpioFieldFor('PB5', 'pull', 'Pull-up'), 'Pull-up', 'a still-legal stored value is kept exactly');
+  assert.equal(e.gpioFieldFor('PB5', 'pull', undefined), 'No pull', 'no stored value at all: the first legal option');
+  assert.equal(e.gpioFieldFor('PB5', 'speed', 'bogus'), '50 MHz', 'the same fallback for a field with only one legal option');
+});
+
+test('normaliseGpioConstraints() rewrites a stored value a constraint has since forbidden, and reports what changed', () => {
+  const e = load();
+  e.S.gpio.PB5 = { pull: 'Pull-down' };   // legal before this fixture's own constraint existed
+  const notes = e.normaliseGpioConstraints();
+  assert.equal(e.S.gpio.PB5.pull, 'No pull', 'rewritten to the first legal option');
+  assert.ok(notes.some(s => /PB5/.test(s) && /pull/.test(s)), 'and the change is reported, not silent');
+
+  // A value the constraint still allows is left completely alone - the mechanism
+  // rewrites violations, not every stored field it can see.
+  e.S.gpio.PA0 = { pull: 'Pull-down' };   // PA0 IS in the allow-list
+  const notes2 = e.normaliseGpioConstraints();
+  assert.equal(e.S.gpio.PA0.pull, 'Pull-down', 'a still-legal value is never touched');
+  assert.equal(notes2.some(s => /PA0/.test(s)), false);
+});

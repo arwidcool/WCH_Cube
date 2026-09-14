@@ -1371,6 +1371,30 @@ bits, and a clock tree that models what the schema can hold.
       live DOM, only `generateAll()`'s own text. Both seen red on the pre-fix code (stashed the
       one-line fix, reran, restored). `node tests/run.js "export.test"` 41/41 (was 35/35),
       `"app/tests"` full engine suite 587/587 (was 581/581).
+- [x] (AGENT-2) **Two follow-ups from main on the DMA mechanism: the USER ACTION comment's
+      hardcoded field names, and the export-coverage gate it exposed.**
+      (1) `dmaSection()`'s USER ACTION comment (`app/engine/codegen.js` ~1823) was hardcoded to
+      `.DMA_MemoryBaseAddr`, true of every OTHER shipped part but not CH32H417 (`ch32h417_dma.h:
+      23-67` splits the pointer into `.DMA_Memory0BaseAddr`/`.DMA_Memory1BaseAddr`, for double-
+      buffer mode) - told a user to fill in a field that does not exist and never named the one
+      they need. Fixed by DERIVING the field names from the data: a `doubleBuffer` flag reads
+      whether this request's own `channel_params` carries a `DMA_BufferMode` row - the same fact
+      the data's own comment already states - rather than hardcoding a second, part-specific
+      string. 2 new tests in `app/tests/codegen.test.js` (CH32V006 stays on the single-buffer
+      wording; CH32H417, the first test in the file to exercise its real DMA codegen at all,
+      gets the split one), seen red on the original hardcoded text before being trusted.
+      (2) `tests/features.test.js`'s 90%-export-coverage gate was RED: 23-24 `app/engine` exports
+      (`pllList`, `tapSources`, `remapPlan`, `CONSTRAINT_FIELDS` and 20 others) were real,
+      shipped mechanisms proven only through a higher-level caller, never called by name from
+      `app/tests`. Covered with 24 new direct-call tests across 8 files, against real shipped
+      data where one exercises the shape (CH32H417 LTDC/UHSIF, CH32V006 ADC/HB) and a minimal
+      synthetic fixture only where none does - never gamed with a bare comment mention, which
+      the check's own text-scan would have accepted but does not prove the function works. The
+      threshold itself untouched. Found and fixed one real pre-existing order-dependency in
+      `app/tests/_harness.js`'s `fresh()` along the way (resets `PROJECT.variant` but never
+      `.name`) by writing the new test to not depend on it, not by changing the shared harness
+      mid-tree. `node tests/run.js "features.test"` 7/7 (export-coverage line green, no
+      exemption), full `"app/tests"` engine suite 608/608 (was 587/587).
 - [x] (AGENT-2) **The nested-struct shape (§3 REQUEST, 09-12T19:33Z): a member that is a POINTER
       to a second struct no SDK function takes alone.** `codegen.init_structs.<inner-struct>.embed`
       now maps a param's `embed: <key>` to `{ into: <outer-struct>, member: <pointer-field> }`.

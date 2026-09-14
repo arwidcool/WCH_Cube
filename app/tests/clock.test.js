@@ -407,3 +407,74 @@ test('a port is iterated as the pins the data lists, never as a range', () => {
   assert.deepEqual(e.gpioPlan().filter(r => r.port === 'C' && missing.includes(r.bit)), [],
     'and no hole ever reaches the plan');
 });
+
+// ---- direct coverage of clock.js's PLL/tap resolvers ------------------------
+// `tapSetting()` (added this cycle) and `rccSection()`/`clockSummaryMarkdown()` both
+// go through these; the mechanisms themselves were already proven end to end through
+// those two callers, but nothing called pllList()/pllNode()/pllState()/tapSources()/
+// tapSourceEntries()/tapSourceEntry()/tapMuxDiv() BY NAME, so a regression in one that
+// both callers happened to route around identically would have nothing here to catch
+// it (`tests/features.test.js`'s export-coverage sweep, main 2026-09-14).
+
+test('pllList()/pllNode()/pllState() resolve every PLL on a part with more than one, sys and named alike', () => {
+  const e = fresh('CH32H417', 'QFN128');
+  e.compute();
+  const list = e.pllList(e.M.clock);
+  const sys = list.find(p => p.sys);
+  assert.ok(sys, 'the SYS PLL is always first-class, even under the plls: schema');
+  assert.equal(e.pllNode(sys), 'PLL', 'the SYS PLL keeps its pre-plls: node id');
+  const named = list.filter(p => !p.sys);
+  assert.ok(named.length >= 2, 'setup: CH32H417 ships more than one named PLL');
+  for (const p of named) {
+    assert.equal(e.pllNode(p), 'pll:' + p.id, 'a named PLL node id cannot collide with an oscillator or a tap');
+  }
+
+  const sysSt = e.pllState(sys, e.S.clock);
+  assert.ok('in' in sysSt && 'mul' in sysSt, 'the SYS PLL keeps its flat pllIn/pllMul state shape');
+  const namedP = named[0];
+  const namedSt = e.pllState(namedP, e.S.clock);
+  assert.deepEqual(namedSt, e.S.clock.plls[namedP.id], "a named PLL's state is read straight off k.plls, keyed by id");
+
+  // Documented edge cases (clock.js:34,63) - a part/config with nothing live never throws.
+  assert.deepEqual(e.pllList(undefined), [], 'a part with no clock: block offers no PLL');
+  assert.deepEqual(e.pllState(namedP, undefined), { in: 0 }, 'no live clock state falls back the same way for every PLL');
+});
+
+test('tapSources()/tapSourceEntries()/tapSourceEntry()/tapMuxDiv() resolve a real leg-divider mux (CH32H417 LTDC)', () => {
+  const e = fresh('CH32H417', 'QFN128');
+  e.compute();
+  const v = e.M.clock.prescalers.LTDC;
+  const names = e.tapSources(v);
+  assert.ok(Array.isArray(names) && names.includes('SERDES_PLL clock / 2'),
+    "a leg with its own built-in divider is offered under its OWN display name, not the bare signal it divides");
+  const entries = e.tapSourceEntries(v);
+  const leg = entries.find(x => x.name === 'SERDES_PLL clock / 2');
+  assert.deepEqual(leg, { name: 'SERDES_PLL clock / 2', source: 'SERDES_PLL_CLK', div: 2 },
+    'the full {name,source,div} entry, normalised from data/mcus/CH32H417.yaml:11072');
+
+  // LTDC's default_source is PLLCLK, a bare leg with no divider of its own.
+  const before = e.tapSourceEntry(v, 'LTDC', e.S.clock);
+  assert.equal(before.name, 'PLLCLK');
+  assert.equal(e.tapMuxDiv(v, 'LTDC', e.S.clock), 1, 'a bare leg carries no divider of its own');
+
+  e.setClock({ preSrc: { LTDC: 'SERDES_PLL clock / 2' } });
+  e.compute();
+  const chosen = e.tapSourceEntry(v, 'LTDC', e.S.clock);
+  assert.equal(chosen.name, 'SERDES_PLL clock / 2');
+  assert.equal(e.tapMuxDiv(v, 'LTDC', e.S.clock), 2,
+    "the mux leg's OWN divider, independent of LTDC's own options: divider");
+});
+
+test("tapSources() is null and tapSourceEntry() falls back to the bare-source shape for a tap with no LIST source (CH32V006 ADC/HB)", () => {
+  const e = fresh('CH32V006', 'TSSOP20');
+  e.compute();
+  const adc = e.M.clock.prescalers.ADC;      // { source: 'HB', ... } - a plain string, not a list
+  assert.equal(e.tapSources(adc), null, 'a bare-string source is not a mux - every caller from before this existed sees exactly what it always did');
+  assert.equal(e.tapSourceEntries(adc), null);
+  const entry = e.tapSourceEntry(adc, 'ADC', e.S.clock);
+  assert.deepEqual(entry, { name: 'HB', source: 'HB', div: 1 });
+  assert.equal(e.tapMuxDiv(adc, 'ADC', e.S.clock), 1);
+
+  const hb = e.M.clock.prescalers.HB;        // the root - no source: at all
+  assert.equal(e.tapSourceEntry(hb, 'HB', e.S.clock), null, 'the root tap has no source to resolve at all');
+});

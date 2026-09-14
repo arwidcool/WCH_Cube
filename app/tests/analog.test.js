@@ -171,6 +171,40 @@ test('a non-analog peripheral with no af: still gets the `af:` advice, which is 
   assert.match(c, /GPIO_PinAFConfig\(GPIOA, GPIO_PinSource5, GPIO_AF5\)/);
 });
 
+// ---- analogClaim()/gpioEffectiveMode() themselves -----------------------------
+// Every test above reads cSource()/afPlan(); nothing calls the two functions that
+// actually DECIDE analog-vs-AF by name, so a regression the higher-level callers
+// happened not to surface would have nothing here to catch it (tests/features.test.js's
+// export-coverage sweep, main 2026-09-14).
+
+test('analogClaim()/gpioEffectiveMode() read a DECLARED analog claim straight off codegen.analog_signals, not guessed', () => {
+  scan(DECLARED);
+  const claim = eng.E.pins.PA0.claims.find(c => c.who === 'ADCX');
+  assert.ok(claim, 'setup: PA0 is claimed by ADCX');
+  assert.deepEqual(eng.analogClaim(claim, 'PA0'), { analog: true, inferred: false });
+  const eff = eng.gpioEffectiveMode('PA0', eng.E.pins.PA0.claims, eng.S.gpio.PA0 || {});
+  assert.deepEqual(eff, { mode: 'Analog', inferred: false });
+});
+
+test('analogClaim()/gpioEffectiveMode() fall back to an INFERRED guess when the part states no list at all', () => {
+  scan(INFERRED);
+  const claim = eng.E.pins.PA0.claims.find(c => c.who === 'ADCX');
+  assert.deepEqual(eng.analogClaim(claim, 'PA0'), { analog: true, inferred: true });
+  const eff = eng.gpioEffectiveMode('PA0', eng.E.pins.PA0.claims, eng.S.gpio.PA0 || {});
+  assert.deepEqual(eff, { mode: 'Analog', inferred: true });
+});
+
+test('gpioEffectiveMode() falls through to Alternate Function for a non-analog claim, and an explicit stored mode wins outright', () => {
+  load(SILENT);
+  eng.setSetting('LINK', 'Mode', 'On');
+  eng.compute();
+  const claims = eng.E.pins.PA5.claims;   // LINK's MUX1 - an ordinary AF signal, not analog
+  assert.deepEqual(eng.gpioEffectiveMode('PA5', claims, {}), { mode: 'Alternate Function Push Pull', inferred: false });
+  // A stored mode is read FIRST (constraints.js:317-318) - it wins over any claim at all.
+  assert.deepEqual(eng.gpioEffectiveMode('PA5', claims, { mode: 'Output Push Pull' }),
+    { mode: 'Output Push Pull', inferred: false });
+});
+
 test('a signal that is BOTH declared analog and given an af: is a TODO, not a coin toss', () => {
   // Two keys, two answers, one pad. The generator picks neither and says which two
   // disagree - `validate_mcu.py` cannot see this one, because each key is valid alone.

@@ -419,6 +419,19 @@ test('a const: member is never drawn as a control', () => {
   assert.deepEqual(e.paramDefs('USART1').map(p => p.key), ['num', 'baud']);
 });
 
+test('isConstParam() is exactly what tells a const: member from an ordinary one', () => {
+  // getParams()'s own const-exclusion (above) and its later const:+sdk_manual: carve-out
+  // both read this function; nothing calls it directly by name, so a regression either
+  // caller happened to route around would have nothing here to catch it
+  // (tests/features.test.js's export-coverage sweep, main 2026-09-14).
+  const e = withConst();
+  const [num, baud] = e.paramDefs('USART1');
+  assert.equal(e.isConstParam(num), true, 'num carries const: USART1');
+  assert.equal(e.isConstParam(baud), false, 'baud is an ordinary editable parameter');
+  assert.equal(e.isConstParam(undefined), false, 'no definition at all is never mistaken for a const one');
+  assert.equal(e.isConstParam({ const: false }), true, "const: false is still a const - util.js's own definition checks presence (const !== undefined), not truthiness");
+});
+
 test('a const: member cannot be set, by a control or by a file', () => {
   const e = withConst();
   assert.throws(() => e.setParam('USART1', 'num', 'USART2'), /fixed at USART1 by the MCU file/);

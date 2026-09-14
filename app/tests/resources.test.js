@@ -954,6 +954,95 @@ peripherals:
   assert.equal(e.cComplaints().some(x => x.kind === 'todo' && /alternate function remap/.test(x.text)), false);
 });
 
+// remapPlan()/unwritableRemaps() themselves - the two tests above only read cSource(),
+// which proves the TEXT the generator emits but never calls either function by name, so
+// a regression only cSource()'s own formatting happened to mask would have nothing here
+// to catch it (tests/features.test.js's export-coverage sweep, main 2026-09-14).
+
+test('remapPlan() lists a configured remap by its own macro, and marks it used when its signals are actually claimed', () => {
+  // Same fixture shape as "a peripheral applied by a macro is left out of the register
+  // word" above (macro-style remap, CH32V006's own real ones are all register-field -
+  // remapPlan()'s `calls` list is specifically the macro half of the mechanism).
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-REMAPPLAN-DIRECT
+  inherits: CH32V006
+codegen:
+  remap:
+    fn: GPIO_PinRemapConfig
+    enable: ENABLE
+peripherals:
+  USART1:
+    remaps:
+      - { name: "000 Default", pins: { TX: PD5, RX: PD6 } }
+      - { name: "001", macro: GPIO_Remap_USART1_Test, pins: { TX: PD0, RX: PD1 } }
+`);
+  e.loadMcu('CH32V006-REMAPPLAN-DIRECT');
+  e.setPackage('TSSOP20');
+  e.setSetting('USART1', 'Mode', 'Asynchronous');
+  e.setRemap('USART1', 1);
+  e.compute();
+  const plan = e.remapPlan();
+  assert.equal(plan.fn, 'GPIO_PinRemapConfig');
+  assert.equal(plan.enable, 'ENABLE');
+  const call = plan.calls.find(c => c.periph === 'USART1');
+  assert.ok(call, 'the configured, non-default remap reaches the plan');
+  assert.equal(call.index, 1);
+  assert.equal(call.macro, 'GPIO_Remap_USART1_Test', "the plan carries the SAME macro name the generated call uses, not a re-derived one");
+  assert.equal(call.used, true, 'USART1 is on and its signals are claimed, so the remap is genuinely in effect');
+
+  // A remap chosen for a peripheral that is OFF (nothing requires its signals) is still
+  // reported - the C output has to decide what "off" means, not this function silently.
+  e.setSetting('USART1', 'Mode', 'Disable');
+  e.compute();
+  const offCall = e.remapPlan().calls.find(c => c.periph === 'USART1');
+  assert.ok(offCall, 'the choice is still in the plan while the peripheral is off');
+  assert.equal(offCall.used, false, 'but nothing actually requires its signals now');
+});
+
+test('unwritableRemaps() lists exactly the pin whose remap this part cannot write, with the real citation', () => {
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-UNWRITABLE-REMAP-DIRECT
+  inherits: CH32V006
+peripherals:
+  TESTPERIPH:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: On, signals: [SIG] }
+    remaps:
+      - { name: "00 Default", pins: { SIG: PD5 } }
+      - { name: "01", pins: { SIG: PD6 } }
+    remap_unwritable: "AFIO_PCFR1.TESTPERIPH_RM[1:0] - not writable on this part"
+`);
+  e.loadMcu('CH32V006-UNWRITABLE-REMAP-DIRECT');
+  e.setPackage('TSSOP20');
+  // Nothing configured yet: no peripheral is on, so nothing is unwritable YET either -
+  // the two-sided property remapPlan's own "used" flag makes: a real gap only counts
+  // once something actually depends on it.
+  e.compute();
+  assert.deepEqual(e.unwritableRemaps(), [], 'setup: TESTPERIPH is off, so index 0 is in effect and nothing is missing');
+
+  e.setSetting('TESTPERIPH', 'Mode', 'On');
+  e.setRemap('TESTPERIPH', 1);
+  e.compute();
+  const list = e.unwritableRemaps();
+  assert.equal(list.length, 1);
+  assert.deepEqual(list[0], { pid: 'TESTPERIPH', index: 1, name: '01',
+    note: 'AFIO_PCFR1.TESTPERIPH_RM[1:0] - not writable on this part' });
+
+  // Index 0 needs no write at all - back at the default, the gap disappears exactly
+  // as `cSource()`'s own "index 0 needs no citation" test above proves in the C.
+  e.setRemap('TESTPERIPH', 0);
+  e.compute();
+  assert.deepEqual(e.unwritableRemaps(), [], 'index 0 is the reset value - nothing to write, nothing missing');
+});
+
 // ---- grouped NVIC vectors ----------------------------------------------------
 
 test('many EXTI lines map to one vector, and the lookup goes line -> vector', () => {

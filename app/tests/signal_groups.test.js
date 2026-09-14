@@ -83,6 +83,29 @@ const load = (pkg) => {
   eng.setSetting('U', 'Mode', 'Enabled');
 };
 
+// signalGroupOf()/defaultSignalPin() themselves - every test in this file reaches the
+// group mechanism through signalPins()/setSignalPin(); nothing calls these two lookups
+// BY NAME, so a regression in either that signalPins() happened to route around would
+// have nothing here to catch it (tests/features.test.js's export-coverage sweep,
+// main 2026-09-14).
+test('signalGroupOf() finds the group a grouped signal belongs to, and returns null for an independent one', () => {
+  load();
+  const g = eng.signalGroupOf('U', 'P0');
+  assert.ok(g, 'P0 is named by signal_groups:');
+  assert.deepEqual(g.signals, ['P0', 'P1']);
+  assert.deepEqual(g.remap_by_package, { QFN8B: 1 });
+  assert.equal(eng.signalGroupOf('U', 'P1'), g, "P1 is the SAME group object, not a second lookup that happens to agree");
+  assert.equal(eng.signalGroupOf('U', 'CLK'), null, 'CLK is not grouped - it picks its pin independently');
+  assert.equal(eng.signalGroupOf('NOSUCHPERIPH', 'P0'), null, 'an unknown peripheral is not a crash');
+});
+
+test("defaultSignalPin() is a signal's own first EXISTING candidate pin", () => {
+  load();
+  assert.equal(eng.defaultSignalPin('U', 'CLK'), 'PA4', 'the first candidate in signal_pins: order');
+  assert.equal(eng.defaultSignalPin('U', 'P0'), 'PA0');
+  assert.equal(eng.defaultSignalPin('U', 'NOSUCHSIGNAL'), null, 'a signal with no candidates at all resolves to nothing, not a crash');
+});
+
 test('a grouped signal defaults to index 0, uniformly across the group', () => {
   load();
   eng.compute();

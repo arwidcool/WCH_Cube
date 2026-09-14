@@ -1717,10 +1717,15 @@ function periphSection() {
 //  channel handle from `dma.register.channel_macro`. A channel the user booked
 //  twice is an #error in cSource(), not last-wins code.
 //
-//  DMA_PeripheralBaseAddr, DMA_MemoryBaseAddr and DMA_BufferSize are deliberately
-//  absent from the data: they are the application's buffer, not a configuration
-//  choice, and CubeMX does not ask for them either. They are emitted as named TODOs
-//  so the file says what the application still has to fill in.
+//  DMA_PeripheralBaseAddr, the memory address field(s) and DMA_BufferSize are
+//  deliberately absent from the data: they are the application's buffer, not a
+//  configuration choice, and CubeMX does not ask for them either. Emitted as a named
+//  USER ACTION comment, not a TODO, so the file says what the application still has
+//  to fill in - and the FIELD NAMES it names are derived per part, not one fixed set:
+//  CH32H417's `DMA_InitTypeDef` splits the memory pointer into `DMA_Memory0BaseAddr`
+//  / `DMA_Memory1BaseAddr` (double-buffer mode); every other shipped part has one
+//  plain `DMA_MemoryBaseAddr`. See the comment beside `doubleBuffer` below for what
+//  in the data tells the two apart.
 
 // `controller` is the raw `M.dma` entry (`dmaControllerFor()`'s return), not a
 // name — CH32H417's two controllers each have their OWN `register.channel_macro`
@@ -1818,10 +1823,33 @@ function dmaSection() {
     // fails CI on that. A buffer address is not missing from the data - it is not a
     // configuration choice at all, and CubeMX does not ask for it either. Marking it
     // TODO would make every project with a DMA request fail --strict forever.
+    //
+    // The FIELD NAMES are not the same on every part: `DMA_InitTypeDef` reuses one type
+    // name for two different C shapes (ch32h417_dma.h:23-67 vs. every other shipped
+    // part's, e.g. ch32v00X_dma.h:23-40) - CH32H417 has `DMA_Memory0BaseAddr` +
+    // `DMA_Memory1BaseAddr` (a second pointer, for double-buffer mode), every other part
+    // has one plain `DMA_MemoryBaseAddr`. main caught this hardcoded to the single-buffer
+    // names on CH32H417 (board 2026-09-14): the comment told the user to fill in a field
+    // that does not exist and never mentioned the one they need. Derived from the data,
+    // not hardcoded again: `channel_params`' own `DMA_BufferMode` row only exists on a
+    // part whose struct HAS the split Memory0/Memory1 pair (the same fact the data's own
+    // comment already states - CH32H417.yaml:9391/9665, "DMA_Memory1BaseAddr ... same as
+    // DMA_Memory0BaseAddr - see codegen's own USER ACTION comment") - so its presence in
+    // THIS request's own `defs` is the signal, not a part-name list this function would
+    // have to be told to update by hand for the next part that adds the same shape.
+    const doubleBuffer = defs.some(d => d.sdk_field === 'DMA_BufferMode');
     L.push('        /* USER ACTION: the application owns the addresses and the length —');
-    L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_MemoryBaseAddr and`);
-    L.push('           .DMA_BufferSize before this call. They are a buffer, not a');
-    L.push('           configuration choice, so the configurator does not ask for them. */');
+    if (doubleBuffer) {
+      L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_Memory0BaseAddr and`);
+      L.push('           .DMA_BufferSize before this call (plus .DMA_Memory1BaseAddr too,');
+      L.push('           if DMA_BufferMode above turns double-buffer mode on). They are a');
+      L.push('           buffer, not a configuration choice, so the configurator does not');
+      L.push('           ask for them. */');
+    } else {
+      L.push(`           set ${varName}.DMA_PeripheralBaseAddr, .DMA_MemoryBaseAddr and`);
+      L.push('           .DMA_BufferSize before this call. They are a buffer, not a');
+      L.push('           configuration choice, so the configurator does not ask for them. */');
+    }
     if (handle && spec.deinit) L.push(`        ${spec.deinit}(${handle});`);
     if (spec.fn && handle) {
       L.push(`        ${spec.fn}(${handle}, &${varName});`);

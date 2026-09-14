@@ -10,7 +10,7 @@
 //  named that the data did not ask for. An unknown block gets empty strings rather than
 //  a guess, which is the same refusal as `modeMacro()` and `structVar()`.
 // =============================================================================
-import { test, assert, fresh, mcuNames } from './_harness.js';
+import { test, assert, fresh, mcuNames, eng } from './_harness.js';
 
 /** Every real part. The synthetic fixture is not silicon; it still must not crash. */
 const PARTS = () => mcuNames().filter(n => !/DUMMY/i.test(n));
@@ -143,4 +143,22 @@ test('the glossary is keyed by name, so a new instance costs nothing', () => {
   assert.equal(n.base, 'USART');
   assert.equal(n.instance, '10');
   assert.match(n.title, /Universal synchronous/);
+});
+
+test('PERIPHERAL_VOCAB carries the two virtual tree entries directly - GPIO and NVIC are not in M.peripherals at all', () => {
+  // Every test above reaches this table only THROUGH peripheralName(); this is the one
+  // place the table itself is read by name (tests/features.test.js's export-coverage
+  // sweep, main 2026-09-14). GPIO/NVIC are the sharpest case: peripheralName()'s DATA-
+  // override rule ("the MCU file overrides this") cannot apply to them, since neither
+  // is a document a part's `peripherals:` block can even carry a title: for.
+  assert.ok(eng.PERIPHERAL_VOCAB.GPIO && eng.PERIPHERAL_VOCAB.GPIO.title && eng.PERIPHERAL_VOCAB.GPIO.what);
+  assert.ok(eng.PERIPHERAL_VOCAB.NVIC && eng.PERIPHERAL_VOCAB.NVIC.title && eng.PERIPHERAL_VOCAB.NVIC.what);
+  // Every entry in the table follows the same title/description shape - the exact
+  // contract 'a title is a name, not a sentence' above checks through peripheralName().
+  for (const [id, entry] of Object.entries(eng.PERIPHERAL_VOCAB)) {
+    assert.equal(typeof entry.title, 'string', `${id}: title is a string`);
+    assert.ok(entry.title.length, `${id}: title is non-empty`);
+    assert.equal(typeof entry.what, 'string', `${id}: what is a string`);
+    assert.ok(entry.what.length, `${id}: what is non-empty`);
+  }
 });

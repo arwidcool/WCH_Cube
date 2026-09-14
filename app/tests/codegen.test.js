@@ -1283,6 +1283,39 @@ test('a user action is not a generator complaint, so DMA does not fail --strict 
   const call = c.indexOf('        DMA_Init(');
   assert.ok(call > 0, 'setup: the DMA_Init call is generated');
   assert.ok(c.indexOf('USER ACTION') < call, 'it sits above the call that uses those fields');
+
+  // Single-buffer part: the struct has one plain memory pointer
+  // (ch32v00X_dma.h:27), so the comment must name exactly that field - never the
+  // split Memory0/Memory1 pair CH32H417 alone has.
+  assert.match(c, /\.DMA_MemoryBaseAddr and/, 'names the real single memory field');
+  assert.equal(/DMA_Memory0BaseAddr|DMA_Memory1BaseAddr/.test(c), false,
+    'never claims a split memory pointer this part\'s struct does not have');
+});
+
+// main's finding (board 2026-09-14): the USER ACTION comment above was hardcoded to
+// three field names true of every OTHER shipped part's DMA_InitTypeDef, but CH32H417's
+// own struct (ch32h417_dma.h:23-67) does not have a `DMA_MemoryBaseAddr` field at all -
+// it splits the memory pointer into `DMA_Memory0BaseAddr` + `DMA_Memory1BaseAddr` (a
+// second pointer, for double-buffer mode, ch32h417_dma.h:27,62). The comment told a
+// user to fill in a field that does not exist and never mentioned the one they need.
+// This is the real shipped CH32H417 data, not a synthetic fixture - the first test in
+// this file to exercise its DMA codegen at all.
+test('CH32H417\'s USER ACTION comment names its OWN split memory fields, not the single-buffer ones', () => {
+  const e = fresh('CH32H417', 'QFN128');
+  e.addDmaRequest('USART1_TX');
+  e.compute();
+  const c = e.cSource();
+  assert.match(c, /USER ACTION: the application owns the addresses and the length/);
+  assert.match(c, /\.DMA_PeripheralBaseAddr, \.DMA_Memory0BaseAddr and/,
+    'names Memory0, the field this struct actually has');
+  assert.match(c, /DMA_Memory1BaseAddr too/,
+    'and mentions Memory1 - the second pointer, conditional on DMA_BufferMode');
+  // The single-buffer wording must not also appear - a bare, un-suffixed
+  // "DMA_MemoryBaseAddr and" (not "DMA_Memory0BaseAddr and", not "DMA_Memory1BaseAddr").
+  assert.equal(/[^0-9]DMA_MemoryBaseAddr and/.test(c), false,
+    'never the OTHER parts\' single-field wording on a part that does not have that field');
+  assert.deepEqual(e.cComplaints().filter(x => /BaseAddr|BufferSize/.test(x.text)), [],
+    'still not a generator complaint on this part either');
 });
 
 // =============================================================================
