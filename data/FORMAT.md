@@ -604,17 +604,52 @@ codegen:
   init_structs:
     ETH_InitTypeDef:
       fn: ETH_RegInit
-      dead_fields: [AutoNegotiation, CarrierSense, Speed, ReceiveOwn, Mode, RetryTransmission,
-                    BackOffLimit, DeferralCheck, ZeroQuantaPause, PauseLowThreshold,
-                    ReceiveStoreForward, FlushReceivedFrame, TransmitThresholdControl,
-                    ReceiveThresholdControl, SecondFrameOperate, AddressAlignedBeats,
-                    FixedBurst, RxDMABurstLength, TxDMABurstLength, DescriptorSkipLength,
-                    DMAArbitration]
+      dead_fields: [ETH_AutoNegotiation, ETH_CarrierSense, ETH_Speed, ETH_ReceiveOwn,
+                    ETH_Mode, ETH_RetryTransmission, ETH_BackOffLimit, ETH_DeferralCheck,
+                    ETH_ZeroQuantaPause, ETH_PauseLowThreshold, ETH_ReceiveStoreForward,
+                    ETH_FlushReceivedFrame, ETH_TransmitThresholdControl,
+                    ETH_ReceiveThresholdControl, ETH_SecondFrameOperate,
+                    ETH_AddressAlignedBeats, ETH_FixedBurst, ETH_RxDMABurstLength,
+                    ETH_TxDMABurstLength, ETH_DescriptorSkipLength, ETH_DMAArbitration]
 ```
 
-A `params:` row whose `sdk_field:` names a listed member is refused with a TODO on the
-struct's own block — the same `--strict`-visible failure as a missing `fn:` or handle, not
-a quiet note — so adding one of the 21 back is a red gate, not a silent, accepted mistake.
+**Each entry is the exact `sdk_field:` string a `params:` row would use** — the struct's
+real member name, `ETH_`-prefix included (`codegen.js` compares `dead_fields` against
+`d.sdk_field` verbatim, `spec.dead_fields.includes(d.sdk_field)`) — not an abbreviated or
+display-friendly form. A `params:` row whose `sdk_field:` names a listed member is refused
+with a TODO on the struct's own block — the same `--strict`-visible failure as a missing
+`fn:` or handle, not a quiet note — so adding one of the 21 back is a red gate, not a
+silent, accepted mistake.
+
+### `codegen.sdk.driver_c` — a name no header anywhere declares
+
+```yaml
+codegen:
+  sdk:
+    evt: H417
+    series: ch32h417
+    driver_c: [EXAM/ETH/MAC_RAW/Common/ETH_Driver/eth_driver_100M.c,
+               EXAM/ETH/MAC_RAW/Common/ETH_Driver/eth_driver_RGMII.c]
+```
+
+`tools/verify_sdk_names.py` reads every `.h` under the EVT's `Peripheral/inc` (and any
+driver header found the way `signal_pins:` documentation describes for UHSIF) for
+DECLARATIONS. That misses a function that is never declared anywhere and only DEFINED in
+an example's own source — CH32H417's `ETH_RegInit` is the proven case: there is no
+`ETH_Init()` in `Peripheral/src` at all, and the only function that ever applies
+`ETH_InitTypeDef` to hardware is defined once, in the example driver's own `.c`, with no
+prototype in any header, including the one beside it.
+
+`driver_c:` names the exact `.c` file(s), paths relative to the part's own `Evt/` root,
+to read for function DEFINITIONS instead of declarations. **Deliberately a hand-curated
+list of files, not a filesystem rule** — see `tools/verify_sdk_names.py`'s own
+`driver_c_files()` docstring for the general rule that was tried first (a public function
+whose name-prefix matches some real SPL peripheral's own prefix) and measured to be
+wrong on 194 of the 194 names it found on this one EVT drop, most of them an unrelated
+example's own local helper sharing a real peripheral's prefix by coincidence
+(`FLASH_ReadID` in an example's own SPI-NOR-flash driver, nothing to do with the on-chip
+FLASH peripheral). A function marked `static` in a designated file is still excluded — a
+name private to its own translation unit is never part of anything exported.
 
 ### Give every enum its register encoding
 

@@ -3199,7 +3199,287 @@ peripherals:
       The four pads are MDIRN/MDIRP (receive pair) and MDITN/MDITP (transmit pair), DS
       Table 2-1-1 at CH32H417DS0.md:3919-3930. They are dedicated pins rather than GPIO
       alternates, which is why they live in data/sources/H417/dedicated_pins.yaml where
-      the generator can see them.
+      the generator can see them. Only 26 of ETH_InitTypeDef's 47 fields are modelled -
+      the ones ETH_RegInit() (the only function that ever applies this struct) actually
+      reads; see this peripheral's own extras comment for the full field split and the
+      `dead_fields:` list that makes the other 21 a refused TODO, not a silent gap.
+    params:
+      - key: phy_addr
+        name: PHY address
+        struct: ETH_InitTypeDef
+        call_arg: true
+        type: int
+        default: 1
+        min: 0
+        max: 31
+        help: "ETH_RegInit()'s second argument - which MDIO address the board's PHY answers to. Default matches the EVT's own PHY_ADDRESS (eth_driver.h)."
+      - key: watchdog
+        name: Watchdog timer
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_Watchdog
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 0,        sdk: ETH_Watchdog_Enable }
+          - { name: Disable, value: 8388608,  sdk: ETH_Watchdog_Disable }
+        help: "R32_ETH_MACCR bit 23, ch32h417_eth.h:358-359. Enabled limits receive to 2048 bytes; disabled allows up to 16384. EVT ETH_Configuration(): Enable."
+      - key: jabber
+        name: Jabber timer
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_Jabber
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 0,        sdk: ETH_Jabber_Enable }
+          - { name: Disable, value: 4194304,  sdk: ETH_Jabber_Disable }
+        help: "R32_ETH_MACCR bit 22, ch32h417_eth.h:362-363. Enabled limits transmit to 2048 bytes; disabled allows up to 16384. EVT ETH_Configuration(): Enable."
+      - key: interframegap
+        name: Inter-frame gap
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_InterFrameGap
+        type: enum
+        default: 96 bit
+        options:
+          - { name: 96 bit, value: 0,       sdk: ETH_InterFrameGap_96Bit }
+          - { name: 88 bit, value: 131072,  sdk: ETH_InterFrameGap_88Bit }
+          - { name: 80 bit, value: 262144,  sdk: ETH_InterFrameGap_80Bit }
+          - { name: 72 bit, value: 393216,  sdk: ETH_InterFrameGap_72Bit }
+          - { name: 64 bit, value: 524288,  sdk: ETH_InterFrameGap_64Bit }
+          - { name: 56 bit, value: 655360,  sdk: ETH_InterFrameGap_56Bit }
+          - { name: 48 bit, value: 786432,  sdk: ETH_InterFrameGap_48Bit }
+          - { name: 40 bit, value: 917504,  sdk: ETH_InterFrameGap_40Bit }
+        help: "R32_ETH_MACCR[19:17], ch32h417_eth.h:366-373. Minimum gap between transmitted frames. EVT ETH_Configuration(): 96 bit."
+      - key: checksumoffload
+        name: IPv4 checksum offload
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_ChecksumOffload
+        type: enum
+        default: Disable
+        options:
+          - { name: Enable,  value: 1024, sdk: ETH_ChecksumOffload_Enable }
+          - { name: Disable, value: 0,    sdk: ETH_ChecksumOffload_Disable }
+        help: "R32_ETH_MACCR bit 10, ch32h417_eth.h:397-398. Checks TCP/UDP/ICMP headers in received frames. EVT ETH_Configuration(): Disable."
+      - key: padcrcstrip
+        name: Automatic pad/CRC strip
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_AutomaticPadCRCStrip
+        type: enum
+        default: Disable
+        options:
+          - { name: Enable,  value: 128, sdk: ETH_AutomaticPadCRCStrip_Enable }
+          - { name: Disable, value: 0,   sdk: ETH_AutomaticPadCRCStrip_Disable }
+        help: "R32_ETH_MACCR bit 7, ch32h417_eth.h:405-406. EVT ETH_Configuration(): Disable."
+      - key: loopback
+        name: MAC loopback
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_LoopbackMode
+        type: enum
+        default: Disable
+        options:
+          - { name: Enable,  value: 4096, sdk: ETH_LoopbackMode_Enable }
+          - { name: Disable, value: 0,    sdk: ETH_LoopbackMode_Disable }
+        help: "R32_ETH_MACCR bit 12, ch32h417_eth.h:389-390. Internal MII loopback, test-only. EVT ETH_Configuration(): Disable."
+      - key: receiveall
+        name: Receive all frames (no filter)
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_ReceiveAll
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 2147483648, sdk: ETH_ReceiveAll_Enable }
+          - { name: Disable, value: 0,           sdk: ETH_ReceiveAll_Disable }
+        help: "R32_ETH_MACFFR bit 31, ch32h417_eth.h:419-420. EVT ETH_Configuration(): Enable."
+      - key: srcaddrfilter
+        name: Source address filter
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_SourceAddrFilter
+        type: enum
+        default: Disable
+        options:
+          - { name: "Normal (drop if match)",   value: 512, sdk: ETH_SourceAddrFilter_Normal_Enable }
+          - { name: "Inverse (drop if no match)", value: 768, sdk: ETH_SourceAddrFilter_Inverse_Enable }
+          - { name: Disable,                    value: 0,   sdk: ETH_SourceAddrFilter_Disable }
+        help: "R32_ETH_MACFFR[9:8], ch32h417_eth.h:423-425. EVT ETH_Configuration(): Disable."
+      - key: passctrlframes
+        name: Control frame forwarding
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_PassControlFrames
+        type: enum
+        default: Block all
+        options:
+          - { name: Block all,                          value: 64,  sdk: ETH_PassControlFrames_BlockAll }
+          - { name: Forward all,                        value: 128, sdk: ETH_PassControlFrames_ForwardAll }
+          - { name: Forward if passes address filter,   value: 192, sdk: ETH_PassControlFrames_ForwardPassedAddrFilter }
+        help: "R32_ETH_MACFFR[7:6], ch32h417_eth.h:428-430. EVT ETH_Configuration(): Block all."
+      - key: broadcastrx
+        name: Broadcast frame reception
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_BroadcastFramesReception
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 0,  sdk: ETH_BroadcastFramesReception_Enable }
+          - { name: Disable, value: 32, sdk: ETH_BroadcastFramesReception_Disable }
+        help: "R32_ETH_MACFFR bit 5, ch32h417_eth.h:433-434. EVT ETH_Configuration(): Enable."
+      - key: dstaddrfilter
+        name: Destination address filter
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_DestinationAddrFilter
+        type: enum
+        default: Normal
+        options:
+          - { name: Normal,  value: 0, sdk: ETH_DestinationAddrFilter_Normal }
+          - { name: Inverse, value: 8, sdk: ETH_DestinationAddrFilter_Inverse }
+        help: "R32_ETH_MACFFR bit 3, ch32h417_eth.h:437-438. EVT ETH_Configuration(): Normal."
+      - key: promiscuous
+        name: Promiscuous mode
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_PromiscuousMode
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 1, sdk: ETH_PromiscuousMode_Enable }
+          - { name: Disable, value: 0, sdk: ETH_PromiscuousMode_Disable }
+        help: "R32_ETH_MACFFR bit 0, ch32h417_eth.h:441-442. EVT ETH_Configuration(): Enable."
+      - key: multicastfilter
+        name: Multicast frame filter
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_MulticastFramesFilter
+        type: enum
+        default: Perfect
+        options:
+          - { name: Perfect + hash table, value: 1028, sdk: ETH_MulticastFramesFilter_PerfectHashTable }
+          - { name: Hash table,           value: 4,    sdk: ETH_MulticastFramesFilter_HashTable }
+          - { name: Perfect,              value: 0,    sdk: ETH_MulticastFramesFilter_Perfect }
+          - { name: None,                 value: 16,   sdk: ETH_MulticastFramesFilter_None }
+        help: "R32_ETH_MACFFR bits [10,4,2], ch32h417_eth.h:445-448. EVT ETH_Configuration(): Perfect."
+      - key: unicastfilter
+        name: Unicast frame filter
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_UnicastFramesFilter
+        type: enum
+        default: Perfect
+        options:
+          - { name: Perfect + hash table, value: 1026, sdk: ETH_UnicastFramesFilter_PerfectHashTable }
+          - { name: Hash table,           value: 2,    sdk: ETH_UnicastFramesFilter_HashTable }
+          - { name: Perfect,              value: 0,    sdk: ETH_UnicastFramesFilter_Perfect }
+        help: "R32_ETH_MACFFR bits [10,1], ch32h417_eth.h:451-453. EVT ETH_Configuration(): Perfect."
+      - key: hashtablehigh
+        name: Hash table (high 32 bits)
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_HashTableHigh
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "R32_ETH_MACHTHR, ch32h417_eth.h. Only meaningful under a hash-table filter mode above. EVT ETH_Configuration(): 0x0."
+      - key: hashtablelow
+        name: Hash table (low 32 bits)
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_HashTableLow
+        type: int
+        default: 0
+        min: 0
+        max: 4294967295
+        help: "R32_ETH_MACHTLR, ch32h417_eth.h. EVT ETH_Configuration(): 0x0."
+      - key: pausetime
+        name: Pause time
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_PauseTime
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "R32_ETH_MACFCR[31:16] (ETH_RegInit shifts this left 16 itself - the field here is the raw 16-bit value), ch32h417_eth.h. EVT ETH_Configuration(): 0x0."
+      - key: unicastpausedetect
+        name: Unicast pause frame detect
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_UnicastPauseFrameDetect
+        type: enum
+        default: Disable
+        options:
+          - { name: Enable,  value: 8, sdk: ETH_UnicastPauseFrameDetect_Enable }
+          - { name: Disable, value: 0, sdk: ETH_UnicastPauseFrameDetect_Disable }
+        help: "R32_ETH_MACFCR bit 3, ch32h417_eth.h:466-467. EVT ETH_Configuration(): Disable."
+      - key: rxflowcontrol
+        name: Receive flow control
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_ReceiveFlowControl
+        type: enum
+        default: Disable
+        options:
+          - { name: Enable,  value: 4, sdk: ETH_ReceiveFlowControl_Enable }
+          - { name: Disable, value: 0, sdk: ETH_ReceiveFlowControl_Disable }
+        help: "R32_ETH_MACFCR bit 2, ch32h417_eth.h:470-471. EVT ETH_Configuration(): Disable."
+      - key: txflowcontrol
+        name: Transmit flow control
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_TransmitFlowControl
+        type: enum
+        default: Disable
+        options:
+          - { name: Enable,  value: 2, sdk: ETH_TransmitFlowControl_Enable }
+          - { name: Disable, value: 0, sdk: ETH_TransmitFlowControl_Disable }
+        help: "R32_ETH_MACFCR bit 1, ch32h417_eth.h:474-475. EVT ETH_Configuration(): Disable."
+      - key: vlantagcomparison
+        name: VLAN tag comparison
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_VLANTagComparison
+        type: enum
+        default: 16-bit
+        options:
+          - { name: 12-bit, value: 65536, sdk: ETH_VLANTagComparison_12Bit }
+          - { name: 16-bit, value: 0,      sdk: ETH_VLANTagComparison_16Bit }
+        help: "R32_ETH_MACVLANTR bit 16, ch32h417_eth.h:478-479. EVT ETH_Configuration(): 16-bit."
+      - key: vlantagid
+        name: VLAN tag identifier
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_VLANTagIdentifier
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "R32_ETH_MACVLANTR[15:0], ch32h417_eth.h. EVT ETH_Configuration(): 0x0."
+      - key: droptcpipchecksumerr
+        name: Drop TCP/IP checksum error frames
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_DropTCPIPChecksumErrorFrame
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 0,        sdk: ETH_DropTCPIPChecksumErrorFrame_Enable }
+          - { name: Disable, value: 67108864, sdk: ETH_DropTCPIPChecksumErrorFrame_Disable }
+        help: "R32_ETH_DMAOMR bit 26, ch32h417_eth.h:542-543. EVT ETH_Configuration(): Enable."
+      - key: txstoreforward
+        name: Transmit store-and-forward
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_TransmitStoreForward
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 2097152, sdk: ETH_TransmitStoreForward_Enable }
+          - { name: Disable, value: 0,       sdk: ETH_TransmitStoreForward_Disable }
+        help: "R32_ETH_DMAOMR bit 21, ch32h417_eth.h:554-555. EVT ETH_Configuration(): Enable (paired with checksum offload, per the EVT's own comment)."
+      - key: forwarderrorframes
+        name: Forward error frames to DMA
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_ForwardErrorFrames
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 128, sdk: ETH_ForwardErrorFrames_Enable }
+          - { name: Disable, value: 0,   sdk: ETH_ForwardErrorFrames_Disable }
+        help: "R32_ETH_DMAOMR bit 7, ch32h417_eth.h:568-569. EVT ETH_Configuration(): Enable."
+      - key: forwardundersized
+        name: Forward undersized good frames
+        struct: ETH_InitTypeDef
+        sdk_field: ETH_ForwardUndersizedGoodFrames
+        type: enum
+        default: Enable
+        options:
+          - { name: Enable,  value: 64, sdk: ETH_ForwardUndersizedGoodFrames_Enable }
+          - { name: Disable, value: 0,  sdk: ETH_ForwardUndersizedGoodFrames_Disable }
+        help: "R32_ETH_DMAOMR bit 6, ch32h417_eth.h:572-573. EVT ETH_Configuration(): Enable."
   EXTI:
     category: System Core
     settings:
@@ -9186,6 +9466,13 @@ codegen:
   sdk:
     evt: H417
     series: ch32h417
+    # ETH_RegInit is declared in NO header anywhere (see tools/verify_sdk_names.py's
+    # own driver_c_files() docstring and this part's ETH peripheral_extras.yaml
+    # comment for the full citation trail) - only defined in the example driver's own
+    # .c. Both files' ETH_RegInit bodies are byte-identical (diffed, not assumed).
+    driver_c:
+      - EXAM/ETH/MAC_RAW/Common/ETH_Driver/eth_driver_100M.c
+      - EXAM/ETH/MAC_RAW/Common/ETH_Driver/eth_driver_RGMII.c
 
   # The SDK does not spell the clock-refresh call the same way on every family, and
   # this part is the one that differs: System/ch32h417/{v3f,v5f}/system_ch32h417.h
@@ -9345,6 +9632,23 @@ codegen:
     # primary struct.
     SAI_FrameInitTypeDef:      { fn: SAI_FrameInit }   # ch32h417_sai.h:242
     SAI_SlotInitTypeDef:       { fn: SAI_SlotInit }    # ch32h417_sai.h:243
+    # ETH_RegInit(ETH_InitTypeDef*, uint16_t PHYAddress) takes NO handle argument
+    # (ETH-> is used directly inside it, like OPA_CMP_Init) - no_handle: true. The
+    # second argument is `phy_addr`'s own `call_arg: true` row (peripheral_extras.yaml
+    # ETH comment). dead_fields: the 21 of ETH_InitTypeDef's 47 members ETH_RegInit's
+    # own body never reads - filled only by ETH_StructInit()'s defaults, which nothing
+    # reads back (ch32h417_eth.c:44-95); a params: row naming one of these is refused
+    # as a TODO, not silently accepted.
+    ETH_InitTypeDef:
+      fn: ETH_RegInit   # driver_c: eth_driver_100M.c:482 / eth_driver_RGMII.c - no header
+      no_handle: true
+      dead_fields: [ETH_AutoNegotiation, ETH_CarrierSense, ETH_Speed, ETH_ReceiveOwn,
+                    ETH_Mode, ETH_RetryTransmission, ETH_BackOffLimit, ETH_DeferralCheck,
+                    ETH_ZeroQuantaPause, ETH_PauseLowThreshold, ETH_ReceiveStoreForward,
+                    ETH_FlushReceivedFrame, ETH_TransmitThresholdControl,
+                    ETH_ReceiveThresholdControl, ETH_SecondFrameOperate,
+                    ETH_AddressAlignedBeats, ETH_FixedBurst, ETH_RxDMABurstLength,
+                    ETH_TxDMABurstLength, ETH_DescriptorSkipLength, ETH_DMAArbitration]
 
   periph_handle:
     # CAN1/CAN2/CAN3 are the SDK's own register-block names (ch32h417.h:1743-1747 casts

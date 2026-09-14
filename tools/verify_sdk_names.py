@@ -52,6 +52,13 @@ Where the names come from
   1. data/sources/<evt>/Evt/**/Peripheral/inc      the EVT package  - TOP AUTHORITY
   2. ~/.platformio/packages/framework-wch-noneos-sdk/Peripheral/<series>/inc
      plus Core/, System/, Startup/, Debug/         the same vendor code as a package
+  3. codegen.sdk.driver_c: [ <path relative to Evt/>, ... ]
+     a hand-curated list of .c files read for function DEFINITIONS, for a name no
+     header anywhere declares (CH32H417's ETH_RegInit: no ETH_Init() in Peripheral/src,
+     the only function that applies ETH_InitTypeDef is defined only in the example
+     driver's own .c). See driver_c_files()'s docstring for why this is a named list of
+     files and not a filesystem rule - a general version of it was tried and measured
+     first, and it was wrong on 194 of the names it found.
 See data/sources/README.md for the precedence rule.
 
 Silence is not a pass. A part with no `codegen.sdk` block, or one whose SDK is not
@@ -115,6 +122,22 @@ FIELD_RE = re.compile(r"([A-Za-z_]\w*)\s*(?:\[[^\]]*\])?\s*(?:,|$)")
 BITFIELD_WIDTH_RE = re.compile(r":\s*\d+")
 FUNC_RE = re.compile(
     r"^[ \t]*(?:extern[ \t]+)?[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)[ \t]*\([^;{]*\)[ \t]*;",
+    re.M,
+)
+# The THIRD indexing mode, for a name no header anywhere declares - `codegen.sdk.driver_c:`
+# below, ETH_RegInit's own case. A DEFINITION, not a prototype: it ends in `{`, not `;`,
+# and the vendor's own brace style puts that `{` on the NEXT line
+# (`uint32_t ETH_RegInit( ... )\n{`), so `[ \t]*\{` (FUNC_RE's own trailing pattern) never
+# matches it - `[ \t\r\n]*` is required, not cosmetic. `static` is excluded: a function
+# private to its own translation unit is a per-file implementation detail, never part of
+# a driver's exported surface - `RecDataPolling`-shaped local helpers stay excluded this
+# way without needing a name to be told apart from `ETH_RegInit` on any other basis.
+FUNC_DEF_RE = re.compile(
+    r"^[ \t]*(?:extern[ \t]+)?[A-Za-z_][\w \t\*]*?\b([A-Za-z_]\w*)[ \t]*\([^;{)]*\)[ \t\r\n]*\{",
+    re.M,
+)
+STATIC_FUNC_DEF_RE = re.compile(
+    r"^[ \t]*static\b[^;{]*?\b([A-Za-z_]\w*)[ \t]*\([^;{)]*\)[ \t\r\n]*\{",
     re.M,
 )
 # Startup is assembly: `.weak NAME` and `.word NAME` are the vector symbols.
@@ -191,6 +214,20 @@ class Index:
         self.files_read += 1
         self.asm_symbols.update(ASM_SYM_RE.findall(raw))
 
+    def add_definitions(self, path: pathlib.Path) -> None:
+        """A `.c` file EXPLICITLY named by `codegen.sdk.driver_c:` - read for function
+        DEFINITIONS, not declarations. See `driver_c_files()`'s own docstring for why
+        this exists only for files a part's data names outright, never for a directory
+        matched by a filesystem pattern."""
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return
+        self.files_read += 1
+        text = strip_comments(raw)
+        statics = set(STATIC_FUNC_DEF_RE.findall(text))
+        self.functions.update(n for n in FUNC_DEF_RE.findall(text) if n not in statics)
+
     def suggest(self, name: str, pool: set[str]) -> str:
         """The half of this tool that earns its keep: say what they probably meant."""
         if not pool:
@@ -265,6 +302,51 @@ def evt_support_dirs(evt_root: pathlib.Path) -> list[pathlib.Path]:
     return sorted(set(out))
 
 
+def driver_c_files(evt_root: pathlib.Path, doc: dict, r: Report) -> list[pathlib.Path]:
+    """`codegen.sdk.driver_c:` - the THIRD indexing mode, for a name no header anywhere
+    declares. CH32H417's `ETH_RegInit` is the proven case: there is no `ETH_Init()` in
+    `Peripheral/src` at all, the only function that ever applies the WHOLE
+    `ETH_InitTypeDef` to hardware is `ETH_RegInit(ETH_InitTypeDef*, uint16_t)`, and it is
+    DEFINED only in the example driver's own `.c`
+    (`Evt/EXAM/ETH/MAC_RAW/Common/ETH_Driver/eth_driver_100M.c`) - never declared, not
+    even in the header sitting right beside it (`eth_driver.h`, which is read for macros
+    like every other header but declares `ETH_Init`/`ETH_Configuration`/etc, never this
+    one). `verify_sdk_names.py` only ever read `.h` files before this, so every
+    `ETH_RegInit` an MCU file names would report as fictional.
+
+    DELIBERATELY A HAND-CURATED LIST OF FILES, not a filesystem rule, and this is not the
+    lazy version - it is the one that survived MEASURING the general version first, the
+    same discipline `evt_include_dirs()` above used for UHSIF. The first rule tried here
+    was structural, the way UHSIF's ".a beside a matching header" rule is: "a public
+    (non-`static`) function whose name-prefix matches a prefix some real Peripheral/inc
+    header already declares, defined outside the standard boilerplate filenames
+    (`main.c`, `hardware.c`, `ch32h417_it.c`, ...)". Run for real against this one EVT
+    drop, that rule surfaced 194 names, and most of them were WRONG:
+    `FLASH_ReadID`/`FLASH_WriteEnable`/six more in `USBFS/DEVICE/MSC_U-Disk/Common/
+    SPI_FLASH.c` are an EXTERNAL SPI NOR FLASH CHIP driver, sharing the on-chip FLASH
+    peripheral's prefix by pure naming coincidence; `RCC_Configuration`, `GPIO_Config`,
+    `SDMMC_SetCommand`, dozens more, same shape. A rule that vouches for `FLASH_ReadID`
+    as if it were `ch32h417_flash.h`'s own surface is worse than the gap it would close:
+    it would let an unrelated example's local function mask a genuine typo in a FLASH
+    `params:` row, forever, silently. So: named files, reviewed once each, cited here -
+    the same trade UHSIF's rule makes by requiring a `.a`, just pushed one step further
+    because ETH's shape has no comparably reliable structural marker at all.
+
+    A relative path is checked to exist and to actually define something new; a path
+    that does neither is an ERROR naming which - the citation is dead, not merely
+    unused, exactly like `codegen.header` naming a file that no longer exists.
+    """
+    paths = ((doc.get("codegen") or {}).get("sdk") or {}).get("driver_c") or []
+    out: list[pathlib.Path] = []
+    for rel in paths:
+        p = evt_root / str(rel)
+        if not p.is_file():
+            r.error("codegen.sdk.driver_c", f"`{rel}` does not exist under {evt_root}")
+            continue
+        out.append(p)
+    return out
+
+
 def build_index(doc: dict, r: Report) -> Index | None:
     """Resolve a part to an SDK and read it. None = not checkable, and it says why."""
     sdk = ((doc.get("codegen") or {}).get("sdk")) or {}
@@ -285,6 +367,7 @@ def build_index(doc: dict, r: Report) -> Index | None:
     sources: list[str] = []
     inc_dirs: list[pathlib.Path] = []
     support: list[pathlib.Path] = []
+    driver_c: list[pathlib.Path] = []
 
     if evt:
         evt_root = ROOT / "data" / "sources" / str(evt) / "Evt"
@@ -299,6 +382,7 @@ def build_index(doc: dict, r: Report) -> Index | None:
             else:
                 r.info("codegen.sdk.evt",
                        f"`{evt}` exists but has no Peripheral/inc yet - falling back to PlatformIO")
+            driver_c += driver_c_files(evt_root, doc, r)
 
     if not inc_dirs and series:
         base = PIO_SDK / "Peripheral" / str(series) / "inc"
@@ -331,6 +415,8 @@ def build_index(doc: dict, r: Report) -> Index | None:
                 idx.add_header(f)
             elif f.suffix.lower() in (".s", ".asm"):
                 idx.add_asm(f)
+    for f in driver_c:
+        idx.add_definitions(f)
     return idx
 
 

@@ -1116,6 +1116,51 @@ bits, and a clock tree that models what the schema can hold.
       ANY peripheral, on any part, since the function's call site assumed the wrong shape
       (`dma.channel_params`'s map-of-groups, not a peripheral's single block) - re-checked
       all six parts after the fix, 0 errors, so nothing was silently wrong, only unchecked.
+
+      **ETH landed 2026-09-14 (`params:` 61 -> 62 of 78) - the last ROUTING peripheral on
+      this part without a block; GPHA correctly excluded, it strands no pads
+      (`pins: { none: true, ... }`, main's own correction).** Built the third indexing
+      mode `verify_sdk_names.py` needed: `codegen.sdk.driver_c:`, a hand-curated list of
+      `.c` files read for function DEFINITIONS (not declarations), for `ETH_RegInit` -
+      declared in NO header anywhere, defined only in the example driver's own
+      `eth_driver_100M.c`/`eth_driver_RGMII.c` (byte-identical bodies, diffed not
+      assumed). Tried the general version first, same discipline as narrowing UHSIF's
+      rule: "a public function whose name-prefix matches a real SPL peripheral prefix,
+      outside the standard boilerplate filenames" - measured against the real EVT drop,
+      **194 candidate names, most of them wrong** (`FLASH_ReadID`/seven more in an
+      example's own EXTERNAL SPI-NOR-flash driver, sharing the on-chip FLASH
+      peripheral's prefix by coincidence; `RCC_Configuration`, `GPIO_Config`,
+      `SDMMC_SetCommand`, dozens more). Rejected for the same reason UHSIF's 711-
+      directory first attempt was: a rule that vouches for `FLASH_ReadID` as if it were
+      real FLASH SDK surface would let an unrelated example's local helper mask a
+      genuine typo, forever, silently. Landed the hand-curated list instead - two named
+      files, cited, reviewed. Both halves asserted as invariants in
+      `verify_sdk_names_selftest.py`'s new `driver_c_cases()` (POSITIVE: resolves with
+      `driver_c:`, fails without it; END TO END: a bad `sdk_field:` is named; NEGATIVE:
+      `FLASH_ReadID` - real, public, elsewhere in the same EVT drop, not in any
+      designated file - stays unresolved), same shape `driver_header_cases()` already
+      uses for UHSIF. 48/48 planted breaks caught (was 44).
+
+      26 of `ETH_InitTypeDef`'s 47 fields modelled - the ones `ETH_RegInit`'s own body
+      reads (confirmed by reading the actual C, not the header's doc comments); the
+      other 21 are `codegen.init_structs.ETH_InitTypeDef.dead_fields` (AGENT-2's
+      mechanism), refused as a named `--strict` TODO rather than silently absent -
+      planted one back in and watched the TODO fire before trusting it. Found and fixed
+      a real error in `data/FORMAT.md`'s own worked `dead_fields:` example while landing
+      this: it listed the 21 names WITHOUT their `ETH_` prefix
+      (`dead_fields: [AutoNegotiation, ...]`), but `codegen.js` compares the list
+      against `d.sdk_field` verbatim - the REAL struct member name, prefix included -
+      so the documented example would never actually have matched anything real. Fixed
+      in both the doc and the real data. `ETH_RegInit`'s second argument (`PHYAddress`,
+      not a struct member) is `call_arg: true` on its own `phy_addr` row, default 1
+      citing the EVT's own `PHY_ADDRESS` macro; `no_handle: true` since `ETH_RegInit`
+      takes no register-block handle at all.
+
+      Compiled, not asserted: a throwaway project with `Interface: Internal PHY`, a
+      non-default `watchdog`/`interframegap`/`phy_addr`, `node tools/wchcube_cli.js
+      --format c --strict` exits 0, all 26 fields emitted correctly with the right
+      values, `ETH_RegInit(&ETH_InitStructure, 3)` - no handle, PHY address appended as
+      the trailing argument, exactly as designed.
       - [ ] (AGENT-1) **SDMMC's DDR-mode structs are not modelled**: `SDMMC_IOInputDelayDDRTypeDef`
             / `SDMMC_IOOutputDelayDDRTypeDef` (eight 4-bit per-line delay taps each,
             `ch32h417_sdmmc.h:111-177`) are real init-time settings, but neither of this part's

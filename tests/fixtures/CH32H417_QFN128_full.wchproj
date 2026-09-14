@@ -309,6 +309,34 @@ peripherals:
       SMI (serial management interface): Disable
       Status outputs: []
     remap: 0
+    params:
+      phy_addr: 1
+      watchdog: Enable
+      jabber: Enable
+      interframegap: 96 bit
+      checksumoffload: Disable
+      padcrcstrip: Disable
+      loopback: Disable
+      receiveall: Enable
+      srcaddrfilter: Disable
+      passctrlframes: Block all
+      broadcastrx: Enable
+      dstaddrfilter: Normal
+      promiscuous: Enable
+      multicastfilter: Perfect
+      unicastfilter: Perfect
+      hashtablehigh: 0
+      hashtablelow: 0
+      pausetime: 0
+      unicastpausedetect: Disable
+      rxflowcontrol: Disable
+      txflowcontrol: Disable
+      vlantagcomparison: 16-bit
+      vlantagid: 0
+      droptcpipchecksumerr: Enable
+      txstoreforward: Enable
+      forwarderrorframes: Enable
+      forwardundersized: Enable
   EXTI:
     settings:
       EXTI trigger edge: Rising edge

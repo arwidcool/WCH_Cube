@@ -317,9 +317,10 @@ def main() -> int:
                     "; ".join(Report_safe(p) for p in problems) or "nothing at all"))
 
         dh_total, dh_missed = driver_header_cases(tmp, verbose=args.verbose)
+        dc_total, dc_missed = driver_c_cases(tmp, verbose=args.verbose)
         bf_total, bf_missed = bitfield_cases(tmp, verbose=args.verbose)
-        missed += dh_missed + bf_missed
-        total = len(cases) + dh_total + bf_total
+        missed += dh_missed + dc_missed + bf_missed
+        total = len(cases) + dh_total + dc_total + bf_total
         print(f"\n{total} planted break(s), {total - missed} caught, {missed} missed")
         return 1 if missed else 0
 
@@ -399,6 +400,89 @@ def driver_header_cases(tmp: pathlib.Path, verbose: bool = False) -> tuple[int, 
     if hit and verbose:
         print("              " + Report_safe(hit))
     return (4, missed + (0 if hit else 1))
+
+
+def driver_c_cases(tmp: pathlib.Path, verbose: bool = False) -> tuple[int, int]:
+    """`codegen.sdk.driver_c:` - the THIRD indexing mode, for a name no header anywhere
+    declares. CH32H417's `ETH_RegInit` is the proven case, same shape as
+    `driver_header_cases()` above for UHSIF: both halves asserted as invariants, not
+    "this one thing is present", because the whole point of a hand-curated file list
+    (over a filesystem rule) is that NOTHING else leaks in from it.
+
+      1. POSITIVE - `ETH_RegInit` resolves once `driver_c:` names the file that defines
+         it, and does NOT resolve with `driver_c:` removed (the file this data actually
+         had before this landed) - proving the citation is load-bearing, not decorative.
+      2. END TO END - a planted bad `sdk_field:` on a real ETH `params:` row is actually
+         NAMED, the same discipline `driver_header_cases()`'s UHSIF case uses.
+      3. NEGATIVE - a real, public, non-`static` function name that exists SOMEWHERE in
+         this EVT drop but is NOT in any `driver_c:`-designated file must NOT resolve.
+         `FLASH_ReadID` (Evt/EXAM/USBFS/DEVICE/MSC_U-Disk/Common/SPI_FLASH.c - an
+         EXTERNAL SPI-NOR-flash driver, nothing to do with the on-chip FLASH
+         peripheral) is the proven false positive from the general rule this file's own
+         docstring describes trying and rejecting; asserting it stays unresolved is what
+         would catch a re-widening back to that rule, the same way
+         `driver_header_cases()`'s 711-directories case does for UHSIF.
+    """
+    import verify_sdk_names as V                                      # noqa: PLC0415
+
+    evt = ROOT / "data" / "sources" / "H417" / "Evt"
+    part = ROOT / "data" / "mcus" / "CH32H417.yaml"
+    if not evt.is_dir() or not part.is_file():
+        print("  SKIP      driver-c cases: the H417 drop is not present")
+        return (0, 0)
+
+    missed = 0
+    doc = yaml.safe_load(part.read_text(encoding="utf-8"))
+
+    # 1a. POSITIVE - resolves with driver_c: present (the real, shipped shape).
+    rep = run(copy.deepcopy(doc), tmp.parent / "CH32H417.yaml")
+    ok = not any("ETH_RegInit" in p for p in rep.errors)
+    print(f"{'  caught  ' if ok else '  MISSED  '}ETH_RegInit resolves with `driver_c:` present")
+    if not ok:
+        missed += 1
+
+    # 1b. Removing driver_c: must make it fail again - proves (1a) is not accidental
+    # (e.g. some OTHER path also declaring the name).
+    without = copy.deepcopy(doc)
+    without["codegen"]["sdk"].pop("driver_c", None)
+    rep2 = run(without, tmp.parent / "CH32H417.yaml")
+    hit = any("ETH_RegInit" in p and "is not a declared function" in p for p in rep2.errors)
+    print(f"{'  caught  ' if hit else '  MISSED  '}ETH_RegInit fails WITHOUT `driver_c:` "
+          f"- the citation is load-bearing")
+    if not hit:
+        missed += 1
+
+    # 2. END TO END - a bad sdk_field on a real ETH row is named.
+    planted = copy.deepcopy(doc)
+    try:
+        row = next(p for p in planted["peripherals"]["ETH"]["params"] if p["key"] == "watchdog")
+        row["sdk_field"] = "ETH_NotARealField"
+    except Exception as exc:                                          # noqa: BLE001
+        print(f"  MISSED    ETH end-to-end: could not plant it ({exc})")
+        missed += 1
+    else:
+        rep3 = run(planted, tmp.parent / "CH32H417.yaml")
+        hit3 = any("ETH_NotARealField" in p for p in rep3.errors)
+        print(f"{'  caught  ' if hit3 else '  MISSED  '}a bad `sdk_field:` on a real ETH row is named")
+        if not hit3:
+            missed += 1
+
+    # 3. NEGATIVE - a real function that exists elsewhere in the drop, but not in any
+    # designated file, must not resolve. Proves scanning stayed narrow.
+    negative = copy.deepcopy(doc)
+    negative.setdefault("codegen", {}).setdefault("init_structs", {})["ETH_InitTypeDef2"] = (
+        {"fn": "FLASH_ReadID", "no_handle": True}
+    )
+    # A synthetic struct/fn pair just to ask the SAME question `want()` asks of `fn:`,
+    # without needing a params: row of its own - does the SDK index carry this name.
+    rep4 = run(negative, tmp.parent / "CH32H417.yaml")
+    leaked = not any("FLASH_ReadID" in p and "is not a declared function" in p for p in rep4.errors)
+    print(f"{'  caught  ' if not leaked else '  MISSED  '}`FLASH_ReadID` (a real function "
+          f"outside any designated driver_c: file) stays unresolved")
+    if leaked:
+        missed += 1
+
+    return (4, missed)
 
 
 def bitfield_cases(tmp: pathlib.Path, verbose: bool = False) -> tuple[int, int]:
