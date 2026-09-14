@@ -29,16 +29,30 @@ peripheral's `signal_pins:` are right, because the two tables are independent so
 but DISAGREEING with one is NOT evidence the FILE is wrong. It is only evidence the
 DATASHEET'S TWO TABLES disagree with each other, and in `CH32H417DS0.md` specifically,
 **Table 2-2-x is measurably less reliable than Table 2-1-1**: checking eight raw diffs
-against Table 2-1-1 by hand found five were Table 2-2-x's own error, one was a naming
-inconsistency Table 2-1-1 sides with the file on, one was confirmed correct, and only one
-(`MCO`, a whole missing peripheral) was a real file defect. A tool that reads every
-Table-2-2-x disagreement as "the file is wrong" would have been wrong 5 times out of 7.
+against Table 2-1-1 by hand (2026-09-13) found five were Table 2-2-x's own error, one was
+a naming inconsistency Table 2-1-1 sides with the file on, one was `MCO` -- which turned
+out not to be a file defect either, just this tool's own registry pointing `MCO` at a
+top-level peripheral that never existed (it is one choice-row of `RCC`'s own setting) --
+and one (`FMC.RAS_N`) was a genuine gap, confirmed by a third source (the EVT). A tool
+that read every Table-2-2-x disagreement as "the file is wrong" would have been wrong 6
+times out of 8.
 
 So every diff against Table 2-2-x is now cross-checked against Table 2-1-1 (imported from
 `tools/extract_h417_pins.py`, AGENT-1's own battle-tested parser for that table -- this
 file does not re-parse Table 2-1-1 itself, both to avoid a second buggy parser and because
 that parser already handles the PDF's line-wrap and split-name/split-AF damage this table
 carries) and resolved to exactly THREE verdicts, never a fourth invented one:
+
+**The payoff of importing rather than re-implementing, seen for real the next day**:
+AGENT-1 found and fixed a THIRD line-wrap variant in `extract_h417_pins.py` (`PF11`'s
+`SDRAM_RAS_N(AF12` split from its closing paren across a page boundary -- `SPLIT_AF_CLOSE`)
+while chasing exactly the `FMC.RAS_N` gap this tool's own EVT cross-check had already found
+by hand. One fix, and this tool's Table 2-1-1 reading improved with zero code changes here
+-- re-running confirmed `file_defect` still 0 and exactly one line (the now-resolved
+`FMC.RAS_N`) dropped out of the diff, nothing else moved. Two independently-written parsers
+for the same PDF-mangled table would have had two different blind spots and no way to
+notice they disagreed; importing means there is exactly one blind spot to find at a time,
+and finding it helps both tools at once.
 
     file_defect                Table 2-1-1 confirms Table 2-2-x's claim, against the file
                                 -- a real gap or wrong value; fix the file.
