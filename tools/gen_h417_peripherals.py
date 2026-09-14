@@ -677,13 +677,18 @@ SETTINGS: dict[str, list[dict]] = {
             {"name": "Synchronous", "signals": ["FS_B", "SCK_B", "SD_B", "MCLK_B"]},
         ],
     }],
+    # "Single wire with supply" (IO+SUP) is deliberately NOT a choice: DS Table 2-2-26
+    # marks SWP_SUP "-" under its own 1-wire column and CH32H417RM.md:11003 scopes SUP to
+    # "Non-1-wire mode" - two independent sources, no register bit or EVT example either
+    # way. See the peripheral's own `comment:` (peripheral_extras.yaml) for the full
+    # citation. SUP stays claimable under Loopback instead, a genuine non-1-wire mode
+    # where Table 2-2-26's other column gives it a real pad.
     "SWPMI": [{
         "name": "Mode",
         "choices": [
             {"name": "Disable"},
             {"name": "Single wire", "signals": ["IO"]},
-            {"name": "Single wire with supply", "signals": ["IO", "SUP"]},
-            {"name": "Loopback", "signals": ["IO", "RX", "TX"]},
+            {"name": "Loopback", "signals": ["IO", "RX", "TX", "SUP"]},
         ],
     }],
     "PIOC": [{

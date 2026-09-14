@@ -187,20 +187,59 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: 1
+      mode: Normal
+      sjw: 1 time quantum
+      bs1: 4 time quanta
+      bs2: 3 time quanta
+      ttcm: Disable
+      abom: Disable
+      awum: Disable
+      nart: Disable
+      rflm: Disable
+      txfp: Disable
   CAN2:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: 1
+      mode: Normal
+      sjw: 1 time quantum
+      bs1: 4 time quanta
+      bs2: 3 time quanta
+      ttcm: Disable
+      abom: Disable
+      awum: Disable
+      nart: Disable
+      rflm: Disable
+      txfp: Disable
   CAN3:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: 1
+      mode: Normal
+      sjw: 1 time quantum
+      bs1: 4 time quanta
+      bs2: 3 time quanta
+      ttcm: Disable
+      abom: Disable
+      awum: Disable
+      nart: Disable
+      rflm: Disable
+      txfp: Disable
   CMP:
     settings:
       Positive input: Disable
       Negative input: Disable
       Output: Disable
     remap: 0
+    params:
+      vref: Disabled
+      hypsel: 0 mV
   CRC:
     settings:
       Mode: Disable
@@ -426,6 +465,29 @@ peripherals:
       Output compare: Disable
       ETR: Disable
     remap: 0
+    params:
+      enable: true
+      clksrc: Internal
+      clkpol: Rising
+      clksample: 0T
+      trigsample: 0T
+      clkpresc: ÷1
+      trigsrc: ETR
+      extrigpol: Rising
+      timeout: Disable
+      outpol: High
+      updatemode: Mode0
+      countsrc: Internal
+      encoder: Disable
+      inclksrc: PCLK1
+      forceouthigh: Disable
+      onepulse: Disable
+      singlemode: Disable
+      continuousmode: Enable
+      pwmout: Enable
+      counterdirind: Disable
+      pulse: 0
+      period: 0
   LPTIM2:
     settings:
       Channel1: Disable
@@ -433,6 +495,29 @@ peripherals:
       Output compare: Disable
       ETR: Disable
     remap: 0
+    params:
+      enable: true
+      clksrc: Internal
+      clkpol: Rising
+      clksample: 0T
+      trigsample: 0T
+      clkpresc: ÷1
+      trigsrc: ETR
+      extrigpol: Rising
+      timeout: Disable
+      outpol: High
+      updatemode: Mode0
+      countsrc: Internal
+      encoder: Disable
+      inclksrc: PCLK1
+      forceouthigh: Disable
+      onepulse: Disable
+      singlemode: Disable
+      continuousmode: Enable
+      pwmout: Enable
+      counterdirind: Disable
+      pulse: 0
+      period: 0
   LTDC:
     settings:
       Colour depth: Disable
@@ -535,6 +620,9 @@ peripherals:
     settings:
       Wakeup: Disable
     remap: 0
+    params:
+      prescaler: 40000
+      alarm: 0
   SAI:
     settings:
       Block A: Disable
@@ -714,7 +802,6 @@ peripherals:
       uhsif_port_rm: Mapping 0
       uhsif_clk_rmm: Mapping 0
       clk_div: /1
-      width_bit: 32-bit
   USART4:
     settings:
       Mode: Disable

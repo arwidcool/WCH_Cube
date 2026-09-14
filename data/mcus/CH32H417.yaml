@@ -4532,6 +4532,242 @@ peripherals:
       CH2: [{ pin: PD14, af: 1 }, { pin: PF5, af: 1 }]
       ETR: [{ pin: PD11, af: 1 }, { pin: PF4, af: 1 }]
       OC: [{ pin: PD13, af: 1 }, { pin: PE1, af: 1 }]
+    params:
+      - key: enable
+        name: Enable
+        sdk_call: LPTIM_Cmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_call_order: before_structs
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: true
+        help: "ch32h417_lptim.h. MUST run before LPTIM_TimeBaseInit() - CH32H417RM.md 17.5.5, LPTIMx_CR CNTSTRT/SNGSTRT/OUTEN are write-only-when-ENABLE=1, and TimeBaseInit() preserves whatever ENABLE already is in the same register write (ch32h417_lptim.c:54,76-77). hardware.c:55 (before :95's TimeBaseInit)."
+      - key: clksrc
+        name: Clock source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockSource
+        type: enum
+        default: Internal
+        options:
+          - { name: Internal, value: 0, sdk: LPTIM_ClockSource_In }
+          - { name: External, value: 1, sdk: LPTIM_ClockSource_Ex }
+        help: "ch32h417_lptim.h:25-26,96-97. EVT hardware.c:57."
+      - key: clkpol
+        name: Clock polarity
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockPolarity
+        type: enum
+        default: Rising
+        depends_on: { param: encoder, equals: false }
+        options:
+          - { name: Rising,         value: 0, sdk: LPTIM_ClockPolarity_Rising }
+          - { name: Falling,        value: 1, sdk: LPTIM_ClockPolarity_Falling }
+          - { name: "Rising and Falling", value: 2, sdk: LPTIM_ClockPolarity_Rising_Falling }
+        help: "ch32h417_lptim.h:29-30,100-102. Shares a union slot with LPTIM_EncoderMode (not modelled - see peripheral comment); applies only while Encoder is off. EVT hardware.c:58."
+      - key: clksample
+        name: Clock sample time
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockSampleTime
+        type: enum
+        default: 0T
+        options:
+          - { name: 0T, value: 0, sdk: LPTIM_ClockSampleTime_0T }
+          - { name: 2T, value: 1, sdk: LPTIM_ClockSampleTime_2T }
+          - { name: 4T, value: 2, sdk: LPTIM_ClockSampleTime_4T }
+          - { name: 8T, value: 3, sdk: LPTIM_ClockSampleTime_8T }
+        help: "ch32h417_lptim.h:36-37,105-108. EVT hardware.c:59."
+      - key: trigsample
+        name: Trigger sample time
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_TriggerSampleTime
+        type: enum
+        default: 0T
+        options:
+          - { name: 0T, value: 0, sdk: LPTIM_TriggerSampleTime_0T }
+          - { name: 2T, value: 1, sdk: LPTIM_TriggerSampleTime_2T }
+          - { name: 4T, value: 2, sdk: LPTIM_TriggerSampleTime_4T }
+          - { name: 8T, value: 3, sdk: LPTIM_TriggerSampleTime_8T }
+        help: "ch32h417_lptim.h:39-40,111-114. EVT hardware.c:60."
+      - key: clkpresc
+        name: Clock prescaler
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockPrescaler
+        type: enum
+        default: "÷1"
+        options:
+          - { name: "÷1",   value: 0, sdk: LPTIM_TClockPrescaler_DIV1 }
+          - { name: "÷2",   value: 1, sdk: LPTIM_TClockPrescaler_DIV2 }
+          - { name: "÷4",   value: 2, sdk: LPTIM_TClockPrescaler_DIV4 }
+          - { name: "÷8",   value: 3, sdk: LPTIM_TClockPrescaler_DIV8 }
+          - { name: "÷16",  value: 4, sdk: LPTIM_TClockPrescaler_DIV16 }
+          - { name: "÷32",  value: 5, sdk: LPTIM_TClockPrescaler_DIV32 }
+          - { name: "÷64",  value: 6, sdk: LPTIM_TClockPrescaler_DIV64 }
+          - { name: "÷128", value: 7, sdk: LPTIM_TClockPrescaler_DIV128 }
+        help: "ch32h417_lptim.h:42-43,117-124. EVT hardware.c:61."
+      - key: trigsrc
+        name: Trigger source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_TriggerSource
+        type: enum
+        default: ETR
+        options:
+          - { name: ETR,       value: 0, sdk: LPTIM_TriggerSource_ETR }
+          - { name: RTC_ALARM, value: 1, sdk: LPTIM_TriggerSource_RTC_ALARM }
+          - { name: TAMP,      value: 2, sdk: LPTIM_TriggerSource_TAMP }
+        help: "ch32h417_lptim.h:45-46,127-129. EVT hardware.c:67."
+      - key: extrigpol
+        name: External trigger polarity
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ExTriggerPolarity
+        type: enum
+        default: Rising
+        options:
+          - { name: Disable,              value: 0, sdk: LPTIM_ExTriggerPolarity_Disable }
+          - { name: Rising,                value: 1, sdk: LPTIM_ExTriggerPolarity_Rising }
+          - { name: Falling,               value: 2, sdk: LPTIM_ExTriggerPolarity_Falling }
+          - { name: "Rising and Falling",  value: 3, sdk: LPTIM_ExTriggerPolarity_Rising_Falling }
+        help: "ch32h417_lptim.h:48-49,132-135. EVT hardware.c:69."
+      - key: timeout
+        name: Timeout function
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_TimeOut
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:51-52. EVT hardware.c:70."
+      - key: outpol
+        name: Output polarity
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_OutputPolarity
+        type: enum
+        default: High
+        options:
+          - { name: High, value: 0, sdk: LPTIM_OutputPolarity_High }
+          - { name: Low,  value: 1, sdk: LPTIM_OutputPolarity_Low }
+        help: "ch32h417_lptim.h:57-58,138-139. EVT hardware.c:71."
+      - key: updatemode
+        name: Update mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_UpdateMode
+        type: enum
+        default: Mode0
+        options:
+          - { name: Mode0, value: 0, sdk: LPTIM_UpdateMode0 }
+          - { name: Mode1, value: 1, sdk: LPTIM_UpdateMode1 }
+        help: "ch32h417_lptim.h:60-61,142-143. EVT hardware.c:72."
+      - key: countsrc
+        name: Count source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_CountSource
+        type: enum
+        default: Internal
+        options:
+          - { name: Internal, value: 0, sdk: LPTIM_CountSource_Internal }
+          - { name: External, value: 1, sdk: LPTIM_CountSource_External }
+        help: "ch32h417_lptim.h:63-64,146-147. EVT hardware.c:73."
+      - key: encoder
+        name: Encoder mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_Encoder
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:66-67. EVT hardware.c:74. Enabling this leaves LPTIM_EncoderMode's union slot unwritten - see peripheral comment."
+      - key: inclksrc
+        name: Internal clock source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_InClockSource
+        type: enum
+        default: PCLK1
+        options:
+          - { name: PCLK1, value: 0, sdk: LPTIM_InClockSource_PCLK1 }
+          - { name: HSI,   value: 1, sdk: LPTIM_InClockSource_HSI }
+          - { name: LSE,   value: 2, sdk: LPTIM_InClockSource_LSE }
+          - { name: LSI,   value: 3, sdk: LPTIM_InClockSource_LSI }
+        help: "ch32h417_lptim.h:69-70,150-153. EVT hardware.c:75."
+      - key: forceouthigh
+        name: Force output high
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ForceOutHigh
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:72-73. EVT hardware.c:76."
+      - key: onepulse
+        name: One-pulse mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_OnePulseMode
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:54-55. Default matches the free-running PWM branch (hardware.c:86-89, MODE==PWM); the One-Pulse branch (:78-80) sets this Enable instead - override if that is the intended use."
+      - key: singlemode
+        name: Single mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_SingleMode
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:75-76. Default matches the free-running PWM branch (hardware.c:86-89); both One-Pulse and Single-Shot branches (:78-83) set this Enable instead."
+      - key: continuousmode
+        name: Continuous mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ContinuousMode
+        type: enum
+        default: Enable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:78-79. Default matches the free-running PWM branch (hardware.c:88); Single-Shot mode (:83) sets this Disable instead."
+      - key: pwmout
+        name: PWM output
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_PWMOut
+        type: enum
+        default: Enable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:81-82. All three PWM/One-Pulse/Single-Shot EVT branches enable this (hardware.c:79,82,87)."
+      - key: counterdirind
+        name: Counter direction indicate
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_CounterDirIndicat
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:84-85. EVT hardware.c:90."
+      - key: pulse
+        name: Pulse (compare) value
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_Pulse
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "ch32h417_lptim.h:87-88. The user's own PWM duty value - no sane universal default beyond leaving it at 0; the EVT's own `50` (hardware.c:92) is a demo number for its specific period, not a general default."
+      - key: period
+        name: Period (auto-reload) value
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_Period
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "ch32h417_lptim.h:90-91. The user's own PWM period value, same flag as pulse - the EVT's own `100` (hardware.c:93) is a demo number, not a general default."
   LPTIM2:
     category: Timers
     settings:
@@ -4558,6 +4794,242 @@ peripherals:
       CH2: [{ pin: PD11, af: 3 }]
       ETR: [{ pin: PB11, af: 3 }, { pin: PD10, af: 4 }]
       OC: [{ pin: PB13, af: 3 }]
+    params:
+      - key: enable
+        name: Enable
+        sdk_call: LPTIM_Cmd
+        sdk_args: [$HANDLE, $VALUE]
+        sdk_call_order: before_structs
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: true
+        help: "ch32h417_lptim.h. MUST run before LPTIM_TimeBaseInit() - CH32H417RM.md 17.5.5, LPTIMx_CR CNTSTRT/SNGSTRT/OUTEN are write-only-when-ENABLE=1, and TimeBaseInit() preserves whatever ENABLE already is in the same register write (ch32h417_lptim.c:54,76-77). hardware.c:55 (before :95's TimeBaseInit)."
+      - key: clksrc
+        name: Clock source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockSource
+        type: enum
+        default: Internal
+        options:
+          - { name: Internal, value: 0, sdk: LPTIM_ClockSource_In }
+          - { name: External, value: 1, sdk: LPTIM_ClockSource_Ex }
+        help: "ch32h417_lptim.h:25-26,96-97. EVT hardware.c:57."
+      - key: clkpol
+        name: Clock polarity
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockPolarity
+        type: enum
+        default: Rising
+        depends_on: { param: encoder, equals: false }
+        options:
+          - { name: Rising,         value: 0, sdk: LPTIM_ClockPolarity_Rising }
+          - { name: Falling,        value: 1, sdk: LPTIM_ClockPolarity_Falling }
+          - { name: "Rising and Falling", value: 2, sdk: LPTIM_ClockPolarity_Rising_Falling }
+        help: "ch32h417_lptim.h:29-30,100-102. Shares a union slot with LPTIM_EncoderMode (not modelled - see peripheral comment); applies only while Encoder is off. EVT hardware.c:58."
+      - key: clksample
+        name: Clock sample time
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockSampleTime
+        type: enum
+        default: 0T
+        options:
+          - { name: 0T, value: 0, sdk: LPTIM_ClockSampleTime_0T }
+          - { name: 2T, value: 1, sdk: LPTIM_ClockSampleTime_2T }
+          - { name: 4T, value: 2, sdk: LPTIM_ClockSampleTime_4T }
+          - { name: 8T, value: 3, sdk: LPTIM_ClockSampleTime_8T }
+        help: "ch32h417_lptim.h:36-37,105-108. EVT hardware.c:59."
+      - key: trigsample
+        name: Trigger sample time
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_TriggerSampleTime
+        type: enum
+        default: 0T
+        options:
+          - { name: 0T, value: 0, sdk: LPTIM_TriggerSampleTime_0T }
+          - { name: 2T, value: 1, sdk: LPTIM_TriggerSampleTime_2T }
+          - { name: 4T, value: 2, sdk: LPTIM_TriggerSampleTime_4T }
+          - { name: 8T, value: 3, sdk: LPTIM_TriggerSampleTime_8T }
+        help: "ch32h417_lptim.h:39-40,111-114. EVT hardware.c:60."
+      - key: clkpresc
+        name: Clock prescaler
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ClockPrescaler
+        type: enum
+        default: "÷1"
+        options:
+          - { name: "÷1",   value: 0, sdk: LPTIM_TClockPrescaler_DIV1 }
+          - { name: "÷2",   value: 1, sdk: LPTIM_TClockPrescaler_DIV2 }
+          - { name: "÷4",   value: 2, sdk: LPTIM_TClockPrescaler_DIV4 }
+          - { name: "÷8",   value: 3, sdk: LPTIM_TClockPrescaler_DIV8 }
+          - { name: "÷16",  value: 4, sdk: LPTIM_TClockPrescaler_DIV16 }
+          - { name: "÷32",  value: 5, sdk: LPTIM_TClockPrescaler_DIV32 }
+          - { name: "÷64",  value: 6, sdk: LPTIM_TClockPrescaler_DIV64 }
+          - { name: "÷128", value: 7, sdk: LPTIM_TClockPrescaler_DIV128 }
+        help: "ch32h417_lptim.h:42-43,117-124. EVT hardware.c:61."
+      - key: trigsrc
+        name: Trigger source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_TriggerSource
+        type: enum
+        default: ETR
+        options:
+          - { name: ETR,       value: 0, sdk: LPTIM_TriggerSource_ETR }
+          - { name: RTC_ALARM, value: 1, sdk: LPTIM_TriggerSource_RTC_ALARM }
+          - { name: TAMP,      value: 2, sdk: LPTIM_TriggerSource_TAMP }
+        help: "ch32h417_lptim.h:45-46,127-129. EVT hardware.c:67."
+      - key: extrigpol
+        name: External trigger polarity
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ExTriggerPolarity
+        type: enum
+        default: Rising
+        options:
+          - { name: Disable,              value: 0, sdk: LPTIM_ExTriggerPolarity_Disable }
+          - { name: Rising,                value: 1, sdk: LPTIM_ExTriggerPolarity_Rising }
+          - { name: Falling,               value: 2, sdk: LPTIM_ExTriggerPolarity_Falling }
+          - { name: "Rising and Falling",  value: 3, sdk: LPTIM_ExTriggerPolarity_Rising_Falling }
+        help: "ch32h417_lptim.h:48-49,132-135. EVT hardware.c:69."
+      - key: timeout
+        name: Timeout function
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_TimeOut
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:51-52. EVT hardware.c:70."
+      - key: outpol
+        name: Output polarity
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_OutputPolarity
+        type: enum
+        default: High
+        options:
+          - { name: High, value: 0, sdk: LPTIM_OutputPolarity_High }
+          - { name: Low,  value: 1, sdk: LPTIM_OutputPolarity_Low }
+        help: "ch32h417_lptim.h:57-58,138-139. EVT hardware.c:71."
+      - key: updatemode
+        name: Update mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_UpdateMode
+        type: enum
+        default: Mode0
+        options:
+          - { name: Mode0, value: 0, sdk: LPTIM_UpdateMode0 }
+          - { name: Mode1, value: 1, sdk: LPTIM_UpdateMode1 }
+        help: "ch32h417_lptim.h:60-61,142-143. EVT hardware.c:72."
+      - key: countsrc
+        name: Count source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_CountSource
+        type: enum
+        default: Internal
+        options:
+          - { name: Internal, value: 0, sdk: LPTIM_CountSource_Internal }
+          - { name: External, value: 1, sdk: LPTIM_CountSource_External }
+        help: "ch32h417_lptim.h:63-64,146-147. EVT hardware.c:73."
+      - key: encoder
+        name: Encoder mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_Encoder
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:66-67. EVT hardware.c:74. Enabling this leaves LPTIM_EncoderMode's union slot unwritten - see peripheral comment."
+      - key: inclksrc
+        name: Internal clock source
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_InClockSource
+        type: enum
+        default: PCLK1
+        options:
+          - { name: PCLK1, value: 0, sdk: LPTIM_InClockSource_PCLK1 }
+          - { name: HSI,   value: 1, sdk: LPTIM_InClockSource_HSI }
+          - { name: LSE,   value: 2, sdk: LPTIM_InClockSource_LSE }
+          - { name: LSI,   value: 3, sdk: LPTIM_InClockSource_LSI }
+        help: "ch32h417_lptim.h:69-70,150-153. EVT hardware.c:75."
+      - key: forceouthigh
+        name: Force output high
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ForceOutHigh
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:72-73. EVT hardware.c:76."
+      - key: onepulse
+        name: One-pulse mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_OnePulseMode
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:54-55. Default matches the free-running PWM branch (hardware.c:86-89, MODE==PWM); the One-Pulse branch (:78-80) sets this Enable instead - override if that is the intended use."
+      - key: singlemode
+        name: Single mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_SingleMode
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:75-76. Default matches the free-running PWM branch (hardware.c:86-89); both One-Pulse and Single-Shot branches (:78-83) set this Enable instead."
+      - key: continuousmode
+        name: Continuous mode
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_ContinuousMode
+        type: enum
+        default: Enable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:78-79. Default matches the free-running PWM branch (hardware.c:88); Single-Shot mode (:83) sets this Disable instead."
+      - key: pwmout
+        name: PWM output
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_PWMOut
+        type: enum
+        default: Enable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:81-82. All three PWM/One-Pulse/Single-Shot EVT branches enable this (hardware.c:79,82,87)."
+      - key: counterdirind
+        name: Counter direction indicate
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_CounterDirIndicat
+        type: enum
+        default: Disable
+        options:
+          - { name: Disable, value: 0, sdk: DISABLE }
+          - { name: Enable,  value: 1, sdk: ENABLE }
+        help: "ch32h417_lptim.h:84-85. EVT hardware.c:90."
+      - key: pulse
+        name: Pulse (compare) value
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_Pulse
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "ch32h417_lptim.h:87-88. The user's own PWM duty value - no sane universal default beyond leaving it at 0; the EVT's own `50` (hardware.c:92) is a demo number for its specific period, not a general default."
+      - key: period
+        name: Period (auto-reload) value
+        struct: LPTIM_TimeBaseInitTypeDef
+        sdk_field: LPTIM_Period
+        type: int
+        default: 0
+        min: 0
+        max: 65535
+        help: "ch32h417_lptim.h:90-91. The user's own PWM period value, same flag as pulse - the EVT's own `100` (hardware.c:93) is a demo number, not a general default."
   LTDC:
     category: Graphics
     # THE OUTPUT WIDTH IS A WIRING CHOICE, NOT A REGISTER, and that is the whole reason
@@ -6575,13 +7047,22 @@ peripherals:
         choices:
           - { name: Disable }
           - { name: "Single wire", signals: [IO] }
-          - { name: "Single wire with supply", signals: [IO, SUP] }
-          - { name: Loopback, signals: [IO, RX, TX] }
+          - { name: Loopback, signals: [IO, RX, TX, SUP] }
     signal_pins:
       IO: [{ pin: PC6, af: 11 }]
       RX: [{ pin: PC10, af: 11 }, { pin: PC8, af: 11 }]
       SUP: [{ pin: PC9, af: 11 }]
       TX: [{ pin: PC7, af: 11 }]
+    notes: >
+      "Single wire with supply" (IO+SUP together) is not offered as a Mode choice.
+      DS Table 2-2-26 marks SWP_SUP "-" under its own 1-wire column, and
+      CH32H417RM.md:11003 scopes SUP explicitly to "Non-1-wire mode" - two independent
+      sources agreeing, and no register bit or SWPMI EVT example found either
+      confirming or denying the combination. "Every choice the app offers must be one
+      the silicon can honour", so the combination is withheld rather than guessed at;
+      if a register bit or example ever turns up either way, this is where to look.
+      SUP stays claimable under Loopback instead - a genuine non-1-wire mode where
+      Table 2-2-26's other column gives it a real pad (PC9, AF11).
     params:
       - key: bitrate
         name: Bit rate divider
@@ -8452,6 +8933,10 @@ codegen:
     # OPA_CMP_Init(CMP_InitTypeDef*) (ch32h417_opa.h:169) takes the struct ALONE - this
     # part has ONE comparator (unlike CH32L103's three), so no CMP_NUM/handle exists.
     CMP_InitTypeDef:         { fn: OPA_CMP_Init, no_handle: true }   # ch32h417_opa.h:169
+    # LPTIM1/LPTIM2 share this one struct and function; periph_handle below says which
+    # register block. LPTIM_Cmd's sdk_call_order: before_structs (peripheral_extras.yaml)
+    # is what makes the enable-before-init ordering hazard (RM 17.5.5) come out right.
+    LPTIM_TimeBaseInitTypeDef: { fn: LPTIM_TimeBaseInit }   # ch32h417_lptim.h:176
 
   periph_handle:
     # CAN1/CAN2/CAN3 are the SDK's own register-block names (ch32h417.h:1743-1747 casts
