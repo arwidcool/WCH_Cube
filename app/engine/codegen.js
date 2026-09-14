@@ -44,7 +44,7 @@ import {
 } from './resources.js';
 import { E, compute } from './engine.js';
 import { generatorOption, userSection } from './export.js';
-import { clockCalc, firstPre, pllList, pllState, tapSource, tapSources, tapSourceEntry } from './clock.js';
+import { clockCalc, firstPre, pllList, pllState, tapSource, tapSources, tapSourceEntry, tapSetting } from './clock.js';
 import { PROJECT } from './project.js';
 import {
   constraintFor, constraintSentence, skippedClaim, gpioEffectiveMode,
@@ -932,16 +932,14 @@ function rccSection() {
   }
   for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
     if (name === fp) continue;
-    // A tap whose source is a mux says which side of it this configuration picked -
-    // the LEG's own name, so a divider the leg itself carries ("SERDES_PLL /2") reads
-    // in the comment rather than only the bare signal it divides.
-    const chosen = tapSourceEntry(v, name, k);
-    const from = tapSources(v) ? `${chosen.name} ` : '';
-    // A tap whose only divider lives in its mux legs (RM 4085-4089's shape) has no
-    // `k.pre[name]` to print - the "/<n>" is the tap's OWN options divider, and there
-    // is nothing to say when the file gives it none.
-    const div = k.pre[name] !== undefined ? `/${k.pre[name]} ` : '';
-    L.push(`    /* ${name} ${from}${div}-> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
+    // `tapSetting()` (clock.js) resolves the mux leg's own display name ("SERDES_PLL
+    // clock / 2" reads rather than only the bare signal it divides) and this tap's
+    // OWN `options:`-driven divider (absent for a bare mux like RNG, whose only
+    // divider — if any — lives folded into a leg's own name instead) - the SAME
+    // function `export.js`'s `clockSummaryMarkdown()` now calls, so the comment and
+    // the report can't drift into disagreeing about one tap again.
+    const { from, div } = tapSetting(v, name, k);
+    L.push(`    /* ${name} ${from ? `${from} ` : ''}${div ? `/${div} ` : ''}-> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
       : v.target_mhz ? ` (must be ${v.target_mhz} MHz)` : ''} */`);
   }
   if (r.over.length) L.push(`    /* WARNING: out of specification: ${r.over.join(', ')} */`);

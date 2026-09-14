@@ -1357,6 +1357,20 @@ bits, and a clock tree that models what the schema can hold.
       fixed - `app/**`) a real display bug in `clockSummaryMarkdown()` (`app/engine/export.js:
       521`, `/undefined` and `[object Object]` for the two new tap shapes) - the actual clock
       tab is unaffected. Full detail: `agents/BOARD.md` 2026-09-14T10:35Z.
+- [x] (AGENT-2) **Fixed the `clockSummaryMarkdown()` display bug AGENT-1 found above.**
+      `tapSetting(v, name, k)` (`app/engine/clock.js:137`) resolves a tap's mux-leg display name
+      and its own `options:` divider ONE place; `codegen.js`'s `rccSection()` (already correct)
+      and `export.js`'s `clockSummaryMarkdown()` (the actual bug) both call it now, so the
+      generated-C comment and the report cannot read two different things about the same tap
+      again. Audited every other `.source`/`k.pre[` site in `export.js`/`codegen.js`/
+      `template.html` for the same hazard - none found. Two new sweep tests in
+      `app/tests/export.test.js`: one narrow (every part x package, `clockSummaryMarkdown()`
+      alone), one wide (every part x package, EVERY text file `generateAll()` emits - the C, the
+      plain pinout, the KiCad CSV, the pinout SVG, the clock summary - never contains the literal
+      string `undefined` or `[object Object]`); disclosed gap: neither reaches `template.html`'s
+      live DOM, only `generateAll()`'s own text. Both seen red on the pre-fix code (stashed the
+      one-line fix, reran, restored). `node tests/run.js "export.test"` 41/41 (was 35/35),
+      `"app/tests"` full engine suite 587/587 (was 581/581).
 - [x] (AGENT-2) **The nested-struct shape (§3 REQUEST, 09-12T19:33Z): a member that is a POINTER
       to a second struct no SDK function takes alone.** `codegen.init_structs.<inner-struct>.embed`
       now maps a param's `embed: <key>` to `{ into: <outer-struct>, member: <pointer-field> }`.

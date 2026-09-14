@@ -7,7 +7,7 @@ import { M, S, PACKAGES, pinType, gpioSpeedFor, signalAf, sigName } from './mode
 import { validateParam } from './params.js';
 import { record } from './history.js';
 import { E, compute } from './engine.js';
-import { clockCalc, firstPre } from './clock.js';
+import { clockCalc, firstPre, tapSetting } from './clock.js';
 // `user` is codegen's: main.c carries the same USER CODE blocks under the same
 // option, and two copies of that helper would be two things to keep in step.
 import { cFiles, gpioPlan, cfg, user, unwritableRemaps } from './codegen.js';
@@ -518,7 +518,17 @@ export function clockSummaryMarkdown() {
   if (fp) lines.push(`| HCLK | ${fp} /${k.pre[fp]} | ${num(r.HCLK)} MHz |`);
   for (const [n, v] of Object.entries(c.prescalers || {})) {
     if (n === fp) continue;
-    lines.push(`| ${n} | /${k.pre[n]}${v.source ? ` from ${v.source}` : ''} | ${num(r[n])} MHz |`);
+    // `tapSetting()` (clock.js) — the SAME function `codegen.js`'s `rccSection()`
+    // comment calls — resolves the mux leg's own display name and this tap's own
+    // divider, if either exists. Printing `v.source`/`k.pre[n]` here directly used
+    // to produce `/undefined` for every bare mux (no divider control at all: RNG,
+    // I2S2, I2S3, HSADC, ETH1G) and `[object Object]` for every leg-divider entry
+    // (LTDC, ETH1G) — `v.source` is an ARRAY on any multi-entry mux, and template-
+    // string coercion of an array of objects is exactly that string (main's finding,
+    // reproduced from the repo owner's own screen, 2026-09-14).
+    const { from, div } = tapSetting(v, n, k);
+    const setting = div ? `/${div}${from ? ` from ${from}` : ''}` : (from || '—');
+    lines.push(`| ${n} | ${setting} | ${num(r[n])} MHz |`);
   }
   for (const d of c.derived || []) lines.push(`| ${d.name} | HCLK /${d.div} | ${num(r[d.name])} MHz |`);
   lines.push('');

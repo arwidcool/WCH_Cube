@@ -1,5 +1,5 @@
 // export.js — the pin table and clock summary behind the Generate button.
-import { test, assert, fresh, eng } from './_harness.js';
+import { test, assert, fresh, eng, mcuNames } from './_harness.js';
 
 // A minimal RFC4180 reader for one CSV line, quote-aware the same way the
 // exporter's own `esc()` is (a doubled `""` inside a quoted field is one literal
@@ -271,6 +271,115 @@ test('the clock summary reports every node and the out-of-spec ones', () => {
   e.S.clock.pre.ADC = 8;
   md = e.clockSummaryMarkdown();
   assert.ok(md.includes('**Out of specification: ADC**'));
+});
+
+// ---- clockSummaryMarkdown() and the two new mux shapes — main's finding, reproduced
+// from the repo owner's own screen: `/undefined` for a bare mux (no divider control
+// at all - RNG, I2S2, I2S3, HSADC, ETH1G) and `[object Object]` for a leg-divider
+// entry (LTDC, ETH1G's own SERDES_PLL/ETH_PLL legs). codegen.js's rccSection() had
+// already resolved both correctly through tapSetting() (clock.js); this export never
+// called it at all - the paramTable()/paramTableFrom() shape one layer up, a comment
+// asserting completeness while a sibling function quietly diverged. No test ever read
+// clockSummaryMarkdown() against a real mux/leg-divider part - only cSource() (the
+// generated C) was checked, which is exactly why this shipped invisibly.
+
+test('a bare mux tap (no divider control at all) prints its source, never "/undefined"', () => {
+  const e = fresh('CH32H417', 'QFN128');
+  e.compute();
+  const md = e.clockSummaryMarkdown();
+  assert.doesNotMatch(md, /undefined/, 'the literal string "undefined" must never reach a report');
+  assert.match(md, /\| RNG \| SYSCLK \| 25 MHz \|/, 'RNG has no options: divider at all - just its current source');
+  assert.match(md, /\| HSADC \| SYSCLK \| 25 MHz \|/);
+});
+
+test('a mux leg that carries its own divider prints the LEG\'S name, never "[object Object]"', () => {
+  const e = fresh('CH32H417', 'QFN128');
+  e.compute();
+  const md = e.clockSummaryMarkdown();
+  assert.doesNotMatch(md, /\[object Object\]/, 'stringifying a {name,source,div} entry by accident must never reach a report');
+  // ETH1G defaults to "ETH_PLL clock / 4" per the data (default_source) - the leg's
+  // own display name, not the bare ETH_PLL_CLK signal it divides.
+  assert.match(md, /\| ETH1G \| ETH_PLL clock \/ 4 \| 125 MHz \|/);
+  // Switching LTDC onto its OWN divided leg (the mechanism's whole reason for
+  // existing) must show the leg's name too, not the object it is built from.
+  e.setClock({ preSrc: { LTDC: 'SERDES_PLL clock / 2' } });
+  e.compute();
+  const md2 = e.clockSummaryMarkdown();
+  assert.doesNotMatch(md2, /\[object Object\]/);
+  assert.match(md2, /\| LTDC \| \/1 from SERDES_PLL clock \/ 2 \| 312\.5 MHz \|/);
+});
+
+test('a multi-entry mux prints only the CURRENTLY SELECTED source, not every option joined by commas', () => {
+  // USBFS's own tap (`/10 from USBHS_PLL_CLK`) was the visible symptom in main's
+  // report: `v.source` is a LIST for a mux, and printing it directly template-
+  // string-coerces the WHOLE array ("USBHS_PLL_CLK,PLLCLK"), not the one chosen leg.
+  const e = fresh('CH32H417', 'QFN128');
+  e.compute();
+  const md = e.clockSummaryMarkdown();
+  const usbfs = md.split('\n').find(l => l.startsWith('| USBFS'));
+  assert.ok(usbfs, 'USBFS has its own tap on this part');
+  assert.doesNotMatch(usbfs, /,/, 'one chosen source, never a joined list');
+});
+
+test('clockSummaryMarkdown() and the generated C comment resolve the SAME tap through the SAME function - cannot drift again', () => {
+  // rccSection() (codegen.js) and clockSummaryMarkdown() (export.js) both call
+  // tapSetting() (clock.js) now; assert they still AGREE about a real mux leg,
+  // not merely that each independently looks right.
+  const e = fresh('CH32H417', 'QFN128');
+  e.setClock({ preSrc: { LTDC: 'SERDES_PLL clock / 2' } });
+  e.compute();
+  const c = e.cSource();
+  const md = e.clockSummaryMarkdown();
+  assert.match(c, /LTDC SERDES_PLL clock \/ 2 \/1 ->/, 'the generated C comment names the same leg');
+  assert.match(md, /\| LTDC \| \/1 from SERDES_PLL clock \/ 2 \|/, 'the report names the identical leg, not a second guess at it');
+});
+
+// The manager's literal ask: "at minimum assert no undefined and no [object Object]
+// appears in a generated report on any shipped part." Every part, every package,
+// every prescaler this data has - the sweep the missing test would have run the
+// moment Deliverable D landed a mux or a leg-divider anywhere.
+test('no shipped part\'s clock summary ever contains "undefined" or "[object Object]", on any package', () => {
+  for (const name of mcuNames()) {
+    const e = fresh(name);
+    if (!e.M.clock) continue;
+    for (const pkg of Object.keys(e.M.packages)) {
+      e.setPackage(pkg);
+      e.compute();
+      const md = e.clockSummaryMarkdown();
+      assert.doesNotMatch(md, /undefined/, `${name} ${pkg}: clockSummaryMarkdown() contains "undefined"`);
+      assert.doesNotMatch(md, /\[object Object\]/, `${name} ${pkg}: clockSummaryMarkdown() contains "[object Object]"`);
+    }
+  }
+});
+
+// The narrower test above is the mechanism that actually failed; this one is the
+// manager's literal ask taken at full width - EVERY file `generateAll()` hands the
+// user (the generated C, the plain pin table, the KiCad CSV, the pinout SVG, the
+// clock summary - the whole "reports" option, on by default) on EVERY shipped part
+// and EVERY package, not only the one report that happened to be the visible
+// symptom this time. A stray object or an unresolved template placeholder in ANY of
+// these is the same class of defect the clock summary shipped: a plausible-looking
+// wrong (or garbled) fact in something a user reads or pastes into KiCad.
+//
+// KNOWN GAP, disclosed rather than implied away: this sweeps `generateAll()`'s own
+// text outputs only. It does NOT reach `app/template.html`'s live DOM rendering (the
+// clock tab, the peripheral tree, any tooltip) - a defect that only a rendered page
+// shows (never reaching a generated file's text) would NOT be caught here. That is
+// what the real-browser verification step is for, not this test.
+test('no generated report on any shipped part, any package, ever contains "undefined" or "[object Object]"', () => {
+  const bad = [];
+  for (const name of mcuNames()) {
+    const e = fresh(name);
+    for (const pkg of Object.keys(e.M.packages)) {
+      e.setPackage(pkg);
+      e.compute();
+      for (const f of e.generateAll()) {
+        if (/undefined/.test(f.text)) bad.push(`${name} ${pkg} ${f.name}: contains "undefined"`);
+        if (/\[object Object\]/.test(f.text)) bad.push(`${name} ${pkg} ${f.name}: contains "[object Object]"`);
+      }
+    }
+  }
+  assert.deepEqual(bad, [], bad.join('\n'));
 });
 
 test('generateAll names its files after the part and package', () => {

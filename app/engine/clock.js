@@ -134,6 +134,32 @@ export function tapMuxDiv(v, name, k) {
   return (e && e.div) || 1;
 }
 
+/**
+ * The two pieces every "how is this tap set" display needs, resolved once:
+ * `from` (the mux leg's own display NAME right now — e.g. "SERDES_PLL clock / 2",
+ * not the bare signal it divides — or '' when the tap has no `source:` at all)
+ * and `div` (this tap's OWN `options:`-driven divider as a string, or '' when it
+ * has none — a bare mux like RNG carries nothing here; a divider one of its LEGS
+ * carries is already folded into that leg's own `from` name).
+ *
+ * ONE function, called by `codegen.js`'s generated-C comment (`rccSection()`)
+ * and `export.js`'s `clockSummaryMarkdown()`, so the two cannot drift into
+ * showing two different things about the same tap — which is exactly how they
+ * did: `rccSection()` already resolved a mux leg correctly; `clockSummaryMarkdown()`
+ * printed the raw `v.source` (an array, for any multi-entry mux) and `k.pre[name]`
+ * (unconditionally, even when the tap has no divider control at all) straight into
+ * a template string, producing `/undefined` for every bare mux (RNG, I2S2, I2S3,
+ * HSADC, ETH1G) and `[object Object]` for every leg-divider entry (LTDC, ETH1G) —
+ * a defect a user-facing report carried while the generated C, built from the
+ * same facts through code that had already been fixed, stayed correct the whole
+ * time (main's finding, 2026-09-14, reproduced from the repo owner's own screen).
+ */
+export function tapSetting(v, name, k) {
+  const from = tapSources(v) ? tapSourceEntry(v, name, k).name : (v.source || '');
+  const div = (k && k.pre || {})[name] !== undefined ? String((k.pre || {})[name]) : '';
+  return { from, div };
+}
+
 // Initial clock state for an MCU's `clock:` block (null when the file has none).
 //
 // `preSrc` and `plls` are written only when the part HAS a mux or a second PLL,

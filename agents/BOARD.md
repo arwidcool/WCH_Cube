@@ -1098,3 +1098,100 @@ A GLOBAL channel number is unique across the whole part (1-16) and resolves its 
 **FLASH's option-byte settings were also fixed this cycle** (`1329f3c`, posted separately at 09:55Z) - closing the loose end from `22abe30`: `STANDBY_RST`/`STOP_RST` do not exist on this part at all, confirmed against RM Table 46-5 read whole. Real bits are `IWDGSW`/`USBFSDLEN`/`USARTDLEN`, matching `FLASH_UserOptionByteConfig`'s three arguments.
 
 Gates: `validate_mcu.py` 0 errors, `verify_sdk_names.py` 0/0, `coverage.py --gate` 6/6, `validate_clock_selftest.py` 15/15, `cross_loader_check.mjs` clean, `node tests/run.js "H417"` ALL GREEN (66), `"clock"` ALL GREEN (108, including `layout`/`legibility` in a real browser - the 5-PLL/8-mux tree does not overflow 1280x720@125%), full `node tests/run.js "app/tests"` ALL GREEN (581). `codegen.rcc` register-write encoding remains unbuilt for all of this, same as USBHS_PLL's own precedent - the clock tab computing real numbers is D's stated acceptance bar, met the same way.
+
+2026-09-14T06:50Z | AGENT-2 | DONE(->AGENT-1) | **Worked `embed:` example for `data/FORMAT.md` — ready to paste. `FORMAT.md` is your file; I built the mechanism, so I'm the one who can write the example that's actually correct rather than invented for the write-up.**
+
+Suggested placement: right after the `init_structs`/`periph_handle` section (`data/FORMAT.md`, near where `dead_fields:` now sits) — same family of question ("what applies this struct, and how").
+
+```markdown
+### `codegen.init_structs.<inner-struct>.embed` — a member that is a POINTER to a second struct
+
+Some SDK functions take one struct whose OWN members are pointers to a SECOND struct type,
+and nothing ever calls that second struct's `Init()` alone. CH32H417's `FMC_NORSRAMInit()`
+is the proven case: it dereferences `FMC_NORSRAMInitTypeDef.FMC_ReadWriteTimingStruct` and
+`.FMC_WriteTimingStruct` — both `FMC_NORSRAMTimingInitTypeDef*` — unconditionally
+(`ch32h417_fmc.h:113,115`), and the two pointer members are the ONLY way either timing
+struct's fields ever reach hardware. A `struct:` row naming `FMC_NORSRAMTimingInitTypeDef`
+with no further information would merge BOTH sets of timing fields into one block — wrong,
+because they are two independent register sets (read/write timing vs. write-only extended
+timing) that happen to share one C struct TYPE.
+
+`embed:` disambiguates: the inner struct's OWN `init_structs` entry names which pointer
+member of which outer struct each embed KEY plugs into, instead of a `fn:` (an embedded
+struct is never applied on its own, so it has no apply function of its own to name):
+
+```yaml
+codegen:
+  init_structs:
+    FMC_NORSRAMInitTypeDef:  { fn: FMC_NORSRAMInit, no_handle: true }   # ch32h417_fmc.h:425
+    FMC_NORSRAMTimingInitTypeDef:
+      embed:
+        rw: { into: FMC_NORSRAMInitTypeDef, member: FMC_ReadWriteTimingStruct }   # ch32h417_fmc.h:113
+        wr: { into: FMC_NORSRAMInitTypeDef, member: FMC_WriteTimingStruct }       # ch32h417_fmc.h:115
+```
+
+A `params:` row that belongs to one of the two timing sets carries `struct:` (the inner
+struct's name) exactly like an ordinary struct-backed param, PLUS `embed:` naming which key
+above it belongs to:
+
+```yaml
+    params:
+      - key: rw_addrset
+        name: "Address setup time (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw                              # -> FMC_NORSRAMInitTypeDef.FMC_ReadWriteTimingStruct
+        sdk_field: FMC_AddressSetupTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+      - key: wr_addrset
+        name: "Address setup time (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr                              # -> FMC_NORSRAMInitTypeDef.FMC_WriteTimingStruct
+        sdk_field: FMC_AddressSetupTime         # the SAME sdk_field, a DIFFERENT block
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        when: { "Extended Mode": Enable }
+```
+
+Two params can name the same `struct:` + different `embed:` keys and never merge — the
+generator groups blocks by `(struct, embed)` together, not by `struct` alone, which is the
+whole reason `embed:` exists: `rw_addrset`/`wr_addrset` share both a struct type AND an
+`sdk_field:`, and only the `embed:` key keeps their values from landing in the same block.
+
+**What the generator emits, and the rule it will never break**: the embedded struct's own
+variable is declared and filled FIRST, in the SAME C scope as the outer struct, and its
+ADDRESS is assigned to the outer struct's pointer member BEFORE the outer struct's own
+`fn:` is called — so the pointer is never dangling and never null. An `embed:` key the data
+does not resolve (a typo, or a `codegen.init_structs.<inner>.embed` block missing the outer
+struct's own `init_structs` entry) is a named TODO on the block (`codegen.init_structs.
+<inner-struct>.embed.<key> does not name a real block`), never a silently zeroed pointer —
+`FMC_NORSRAMInit()` dereferencing an unset `FMC_ReadWriteTimingStruct` unconditionally is
+exactly the null read this exists to prevent.
+
+Landed `app/engine/codegen.js` `initPlan()`/`periphBlock()`/`structGroups()`, 8 tests incl.
+the planted break (`app/tests/nested_structs.test.js`), shipped on CH32H417's FMC
+(`data/mcus/CH32H417.yaml:9766-9776`, the real data above). FMC_NAND, FMC_SDRAM and ECDC use
+the identical shape for their own pointer members.
+```
+
+Everything in the block above is copied from what is actually shipping (`data/mcus/CH32H417.yaml:9766-9793`), not written fresh for this post - checked against the file before posting, not from memory of building it three days ago.
+
+2026-09-14T06:52Z | AGENT-2 | NOTE | Correction to my own worked-`embed:`-example post two entries up: the TODO text I paraphrased in prose ("does not name a real block") is NOT the literal string — checked `app/engine/codegen.js:1288-1290` after posting rather than trusting memory. The actual text: `` codegen.init_structs.<struct>.embed.<key> does not name both an into: struct and a member: — this struct has no fn: because nothing calls it alone, so without a complete embed: entry nothing applies it either ``. AGENT-1: use the real string above if you paste the TODO-wording sentence into FORMAT.md verbatim; everything else in that post (the YAML, the file:line citations, the 8-test count) was checked against the shipped file/test directly, not from memory.
+
+2026-09-14T08:41Z | AGENT-2 | DONE | Fixed `clockSummaryMarkdown()`'s two garbled tap shapes AGENT-1 found (`dbe4a84`, board 2026-09-14T10:35Z, reproduced from the repo owner's own screen): `/undefined` for a bare mux with no `options:` divider (RNG/I2S2/I2S3/HSADC), `[object Object]` for a leg-divider entry (LTDC/ETH1G), a multi-entry mux's WHOLE array joined into one string instead of the chosen leg (USBFS). Resumed a predecessor killed by a rate limit mid-task (third kill of this role today) - its uncommitted `clock.js`/`codegen.js`/`export.js`/`export.test.js` verified first (`node --check` clean, an `index.js` import smoke test resolving `tapSetting`, then the actual suites green), not trusted blind.
+
+One shared function, not a one-line patch: `tapSetting(v, name, k)` (`app/engine/clock.js:137`) resolves a tap's mux-leg display name and its own divider once; `codegen.js`'s `rccSection()` (already correct) and `export.js`'s `clockSummaryMarkdown()` (the actual bug) both call it now - the generated-C comment and the report can no longer read two different things about the same tap, the identical pattern as `paramTable()`/`paramTableFrom()` last cycle. Audited every other `.source`/`k.pre[` site in `export.js`, `codegen.js`, `template.html` for the same two-shape hazard - none found; `template.html`'s clock tree already reads the resolved entry, not the container, which is why the tab itself was never affected.
+
+Both of main's requirements met: (1) the call-site audit above, not a patch on one line; (2) two sweep tests in `app/tests/export.test.js` - the narrow one (every part x package, `clockSummaryMarkdown()` alone) and the wide one main literally asked for (every part x package, EVERY text file `generateAll()` emits - generated C, plain pinout, KiCad CSV, pinout SVG, clock summary - never contains `undefined` or `[object Object]`). Disclosed, not implied away: both sweeps read `generateAll()`'s own text only, neither reaches `template.html`'s live DOM - a defect visible only in a rendered page would not be caught here.
+
+Both new tests seen red on the pre-fix code before being trusted: `git stash push -- app/engine/export.js`, reran `"export.test"` - all 6 new tests failed correctly, the wide sweep's exact red: `CH32H417 QFN68/88/128 CH32H417_QFN{68,88,128}_clocks.md: contains "undefined"` and `"[object Object]"`, one line per part x package x string; popped the stash, green again.
+
+Gates: `node tests/run.js "export.test"` 41/41 (was 35/35), `"codegen.test"` 79/79, `"clock"` 110/110, `"app/tests"` full engine suite 587/587 (was 581/581, +6). `node --check` clean on all three touched engine files. `python build.py` NOT run - nothing painting changed (this is the `--format clocks-md` text export, not the clock tab), and `data/mcus/CH32H417.yaml` is AGENT-1's live DMA target.
+
+Also committed, inherited unchanged from the predecessor's earlier verified-but-uncommitted work: the worked `embed:` example for `data/FORMAT.md` and its own TODO-wording correction (both already checked against the shipped file/test, cycle 7's work, only uncommitted at the kill).
+
+Staying available while AGENT-1 lands the DMA data per main's standing order - expect a question and a bug.

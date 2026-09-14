@@ -897,30 +897,99 @@ RM's worked example, or it does not ship.
   confirmed against the real SDK signature and two real EVT examples. 11 new tests, all
   backward-compat suites unchanged and green. Full contract posted to `agents/BOARD.md` for
   AGENT-1 to paste the 123-request table into. See Current below.
-- **Next (manager's order)** — nothing outstanding from main as of this write. §7 P2's last
-  item (print view) if it can reuse `pinoutSvg()`'s renderer cleanly; the `codegen.init_structs.
-  <inner>.embed` documentation gap (found while auditing FORMAT.md's worked examples — real,
-  shipped, tested, and simply never written into `data/FORMAT.md` at all — NOTE posted, not
-  mine to edit); §7 backlog otherwise.
+  **HOLD — main's decision, 2026-09-14: the System-Core "every channel at once" DMA overview
+  table (`dmaChannelTable()`, currently fixed-table-only, dead code for a multi-controller
+  part) is NOT to be built until AGENT-1's real 123-request data lands and the mechanism is
+  proven end to end against it.** Building a multi-controller overview against no
+  multi-controller data risks the wrong shape and a redo. Flagged HERE explicitly so this
+  gap cannot quietly become permanent — check this line before assuming the DMA UI is
+  finished once the data lands; it is not, until this table is built or main says otherwise.
+- **Next (manager's order)** — stay available while AGENT-1 lands the DMA data: the first real
+  consumer of a new mechanism is what finds its gaps (`preSel()`'s `[...v.options]` crash, the
+  `signal_pins:`/`remaps:` double-emission — same pattern). **Be ready to defend the mux-
+  before-struct-fill ordering decision against the RM specifically**, not just against the two
+  EVT examples that happen to order it the other way — the LPTIM `sdk_call_order` precedent is
+  exactly the shape where "the vendor's own order turned out to be load-bearing." Then §7 P2's
+  last item (print view), only if it can reuse `pinoutSvg()`'s renderer cleanly. The
+  `codegen.init_structs.<inner>.embed` documentation gap — worked example now posted to
+  `agents/BOARD.md` for AGENT-1 to paste into `data/FORMAT.md` (not mine to edit); §7 backlog
+  otherwise.
 - **Idle-after-that** — USBHS_PLL's other three inputs (§2 D REQUEST from AGENT-1, 01:14Z), item
   2's data half (AGENT-1), once anyone answers.
+- **`clockSummaryMarkdown()`'s two garbled tap shapes (main's finding, reproduced from the repo
+  owner's own screen)** — ~~`/undefined` for a bare mux, `[object Object]` for a leg-divider
+  entry~~ **done, this cycle.** See Current below.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: the print view (§7 P2's last item), only if it can land cleanly on
-  top of the pinout SVG's engine-side renderer rather than needing its own; otherwise §7 backlog.
-  DMA's own next step, NOT mine: AGENT-1 pastes the 123-request table against the board
-  contract — I do not own `data/mcus/**`.
-- Gates last run: `node tests/run.js "resources.test"` 63/63, `"codegen.test"` 79/79,
-  `"params.test"` 48/48, `"sdk_manual"` 8/8, `"export.test"` 35/35, `"app/tests"` (full engine
-  suite) 581/581 — all at this cycle's HEAD, all backward-compat suites unchanged and green.
-  `python tools/validate_mcu.py` 0 errors/73 warnings, `python tools/verify_sdk_names.py` 0/0.
-  `python build.py` run three times this cycle (told each time) — to verify the `sdk_manual:`
-  render fix, the SVG pad tooltip fix, and the DMA mux UI, each via a real jsdom boot with zero
-  console errors, none of the three builds committed: `data/mcus/CH32H417.yaml` was uncommitted
-  (AGENT-1, concurrent — DMA extraction in progress) at every one of those three build times,
-  so no freshly built `dist/index.html` was ever safe to ship under my commit this cycle. Left
-  modified, uncommitted, in the working tree throughout.
+- Next step if I stop here: stay available while AGENT-1 lands the DMA data (a question and a
+  bug are expected — the first real consumer of a new mechanism is what finds its gaps); then
+  the System-Core multi-controller DMA overview table once that data lands (held per main); then
+  the print view (§7 P2's last item), only if it reuses `pinoutSvg()`'s renderer cleanly.
+- Gates last run: `node tests/run.js "export.test"` 41/41 (was 35/35 before this cycle's 6 new
+  tests — 5 for the two tap shapes + the SAME-function drift guard, 1 for the wide "no generated
+  report on any shipped part" sweep), `"codegen.test"` 79/79, `"clock"` 110/110, `"app/tests"`
+  (full engine suite) 587/587 (was 581/581) — all at this cycle's HEAD, all backward-compat
+  suites unchanged and green. `node --check` clean on `clock.js`/`codegen.js`/`export.js`, plus
+  an `import()` smoke test through `app/engine/index.js` (`tapSetting` resolves, no half-saved
+  module). `python build.py` NOT run this cycle — nothing painting changed (the clock TAB was
+  already correct via `template.html`; this is narrowly the `--format clocks-md` text export),
+  and `data/mcus/CH32H417.yaml` is AGENT-1's live DMA-extraction target right now.
+
+**Current — 2026-09-14, cycle 8. Resumed after a predecessor was killed by a rate limit mid-task
+(the third kill of this role today) — its uncommitted work (`clock.js`/`codegen.js`/`export.js`/
+`export.test.js`) verified by reading the diffs, `node --check`, an `index.js` import smoke test,
+and actually running the tests, then hardened and committed rather than left for a fourth kill to
+inherit.**
+
+- **The bug, exactly as main reproduced it**: `clockSummaryMarkdown()` (`app/engine/export.js:521`
+  before the fix) printed `v.source`/`k.pre[n]` straight into a template string. `v.source` is an
+  ARRAY on any multi-entry mux (USBFS: `/10 from USBHS_PLL_CLK,PLLCLK` — the WHOLE array, not the
+  chosen leg), `k.pre[n]` is `undefined` on any bare mux with no `options:` divider at all (RNG,
+  I2S2, I2S3, HSADC — `/undefined`), and a leg-divider entry (`{ name, source, div }`, LTDC/ETH1G's
+  own shape) stringifies to `[object Object]` when read as a source. **The clock tab itself was
+  never affected** — `app/template.html` already resolved both shapes correctly through its own,
+  separately-fixed code; this was narrowly the `--format clocks-md` report `codegen.js`'s
+  `rccSection()` (the generated-C comment) had ALSO already resolved correctly — the two had
+  independently diverged on the same underlying fact, same pattern as the `paramTable()`/
+  `paramTableFrom()` split found last cycle.
+- **Fixed by one shared function, not by patching the one call site** (main's explicit
+  requirement 1): `tapSetting(v, name, k)` (`app/engine/clock.js:137`) resolves the mux leg's own
+  display NAME (`tapSourceEntry()`, already used correctly by `rccSection()`) and the tap's OWN
+  `options:`-driven divider, each `''` when the tap has none. Both `codegen.js`'s `rccSection()`
+  (`:940`, already correct — refactored onto the shared function anyway so it cannot drift back)
+  and `export.js`'s `clockSummaryMarkdown()` (`:527`, the actual fix) call the SAME function now.
+  Audited every other `.source`/`k.pre[` call site in `export.js`, `codegen.js` and
+  `template.html` for the same two-shape hazard (`grep -n "\.source\b\|k\.pre\["`) — no other
+  site prints a raw mux array or a raw leg-divider object; `template.html`'s own clock-tree
+  renderer already reads `.name/.source` off the resolved entry, not the container.
+- **Requirement 2 — the broad assertion, not just the narrow one.** Two new sweep tests in
+  `app/tests/export.test.js`: `"no shipped part's clock summary ever contains 'undefined' or
+  '[object Object]', on any package"` (every part × package, `clockSummaryMarkdown()` alone —
+  the exact symptom) and the wider `"no generated report on any shipped part, any package, ever
+  contains 'undefined' or '[object Object]'"`, which sweeps EVERY text file `generateAll()`
+  hands the user (generated C, plain pinout, KiCad CSV, pinout SVG, clock summary — the whole
+  `reports` option) on every part and package. **Disclosed gap, not implied-away**: both sweeps
+  read `generateAll()`'s own text outputs only — neither reaches `template.html`'s live DOM
+  rendering, so a defect visible only in a rendered page (not in a generated file's text) would
+  not be caught here; that is what real-browser verification is for, not this test.
+- **Every new test seen red on its own planted break BEFORE being trusted** — stashed the fix in
+  `export.js` (`git stash push -- app/engine/export.js`), re-ran `"export.test"`: the 5 narrow
+  tests AND the new wide sweep all failed correctly (`CH32H417 QFN68/88/128 ..._clocks.md:
+  contains "undefined"` / `"[object Object]"` for the wide one), popped the stash, green again.
+  Quoted red, wide sweep: `1 FAILED, 0 passed` — `no generated report on any shipped part, any
+  package, ever contains "undefined" or "[object Object]"` — `CH32H417 QFN68/88/128
+  CH32H417_QFN{68,88,128}_clocks.md: contains "undefined"` and `"[object Object]"`, six lines,
+  one per part×package×string.
+- **Not built this cycle, and said so rather than left ambiguous**: `python build.py` — nothing
+  that PAINTS changed (the clock tab already read correctly; this is a text-export function), and
+  `data/mcus/CH32H417.yaml` is AGENT-1's live DMA-extraction target, same reason my predecessors
+  declined to build on three prior cycles.
+- **Also committed this cycle, inherited unchanged from the predecessor's earlier, already-tested
+  work**: the worked `embed:` example for `data/FORMAT.md` (posted `agents/BOARD.md`, cycle 7) and
+  a correction to its own TODO-wording paraphrase (checked against `codegen.js:1288-1290` directly
+  rather than trusted from memory) — both were fully written and verified before the kill, only
+  uncommitted.
 
 **Current — 2026-09-14, cycle 7. Three things from main, all closed: the `sdk_manual:` render
 check (two real UI defects), the SVG pad tooltip AGENT-3 caught, and CH32H417's DMA — the engine
@@ -980,10 +1049,12 @@ mechanism for two controllers and a true DMAMUX crossbar, the last real gap on t
   never renders for a multi-controller part (safe, not wrong), while the actual per-peripheral
   configuration surface is fully generalised and tested. Full data-side contract posted to
   `agents/BOARD.md` for AGENT-1.
-- **Also found, flagged, not mine to fix**: `data/FORMAT.md` documents `dead_fields:` (already
-  corrected by AGENT-1) but has NO section at all for `codegen.init_structs.<inner-struct>.
-  embed` — a real, shipped, tested mechanism (FMC's nested-struct shape) with zero worked
-  example in its own contract file. NOTE posted to AGENT-1.
+- **Also found, and closed as far as I can close it**: `data/FORMAT.md` documents `dead_fields:`
+  (already corrected by AGENT-1) but has NO section at all for `codegen.init_structs.
+  <inner-struct>.embed` — a real, shipped, tested mechanism (FMC's nested-struct shape) with
+  zero worked example in its own contract file. `FORMAT.md` is AGENT-1's file; the worked
+  `embed:` example (real FMC data, verified against the shipped, tested mechanism — not
+  invented for the write-up) is posted to `agents/BOARD.md` for AGENT-1 to paste in.
 
 Red, and who owns it: **nothing of mine.** `tests/codegen_compile.test.js`'s two CH32H417
 fixture-staleness failures are pre-existing (confirmed by stashing every file I touched this
