@@ -366,3 +366,62 @@ modelled `pvd_level` param). Landed `a4f33bc`. CH32H417's known-missing count: 1
 The `IN_EXTRACTION` blanket for CH32H417 was NOT retired — seven real cells still need
 it, six of them now precisely named instead of folded into a claim ("the peripherals
 that have none") that was not true of six of the eleven it was asked to close.
+
+## Addendum, 2026-09-14 — the pre-push hook caught a real, 2,302-byte drift, end to end
+
+Not part of the pin-verification work, but the same "a gate has to be seen to fail on the
+thing it exists to catch" thesis this whole file is written under, closing the loop on a
+guard built earlier this same day.
+
+**What happened.** 97 commits of a day's work — the whole pin-verification record, C's
+routing closure, the cross-loader gate, the ABSENT-citation gate, ETH, roughly twenty-five
+peripherals' worth of params — sat unpushed. `git push origin main` was rejected by
+`check_dist_fresh`'s pre-push hook:
+
+```
+check_dist_fresh: 883bc5b... touches a build input - rebuilding from the COMMIT
+  (not the working tree) to check it...
+check_dist_fresh: 883bc5b... is STALE - 883bc5b...'s committed dist/index.html
+  (1690282 bytes) does not match a fresh build of 883bc5b...'s own committed
+  sources (1692584 bytes).
+```
+
+A genuine **2,302-byte** divergence between the committed `dist/index.html` and what its
+own committed sources actually build to — not a false alarm, not a flaky check.
+
+**Why it happened, and why every step along the way was the correct call anyway.**
+AGENT-2 declined to rebuild and commit a fresh `dist/index.html` on **four separate
+cycles** this round, each time because `data/mcus/CH32H417.yaml` was mid-edit by AGENT-1
+at that moment — committing a rebuild then would have baked in-flight, uncommitted data
+into a shared build artifact. Each decline was right in isolation. The accumulated
+consequence, invisible until something checked for it, was a committed `dist/index.html`
+that drifted further from its declared sources with every one of those correct declines.
+Nobody was careless; the drift was a property of the sequence, not of any one commit.
+
+**Why this specific rejection is the check working, not the check being lucky.**
+`tools/check_dist_fresh.js`'s v2 — the version rebuilt earlier the same day, after finding
+the ORIGINAL implementation vouched for a `dist/index.html` that did not match its own
+commit (STATUS.md's round-6 preamble: three green Python gates over a file `js-yaml`
+rejected outright, the sibling incident to this one) — checks **what is being pushed**,
+built fresh **from the commit itself**, never the working tree. The version that existed
+twelve hours earlier checked the working tree, and would have let this exact push through
+silently: the working tree at push time had OTHER agents' unrelated in-progress edits in
+it, not the stale `dist`, so a working-tree check had nothing to catch. Only a
+from-the-commit rebuild could see that the commit itself, in isolation, no longer builds
+to what it claims to ship.
+
+**The repair, and why the shape of it matters as much as the fix.** Before touching
+anything: confirmed the tree was actually settled (`git status` clean of `data/mcus` and
+`app/engine` changes, `HEAD` sitting exactly on the named commit) rather than assuming it
+— per the standing instruction, a rebuild against a STILL-mid-extraction tree would have
+baked in-flight data into the fix for baked-in-flight-data, the identical failure one
+level up. Ran `python build.py` on that clean tree, committed the rebuild **alone**
+(`7dc4549`, no other file in the commit), pushed again with no `--no-verify` and no force
+at any point. The hook accepted it: `check_dist_fresh: nothing being pushed touches
+app/template.html, app/engine, app/vendor, data, build.py - skipped.` Exit 0.
+
+**Worth stating plainly for the record: a hook that gets bypassed once stops being a
+hook.** The value of `check_dist_fresh` is not that it can reject a bad push - it is that
+every agent with push access has never once reached for `--no-verify` when it did. The
+first bypass, however justified it feels in the moment, is the point a real gate becomes
+a suggestion.
