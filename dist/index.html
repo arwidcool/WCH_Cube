@@ -23146,6 +23146,32 @@ function tapMuxDiv(v, name, k) {
   return (e && e.div) || 1;
 }
 
+/**
+ * The two pieces every "how is this tap set" display needs, resolved once:
+ * `from` (the mux leg's own display NAME right now — e.g. "SERDES_PLL clock / 2",
+ * not the bare signal it divides — or '' when the tap has no `source:` at all)
+ * and `div` (this tap's OWN `options:`-driven divider as a string, or '' when it
+ * has none — a bare mux like RNG carries nothing here; a divider one of its LEGS
+ * carries is already folded into that leg's own `from` name).
+ *
+ * ONE function, called by `codegen.js`'s generated-C comment (`rccSection()`)
+ * and `export.js`'s `clockSummaryMarkdown()`, so the two cannot drift into
+ * showing two different things about the same tap — which is exactly how they
+ * did: `rccSection()` already resolved a mux leg correctly; `clockSummaryMarkdown()`
+ * printed the raw `v.source` (an array, for any multi-entry mux) and `k.pre[name]`
+ * (unconditionally, even when the tap has no divider control at all) straight into
+ * a template string, producing `/undefined` for every bare mux (RNG, I2S2, I2S3,
+ * HSADC, ETH1G) and `[object Object]` for every leg-divider entry (LTDC, ETH1G) —
+ * a defect a user-facing report carried while the generated C, built from the
+ * same facts through code that had already been fixed, stayed correct the whole
+ * time (main's finding, 2026-09-14, reproduced from the repo owner's own screen).
+ */
+function tapSetting(v, name, k) {
+  const from = tapSources(v) ? tapSourceEntry(v, name, k).name : (v.source || '');
+  const div = (k && k.pre || {})[name] !== undefined ? String((k.pre || {})[name]) : '';
+  return { from, div };
+}
+
 // Initial clock state for an MCU's `clock:` block (null when the file has none).
 //
 // `preSrc` and `plls` are written only when the part HAS a mux or a second PLL,
@@ -26971,16 +26997,14 @@ function rccSection() {
   }
   for (const [name, v] of Object.entries(M.clock.prescalers || {})) {
     if (name === fp) continue;
-    // A tap whose source is a mux says which side of it this configuration picked -
-    // the LEG's own name, so a divider the leg itself carries ("SERDES_PLL /2") reads
-    // in the comment rather than only the bare signal it divides.
-    const chosen = tapSourceEntry(v, name, k);
-    const from = tapSources(v) ? `${chosen.name} ` : '';
-    // A tap whose only divider lives in its mux legs (RM 4085-4089's shape) has no
-    // `k.pre[name]` to print - the "/<n>" is the tap's OWN options divider, and there
-    // is nothing to say when the file gives it none.
-    const div = k.pre[name] !== undefined ? `/${k.pre[name]} ` : '';
-    L.push(`    /* ${name} ${from}${div}-> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
+    // `tapSetting()` (clock.js) resolves the mux leg's own display name ("SERDES_PLL
+    // clock / 2" reads rather than only the bare signal it divides) and this tap's
+    // OWN `options:`-driven divider (absent for a bare mux like RNG, whose only
+    // divider — if any — lives folded into a leg's own name instead) - the SAME
+    // function `export.js`'s `clockSummaryMarkdown()` now calls, so the comment and
+    // the report can't drift into disagreeing about one tap again.
+    const { from, div } = tapSetting(v, name, k);
+    L.push(`    /* ${name} ${from ? `${from} ` : ''}${div ? `/${div} ` : ''}-> ${r[name]} MHz${v.min_mhz || v.max_mhz ? ` (${v.min_mhz || 0}-${v.max_mhz || '?'} MHz)`
       : v.target_mhz ? ` (must be ${v.target_mhz} MHz)` : ''} */`);
   }
   if (r.over.length) L.push(`    /* WARNING: out of specification: ${r.over.join(', ')} */`);
@@ -28548,7 +28572,17 @@ function clockSummaryMarkdown() {
   if (fp) lines.push(`| HCLK | ${fp} /${k.pre[fp]} | ${num(r.HCLK)} MHz |`);
   for (const [n, v] of Object.entries(c.prescalers || {})) {
     if (n === fp) continue;
-    lines.push(`| ${n} | /${k.pre[n]}${v.source ? ` from ${v.source}` : ''} | ${num(r[n])} MHz |`);
+    // `tapSetting()` (clock.js) — the SAME function `codegen.js`'s `rccSection()`
+    // comment calls — resolves the mux leg's own display name and this tap's own
+    // divider, if either exists. Printing `v.source`/`k.pre[n]` here directly used
+    // to produce `/undefined` for every bare mux (no divider control at all: RNG,
+    // I2S2, I2S3, HSADC, ETH1G) and `[object Object]` for every leg-divider entry
+    // (LTDC, ETH1G) — `v.source` is an ARRAY on any multi-entry mux, and template-
+    // string coercion of an array of objects is exactly that string (main's finding,
+    // reproduced from the repo owner's own screen, 2026-09-14).
+    const { from, div } = tapSetting(v, n, k);
+    const setting = div ? `/${div}${from ? ` from ${from}` : ''}` : (from || '—');
+    lines.push(`| ${n} | ${setting} | ${num(r[n])} MHz |`);
   }
   for (const d of c.derived || []) lines.push(`| ${d.name} | HCLK /${d.div} | ${num(r[d.name])} MHz |`);
   lines.push('');
