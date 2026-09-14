@@ -643,6 +643,80 @@ with a TODO on the struct's own block — the same `--strict`-visible failure as
 `fn:` or handle, not a quiet note — so adding one of the 21 back is a red gate, not a
 silent, accepted mistake.
 
+### `codegen.init_structs.<inner-struct>.embed` — a member that is a POINTER to a second struct
+
+Some SDK functions take one struct whose OWN members are pointers to a SECOND struct type,
+and nothing ever calls that second struct's `Init()` alone. CH32H417's `FMC_NORSRAMInit()`
+is the proven case: it dereferences `FMC_NORSRAMInitTypeDef.FMC_ReadWriteTimingStruct` and
+`.FMC_WriteTimingStruct` — both `FMC_NORSRAMTimingInitTypeDef*` — unconditionally
+(`ch32h417_fmc.h:113,115`), and the two pointer members are the ONLY way either timing
+struct's fields ever reach hardware. A `struct:` row naming `FMC_NORSRAMTimingInitTypeDef`
+with no further information would merge BOTH sets of timing fields into one block — wrong,
+because they are two independent register sets (read/write timing vs. write-only extended
+timing) that happen to share one C struct TYPE.
+
+`embed:` disambiguates: the inner struct's OWN `init_structs` entry names which pointer
+member of which outer struct each embed KEY plugs into, instead of a `fn:` (an embedded
+struct is never applied on its own, so it has no apply function of its own to name):
+
+```yaml
+codegen:
+  init_structs:
+    FMC_NORSRAMInitTypeDef:  { fn: FMC_NORSRAMInit, no_handle: true }   # ch32h417_fmc.h:425
+    FMC_NORSRAMTimingInitTypeDef:
+      embed:
+        rw: { into: FMC_NORSRAMInitTypeDef, member: FMC_ReadWriteTimingStruct }   # ch32h417_fmc.h:113
+        wr: { into: FMC_NORSRAMInitTypeDef, member: FMC_WriteTimingStruct }       # ch32h417_fmc.h:115
+```
+
+A `params:` row that belongs to one of the two timing sets carries `struct:` (the inner
+struct's name) exactly like an ordinary struct-backed param, PLUS `embed:` naming which key
+above it belongs to:
+
+```yaml
+    params:
+      - key: rw_addrset
+        name: "Address setup time (read/write)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: rw                              # -> FMC_NORSRAMInitTypeDef.FMC_ReadWriteTimingStruct
+        sdk_field: FMC_AddressSetupTime
+        type: int
+        default: 15
+        min: 0
+        max: 15
+      - key: wr_addrset
+        name: "Address setup time (write, extended mode)"
+        struct: FMC_NORSRAMTimingInitTypeDef
+        embed: wr                              # -> FMC_NORSRAMInitTypeDef.FMC_WriteTimingStruct
+        sdk_field: FMC_AddressSetupTime         # the SAME sdk_field, a DIFFERENT block
+        type: int
+        default: 15
+        min: 0
+        max: 15
+        when: { "Extended Mode": Enable }
+```
+
+Two params can name the same `struct:` + different `embed:` keys and never merge — the
+generator groups blocks by `(struct, embed)` together, not by `struct` alone, which is the
+whole reason `embed:` exists: `rw_addrset`/`wr_addrset` share both a struct type AND an
+`sdk_field:`, and only the `embed:` key keeps their values from landing in the same block.
+
+**What the generator emits, and the rule it will never break**: the embedded struct's own
+variable is declared and filled FIRST, in the SAME C scope as the outer struct, and its
+ADDRESS is assigned to the outer struct's pointer member BEFORE the outer struct's own
+`fn:` is called — so the pointer is never dangling and never null. An `embed:` key the data
+does not resolve (a typo, or a `codegen.init_structs.<inner>.embed` block missing the outer
+struct's own `init_structs` entry) is a named TODO on the block (`codegen.init_structs.
+<inner-struct>.embed.<key> does not name a real block`), never a silently zeroed pointer —
+`FMC_NORSRAMInit()` dereferencing an unset `FMC_ReadWriteTimingStruct` unconditionally is
+exactly the null read this exists to prevent.
+
+Landed in `app/engine/codegen.js`'s `initPlan()`/`periphBlock()`/`structGroups()` (AGENT-2),
+8 tests including the planted break (`app/tests/nested_structs.test.js`), shipped on
+CH32H417's FMC (`data/mcus/CH32H417.yaml`, the real data above — verified against the file
+before this section was written, not from memory of building it). FMC_NAND, FMC_SDRAM and
+ECDC use the identical shape for their own pointer members.
+
 ### `codegen.sdk.driver_c` — a name no header anywhere declares
 
 ```yaml
