@@ -1425,6 +1425,21 @@ bits, and a clock tree that models what the schema can hold.
       flag, a configured request overriding the default, the old shape untouched, a real
       jsdom render of both controllers' pages. `node tests/run.js "app/tests"` 621/621 (was
       608/608).
+- [x] (AGENT-2) **§7 P2's last item: the print view, held all cycle on "only if it reuses
+      pinoutSvg() cleanly" - it does.** A "Print" button beside "Copy" in the Project
+      Manager's file preview, shown only for the `_pinout.svg` file. Clicking it drops that
+      file's OWN text (the identical string `pinoutSvg()` produced for `projectFiles()`)
+      into `#print-pinout` (hidden on screen, shown under `@media print`, which hides
+      `.app` too), then calls `window.print()` if present. Proven as reuse, not asserted:
+      `app/tests/print_pinout.test.js` parses BOTH `pinoutSvg()`'s raw text and the
+      injected content through the SAME DOM parser and asserts the `<svg>` outerHTML is
+      byte-identical - a raw string `.includes()` does NOT work here (pinoutSvg()'s XML
+      prolog gets reformatted by innerHTML), recorded rather than worked around silently.
+      `window.print()`'s guard exercised for real against jsdom's own "Not implemented"
+      stub. Planted break checked without a rebuild - a string-mutated in-memory copy of
+      the already-built `dist/index.html` (main's hold on `dist` respected). `node tests/
+      run.js "print_pinout"` 2/2. `python build.py` run once, before main's no-rebuild hold
+      arrived - told on the board; not committed.
 - [x] (AGENT-2) **The nested-struct shape (§3 REQUEST, 09-12T19:33Z): a member that is a POINTER
       to a second struct no SDK function takes alone.** `codegen.init_structs.<inner-struct>.embed`
       now maps a param's `embed: <key>` to `{ into: <outer-struct>, member: <pointer-field> }`.

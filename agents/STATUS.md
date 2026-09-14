@@ -936,21 +936,75 @@ RM's worked example, or it does not ship.
 - **P1 — the System-Core multi-controller DMA overview**, held until real two-controller data
   existed — ~~condition met, table built against CH32H417's real data, not a synthetic
   part~~ **done, this cycle.** See Current below.
+- **§7 P2's last item — the print view** — ~~held all cycle on "only if it can reuse
+  `pinoutSvg()`'s renderer cleanly"~~ **done, this cycle: it does, proven by parsing both
+  through the same DOM and comparing, not by looking similar.** See Current below.
+- **HSADC's per-channel call (main's finding, AGENT-1's new gate)** — `HSADC_ChannelConfig`
+  is a ONE-ARGUMENT per-channel call (channel alone; no rank, no sample time), which
+  `sdk_repeat: channels` (the 4-arg `ADC_RegularChannelConfig` shape) cannot express. **Next.**
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: the print view (§7 P2's last item), only if it reuses
-  `pinoutSvg()`'s renderer cleanly — the only item left on my own list. Otherwise stay
-  available for AGENT-1's next DFSDM question and §7 backlog.
+- Next step if I stop here: the HSADC one-argument per-channel call shape (main, board
+  2026-09-14T10:26Z-ish) — a new `sdk_repeat` variant, additive beside the 4-arg one, with
+  the two things main flagged to get right: whether `rank` genuinely has no HSADC meaning
+  (check the RM before assuming the short signature means "absent"), and the mechanism must
+  not make AGENT-1's WARNING (not error) unconditionally satisfiable — TKEY/OPA1/CMP1-3
+  legitimately have checkboxes with no per-channel call, and the gate has to keep telling
+  those apart from "unmodelled".
 - Gates last run: `node tests/run.js "channel_second_axis"` 8/8, `"dma_mux_overview"` 5/5,
-  `"instances.test"` 16/16, `"channel_multi_struct"` 5/5, `"params.test"` 49/49,
-  `"resources.test"` 65/65, `"codegen.test"` 80/80, full `"app/tests"` engine suite 621/621
-  (was 608/608 at this cycle's start, +13 across both items) — all backward-compat suites
-  unchanged and green, zero data-file edits. `node --check` clean on every touched engine
-  file. `python build.py` run twice, told each time: once to verify `instanceGroups()`'s new
-  two-axis UI grouping (jsdom), once for the DMA overview's real-browser render against real
-  CH32H417 data (also jsdom). Neither build committed — `data/mcus/CH32V003.yaml` was
-  mid-edit at the first, `data/mcus/CH32L103.yaml`/`.notes.md` mid-edit as this is written.
+  `"print_pinout"` 2/2, `"instances.test"` 16/16, `"channel_multi_struct"` 5/5, `"params.
+  test"` 49/49, `"resources.test"` 65/65, `"codegen.test"` 80/80, `"export.test"` 43/43 (one
+  transient module-load failure on an unrelated first run, `data/mcus/CH32H417.yaml`
+  mid-save under AGENT-1's own concurrent edit — clean on immediate re-run, disclosed not
+  hidden) — all backward-compat suites unchanged and green, zero data-file edits by me.
+  `node --check` clean on every touched engine file. `python build.py` run **three** times
+  this cycle total, told each time: twice for P0/P1 (already reported), once more for the
+  print view's first jsdom proof — that THIRD build happened before main's "nobody rebuild
+  until I call the settle" reached me; the print view's planted-break check afterward used a
+  string-mutated COPY of the already-built `dist/index.html` in memory, no further build. No
+  build has been committed by me all cycle — `data/mcus/CH32V003.yaml`, then
+  `CH32L103.yaml`/`.notes.md`, then `CH32H417.yaml` were each mid-edit in turn under
+  AGENT-1's own concurrent work at the moment in question.
+
+**Current — 2026-09-14, cycle 11. §7 P2's last item, the print view — done, and it holds
+the standing condition: it genuinely reuses `pinoutSvg()`, no third renderer.**
+
+- **The mechanism.** A "Print" button beside "Copy" in the Project Manager's file preview,
+  shown ONLY for the `_pinout.svg` file — the one generated file that is an image, so
+  "print" has something honest to mean. Clicking it drops that file's OWN text (the
+  identical string `pinoutSvg()` already produced for `projectFiles()`) into `#print-pinout`
+  (hidden on screen, shown only under `@media print`, which hides `.app` itself so nothing
+  about the app's live layout has to survive a print stylesheet), then calls `window.print()`
+  if the browser has one. `printPinout()` (`app/template.html`) renders nothing — a
+  container fill and a guarded `window.print()`, nothing else.
+- **Proven as reuse, not asserted.** `app/tests/print_pinout.test.js`'s first test parses
+  BOTH `pinoutSvg()`'s raw text and the injected `#print-pinout` content through the SAME
+  DOM parser and asserts the two `<svg>` elements' `outerHTML` are byte-identical — not
+  "looks similar". Found and recorded rather than quietly worked around: a raw string
+  `.includes()` check does NOT work here, because `pinoutSvg()`'s output leads with an XML
+  prolog an HTML `innerHTML` parse reformats — the file text and the injected text differ as
+  raw strings even though they parse to the identical element. Parsing both through the same
+  DOM before comparing is the more honest check, not a workaround for a flaky one.
+- **`window.print()` is guarded**, and the guard is exercised for real, not skipped: jsdom
+  stubs `window.print` as a no-op that logs "Not implemented" (already filtered as noise by
+  `tests/lib/app.js`'s own virtualConsole rule), and the second test confirms calling it
+  never throws into the page.
+- **Planted-break checked without a rebuild**, respecting main's hold on `dist`: a copy of
+  the already-built `dist/index.html`, string-mutated in memory (`id="pm-print"` renamed),
+  confirms `document.getElementById('pm-print')` comes back null and the first test's own
+  first assertion catches it.
+- **One real, disclosed, unrelated flake**: the first run of `node tests/run.js "export.
+  test"` this cycle showed 6 module-load failures across files the filter pattern does not
+  even match (`tests/completeness.test.js`, `h417_*.test.js`, …) — `data/mcus/CH32H417.yaml`
+  mid-save under AGENT-1's own concurrent DFSDM/HSADC work at that exact moment. Re-run
+  seconds later: clean. Said so rather than silently re-running until green and not
+  mentioning the first result.
+- **`python build.py` run once for this item**, before main's "nobody rebuild until I call
+  the settle" reached me — told on the board. No build since; the planted-break check above
+  used the copy already on disk. Not committing `dist/index.html`.
+
+Red, and who owns it: **nothing of mine.**
 
 **Current — 2026-09-14, cycle 10. P0 and P1 from main, both closed: DFSDM's second handle
 axis (the last thing blocking AGENT-1) and the System-Core multi-controller DMA overview

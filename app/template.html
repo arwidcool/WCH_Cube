@@ -796,6 +796,22 @@
     .logo{margin-right:10px}
   }
   @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
+
+  /* Print pinout — §7 P2's last item. `pinoutSvg()`'s own output (the SAME string
+     `generateAll()` already puts in the Project Manager's file list) dropped into
+     #print-pinout unmodified is what prints; nothing here re-renders it, so a printed
+     sheet and the exported .svg can never read two different things about one pinout —
+     the exact drift `paramTable()`/`paramTableFrom()` and `rccSection()`/
+     `clockSummaryMarkdown()` both shipped before being caught this cycle. Hidden on
+     screen; @media print hides the live app instead of the reverse, so nothing about
+     the app's own layout has to survive a print stylesheet. */
+  #print-pinout{display:none}
+  @media print{
+    body>.app,body>.toast,body>.pinhover,body>#newproj{display:none!important}
+    #print-pinout{display:block;padding:24px}
+    #print-pinout h1{font:600 16px system-ui,sans-serif;margin:0 0 12px}
+    #print-pinout svg{width:100%;height:auto;max-width:100%}
+  }
 </style>
 </head>
 <body>
@@ -927,6 +943,10 @@
     </div>
   </div>
 </div>
+
+<!-- Print pinout target — see the #print-pinout rule above for why this is filled
+     from pinoutSvg()'s own output rather than re-rendered. -->
+<div id="print-pinout"></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <!-- What a pin is, on hover. The SVG `<title>` above still carries the same words for
@@ -4225,9 +4245,16 @@ function renderPmCode(file, flags) {
   const errs = Object.values(marks).filter(k => k === 'error').length;
   const todos = Object.values(marks).filter(k => k === 'todo').length;
   const lines = file.text.split('\n');
+  // Print is offered for the pinout SVG alone - §7 P2's last item, and only because it
+  // can reuse pinoutSvg()'s own output unmodified. Nothing else generateAll() emits is
+  // an image; printing the .c/.h/.md/.csv files the way a browser prints TEXT would be
+  // a second, unrelated feature, not this one.
+  const printable = /_pinout\.svg$/.test(file.path);
   head.innerHTML = `<b>${esc(file.path)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
-    + `<div class="spacer"></div><button id="pm-copy">Copy</button>`;
+    + `<div class="spacer"></div>${printable ? '<button id="pm-print">Print</button>' : ''}<button id="pm-copy">Copy</button>`;
   head.querySelector('#pm-copy').onclick = () => pmCopy(file);
+  const printBtn = head.querySelector('#pm-print');
+  if (printBtn) printBtn.onclick = () => printPinout(file);
   const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — <b>this file will not compile as it stands.</b>`
     + ` The generator says so rather than emitting code for a configuration it cannot express. The line${errs === 1 ? ' is' : 's are'} marked below.</div>`
     : todos ? `<div class="pmnote warn">${todos} TODO section${todos === 1 ? '' : 's'} — the generator could not work something out and said so instead of emitting plausible-looking bits.`
@@ -4272,6 +4299,25 @@ function pmCopyFallback(file, done) {
   try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
   ta.remove();
   ok ? done() : toast('Could not copy — select the text and copy it yourself');
+}
+
+/**
+ * §7 P2's last item — the print view. `file.text` here IS `pinoutSvg()`'s own output:
+ * the identical string `generateAll()` already put in the Project Manager's file list,
+ * dropped into `#print-pinout` unmodified. Not a second renderer — the live canvas
+ * (`renderChip()`/`exportSvg()`) measures real glyph widths off a rendered `<text>` and
+ * reads the page's own `var(--x)` colours, neither of which a print stylesheet can rely
+ * on holding still; `pinoutSvg()` is the one renderer that was ALREADY self-styled and
+ * headless-safe for exactly this reason (see its own doc-comment, app/engine/export.js).
+ * `window.print()` is absent from jsdom (`tests/lib/app.js` filters the resulting
+ * "Not implemented" jsdomError as noise, not a real problem), so it is called only when
+ * the browser actually has it - never a silent no-op mistaken for "nothing to print".
+ */
+function printPinout(file) {
+  const box = document.getElementById('print-pinout');
+  if (!box) return;
+  box.innerHTML = `<h1>${esc(M.mcu.name)} — ${esc(S.pkg)} pinout</h1>${file.text}`;
+  if (typeof window.print === 'function') window.print();
 }
 
 // ---- the ZIP writer, which lives in the engine --------------------------------
