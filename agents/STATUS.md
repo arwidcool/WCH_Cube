@@ -364,22 +364,71 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — nothing. `pio run` SUCCESS x2 posted, and the P0 SDMMC investigation is
-closed with a correction and two REQUESTs, not a forced fix. `params:` holds at **46 of
-78** — SDMMC's own params were already correct; this was a pin-mux question, not a
-params one.
+**IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: CAN1-3/DAC/LPTIM1-2/GPHA/RTC worst-first (RTC's gate is TWO
-  bits — do not let `BKP` alone tick it), or ETH/ECDC/FMC_NAND/FMC_SDRAM under AGENT-2's
-  `embed:` contract if `main` wants those prioritised first. SDMMC's `af:`/remap gap
-  stays open pending AGENT-2 (a `codegen.remap` capability, or a `no_af:`-shaped marker)
-  and AGENT-3 (whether DS-completeness and reachability can coexist in
-  `h417_dedicated.test.js`) — REQUEST posted, not mine to close alone.
-- Gates last run: `validate_mcu` 0 errors/99 warnings (back to baseline) ·
-  `verify_sdk_names` 0/0 · `coverage.py --gate` 6 of 6 · `coverage.py CH32H417` complete,
-  0 open · `validate_params_selftest` 5/5 · `verify_sdk_names_selftest` 44/44 ·
-  `--strict` exits 0 on all 8 shipped fixtures · `node tests/run.js "H417"` 65/65 ·
-  `"h417_dedicated"` 2/2 · `"codegen_compile"` 18/18 · `pio run` **SUCCESS x2** (below).
+- Next step if I stop here: the 6 routing peripherals still owed (`DFSDM, ETH, USBFS,
+  USBHS, USBPD, USBSS`) — USBHS/USBSS/USBPD are byte-identical across every EVT example
+  (`const:` fits), USBFS is byte-DIFFERENT across all 8 (must NOT get `const:`), ETH is
+  blocked on a third `verify_sdk_names.py` indexing mode (`ETH_RegInit` is in no header,
+  only designated `.c` files) — its own careful narrowing, not started.
+- Gates last run: `validate_mcu` 0 errors/73 warnings · `verify_sdk_names` 0/0 ·
+  `coverage.py --gate` 6 of 6, CH32H417 complete/0 open · `validate_params_selftest` 5/5
+  · `validate_afmux_selftest` 13/13 (2 new cases) · `node tests/run.js "H417"` 65/65 ·
+  `"signal_groups"` 13/13 · `"codegen_compile"` 18/18 · `"completeness"` 15/15. `pio run`
+  not run this cycle (no `main` ask).
+
+**Current — 2026-09-14T~04:30Z. Resumed after a predecessor was killed mid-task by a
+rate limit; verified its uncommitted LPTIM work by reading the diff and running the
+gates (not by trusting its own description), then committed it and kept going.**
+
+- **LPTIM1/LPTIM2 landed** (`bc2fdb7`): `params:` **54 → 56 of 78**. One shared struct
+  and apply call (`LPTIM_TimeBaseInitTypeDef`/`LPTIM_TimeBaseInit`,
+  `ch32h417_lptim.h:23-92,176`), 17 fields cited to the header and to the vendor's own
+  PWM/One-Pulse example. The enable call carries `sdk_call_order: before_structs`
+  (AGENT-2's mechanism) because RM 17.5.5 documents `CNTSTRT`/`SNGSTRT`/`OUTEN` as
+  write-only-when-`ENABLE`=1 and `LPTIM_TimeBaseInit()` preserves whatever `ENABLE`
+  already is in the same register write — reversed, it compiles clean and silently
+  never starts. `LPTIM_EncoderMode` stays unmodelled (no macro values anywhere in the
+  header, shares a union slot with `clkpol`, gated off it).
+- **SWPMI's "Single wire with supply" ruling applied, and upgraded past what was on
+  disk.** The predecessor had already removed the choice on the manager's citation (DS
+  Table 2-2-26 + `CH32H417RM.md:11003`, no register bit either way), but recorded it
+  only as a source `#` comment — invisible to the app. Moved it into the peripheral's
+  own `notes:` field instead (real schema key, "shown to the user" per
+  `data/FORMAT.md`), so the decision is visible in the app, not only to whoever reads
+  the YAML next. Landed through `peripheral_extras.yaml`'s `swpmi_params` anchor +
+  regenerate, never a hand edit.
+- **UHSIF's QFN68/QFN88 `signal_groups` default gap closed** (`6d7165e`), the third item
+  the manager owed me an answer on. AGENT-2 landed `signal_groups[].remap_by_package`
+  this cycle (`82c2d73`, reusing `remaps:`'s own shape) — this is the data it was built
+  for. `CH32H417RM.md:11839-11845` states the fix outright, right after Table 9-33:
+  "The chip packaged with 56/68 pins is recommended to use the mapping configuration of
+  01b; It is recommended to use 1xb mapping configuration for chips packaged as 88
+  pins." `remap_by_package: { QFN68: 1, QFN88: 2 }`, verified against the real package
+  pin tables both ways (index 1 bonds 5 of PORT0-7 on QFN68, not all 8 — the RM's own
+  recommendation, not claimed as a full fix; index 2 bonds all 8 on QFN88). Found
+  `signal_groups[].remap_by_package` had **no `validate_mcu.py` check at all** — only
+  the peripheral-level `remaps:` one did — so a bad package name or an out-of-range
+  index would have passed silently; added the check, `data/FORMAT.md` documents the
+  key, two new cases in `validate_afmux_selftest.py` (13/13), both watched red before
+  being trusted.
+- **A stale self-test fixed along the way**: `validate_params_selftest.py` targeted
+  `UHSIF.width_bit`, a param removed when `signal_groups:` landed — 2 of 5 planted
+  breaks were silently NOT being planted at all (`row()` raises `KeyError` before
+  `validate_mcu.py` ever runs, and the harness counted that as a catch). Found by
+  re-running the selftest ahead of a data commit and seeing 3/5. Retargeted to
+  `uhsif_port_rm`, 5/5.
+- **TASKS.md's live `[~]` line updated** with the new count and this cycle's findings,
+  and the UHSIF-claims-all-49-pads sub-item ticked `[x]` — it was already resolved
+  (Mode's choices are width-specific pin claims today) before this cycle started, just
+  never ticked.
+- Fixtures refreshed once, for the LPTIM/SWPMI param defaults only:
+  `node tests/fixtures/make_fixtures.js` (the two H417 ones were stale; the UHSIF
+  `remap_by_package` change added no new `params:` key, so no second refresh needed).
+
+Red, and who owns it: **nothing of mine.** Did not touch `app/engine/**`,
+`app/tests/**` or `tools/wchcube_cli.js`, all mid-edit under AGENT-2 on the shared tree
+this cycle.
 
 **Current — 2026-09-13T20:23Z. `pio run` posted; the SDMMC "P0" turned out to be two
 real schema gaps, and I closed the investigation rather than force either fix.**

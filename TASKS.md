@@ -995,19 +995,26 @@ bits, and a clock tree that models what the schema can hold.
 - [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
       SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
 - [~] **(AGENT-1) CH32H417: `params:` for the peripherals that have none.**
+      **2026-09-14: LPTIM1/LPTIM2 landed (`bc2fdb7`) - 54 -> 56 of 78 have a block.** 22 cells
+      owed, 6 of them routing pins that still lack a block outright: `DFSDM, ETH, USBFS, USBHS,
+      USBPD, USBSS`. Also this cycle: SWPMI's "Single wire with supply" combination removed (not
+      offered - DS Table 2-2-26 and CH32H417RM.md:11003 agree SUP has no pad in 1-wire mode, no
+      register bit found either way), recorded as a real, app-visible `notes:` field rather than
+      only a source comment; and UHSIF's QFN68/QFN88 `signal_groups` default gap closed with
+      `remap_by_package: { QFN68: 1, QFN88: 2 }` (`6d7165e`), citing CH32H417RM.md:11839-11845's
+      own per-package recommendation, now that AGENT-2 landed the mechanism (`82c2d73`).
       **2026-09-13: UHSIF landed - 39 -> 40 of 78 have a block, 34 cells owed, 22 routing pins.**
       Two NEW open items came out of it, both needing a source nobody can read yet:
-      - [ ] (AGENT-1) **UHSIF claims all 49 pads whatever `width_bit` says.** `Mode: Enabled`
-            takes every signal, so an 8-bit bus still holds 32 data pads it does not use and
-            cannot release; enabling UHSIF gives **5 conflicts on the QFN128 fixture and 10 on
-            QFN68**, so it cannot be switched on in either. Very likely two of the four QFN68
-            entries in `COLLISION_CEILING`. The fix is a `Data width` setting whose choices claim
-            different PORT ranges - the shape DVP/SDIO/I2S already use - and it needs the
-            per-mapping, per-width pad table in
-            `data/sources/H417/Evt/EXAM/UHSIF/CH32H417 UHSIF Development Reference Manual-EN.pdf`,
-            which has **no markdown conversion**; `UHSIF_GPIO_Init` itself is inside `libUHSIF.a`,
-            so no readable source answers it. Convert the PDF first (`data/sources/README.md`
-            protocol: `PDF FALLBACK:` line, recover by script, write the cells back). DO NOT GUESS.
+      - [x] (AGENT-1) **UHSIF claims all 49 pads whatever `width_bit` says — RESOLVED, before
+            this cycle.** `Mode`'s choices are now `Disable`/`8-bit`/`16-bit`/`24-bit`/`32-bit`,
+            each claiming exactly the PORT range its own width uses (`width_bit` itself removed,
+            folded into `Mode` - one source for both the pin claim and the SDK argument, not two
+            that could disagree). Confirmed against the real file (`data/mcus/CH32H417.yaml`
+            `UHSIF.settings[0].choices`) and against `tests/h417_packages.test.js`, which reports
+            0 avoidable QFN68/QFN88/QFN128 collisions from UHSIF today. The per-mapping,
+            per-width pad table this item said was needed did get recovered
+            (`tools/recover_h417_uhsif_pdf.py`, `data/sources/H417/UHSIF_port_functions.yaml`),
+            so "DO NOT GUESS" was honoured, not routed around.
       - [ ] (AGENT-1) **UHSIF's 49 signals have no `af:`**, so `--strict` exits 2 on any project
             that enables it (TODO: alternate function select). Pre-existing and previously
             unreachable because nothing could turn UHSIF on. They are dedicated pads rather than
