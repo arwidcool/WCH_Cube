@@ -343,10 +343,13 @@ peripherals:
     remap: 0
   FLASH:
     settings:
-      Independent watchdog start (IWDG_SW): Started by software (factory default)
-      Reset on entering Standby (STANDBY_RST): No reset (factory default)
-      Reset on entering Stop (STOP_RST): No reset (factory default)
+      Independent watchdog hardware enable (IWDGSW): Software-controlled (factory default)
+      USBFS keyless download (USBFSDLEN): Enabled (factory default)
+      USART keyless download (USARTDLEN): Enabled (factory default)
     remap: 0
+    params:
+      access_clock: /1 (HCLK)
+      enhance_mode: false
   FMC:
     settings:
       Bus mode: Disable
@@ -422,6 +425,9 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      mode: R2M (fill memory from a colour/data source)
+      cmode: ARGB8888
   HSADC:
     settings:
       Mode: Disable
@@ -486,6 +492,10 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      write_access: Enable before writing
+      prescaler: '64'
+      reload: 4095
   LPTIM1:
     settings:
       Channel1: Disable
@@ -590,6 +600,9 @@ peripherals:
       Programmable Voltage Detector (PVD): Disable
       Low power mode: None
     remap: 0
+    params:
+      pvd_level: Rising 3.2V / falling 3.09V
+      pvd_cmd: true
   QSPI1:
     settings:
       Mode: Disable
@@ -906,6 +919,10 @@ peripherals:
     settings:
       Mode: Disable
     remap: 0
+    params:
+      prescaler: '1'
+      window: 127
+      counter: 127
 gpio_manual:
   PC0: GPIO_Output
   PC1: GPIO_Input
@@ -933,12 +950,28 @@ clock:
   sys: HSI
   pre:
     USBFS: 10
+    UHSIF: 1
+    LTDC: 1
     HB: 1
     FPRE: 1
     HB2: 1
     ADC: 2
   preSrc:
     USBFS: USBHS_PLL_CLK
+    RNG: SYSCLK
+    I2S2: SYSCLK
+    I2S3: SYSCLK
+    HSADC: SYSCLK
+    UHSIF: SYSCLK
+    LTDC: PLLCLK
+    ETH1G: ETH_PLL clock / 4
   plls:
     USBHS_PLL:
       in: 0
+    ETH_PLL:
+      in: 0
+    USBSS_PLL:
+      in: 0
+    SERDES_PLL:
+      in: 0
+      mul: 25
