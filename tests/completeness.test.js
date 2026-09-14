@@ -492,6 +492,196 @@ test('every peripheral of every real part has settings, params, a clock bit, and
   assert.empty(missing, 'peripheral cells that are neither filled in nor declared absent in ABSENT');
 });
 
+// ---------------------------------------------------------------- an ABSENT citation's referent
+//
+// `DMA1.params` said, in good faith and correctly for five parts, that DMA parameters "live in
+// the top-level dma.channel_params, not on the peripheral". CH32H417 has no `dma:` block at all
+// - the citation was never wrong where it was written, and nothing here ever asked, for THIS
+// part, whether the sentence was still true. An exemption whose reason has quietly gone false
+// reads exactly like one that still holds, which is how an entire DMA subsystem sat behind a
+// correct-sounding sentence. The matrix test above checks that an ABSENT ENTRY EXISTS for a
+// missing cell. It has never checked that the entry's REASON IS TRUE. This is that second
+// question, asked once for every citation this file makes, on every part it is used against.
+//
+// TWO KINDS OF CLAIM, extracted from the citation text by pattern rather than by hand-tagging
+// each of the ~90 entries (hand-tagging would rot exactly the way DMA1.params did - a citation
+// and its own checkability silently drifting apart):
+//   file_line   `name.ext:NN` or `name.ext:NN-MM` (h/c/S/md) - the named file must exist
+//               somewhere under that PART's own `data/sources/<evt>` tree (Datasheets and Evt
+//               both live under it) and carry at least as many lines as the citation's highest
+//               line number.
+//   data_path   a dotted path rooted at a real top-level key of the MCU model (`dma.`,
+//               `codegen.`, `nvic.`, ...) - it must resolve to something DEFINED in that
+//               part's own loaded model, `eng.M`, the exact structure every other check in
+//               this file reads (not a re-parse of the YAML that could disagree with it).
+// A citation with NEITHER kind of claim is not a failure - most of this table is prose ("both
+// are choices, not numbers") with no referent to point a checker at - but it is counted and
+// printed, so "how many of these ~90 exemptions can this file actually verify" is a number on
+// the page, the same discipline the pin-verification record uses for its own tooling gaps.
+//
+// GENERIC ENTRIES (no part prefix, e.g. `DMA1.params`) apply to every part with that
+// peripheral, via `lookup()`'s fallback - and DMA1.params is the proof that "true on the part
+// it was written against" is not "true everywhere it now applies". So a generic entry's claims
+// are checked against EVERY part `excused()` actually resolves it for, not just one.
+
+const MODEL_ROOTS = ['dma', 'codegen', 'nvic', 'exti', 'gpio', 'clock', 'constraints', 'pins', 'packages'];
+const FILE_LINE_RE = /\b([A-Za-z0-9_][A-Za-z0-9_.]*\.(?:h|c|S|md)):(\d+)(?:[-–](\d+))?\b/g;
+const DATA_PATH_RE = new RegExp(`\\b(?:${MODEL_ROOTS.join('|')})(?:\\.[a-z][a-z0-9_]*)+\\b`, 'g');
+
+/** Every checkable claim a citation string makes. `[]` means prose only, not a failure. */
+function citationClaims(text) {
+  const claims = [];
+  for (const m of text.matchAll(FILE_LINE_RE)) {
+    const line = Number(m[2]), lineEnd = m[3] ? Number(m[3]) : line;
+    claims.push({ kind: 'file_line', text: m[0], file: m[1], line, lineEnd });
+  }
+  for (const m of text.matchAll(DATA_PATH_RE)) claims.push({ kind: 'data_path', text: m[0], path: m[0] });
+  return claims;
+}
+
+/** Every file under a part's own `data/sources/<evt>` tree, indexed by basename. Built once per
+ *  evt root and cached — this file tree does not change mid-run. */
+const fileIndexCache = new Map();
+function fileIndex(evtRoot) {
+  if (fileIndexCache.has(evtRoot)) return fileIndexCache.get(evtRoot);
+  const dir = path.join(ROOT, 'data', 'sources', evtRoot);
+  const idx = new Map();
+  if (fs.existsSync(dir)) {
+    for (const entry of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const full = path.join(entry.path ?? entry.parentPath ?? dir, entry.name);
+      if (!idx.has(entry.name)) idx.set(entry.name, []);
+      idx.get(entry.name).push(full);
+    }
+  }
+  fileIndexCache.set(evtRoot, idx);
+  return idx;
+}
+
+/** Walk a dotted path (`dma.channel_params`) into a model object; `undefined` if any step is. */
+function resolvePath(model, dotted) {
+  let v = model;
+  for (const seg of dotted.split('.')) {
+    if (v === null || v === undefined) return undefined;
+    v = v[seg];
+  }
+  return v;
+}
+
+test('every ABSENT citation that names a checkable location actually resolves, per part', () => {
+  const problems = [];
+  const templated = [];
+  let checkable = 0, proseOnly = 0;
+  const evtRootCache = new Map();
+  const evtRoots = fs.readdirSync(path.join(ROOT, 'data', 'sources'), { withFileTypes: true })
+    .filter(e => e.isDirectory()).map(e => e.name);
+
+  for (const [key, citation] of Object.entries(ABSENT)) {
+    if (typeof citation !== 'string') continue; // OPEN-shaped [owner, task] entries live in a
+                                                  // different table; ABSENT is string-only.
+    const segs = key.split('.');
+    const cell = segs.pop();
+    const pid = segs.pop();
+    const partPrefix = segs.pop(); // undefined for a generic PID.CELL key
+    const claims = citationClaims(citation);
+    if (!claims.length) { proseOnly++; continue; }
+
+    // A generic entry only actually excuses a part that HAS the peripheral in the first
+    // place - `excused()` is a bare table lookup and does not gate on that itself (only the
+    // real matrix loop above does, by construction: it is only ever called from inside
+    // `Object.entries(M.peripherals)`). Skipping this gate here would check `PIOC.params`
+    // against every part with NO Object.entries(M.peripherals) NO peripheral called PIOC at
+    // all, reporting a false "does not resolve" against parts the entry never actually
+    // excuses anything on.
+    const hasPid = part => { eng.loadMcu(eng.MCU_FILES[part]); return !!(eng.M.peripherals || {})[pid]; };
+    const parts = partPrefix ? [partPrefix]
+      : REAL_PARTS.filter(p => hasPid(p) && excused(p, pid, cell) === citation);
+    if (!parts.length) {
+      // A generic entry `excused()` never actually resolves for ANY real part is itself
+      // suspicious (dead weight, or a typo'd pid) - named rather than silently skipped.
+      problems.push(`${key}: no real part currently resolves this entry via lookup() - dead `
+        + `or mistyped pid/cell`);
+      continue;
+    }
+    for (const part of parts) {
+      checkable++;
+      if (!evtRootCache.has(part)) {
+        eng.loadMcu(eng.MCU_FILES[part]);
+        evtRootCache.set(part, ((eng.M.codegen || {}).sdk || {}).evt || null);
+      }
+      const evtRoot = evtRootCache.get(part);
+      eng.loadMcu(eng.MCU_FILES[part]);
+      const model = eng.M;
+      for (const claim of claims) {
+        if (claim.kind === 'data_path') {
+          if (resolvePath(model, claim.path) === undefined) {
+            problems.push(`${key} (${part}): "${claim.path}" does not resolve in ${part}'s `
+              + `own loaded model - the citation names a location that is not there`);
+          }
+        } else {
+          if (!evtRoot) {
+            problems.push(`${key} (${part}): cites "${claim.text}" but ${part} has no `
+              + `codegen.sdk.evt, so there is no source tree to check it against`);
+            continue;
+          }
+          const matches = fileIndex(evtRoot).get(claim.file);
+          if (matches && matches.length) {
+            const longEnough = matches.some(f => fs.readFileSync(f, 'utf8').split('\n').length >= claim.lineEnd);
+            if (!longEnough) {
+              const lens = matches.map(f => fs.readFileSync(f, 'utf8').split('\n').length);
+              problems.push(`${key} (${part}): "${claim.text}" cites line ${claim.lineEnd} but `
+                + `${claim.file} has ${lens.join('/')} line(s) - out of range`);
+            }
+            continue;
+          }
+          // Not under THIS part's own tree. Two different things can be true, and they get
+          // different treatment: the file exists under a SIBLING part's tree (this is the
+          // DMA1/PIOC shape - a citation written against one part, silently reused for
+          // another it was never checked against - a real failure), or it exists under NO
+          // part's tree at all (a family-wide shorthand like `ch32v00X.h`, a deliberate
+          // placeholder this repo's own citations use elsewhere and never a literal path -
+          // noted, not failed, since the claim was never checkable to begin with).
+          const elsewhere = evtRoots.filter(r => r !== evtRoot && fileIndex(r).get(claim.file)?.length);
+          if (elsewhere.length) {
+            problems.push(`${key} (${part}): "${claim.file}" (from "${claim.text}") does not `
+              + `exist under data/sources/${evtRoot}, but DOES exist under `
+              + `${elsewhere.map(r => `data/sources/${r}`).join(', ')} - likely written `
+              + `against the wrong part`);
+          } else {
+            templated.push(`${key} (${part}): "${claim.text}" - "${claim.file}" is not a real `
+              + `filename anywhere in data/sources (a family-wide placeholder, not checked)`);
+          }
+        }
+      }
+    }
+  }
+  console.log(`        ${Object.keys(ABSENT).length} ABSENT citation(s): ${checkable} `
+    + `checkable-location instance(s) verified, ${proseOnly} prose-only (no checkable referent)`
+    + `, ${templated.length} templated/placeholder filename(s) (not literally checkable).`);
+  if (templated.length) for (const line of templated) console.log(`          - ${line}`);
+  assert.empty(problems, 'ABSENT citations naming a location that does not resolve');
+});
+
+test('planted break: an ABSENT citation naming a location that does not exist is caught', () => {
+  // Both directions, the same discipline every gate this round has needed. A real citation
+  // (RCC.params, above) names nothing checkable and must not be flagged. A fabricated one
+  // reproducing the EXACT DMA1.params shape - a real rule, a dead pointer - on a part
+  // confirmed to lack the block, must fail and name it.
+  const noDmaBlock = REAL_PARTS.find(p => { eng.loadMcu(eng.MCU_FILES[p]); return !eng.M.dma; });
+  assert.ok(noDmaBlock, 'no real part currently lacks a dma: block - this plant needs a live target and CH32H417 apparently grew one; find another missing data_path to plant against');
+
+  const claims = citationClaims('parameters live in the top-level dma.channel_params, not on the peripheral');
+  assert.equal(claims.length, 1, 'the planted citation text should yield exactly one data_path claim');
+  eng.loadMcu(eng.MCU_FILES[noDmaBlock]);
+  const missingResolves = resolvePath(eng.M, claims[0].path) !== undefined;
+  assert.notOk(missingResolves, `planted precondition failed: dma.channel_params DOES resolve on ${noDmaBlock} - the plant is not exercising a real gap`);
+
+  const realClaims = citationClaims(ABSENT['RCC.params']);
+  assert.equal(realClaims.length, 0, 'RCC.params was expected to be prose-only (no checkable referent) - if this now fails, RCC.params grew a checkable claim and this assertion is stale, not the code under test');
+
+  console.log(`      planted refusal (dead ABSENT referent): dma.channel_params does not resolve on ${noDmaBlock}, reproducing the DMA1.params shape`);
+});
+
 // ---------------------------------------------------------------- how far a part may be soft
 //
 // `IN_EXTRACTION` lets a part that is being extracted print a cell with an owner instead of
