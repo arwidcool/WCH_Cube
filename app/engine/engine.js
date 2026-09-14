@@ -20,7 +20,7 @@
 import {
   M, S, canon, pinExists, pinLabel, pinNum, groupOf, sigName,
   requiredSignals, isEnabled, isAvailable, neutralChoice, gpioSpeeds, gpioSpeedFor,
-  signalPins, signalPinOptions, isAfMuxed,
+  signalPins, signalPinOptions, isAfMuxed, signalGroupOf,
 } from './model.js';
 import { record, batch } from './history.js';
 import { resourceState } from './resources.js';
@@ -176,7 +176,24 @@ export function previewAssign(pin, opt) {
   // running that check here would invent collisions on pins nothing is about to move.
   if (isAfMuxed(periph)) {
     if (onThisPin) return '';
-    return cur && cur.claims.some(c => c.who !== periph) ? 'pin in use' : '';
+    if (cur && cur.claims.some(c => c.who !== periph)) return 'pin in use';
+    // `signal_groups:` is the one exception to "no sibling to drag along": this
+    // signal's siblings move to the SAME index in the same call (`setSignalPin()`),
+    // so a pin that looks free for THIS signal alone can still collide through a
+    // sibling that has to move with it - the exact check the remaps: branch below
+    // already does for a whole peripheral, narrowed to just this group's members.
+    const grp = signalGroupOf(periph, signal);
+    if (grp) {
+      const idx = signalPinOptions(periph, signal).findIndex(o => o.pin === pin);
+      if (idx >= 0) {
+        const hit = grp.signals
+          .filter(s => s !== signal)
+          .map(s => (signalPinOptions(periph, s)[idx] || {}).pin)
+          .filter(px => px && E.pins[canon(px)] && E.pins[canon(px)].claims.some(c => c.who !== periph));
+        if (hit.length) return 'remap collides on ' + [...new Set(hit)].join(', ');
+      }
+    }
+    return '';
   }
   const isCur = !!(onThisPin && S.periph[periph].remap === remap);
   if (isCur) return '';
@@ -338,10 +355,24 @@ export function setRemap(pid, index) {
 export function setSignalPin(pid, signal, pin) {
   const opts = signalPinOptions(pid, signal);
   if (!opts.length) throw new Error(`${pid} has no signal_pins entry for ${signal}`);
-  if (!opts.some(o => o.pin === pin))
+  const idx = opts.findIndex(o => o.pin === pin);
+  if (idx < 0)
     throw new Error(`${pid}_${signal} cannot use ${pin}: the data lists ${opts.map(o => o.pin).join(', ')}`);
   record(`${sigName(pid, signal)} on ${pinLabel(pin)}`);
   (S.periph[pid].afPins ||= {})[signal] = pin;
+  // `signal_groups:` - this signal moves ATOMICALLY with its siblings (UHSIF's
+  // PORT0-7 under one shared UHSIF_PORT_RM, the remaps: equivalent for a subset of
+  // one peripheral's signals). Every sibling moves to the SAME INDEX in its own
+  // candidate list, in this same call, so the group can never read as a combination
+  // the silicon cannot produce even for one intermediate render.
+  const grp = signalGroupOf(pid, signal);
+  if (grp) {
+    for (const sib of grp.signals) {
+      if (sib === signal) continue;
+      const sibOpts = signalPinOptions(pid, sib);
+      if (sibOpts[idx]) S.periph[pid].afPins[sib] = sibOpts[idx].pin;
+    }
+  }
 }
 
 // One cell of the GPIO settings table (mode, pull, speed, label).

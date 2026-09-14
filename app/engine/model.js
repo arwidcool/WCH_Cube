@@ -290,6 +290,32 @@ export function defaultSignalPin(pid, sig) {
   return (opts.find(o => pinExists(o.pin)) || opts[0]).pin;
 }
 
+// `signal_groups:` - a NAMED SUBSET of an `af`-muxed peripheral's signals that the
+// silicon moves TOGETHER under one shared field, inside a peripheral whose OTHER
+// signals genuinely do pick their pin independently. CH32H417 UHSIF is the proven
+// case: `UHSIF_PORT_RM` moves PORT0-7's eight signals as one atomic, three-valued
+// choice - structurally identical to `SDMMC_RM` - while UHSIF_CLK's four options are a
+// real independent choice (a single signal has nothing else to disagree with), and
+// PORT8-47 have exactly one candidate each (no choice, nothing to couple). `remaps:`
+// cannot express "just these eight signals, atomically" without giving every OTHER
+// signal of the peripheral a matching entry in a shape they do not need; `signal_pins:`
+// cannot express the coupling at all - each signal already picks independently, which
+// is the exact defect (CMD-from-RM=00 beside D0-from-RM=01, one repository over).
+//
+// The shape reuses `signal_pins:`'s own per-signal candidate lists rather than
+// inventing a second place to state the same pins twice: `signal_groups:` says WHICH
+// signals move together; each grouped signal's own `signal_pins:` entry still says
+// WHAT its candidates are, in the SAME order for every signal in the group (index 0 is
+// every member's own pin under choice 0, index 1 under choice 1, and so on - the same
+// "index is the register value" rule `remaps:` already states). `setSignalPin()` below
+// is where the coupling actually happens: choosing a pin for ONE grouped signal moves
+// every sibling to the matching index in the SAME call, so `signalPins()` itself needs
+// no group-awareness for an already-chosen signal - only for picking today's DEFAULT,
+// which must be uniform across the group rather than each signal's own "first bonded"
+// pick (a mismatch there would start the group on an impossible combination too).
+export const signalGroupOf = (pid, sig) =>
+  ((M.peripherals[pid] || {}).signal_groups || []).find(g => (g.signals || []).includes(sig)) || null;
+
 // signal -> pin for this peripheral as it is configured right now, in the same shape
 // a `remaps:` entry has, so one reader covers both.
 export function signalPins(pid) {
@@ -300,7 +326,12 @@ export function signalPins(pid) {
   for (const sig of Object.keys(P.signal_pins)) {
     const want = chosen[sig];
     const ok = want && signalPinOptions(pid, sig).some(o => o.pin === want);
-    const pin = ok ? want : defaultSignalPin(pid, sig);
+    // A grouped signal's UNCHOSEN default is its own index-0 entry, not "first
+    // bonded" - every sibling defaults to index 0 too, so the group starts on a real,
+    // atomic combination rather than each signal picking whatever fits it alone.
+    const pin = ok ? want
+      : signalGroupOf(pid, sig) ? (signalPinOptions(pid, sig)[0] || {}).pin
+      : defaultSignalPin(pid, sig);
     if (pin) pins[sig] = pin;
   }
   return { name: 'the per-pin AF map', pins, af: true };

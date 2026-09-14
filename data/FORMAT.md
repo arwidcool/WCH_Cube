@@ -787,6 +787,57 @@ speed the part no longer offers.
 `tools/validate_afmux_selftest.py` plants a break in each of these checks and requires the
 validator to catch it, because a check that cannot fail is worth nothing.
 
+### `signal_groups` — a NAMED SUBSET that moves together, inside an `af`-muxed peripheral
+
+Everything above assumes an `af`-muxed peripheral's signals are *all* independent — the
+whole reason `signal_pins:` replaces `remaps:` in the first place. CH32H417 UHSIF breaks
+that assumption for exactly eight of its 49 signals: `UHSIF_PORT_RM` moves `PORT0`-`PORT7`
+together under ONE shared, three-valued field — structurally identical to `SDMMC_RM` (the
+`remaps:` case above) — while `UHSIF_CLK`'s four options are a genuinely independent
+choice (a lone signal has nothing to disagree with) and `PORT8`-`PORT47` have exactly one
+candidate each (no choice, nothing to couple). Neither `remaps:` nor `signal_pins:` alone
+fits: `remaps:` would force every one of the other 41 signals into a shape they do not
+need; `signal_pins:` cannot express the coupling at all, which is the exact defect this
+key exists to close — offering `PORT0` from one mapping alongside `PORT1` from another,
+a combination the silicon cannot produce.
+
+```yaml
+peripherals:
+  UHSIF:
+    signal_pins:
+      PORT0: [{ pin: PC1 }, { pin: PF12 }, { pin: PE8 }]   # index 0/1/2 = RM 00/01/1x
+      PORT1: [{ pin: PC2 }, { pin: PF13 }, { pin: PE9 }]   # same order, same meaning
+      # ...PORT2-PORT7, same shape...
+      CLK: [{ pin: PC0 }, { pin: PF14 }, { pin: PD9 }, { pin: PF11 }]   # independent, untouched
+      PORT8: [{ pin: PE13 }]                                            # fixed, untouched
+      # ...
+    signal_groups:
+      - signals: [PORT0, PORT1, PORT2, PORT3, PORT4, PORT5, PORT6, PORT7]
+```
+
+**The pins still live in `signal_pins:`, once, exactly as they would without a group** —
+`signal_groups:` says only WHICH signals move together, not what their candidates are.
+This means **every signal named in a group must offer the SAME NUMBER of options, in the
+SAME order** — index 0 is every member's own pin under choice 0, index 1 under choice 1,
+and so on, the identical "index is the register value" rule `remaps:` already states one
+level up. `validate_mcu.py` should check the counts agree; a group whose members disagree
+on how many options they have is a data defect, not something the engine guesses past.
+
+**What changes for a grouped signal, and what does not:**
+
+- Picking a pin for ONE member moves every other member to the matching index, in the
+  same call (`setSignalPin()`) — never as two separate user actions, and never leaving
+  the group on a mismatched combination even for one intermediate render.
+- An unchosen grouped signal defaults to **its own index 0**, not "first bonded on this
+  package" — every member defaults to index 0 together, so the group starts on a real
+  combination rather than each signal picking whatever fits it alone.
+- `previewAssign` — normally "no sibling to drag along" for an `af`-muxed signal — checks
+  every OTHER member of the group at the same target index too, because a pin that looks
+  free for the clicked signal alone can still collide through a sibling the move drags
+  with it.
+- A signal outside every group (`CLK`, `PORT8`-`PORT47` above) is completely unaffected:
+  it keeps picking its own pin exactly as an ordinary `signal_pins:` signal always has.
+
 ## `exti`
 
 ```yaml
