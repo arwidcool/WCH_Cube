@@ -40,26 +40,41 @@ PART = ROOT / "data" / "mcus" / "CH32X035.yaml"
 PID = "ADC1"
 
 
-# (label, mutate(doc), substring the refusal must contain)
+# (label, mutate(doc), substring the refusal must contain, strict)
+# `strict=True` cases are the WARNING half (a checkboxes setting with NO consuming
+# `params:` row at all - see check_codegen()'s own comment for why that one is a WARN,
+# not an ERROR) - a warning does not fail the exit code on its own, so those cases need
+# `--strict` to turn it into a refusal the harness can catch by exit code.
 CASES = [
     ("the whole codegen.channel_macros.ADC1 map removed",
      lambda d: d["codegen"]["channel_macros"].pop(PID),
-     "missing, but ADC1.params has a `sdk_repeat: channels` row"),
+     "missing, but ADC1.params has a `sdk_repeat: channels` row", False),
 
     ("one channel's macro entry removed (the rest still present)",
      lambda d: d["codegen"]["channel_macros"][PID].pop("IN5"),
-     "has no macro for IN5"),
+     "has no macro for IN5", False),
 
     ("the internal channel's macro entry removed",
      lambda d: d["codegen"]["channel_macros"][PID].pop("IN15 (Vrefint, internal)"),
-     "has no macro for IN15 (Vrefint, internal)"),
+     "has no macro for IN15 (Vrefint, internal)", False),
+
+    ("the sample param removed too (simulates CH32L103.ADC1's ORIGINAL shape: "
+     "channel checkboxes, zero consumers, zero macros - the hole in the ERROR check "
+     "above, closed by the WARN check below it)",
+     lambda d: (d["codegen"]["channel_macros"].pop(PID),
+                d["peripherals"][PID].__setitem__(
+                    "params", [p for p in d["peripherals"][PID]["params"]
+                               if p.get("sdk_repeat") != "channels"])),
+     "offers 15 `IN<n>`-named checkbox channel(s)", True),
 ]
 
 
-def run(doc, path: pathlib.Path) -> tuple[int, str]:
+def run(doc, path: pathlib.Path, strict: bool = False) -> tuple[int, str]:
     path.write_text(yaml.safe_dump(doc, sort_keys=False, allow_unicode=True), encoding="utf-8")
-    res = subprocess.run([sys.executable, str(VALIDATOR), "--quiet", str(path)],
-                         capture_output=True, text=True, cwd=str(ROOT))
+    args = [sys.executable, str(VALIDATOR), "--quiet", str(path)]
+    if strict:
+        args.append("--strict")
+    res = subprocess.run(args, capture_output=True, text=True, cwd=str(ROOT))
     return res.returncode, (res.stdout or "") + (res.stderr or "")
 
 
@@ -89,7 +104,7 @@ def main() -> int:
             return 1
         print(f"  OK    {PART.name} validates clean before any break is planted")
 
-        for label, mutate, expect in CASES:
+        for label, mutate, expect, strict in CASES:
             doc = copy.deepcopy(clean)
             try:
                 mutate(doc)
@@ -97,7 +112,7 @@ def main() -> int:
                 failures.append(label)
                 print(f"FAIL  {label}\n        could not plant it ({exc})")
                 continue
-            code, out = run(doc, scratch)
+            code, out = run(doc, scratch, strict=strict)
             flat = re.sub(r"\s+", " ", out)
             caught = code != 0 and expect in flat
             print(f"{'  OK  ' if caught else 'FAIL  '} {label}")

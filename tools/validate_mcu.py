@@ -1406,6 +1406,52 @@ def check_codegen(doc: dict, r: Report) -> None:
                            f"choices name them ({keys} needs one per channel), ticking one "
                            "of these would compile to a TODO")
 
+    # The check above only fires when a `sdk_repeat: channels` row EXISTS - which is
+    # exactly the hole CH32L103's ADC1 sat in until 2026-09-14: its `Channels` checkboxes
+    # named ten real channels and no `params:` row consumed them AT ALL (no macro lookup
+    # ever attempted, not even a TODO - ticking a channel was silently inert, arguably
+    # worse than a visible TODO). A check that requires the defective row to already
+    # exist cannot catch "the row was never written".
+    #
+    # A WARNING, not an ERROR: a `type: checkboxes` setting is not always a per-channel
+    # SDK call waiting to happen - TKEY's/ETH's/FMC's/OPA1's/CMP*'s own checkboxes exist
+    # on real shipped parts with no `sdk_repeat: channels` consumer and are correctly
+    # modelled (TKEY's channels are ADC pin re-use with no separate register write of
+    # their own; OPA1/CMP*'s are input/output pin selectors, not a scan sequence). What
+    # distinguishes an ADC-SHAPED channel list is this codebase's own established naming
+    # convention for one, `IN<number>` - every real instance fixed today (H417/L103/V003/
+    # V006/X035's ADC1/ADC2) uses it, consistently, because it is the datasheet's own
+    # channel numbering. Narrowed to that pattern specifically so this does not repeat
+    # the manager's OWN probe's mistake (a crude name-match flagging DMA1) on a wider
+    # blast radius - this is deliberately advisory, not a build-breaking ERROR, because
+    # the right fix might not be `channel_macros` at all (HSADC's OWN "IN0".."IN6"
+    # checkboxes have this exact shape and a REAL per-channel function,
+    # `HSADC_ChannelConfig(uint8_t)` - ch32h417_hsadc.h:101 - that nothing calls today;
+    # closing it needs new engine work, a single-argument repeat shape `sdk_repeat:
+    # channels` does not have, which is why it is named here and not silently folded
+    # into the ERROR case above).
+    in_pattern = re.compile(r"^IN\d")
+    for pid, P in periphs.items():
+        if not isinstance(P, dict) or pid in channel_macros:
+            continue
+        channel_like = [str(c.get("name")) for s in (P.get("settings") or [])
+                        if isinstance(s, dict) and s.get("type") == "checkboxes"
+                        for c in (s.get("choices") or []) if isinstance(c, dict)
+                        and in_pattern.match(str(c.get("name")))]
+        if not channel_like:
+            continue
+        repeats = [p for p in (P.get("params") or [])
+                   if isinstance(p, dict) and p.get("sdk_repeat") == "channels"]
+        if repeats:
+            continue        # already covered, and already correct, by the ERROR case above
+        r.warn(f"peripherals.{pid}", f"offers {len(channel_like)} `IN<n>`-named checkbox "
+                                     f"channel(s) ({', '.join(channel_like[:4])}"
+                                     f"{', ...' if len(channel_like) > 4 else ''}) but no "
+                                     "params: row consumes them (no `sdk_repeat: channels`, "
+                                     "no per-channel call of any kind) - ticking one may be "
+                                     "silently inert; check by generating real C with one "
+                                     "selected before assuming it works")
+
 
 def _check_choice_keys(doc, r, where, pid, sname, mapping, exhaustive: bool = False) -> None:
     """A value map keyed by the NAME of a choice. Every key must still be a choice; with

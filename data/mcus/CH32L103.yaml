@@ -1385,6 +1385,9 @@ peripherals:
           - { name: IN7, signals: [IN7] }
           - { name: IN8, signals: [IN8] }
           - { name: IN9, signals: [IN9] }
+          - { name: "IN16 (temperature sensor, internal)" }
+          - { name: "IN17 (Vrefint, internal)" }
+          - { name: "IN18 (VDDA/2, internal)" }
     params:
       - key: mode
         name: Mode
@@ -1446,12 +1449,80 @@ peripherals:
           - { name: "x4",  value: 1, sdk: ADC_Pga_4 }
           - { name: "x16", value: 2, sdk: ADC_Pga_16 }
           - { name: "x64", value: 3, sdk: ADC_Pga_64 }
+      # NOT ADC_InitTypeDef - ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime)
+      # is a separate call, one per CHANNEL (ch32l103_adc.h:175). Until 2026-09-14 this
+      # row did not exist at all, so `Channels` above ticked a checkbox that reached no
+      # generated code whatsoever - no TODO, no call, nothing, because nothing ever
+      # attempted the lookup (confirmed by generating C on the existing fixture with IN4
+      # ticked before writing this row: the struct filled, `ADC_RegularChannelConfig` was
+      # never even mentioned). Found chasing CH32X035's `codegen.channel_macros` gap and
+      # a probe for the same shape across all six parts (agents/BOARD.md 2026-09-14).
+      #
+      # The eight codes are ADC_SampleTime_CyclesMode0..7 (ch32l103_adc.h:110-117) - SAME
+      # macro NAMES as CH32V006's own eight, but NOT the same cycle counts: this part's
+      # own RM table (CH32L103RM.md:7880-7887) is 1.5/7.5/13.5/28.5/41.5/55.5/71.5/239.5
+      # cycles, V006's is 3.5/9/15/30/43/57/73/241 - three parts, three different ADC
+      # shapes so far, confirmed against THIS header and THIS RM table rather than ported.
+      #
+      # The RM table has TWO columns (ADC_LP=0 / ADC_LP=1, CH32L103RM.md:7878-7880) for
+      # the first five codes - the low-power bit changes what a code MEANS. ADC_LP has no
+      # struct member and no function anywhere in ch32l103_adc.h (grepped, zero hits, same
+      # position CH32X035's own `lowpower` row is in) and its RM reset value is 0
+      # (CH32L103RM.md:8954) = the LOW-POWER column, which is the one used below - nothing
+      # in this generator ever writes it, so it never moves off reset.
+      - key: sample
+        name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
+        sdk_note: "ADC_InitTypeDef has no sample-time member. Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per CHANNEL, not per peripheral. ch32l103_adc.h:175."
+        type: enum
+        default: 7.5 cycles
+        options:
+          - { name: 1.5 cycles,   value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles,   value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 13.5 cycles,  value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 28.5 cycles,  value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 41.5 cycles,  value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles,  value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles,  value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
+        help: "ADC_SAMPTR1/2 SMPx[2:0] (RM 12.2.2 item 5, CH32L103RM.md:7864-7887). Cycle counts shown are the ADC_LP=0 (low-power, reset default) column - ADC_LP=1 changes the first five codes' meaning, and nothing in this file's data ever writes ADC_LP (no struct field, no function - it stays at its reset value)."
+      # RM 12.2 (CH32L103RM.md:7825-7852): "TSVREFE position 1 of the ADC_CTLR2 register,
+      # awakening the ADC internal sampling channel" - without it, IN16 (temperature
+      # sensor) and IN17 (Vrefint) do not give a valid reading, confirmed against
+      # ch32l103_adc.c:964-973 (`ADC1->CTLR2 |= CTLR2_TSVREFE_Set`) and the bit's own RM
+      # entry (CH32L103RM.md:8493, reset 0). IN18 (VDDA/2) needs no such enable - the RM
+      # names only the temperature sensor / Vrefint pair for this bit
+      # (CH32L103RM.md:7842-7852 lists all three channels, only the first two under the
+      # TSVREFE note). Not conditional on which channels are ticked - `when:` gates on
+      # another PARAM's value, not a checkboxes setting's choice, so this stays a plain,
+      # always-offered switch the user turns on when IN16 or IN17 is ticked above, off by
+      # default since most configurations use neither.
+      - key: temp_vref_enable
+        name: Temperature sensor / Vrefint enable
+        sdk_call: ADC_TempSensorVrefintCmd
+        sdk_args: [$VALUE]
+        sdk_note: "ADC_CTLR2 TSVREFE, bit 23 (ch32l103_adc.h has no struct field for it - a bare Cmd function, ch32l103_adc.h:192)."
+        type: bool
+        default: false
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "Required before IN16 (temperature sensor) or IN17 (Vrefint) give a valid conversion (RM 12.2.2, CH32L103RM.md:7825-7830). Leave off if neither channel is ticked in Channels above; IN18 (VDDA/2) needs no such enable."
     notes: >
-      Analog peripheral: its channels are pins, not alternate functions, so they are
-      modelled as `codegen.analog_signals` rather than as remaps. The DS reserves
-      ADC channels 10 to 12 as internal (temperature, Vrefint, VBAT) on the L103.
-      The channel to pin map is NOT yet extracted - see CH32L103.notes.md, open
-      questions. Nothing here claims a pin, so the figure above is honest about it.
+      12-bit SAR, 10 external channels plus 3 internal ones - DS0.md 1.4.13
+      (CH32L103DS0.md:1072-1079): "up to 10 external channels and 3 internal channel
+      samples... The internal channels of the ADC are ADC_IN16 to ADC_IN18. The
+      temperature sensor is internally connected to the IN16 input channel...; the
+      internal reference voltage is connected to the IN17 input channel; and VDDA/2 is
+      connected to the IN18 input channel." Corrected 2026-09-14 from a stale note that
+      said channels "10 to 12" and named the third one VBAT - neither matched this
+      part's own header (ADC_Channel_16/17/18, ch32l103_adc.h:92-97) or datasheet; the
+      channel-to-pin map for the external ten (below, `remaps:`) already existed and was
+      correctly extracted, contradicting the same stale note's claim that it was not.
+      Its channels are pins, not alternate functions, so the external ten are modelled
+      as `codegen.analog_signals` rather than as remaps; the three internal ones have no
+      pin and are pinless `codegen.channel_macros` entries instead.
 
     remaps:
       - name: Analog channels (no remap - a channel IS the pin)
@@ -2758,11 +2829,31 @@ codegen:
       ADC: { lsb: 14, bits: 2, values: { 2: 0, 4: 1, 6: 2, 8: 3 } }
     # PLLMUL[3:0] at bit 18 - only the three the part offers, per RM 3.3.1.
     pllmul: { lsb: 18, bits: 4, values: { 6: 4, 9: 7, 12: 10 } }
+  # Signal name -> SDK macro, for ADC1's `sample` param (sdk_repeat: channels,
+  # ADC_RegularChannelConfig). THIS BLOCK DID NOT EXIST until 2026-09-14, and neither did
+  # the `sample` param it backs - see that row's own comment for the full story: ticking
+  # ANY of ADC1's channels compiled to nothing at all, not even a TODO, because nothing
+  # ever attempted the lookup. ch32l103_adc.h:82-97 defines ADC_Channel_0..9 (external,
+  # IN0..IN9) and ADC_Channel_16/17/18 (internal - temperature sensor, Vrefint, VDDA/2;
+  # the header's own `ADC_Channel_CalInternal` alias for channel 18 is the SDK's name for
+  # it, not the DS's - CH32L103DS0.md:1078-1079 calls it VDDA/2, so that is the display
+  # name used below, same "the datasheet's word, not the header's" choice CH32H417's own
+  # ADC1/ADC2 make for their own two internal channels).
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            IN8: ADC_Channel_8, IN9: ADC_Channel_9,
+            "IN16 (temperature sensor, internal)": ADC_Channel_16,
+            "IN17 (Vrefint, internal)": ADC_Channel_17,
+            "IN18 (VDDA/2, internal)": ADC_Channel_18 }
+
   # Which signals are analog. Read from the DS pin table's own `ADC_IN<n>` main
   # functions by `tools/l103_adc.py`, so the list is exactly the channels the
   # peripheral routes to a pin. The DS model table says "ADC 10+3": the three that
-  # are NOT here are the internal channels (temperature, Vrefint, VBAT) and they
-  # have no pin, which is the repo-wide internal-channel gap recorded in the notes.
+  # are NOT here are the internal channels (temperature sensor, Vrefint, VDDA/2,
+  # CH32L103DS0.md:1078-1079) and they have no pin - modelled above as pinless
+  # `channel_macros` entries instead, same shape as CH32H417/CH32V003/CH32V006's own
+  # internal ADC channels.
   analog_signals:
     ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9]
 
