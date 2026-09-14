@@ -48,7 +48,10 @@ Table 2-1-1. One real pin defect found and fixed (`FMC.RAS_N`). One reversed dif
 caught in a datasheet table before it could be copied into the file (`SerDes`). Four disagreements
 between the DS's own two tables remain genuinely unresolved and are recorded as `disagreements:`
 entries, not guessed at. Two FMC pad collisions on QFN68 are unresolved as to whether they are
-fixable or silicon-forced — say which is claimed, and be exact.**
+fixable or silicon-forced — say which is claimed, and be exact. UHSIF on QFN68 only reaches 5 of
+its 8 grouped ports under the RM's own recommended mapping — a real constraint for anyone
+choosing that package, not a bug, and not something the default now being set should be read as
+having fixed.**
 
 ---
 
@@ -93,7 +96,7 @@ re-verification means re-reading this file's method and re-running the scripts b
 | Ethernet (Table 24, ad hoc) | ETH | 24 (20 AF-based + 4 dedicated) | **0** | 0 | 0 |
 | SWPMI (Table 26, ad hoc) | SWPMI | 5 | **0** | 0 | 0 pin-level; 1 open **settings-model** question (not a pin fact — see below) |
 | SDMMC (Table 12, `remaps:`) | SDMMC | 13 signals, all pins across all 3 `remaps:` sets | **0** | 0 | 0 |
-| UHSIF (Table 16, `signal_groups:`) | UHSIF | 49 signals, 62 pin candidates (including PORT0-7's 3-way group) | **0** | 0 | 0 pin facts; 1 open **linkage** question (which SDK mapping argument selects which pin set — see below) |
+| UHSIF (Table 16, `signal_groups:`) | UHSIF | 49 signals, 62 pin candidates (including PORT0-7's 3-way group) | **0** | 0 | 0 pin facts; 1 open **package-bonding** constraint (QFN68's own default index only bonds 5 of the 8 grouped ports — see below) |
 
 `af_list`'s 45 peripherals: `TIM1-5,8-12`, `LPTIM1-2`, `I2C1-4`, `I3C`, `SPI1-4`, `I2S2-3`,
 `USART1-8`, `SDIO`, `CAN1-3`, `FMC` (Table 14 FSMC + Table 15 SDRAM merged — one external memory
@@ -176,18 +179,28 @@ prose, and no SWPMI EVT example exists (`ch32h417_swpmi.c`/`.h` exist in `Periph
 no `Evt/EXAM/SWPMI` project does) to check against. **Flagged for AGENT-1's judgement on the
 board; not yet resolved either way.**
 
-### 3. UHSIF — the SDK-argument-to-pin-set linkage is still open
+### 3. UHSIF — QFN68's own default index bonds only 5 of its 8 grouped ports
 
-The pin **values** are fully verified (62/62 confirmed against Table 2-1-1, and the atomic
-`signal_groups:` structure now correctly prevents the picker from offering, e.g., `PORT0` from one
-register value alongside `PORT3` from another). What remains open is which of `uhsif_port_rm`'s
-three SDK argument values (`DEF_UHSIF_PINREMAP0/1/2`, passed to `UHSIF_GPIO_Init`) actually
-selects which of the three pin sets (`RM=00`/`01`/`1x`) now encoded in `signal_pins:`'s
-three-slot arrays. `UHSIF_GPIO_Init`'s body is inside a prebuilt `libUHSIF.a`, not readable SPL
-source, so this is a genuine gap in available sources rather than an unmade check — recorded in
-the peripheral's own `notes:` field so it does not read as solved. The clock remap
-(`UHSIF_CLK_RM`, a separate 4-way register field from `UHSIF_PORT_RM`) is not yet folded into
-`signal_groups:` either; `CLK`'s four candidates are still a flat, ungrouped list.
+**Updated 2026-09-14, after AGENT-1 closed the SDK-argument-to-pin-set linkage this section
+previously described as open.** `data/mcus/CH32H417.yaml:8063-8079` now carries
+`remap_by_package: { QFN68: 1, QFN88: 2 }`, set from the RM's own words
+(`CH32H417RM.md:11839-11845`, right after Table 9-33's three mapping columns: *"The chip packaged
+with 56/68 pins is recommended to use the mapping configuration of 01b; It is recommended to use
+1xb mapping configuration for chips packaged as 88 pins."*) — not inferred from bonding alone.
+
+**This is the RM's recommendation, and it is checked, but it is not a complete fix for QFN68.**
+Index 0 (`RM=00`, this part's own reset default) bonds NONE of `PORT0-7` on QFN68 at all — its
+pins (`PF12/PF13/PE7/PE8/PE9/PE10/PE11/PE12`) do not exist on that package. **Index 1 (`RM=01`,
+the package default the file now sets) still leaves `PORT0-2` unbonded on QFN68** — `PF12`/`PF13`/
+`PE7` again — and only bonds `PORT3-7` (`PC1`/`PC2`/`PC3`/`PB0`/`PB1`, all real QFN68 pads).
+**A board designed around QFN68 with UHSIF enabled gets 5 of UHSIF's 8 grouped ports (`PORT3-7`);
+`PORT0`, `PORT1`, `PORT2` are not reachable on that package under either index the RM
+recommends.** QFN88 with index 2 IS a full fix (`PORT0-7` all bonded, checked the same way);
+QFN128 needs no override since its own bonding already carries every `RM=00` pin.
+
+The clock remap (`UHSIF_CLK_RM`, a separate 4-way register field from `UHSIF_PORT_RM`) is not yet
+folded into `signal_groups:`; `CLK`'s four candidates are still a flat, ungrouped list — a smaller,
+separate open item from the port-bonding constraint above.
 
 ### 4. Two FMC pad collisions on QFN68 — status genuinely open, corrected mid-cycle
 
