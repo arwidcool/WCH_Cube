@@ -66,7 +66,19 @@ jobs:
         run: |
           git config --global core.autocrlf false
           git config --global core.longpaths true
+      # fetch-depth: 0 - full history, not the default shallow (depth 1) clone.
+      # tests/check_dist_fresh.test.js needs real history: `git rev-list --max-parents=0
+      # HEAD` to find the repo's actual first commit, and `git show <old-sha>:<path>` to
+      # read specific historical commits by name. In a depth-1 clone the single fetched
+      # commit has no parent information at all, so a shallow checkout's HEAD reads AS a
+      # root commit (max-parents=0 finds HEAD itself instead of the real first commit) and
+      # any older SHA the tests name outright does not exist in the checkout to `git show`.
+      # Found 2026-09-14: four commits in a row (`7dc4549`..`ab76767`) failed CI on three
+      # `build ›` assertions that never fail locally (full clone here) - not a data
+      # defect, a checkout option this workflow never set.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -243,7 +255,19 @@ jobs:
         run: |
           git config --global core.autocrlf false
           git config --global core.longpaths true
+      # fetch-depth: 0 - full history, not the default shallow (depth 1) clone.
+      # tests/check_dist_fresh.test.js needs real history: `git rev-list --max-parents=0
+      # HEAD` to find the repo's actual first commit, and `git show <old-sha>:<path>` to
+      # read specific historical commits by name. In a depth-1 clone the single fetched
+      # commit has no parent information at all, so a shallow checkout's HEAD reads AS a
+      # root commit (max-parents=0 finds HEAD itself instead of the real first commit) and
+      # any older SHA the tests name outright does not exist in the checkout to `git show`.
+      # Found 2026-09-14: four commits in a row (`7dc4549`..`ab76767`) failed CI on three
+      # `build ›` assertions that never fail locally (full clone here) - not a data
+      # defect, a checkout option this workflow never set.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
