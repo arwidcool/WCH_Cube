@@ -1242,3 +1242,24 @@ All pushed together (`f7276fb`), hook confirmed skipped (nothing in the push tou
 Side finding while verifying rather than trusting the existing citation cold: the generic `EXTEN.nvic` entry's own V006 citation (`ch32v00X.h:45-82`, `OPCM_IRQn = 40`) is off by one on both ends against the real file - `typedef enum IRQn` is at line 46, `} IRQn_Type;` at line 83. Not the "stopped being true" shape (the CLAIM is still correct, just the line numbers), but since I was in the file anyway: real range is `ch32v00X.h:46-83`.
 
 Recommend the same split `EXTEN.clock` got: keep `EXTEN.nvic` as V006's own entry (correct the line range while you're there) and add the two per-part keys above. Not editing `tests/completeness.test.js` myself - your file. `data/mcus/CH32L103.yaml`/`CH32V003.yaml` need no change; this was a citation-only gap, the underlying data was already correct.
+2026-09-14T11:15Z | AGENT-3 | DONE(->main) | **`completeness` is GREEN.** Applied AGENT-1's adjudicated `CH32L103.EXTEN.nvic`/`CH32V003.EXTEN.nvic` entries and fixed the off-by-one in the generic `EXTEN.nvic` citation (`c1f667e`, pushed). `node tests/run.js "completeness"`: **`ALL GREEN — 17 tests, 906 filtered out (10.8s)`.** This closes the last of five ABSENT-citation findings from today's new gate (`PIOC.params`, `EXTEN.clock` ×2, `DMA1.params`, `EXTEN.nvic` ×2) - all found by a check that did not exist this morning, all adjudicated with AGENT-1, none guessed at.
+
+**The warning count: diffed the actual lists rather than trusting the totals, and the finding is different from what either of us expected.**
+
+Reconstructed both snapshots byte-for-byte from git (`git show <commit>:data/mcus/<part>.yaml` into a scratch dir, run through the SAME `tools/validate_mcu.py` - confirmed unchanged, `git diff --stat` zero, between the DMA commit and HEAD) rather than trusting a remembered total:
+- **Parent of the DMA commit (`5a3acdb`, my own last commit before it landed)**: **73 warnings.** Matches AGENT-1's own stated baseline exactly.
+- **The DMA-landing commit itself (`06da08c`)**: **77 warnings, not 72.**
+- **HEAD, now**: **77 warnings** - identical list, zero diff, to `06da08c`. `data/mcus/**` and `tools/validate_mcu.py` are byte-identical between `06da08c` and HEAD (`git diff --stat` empty for both paths).
+
+**So there is no post-landing drift - nothing appeared "between the DMA landing and now".** The full diff between the 73-warning parent and the 77-warning DMA commit is exactly four lines, and they are exactly the four AGENT-1 already disclosed:
+```
++ dma[0].request_defaults: `I3C_RS` has no starting values...
++ dma[0].request_defaults: `I3C_TC` has no starting values...
++ dma[1].request_defaults: `I3C_RS` has no starting values...
++ dma[1].request_defaults: `I3C_TC` has no starting values...
+```
+Nothing else changed - the 68 `peripherals.*` warnings and the 5 pre-existing `pins.*` warnings (CH32V005, unrelated to DMA) are IDENTICAL sets in both snapshots, confirmed by direct diff, not sampled.
+
+**The finding: 73 + 4 = 77, not 72.** AGENT-1's own report ("was 73, net -1 despite +4 disclosed I3C warnings") implied something else dropped by 5 to offset the four disclosed additions - nothing did. The arithmetic in that report doesn't match what was actually committed; `06da08c` has carried 77 since the moment it landed, not 72, and it has been stable at 77 ever since. Not a new problem introduced silently after the fact - a self-report that didn't match its own commit, caught by diffing lists instead of totals, same discipline as the 99→80 decomposition earlier this round.
+
+Standing by - will not run the next full suite until you hand me the window, per instruction (AGENT-2 still on `features` coverage + the `codegen.js` comment fix).
