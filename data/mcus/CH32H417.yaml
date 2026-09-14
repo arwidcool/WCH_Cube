@@ -3509,6 +3509,28 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    params:
+      - key: access_clock
+        name: Flash access clock divider
+        sdk_call: FLASH_Access_Clock_Cfg
+        sdk_args: [$VALUE]
+        type: enum
+        default: "/1 (HCLK)"
+        options:
+          - { name: "/1 (HCLK)", value: 0, sdk: FLASH_CLK_HCLKDIV1 }
+          - { name: "/2",        value: 1, sdk: FLASH_CLK_HCLKDIV2 }
+          - { name: "/4",        value: 2, sdk: FLASH_CLK_HCLKDIV4 }
+          - { name: "/8",        value: 3, sdk: FLASH_CLK_HCLKDIV8 }
+        help: "ch32h417_flash.h:96-100. Not exercised by any shipped example; default matches the reset/POR value (0, undivided)."
+      - key: enhance_mode
+        name: Enhanced read mode
+        sdk_call: FLASH_Enhance_Mode
+        sdk_args: [$VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: false
+        help: "ch32h417_flash.h:136, FLASH_FLAG_ENHANCE (:92) reads back whether it took. Not exercised by any shipped example; default matches the reset/POR value (off)."
   FMC:
     category: Memory
     # THE BUSES ARE SELECTABLE BY WIDTH, NOT ALL-OR-NOTHING, and the reason is a real board:
@@ -4421,6 +4443,33 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    params:
+      - key: mode
+        name: Transfer mode
+        struct: GPHA_InitTypeDef
+        sdk_field: GPHA_Mode
+        type: enum
+        default: R2M (fill memory from a colour/data source)
+        depends_on: { setting: Mode, equals: Enabled }
+        options:
+          - { name: "M2M PFC (memory to memory, pixel-format convert)", value: 0, sdk: GPHA_M2M_PFC }
+          - { name: "M2M blend (memory to memory, with foreground/background blend)", value: 1, sdk: GPHA_M2M_BLEND }
+          - { name: "R2M (fill memory from a colour/data source)", value: 2, sdk: GPHA_R2M }
+        help: "ch32h417_gpha.h:24-25,147-150. The one shipped example (Evt/EXAM/GPHA/GPHA_R2M/Common/hardware.c:97) uses R2M, the default here."
+      - key: cmode
+        name: Output colour format
+        struct: GPHA_InitTypeDef
+        sdk_field: GPHA_CMode
+        type: enum
+        default: ARGB8888
+        depends_on: { setting: Mode, equals: Enabled }
+        options:
+          - { name: ARGB8888, value: 0, sdk: GPHA_ARGB8888 }
+          - { name: RGB888,   value: 1, sdk: GPHA_RGB888 }
+          - { name: RGB565,   value: 2, sdk: GPHA_RGB565 }
+          - { name: ARGB1555, value: 3, sdk: GPHA_ARGB1555 }
+          - { name: ARGB4444, value: 4, sdk: GPHA_ARGB4444 }
+        help: "ch32h417_gpha.h:27-28,152-157. Also sets the range every per-operation colour/offset value must respect (documented per-field in the header, not enforced by this schema). The one shipped example (:98) uses ARGB8888, the default here."
   HSADC:
     category: Analog
     # ONLY THE THREE MEMBERS THAT ARE A CONFIGURATION ARE ROWS. `HSADC_InitTypeDef` has
@@ -4931,6 +4980,41 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    params:
+      - key: write_access
+        name: Register write access
+        sdk_call: IWDG_WriteAccessCmd
+        sdk_args: [$VALUE]
+        type: enum
+        default: Enable before writing
+        options:
+          - { name: Enable before writing, value: 21845, sdk: IWDG_WriteAccess_Enable }
+          - { name: Keep locked,           value: 0,     sdk: IWDG_WriteAccess_Disable }
+        help: "ch32h417_iwdg.h:23-24. Unlocks IWDG_PSCR/IWDG_RLDR before either is written - a prescaler or reload written while locked is silently discarded (RM ch.5, IWDG). The two values are the literal key words 0x5555/0x0000."
+      - key: prescaler
+        name: Prescaler
+        sdk_call: IWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        default: "64"
+        options:
+          - { name: "4",   value: 0, sdk: IWDG_Prescaler_4 }
+          - { name: "8",   value: 1, sdk: IWDG_Prescaler_8 }
+          - { name: "16",  value: 2, sdk: IWDG_Prescaler_16 }
+          - { name: "32",  value: 3, sdk: IWDG_Prescaler_32 }
+          - { name: "64",  value: 4, sdk: IWDG_Prescaler_64 }
+          - { name: "128", value: 5, sdk: IWDG_Prescaler_128 }
+          - { name: "256", value: 6, sdk: IWDG_Prescaler_256 }
+        help: "ch32h417_iwdg.h:27-33. Divides the LSI, this watchdog's only clock. The header stops at 256, same as every other CH32 part shipped here."
+      - key: reload
+        name: Reload value
+        sdk_call: IWDG_SetReload
+        sdk_args: [$VALUE]
+        type: int
+        default: 4095
+        min: 0
+        max: 4095
+        help: "ch32h417_iwdg.h. 12-bit down-counter, so 4095 is the ceiling. Timeout is (prescaler x (reload + 1)) / f_LSI."
   LPTIM1:
     category: Timers
     settings:
@@ -6199,6 +6283,63 @@ peripherals:
             Ground, and the analog return for VDD33A and VREFP. Star VSSA to VSS at the pin
             rather than along the digital ground path.
           source: "CH32H417DS0.md Table 2-1-1"
+    # `settings:` NOT overridden here - `MODES["PWR"]` in gen_h417_peripherals.py
+    # (a template shared with CH32X035, RM ch.2) already carries the real
+    # "Programmable Voltage Detector (PVD)" and "Low power mode" rows; caught by the
+    # generator's own loss guard when a first draft of this comment tried to replace
+    # them with a worse, invented pair. `params:` below gates on the EXISTING setting
+    # NAME and choice spelling exactly ("Programmable Voltage Detector (PVD)" /
+    # "Enabled", not "Power..."/"Enable").
+    #
+    # Only PVD is modelled. "Low power mode" (None/Sleep/Stop/Standby) has a real
+    # backing function too - `PWR_EnterSTOPMode(PWR_Regulator, PWR_STOPEntry)` - but
+    # it is a RUNTIME action (enters the mode the instant it is called), not an
+    # init-time value to store in a struct or pass once at startup; this schema's
+    # params: mechanism has nothing that fits "generate a callable helper the user's
+    # own code invokes later" today, so it is left exactly as it already was (a real
+    # settings row, no params backing it yet) rather than guessed into the wrong
+    # shape. Pre-existing gap, not opened by this commit.
+    #
+    # VIO18Level/VIO18CfgMode (ch32h417_pwr.h:33-38,51-53 - 6 voltage-level codes for
+    # the high-speed I/O supply, RM-adjacent to the VIO18 rail already documented in
+    # `supplies:` above) is NOT modelled either: no RM register-bit table this file's
+    # sources could find (grepped for VIO18SEL/VIO18LVLSEL, zero hits) and no shipped
+    # EVT example calls either function. Getting a supply-rail VOLTAGE LEVEL wrong is
+    # a real hardware-damage risk, not just a wrong number, so it stays a named, open
+    # gap rather than a guess. TASKS.md line.
+    params:
+      - key: pvd_level
+        name: PVD threshold
+        sdk_call: PWR_PVDLevelConfig
+        sdk_args: [$VALUE]
+        type: enum
+        default: "Rising 3.2V / falling 3.09V"
+        depends_on: { setting: "Programmable Voltage Detector (PVD)", equals: Enabled }
+        options:
+          - { name: "Rising 2.4V / falling 2.44V", value: 0, sdk: PWR_PVDLevel_MODE0 }
+          - { name: "Rising 2.6V / falling 2.49V", value: 1, sdk: PWR_PVDLevel_MODE1 }
+          - { name: "Rising 2.7V / falling 2.59V", value: 2, sdk: PWR_PVDLevel_MODE2 }
+          - { name: "Rising 2.8V / falling 2.69V", value: 3, sdk: PWR_PVDLevel_MODE3 }
+          - { name: "Rising 2.9V / falling 2.79V", value: 4, sdk: PWR_PVDLevel_MODE4 }
+          - { name: "Rising 3.0V / falling 2.89V", value: 5, sdk: PWR_PVDLevel_MODE5 }
+          - { name: "Rising 3.1V / falling 2.99V", value: 6, sdk: PWR_PVDLevel_MODE6 }
+          - { name: "Rising 3.2V / falling 3.09V", value: 7, sdk: PWR_PVDLevel_MODE7 }
+        help: >
+          PWR_CTLR PLS[7:5], CH32H417RM.md:1170-1194. Both thresholds recorded exactly
+          as the RM states them, average neither - the RM's own numbers read as if
+          "falling" sits ABOVE "rising" per code, which is unusual hysteresis framing;
+          not resolved further here, just transcribed faithfully. EVT
+          Evt/EXAM/PWR/PVD_VoltageJudger/Common (:24) uses MODE7, the default here.
+      - key: pvd_cmd
+        name: PVD enable
+        sdk_call: PWR_PVDCmd
+        sdk_args: [$VALUE]
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        type: bool
+        default: true
+        depends_on: { setting: "Programmable Voltage Detector (PVD)", equals: Enabled }
+        help: "ch32h417_pwr.h:67. EVT Evt/EXAM/PWR/PVD_VoltageJudger/Common (:25), right after PWR_PVDLevelConfig."
   QSPI1:
     category: Connectivity
     settings:
@@ -8436,6 +8577,14 @@ peripherals:
       that is already powered on, and the channel converted is the first of that ADC's
       regular sequence. Pick the pads on ADC1's or ADC2's `Channels` row; up to 16
       detection channels, one conversion at a time (RM 13.1).
+      # No `params:` here - AGENT-3 confirmed ABSENT (tests/completeness.test.js's
+      # 'CH32H417.TKEY.params'): no ch32h417_tkey.h exists at all, TKEY is realized
+      # entirely as ADC_CTLR1.TKENABLE, and the only configuration - which pad(s) -
+      # is already the ADC's own `Channels` row above. A prior draft added a
+      # `sdk_manual` row for the TKENABLE bit itself; withdrawn, since the bit has
+      # no independent user-facing choice left once the ADC channel is picked (it is
+      # just "TKEY mode is on for this ADC", implied by claiming a touch channel at
+      # all, not a second decision).
   UHSIF:
     category: Connectivity
     settings:
@@ -9190,6 +9339,37 @@ peripherals:
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
+    params:
+      - key: prescaler
+        name: Prescaler
+        sdk_call: WWDG_SetPrescaler
+        sdk_args: [$VALUE]
+        type: enum
+        default: "1"
+        options:
+          - { name: "1", value: 0, sdk: WWDG_Prescaler_1 }
+          - { name: "2", value: 1, sdk: WWDG_Prescaler_2 }
+          - { name: "4", value: 2, sdk: WWDG_Prescaler_4 }
+          - { name: "8", value: 3, sdk: WWDG_Prescaler_8 }
+        help: "ch32h417_wwdg.h:23-26. Divides HCLK/4096. Four options only - the header stops at 8."
+      - key: window
+        name: Window value
+        sdk_call: WWDG_SetWindowValue
+        sdk_args: [$VALUE]
+        type: int
+        default: 127
+        min: 64
+        max: 127
+        help: "ch32h417_wwdg.h. Refreshing EARLIER than this resets the part, which is the whole point of a windowed watchdog. The counter's bit 6 must stay set, so the usable range starts at 64."
+      - key: counter
+        name: Counter start value
+        sdk_call: WWDG_Enable
+        sdk_args: [$VALUE]
+        type: int
+        default: 127
+        min: 64
+        max: 127
+        help: "ch32h417_wwdg.h:34. WWDG_Enable takes the counter as its argument, so this value and switching the watchdog on are the same call. Below 64 the counter has already underflowed and the part resets at once."
 nvic:
   controller: PFIC
   scheme:
@@ -9632,6 +9812,13 @@ codegen:
     # primary struct.
     SAI_FrameInitTypeDef:      { fn: SAI_FrameInit }   # ch32h417_sai.h:242
     SAI_SlotInitTypeDef:       { fn: SAI_SlotInit }    # ch32h417_sai.h:243
+    # GPHA_Init(GPHA_InitTypeDef*) takes NO handle argument (ch32h417_gpha.h:196) - one
+    # GPHA block on this part, no register-block pointer. Only 2 of the struct's 10
+    # fields are modelled (peripheral_extras.yaml GPHA comment: the other 8 are
+    # per-operation values a real EVT example refills on every call, not board config),
+    # so dead_fields is NOT used here - those 8 are simply absent from params:, which
+    # zero-inits them the same way the EVT's own `GPHA_InitStruct = {0}` does.
+    GPHA_InitTypeDef: { fn: GPHA_Init, no_handle: true }   # ch32h417_gpha.h:196
     # ETH_RegInit(ETH_InitTypeDef*, uint16_t PHYAddress) takes NO handle argument
     # (ETH-> is used directly inside it, like OPA_CMP_Init) - no_handle: true. The
     # second argument is `phy_addr`'s own `call_arg: true` row (peripheral_extras.yaml
