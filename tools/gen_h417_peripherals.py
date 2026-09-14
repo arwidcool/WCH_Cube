@@ -1380,8 +1380,15 @@ def emit_peripheral(pid: str, sigs: dict[str, list[tuple[str, int, str | None]]]
     # the override and reported clean) while js-yaml THROWS on the same file - the exact
     # trap this generator's own settings-guard was written to prevent, missed here.
     # Found narrowing SDMMC's signal_pins to the RM=00 pin set, 2026-09-13.
-    if "signal_pins" in extra_keys:
-        pass  # the override supplies it whole; emitted below with the rest of `extra`
+    #
+    # An extras `remaps:` override means the SAME thing for the SAME reason: SDMMC's
+    # `AFIO_PCFR1.SDMMC_RM[1:0]` moves every signal atomically, so `remaps:` replaces
+    # `signal_pins:` entirely rather than living beside it (`validate_mcu.py`: "a
+    # peripheral muxes one way or the other"). Missing this the first time produced
+    # BOTH keys in one generated block - caught by validate_mcu's own check, not
+    # silently, but exactly the same shape of miss as the signal_pins case above.
+    if "signal_pins" in extra_keys or "remaps" in extra_keys:
+        pass  # the override supplies pin data whole; emitted below with the rest of `extra`
     elif sigs:
         out("    signal_pins:")
         for sig in sorted(sigs):

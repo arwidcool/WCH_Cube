@@ -6061,20 +6061,32 @@ peripherals:
     # reaches SDMMC through the register field, not the AFRL/AFRH nibble
     # `GPIO_PinAFConfig` writes.
     #
-    # `signal_pins:` BELOW REPLACES THE GENERATOR'S OWN, narrowed to `SDMMC_RM=00` (the
-    # reset default, needing no register write at all - the only one of the three
-    # DS-listed pin sets anything the generator emits can ever reach) rather than
-    # offering the other two as choices nothing can honour (Round 5's rule).
-    # `data/sources/H417/dedicated_pins.yaml` still carries the FULL three-set DS
-    # extraction unfiltered; this override is where the cited narrowing happens, one
-    # peripheral, per `tests/h417_dedicated.test.js`'s `KNOWN_NARROWED` guard (AGENT-3,
-    # board 2026-09-13, ruling on the REQUEST at 20:23Z) - a cited, per-peripheral
-    # narrowing is accepted, a blanket one is not, and the guard checks the file's pins
-    # are a genuine SUBSET of the DS's, never a superset or substitution. Same
-    # citation as `KNOWN_NARROWED.SDMMC` in that test file. The remaining
-    # `codegen.remap`-on-`style: af` capability (so `SDMMC_RM=01`/`1x` could ever be
-    # reached) is still open with AGENT-2, same as FMC's multi-bank `Chip select`
-    # checkbox and SAI's Frame/Slot structs.
+    # `remaps:` BELOW REPLACES THE GENERATOR'S OWN `signal_pins:` wholesale - AGENT-2's
+    # ruling (board 2026-09-13T23:23Z), reversing this file's own earlier RM=00-only
+    # narrowing (which this comment used to describe and which broke
+    # `tests/h417_dedicated.test.js`'s DS-completeness check the moment it landed,
+    # restored by AGENT-3 immediately after). `remaps:` is the CORRECT shape here, not a
+    # style choice: `AFIO_PCFR1.SDMMC_RM[1:0]` moves EVERY SDMMC signal to one of three
+    # pin sets AT ONCE (CH32H417RM.md:11741-11768, Table 9-32) - the exact "one register
+    # field moves every signal of a peripheral at once" case `remaps:` exists for
+    # (data/FORMAT.md's opening section), and `signal_pins:` is the OPPOSITE model
+    # (independent per-signal choice) - a `signal_pins:` list per signal would let the
+    # picker offer `CMD` from RM=00 together with `D0` from RM=01, a combination the
+    # silicon cannot produce. All three RM values are real, DS-cited pin sets (Table
+    # 9-32); RM=00 is byte-identical to what shipped before, RM=01/1x are the same
+    # table's other two columns. `remap_unwritable:` records WHY codegen cannot write
+    # any choice but the default: this part's `codegen.remap.style` is `af`, and
+    # `style: af` FORBIDS `codegen.remap.fields` (data/FORMAT.md:654-657) - no emitter
+    # exists that could ever WRITE SDMMC_RM, confirmed against the vendor's own
+    # `SD_GPIO_Init()` (`Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113`), which calls
+    # `GPIO_Init(..., GPIO_Mode_AF_PP, ...)` and never `GPIO_PinAFConfig()` - the pad
+    # reaches SDMMC through the register field, not the AFRL/AFRH nibble
+    # `GPIO_PinAFConfig` writes. Selecting RM=00 (index 0) still generates exactly what
+    # it always did (the reset value, no write, no TODO); selecting RM=01/1x is now
+    # OFFERED for planning (pin grid, export, collision checking, all real) and
+    # generates one explicit, cited TODO instead of either silent nothing or a
+    # misleading "add a fields entry" hint. `af:` stays absent on every SDMMC pin
+    # throughout - not a gap, see above.
     settings:
       - name: Mode
         choices:
@@ -6088,20 +6100,23 @@ peripherals:
           - { name: "STR (strobe)", signals: [STR] }
           - { name: "SLVCK (slave clock)", signals: [SLVCK] }
           - { name: "STS (status)", signals: [STS] }
-    signal_pins:
-      D0: [{ pin: PC8 }]
-      D1: [{ pin: PC9 }]
-      D2: [{ pin: PC10 }]
-      D3: [{ pin: PC11 }]
-      D4: [{ pin: PA14 }]
-      D5: [{ pin: PA15 }]
-      D6: [{ pin: PC6 }]
-      D7: [{ pin: PC7 }]
-      CMD: [{ pin: PD2 }]
-      STR: [{ pin: PD3 }]
-      STS: [{ pin: PD2 }]
-      SDCK: [{ pin: PC12 }]
-      SLVCK: [{ pin: PC12 }]
+    remaps:
+      - name: "SDMMC_RM=00 (default)"
+        pins: { D0: PC8, D1: PC9, D2: PC10, D3: PC11, D4: PA14, D5: PA15, D6: PC6, D7: PC7,
+                CMD: PD2, STR: PD3, STS: PD2, SDCK: PC12, SLVCK: PC12 }
+      - name: "SDMMC_RM=01"
+        pins: { D0: PB13, D1: PC9, D2: PB10, D3: PB11, D4: PA14, D5: PA15, D6: PC6, D7: PC7,
+                CMD: PD12, STR: PD10, STS: PD12, SDCK: PD11, SLVCK: PD11 }
+      - name: "SDMMC_RM=1x"
+        pins: { D0: PD0, D1: PD1, D2: PD2, D3: PD3, D4: PD4, D5: PD5, D6: PD6, D7: PD7,
+                CMD: PC10, STR: PC11, STS: PC10, SDCK: PC12, SLVCK: PC12 }
+    remap_unwritable: >
+      AFIO_PCFR1.SDMMC_RM[1:0] (CH32H417RM.md:11741-11768, Table 9-32) is a real
+      register field, but this part's codegen.remap.style: af has no per-peripheral
+      field to write it (style: af forbids codegen.remap.fields, data/FORMAT.md:
+      654-657) and the SDK exposes no macro for it either (SD_GPIO_Init(),
+      Evt/EXAM/SDMMC/SDMMC_SD/Common/sdmmc_sd.c:93-113, calls GPIO_Init(Mode_AF_PP)
+      and never GPIO_PinAFConfig()). RM=01/1x must be set by hand to match the plan.
     params:
       - key: width_1b
         name: Bus width
