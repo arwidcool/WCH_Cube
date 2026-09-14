@@ -142,8 +142,20 @@ const ABSENT = {
   'SYS.nvic': 'the debug interface and the reset pin are not interrupt sources',
   'IWDG.nvic': 'the independent watchdog RESETS the part, it does not interrupt. No IWDG_IRQn in the enum',
   'TKEY.nvic': 'TouchKey raises the ADC vector, which is declared with peripheral: ADC1. No TKEY_IRQn in the enum',
-  'EXTEN.nvic': 'the extended-configuration unit raises no interrupt: IRQn_Type in ch32v00X.h:45-82 '
-    + 'ends at OPCM_IRQn = 40 and contains no EXTEN entry. LKUPRST is a polled status flag, not a vector',
+  'EXTEN.nvic': 'the extended-configuration unit raises no interrupt: IRQn_Type in ch32v00X.h:46-83 '
+    + 'ends at OPCM_IRQn = 40 and contains no EXTEN entry. LKUPRST is a polled status flag, not a vector. '
+    + 'TRUE FOR CH32V006 specifically (the part ch32v00X.h, capital X, is really spelled for) - CH32L103 '
+    + 'and CH32V003 have their own IRQn_Type and their own citations below, same split as EXTEN.clock '
+    + 'above. Line range corrected 2026-09-14 (AGENT-1, board): `typedef enum IRQn` is at line 46, '
+    + '`} IRQn_Type;` at 83 - the CLAIM was always right, only :45-82 was off by one on both ends',
+  'CH32L103.EXTEN.nvic': 'IRQn_Type in ch32l103.h:37-102 (this part\'s own real header) ends at '
+    + 'CMPWakeUp_IRQn = 68 and contains no EXTEN entry anywhere in the enum - checked by reading the '
+    + 'whole block, not grepping for a name that might be spelled differently. LKUPRST stays a polled '
+    + 'status flag on this part too, same reasoning as the generic entry (AGENT-1, board 2026-09-14)',
+  'CH32V003.EXTEN.nvic': 'IRQn_Type in ch32v00x.h:35-68 (lowercase x - this part\'s own real file, not '
+    + 'V006\'s capital-X one) ends at TIM2_IRQn = 38 and contains no EXTEN entry. This part\'s enum is '
+    + 'much shorter than L103\'s or V006\'s (max vector number 38 vs 68/40) - read whole, not truncated '
+    + 'early (AGENT-1, board 2026-09-14)',
   // --- per-part: true on THIS part and not on its siblings
   //
   // CH32X035 has ONE vector, `OPA_IRQn = 48`, for two OPAs and three
