@@ -1478,6 +1478,36 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       and this line together at 0.
       Separately: `SYS_SWIO` (PB9) is the pad most of these land on, so the debug port is the
       most common casualty; on QFN68 I2C1 has no other option and THAT one is the silicon.
+      **Two closed by AGENT-3's `signal_groups:` landing (UHSIF), 4 -> 2. The remaining two
+      (FMC_A11/PB11, FMC_A12/PB12) traced 2026-09-14, and empirically confirmed SILICON-
+      FORCED, not an ordering bug** - answering main's request for a re-stated trace on
+      this specific pair, not the older PD11/PD12 wording. Reasoning, then proof:
+      `A6`/`A20`'s only alternates (`PA10`/`PE4`) are not bonded on QFN68, so both are
+      permanently pinned to `PB11`; `A11` is the one signal in the PB11 collision that
+      genuinely has a second bonded option (`PD11`) — but `PD11` is `A16`'s ONLY pad, and
+      under the widest `Address lines` choice (`A0-A25`) `A16` is claimed alongside `A11`.
+      So `PB11`/`PD11` together have to seat THREE single-purpose claimants (`A6`, `A11`,
+      `A20`) plus `A16`'s exclusive hold on `PD11`, for two physical pads - moving `A11`
+      relocates the collision, it cannot remove it. **Proved, not just reasoned**: swapped
+      `A11`'s and `A12`'s `signal_pins:` order in a throwaway local edit (reverted before
+      committing anything, `git checkout -- data/mcus/CH32H417.yaml` immediately after,
+      `git status` confirms clean) and re-ran `node tests/run.js "h417_packages"`. Result:
+      QFN68's avoidable count stayed at **exactly 2** (the same pair now reported as
+      `FMC_A11 + FMC_A16 on PD11` instead of `FMC_A6 + FMC_A11 on PB11` - relabelled, not
+      fixed) AND two previously-hidden silicon-forced collisions were unmasked at the SAME
+      pads (`FMC_A6 + FMC_A20` on `PB11`, `FMC_A7 + FMC_A21` on `PB12` - always real,
+      previously invisible only because the sweep records one classification per pad and
+      stops at the first choice that reaches it) AND **QFN88 regressed from 0 to 2
+      avoidable collisions** (`FMC_A11 + FMC_A16` on `PD11`, `FMC_A12 + FMC_A17` on
+      `PD12` - QFN88 bonds enough address pins that today's order never surfaces this, but
+      the reorder breaks it). Reordering is a net loss on the only package it was meant to
+      help and a regression on a currently-clean one. **REQUEST(->AGENT-3): reclassify
+      these two as `silicon` in `tests/h417_packages.test.js`** (the two-kind split the
+      file's own comment already anticipates) rather than counting them against the
+      ratchet - `COLLISION_CEILING.QFN68` would go to 0, and this line could close, with
+      the true fact (QFN68 does not bond enough distinct FMC address pins for a wide bus)
+      recorded as silicon rather than implied to be a bug waiting on a reorder that cannot
+      exist.
 
 - [x] (AGENT-1) **CH32H417 declares no `codegen.analog_signals`, so an analog pad is not
       recognised** — found by AGENT-3 extending the CH32H417 fixture to claim OPA1 P0/N0/OUT0 and
@@ -1603,3 +1633,54 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       Restored, `node tests/run.js "export.test"` ALL GREEN. **Not done**: the pinout SVG export
       and the print view (§7 P2's other two items) — next up, in that order per the owner's
       stated priority (SVG second, print view "only if those land cleanly").
+
+- [x] (AGENT-2) **`main` found the KiCad CSV unreachable from the CLI and asked for it fixed
+      before anything else — fixed, plus the pinout SVG built CLI-reachable from its first
+      commit so the same gap could not repeat.** `node tools/wchcube_cli.js CH32H417 --package
+      QFN128 --format all --out <dir>` wrote seven files with no `_kicad_pins.csv` among them,
+      and `grep -n kicad tools/wchcube_cli.js` returned nothing — `kicadPinCsv()` existed and
+      worked, reached only through `generateAll()`/`projectFiles()`, never through
+      `tools/wchcube_cli.js`'s own `FORMATS`/`outputs()`. Added `pins-kicad` to `FORMATS`
+      (`tools/wchcube_cli.js:29`) and its line in `outputs()`; `--format all` picks it up for
+      free (`FORMATS.filter(f => f !== 'json')`). 2 new tests in `app/tests/cli.test.js`
+      (byte-identical to `eng.kicadPinCsv()`; `--format all` includes it), both seen red on the
+      pre-fix code before being trusted.
+      **The pinout SVG (§7 P2, part two) landed the SAME cycle, engine-first, on the lesson just
+      learned rather than repeating it.** `pinoutSvg()` (`app/engine/export.js`) is a NEW, pure,
+      headless-safe renderer — not a port of the canvas's own `renderChip()`/`exportSvg()`
+      (`app/template.html`), which clones the live, interactively-themed DOM and depends on a
+      browser to MEASURE text in (`fitSvgTexts()` shrinks a label by reading real glyph widths
+      off a rendered `<text>`, meaningless without a DOM) and on the page's own `<style>` sheet
+      for `var(--x)` colours, neither of which a headless process has. Ports the same PURE
+      geometry math (`layout()`'s quad/dual pin placement, `labelRoom()`) from data alone
+      (`pinRows()`, `PACKAGES`), drops the live view's rotate/mirror (`U.rot`/`U.flip` is
+      UI-only chrome with no "current" value for a one-shot export — always draws pin 1
+      top-left), and self-styles with concrete hex colours since there is no page theme to
+      read. States its part and package twice (an SVG `<title>` element, and a leading XML
+      comment for a plain-text reader) — the KiCad CSV's own "a CSV that does not say QFN68
+      from QFN128 is a trap" rule, applied again. A `remap_unwritable:` pin is drawn like any
+      other assigned pin, coloured and captioned "planning only" rather than hidden — the same
+      three-constraint contract the KiCad CSV met, checked the same way. Wired into
+      `generateAll()`/`projectFiles()` (all four call sites, matching the `kicad_pins.csv`
+      pattern exactly) AND into `tools/wchcube_cli.js`'s `FORMATS`/`outputs()` in the SAME
+      commit that introduces the function — never landed engine-only first. 5 new engine tests
+      (`app/tests/export.test.js`: well-formed XML + states part/package; both package shapes,
+      quad-with-epad and dual; assigned/conflict/planning-only content, including a colour
+      check for the planning-only fill found missing mid-development — the tooltip-text
+      assertion alone stayed green with the colour branch deleted entirely, a real gap closed
+      before shipping, not a hypothetical one) + 2 CLI tests (byte-identical to `eng.pinoutSvg()`;
+      `--format all` includes it). Every one of the 7 new tests across both files seen red on
+      its own planted break, then restored: `node tests/run.js "export.test"` 40/40,
+      `"cli.test"` 32/32, `"pinmap"` 8/8 (file-count assertions there and in `export.test.js`
+      updated for the new file), `node tests/run.js "app/tests"` (full engine suite) 567/567.
+      `python tools/validate_mcu.py` 0 errors/73 warnings, `python tools/verify_sdk_names.py`
+      0/0. `python build.py` run once to verify in a real bundle (not committed — see below):
+      `node`-driven jsdom boot of the built `dist/index.html` against CH32H417/QFN128 confirms
+      the Project Manager's file list carries both `_kicad_pins.csv` and `_pinout.svg` with zero
+      console problems, and `pinoutSvg()` called in-page produces the identical byte length
+      (54847) the standalone engine call does — the CLI and the browser bundle agreeing, the
+      same guarantee `pins-md`/`pins-csv` already had. **`dist/index.html` NOT committed this
+      cycle**: `data/mcus/CH32H417.yaml` was uncommitted (AGENT-1, concurrent) at build time, so
+      the freshly built file is not safe to ship under this commit — exactly the mechanism that
+      put `main` red three times before worktrees were suspended; left modified, uncommitted, in
+      the working tree instead.
