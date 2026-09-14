@@ -101,9 +101,13 @@ absent:
   # provides 16 channels, where DMAMUX channels 1 through 8 are connected to DMA1 channels
   # 1 through 8, and DMAMUX channels 9 through 16 are connected to DMA2 channels 1 through
   # 8." One register block serving both, so mapping the instance onto either controller
-  # alone would be half true. What a user picks is a REQUEST per channel, and this part has
-  # no `dma.request_defaults` yet - that is the TASKS.md line, not a peripheral.
-  - { instance: DMAMUX, reason: "the DMA request multiplexer: one register block routing peripheral requests into DMA1's and DMA2's channels (RM 10.2.3), not a peripheral of its own. The per-channel request selection it configures is not modelled on this part yet", source: "CH32H417RM.md:12508-12514 and Table 10-6 (:12678)" }
+  # alone would be half true. What a user picks is a REQUEST per channel - now modelled
+  # as `dma[0].mux`/`dma[1].mux` (both controllers' `requests:`, RM Table 10-2's full
+  # 123-entry catalogue, `data/mcus/CH32H417.yaml` top-level `dma:`), landed after this
+  # row was first written. DMAMUX stays declared absent here for the SAME reason as
+  # before, unchanged by that: it is still not a `peripherals:` entry a user switches on
+  # or off - it is configured entirely through DMA1's/DMA2's own channels.
+  - { instance: DMAMUX, reason: "the DMA request multiplexer: one register block routing peripheral requests into DMA1's and DMA2's channels (RM 10.2.3), not a peripheral of its own - the per-channel request selection it configures is modelled on dma[].mux, not as a peripheral block", source: "CH32H417RM.md:12508-12514 and Table 10-6 (:12678)" }
 # The DS reads the same silicon twice - Table 2-1-1 pin-first, Tables 2-2-x
 # signal-first - and where the two answers differ, BOTH are recorded here and
 # neither is averaged. Every entry names the line of each reading. One entry closes

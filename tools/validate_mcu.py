@@ -1043,66 +1043,119 @@ def check_param_list(defs, where, r: Report) -> dict:
     return by_key
 
 
-def check_dma(doc: dict, r: Report) -> None:
-    """`dma:` has to carry enough to build a DMA Settings tab: which channels serve which
-    request, what a fresh request starts as, and what the user may change. A request with
-    no starting values is the failure that matters - the tab would add a row of blanks."""
-    dma = doc.get("dma")
-    if dma is None:
-        return
+def _dma_owner_guess(sig: str) -> str:
+    """Best-guess peripheral name for a DMA request signal, for the ERROR message only."""
+    owner = str(sig).split("_")[0]
+    if owner != sig:
+        return owner
+    return re.sub(r"\d+$", "", str(sig)) or owner
+
+
+def _dma_owner(sig: str, periphs: dict) -> bool:
+    """Does this DMA request signal belong to a real peripheral in this file?
+
+    `TIM1_UP` is peripheral TIM1 plus an event name; `ADC1` is the whole peripheral
+    (both checked by the `_` split). Neither form fits `DAC1`/`DAC2` - CH32H417's RM
+    Table 10-2 names the DMA controller's two channel-specific requests after DAC's
+    own two OUTPUT channels (DAC_Channel_1/2, ch32h417_dac.h:90-91), not two instances;
+    this part's `peripherals:` has one "DAC" entry, matching the real silicon (one
+    DAC_TypeDef, two channel macros). Stripping a trailing digit run and re-checking
+    is the fallback for exactly that shape - `TIM1_UP` never reaches it (the `_` split
+    already resolves `TIM1`), so it only widens what DAC1/DAC2-shaped names accept."""
+    owner = str(sig).split("_")[0]
+    if owner in periphs:
+        return True
+    stripped = re.sub(r"\d+$", "", str(sig))
+    return bool(stripped) and stripped in periphs
+
+
+def _check_dma_controller(dma: dict, where: str, periphs: dict, r: Report) -> None:
+    """One controller entry. Shared by the single-controller shape (`dma:` a mapping,
+    `where` = "dma") and the multi-controller shape (`dma:` a list, `where` =
+    "dma[i]") - CH32H417 is the first part with two real DMA controllers (DMA1/DMA2,
+    RM ch.10), which is also the part whose 16 channels are a true DMAMUX crossbar
+    (any of 123 named requests onto any channel, `mux:`) rather than the small,
+    silicon-fixed per-channel table every other shipped part's `requests:` is
+    (mechanism: AGENT-2, agents/BOARD.md 2026-09-14T06:44Z). A controller carries
+    EITHER shape, never both - the RM does not describe a channel with two request
+    sources."""
     if not isinstance(dma, dict):
-        r.error("dma", "must be a mapping")
+        r.error(where, "must be a mapping")
         return
-    periphs = doc.get("peripherals") or {}
     channels = dma.get("channels")
     requests = dma.get("requests") or {}
+    mux = dma.get("mux")
+
+    if requests and mux:
+        r.error(where, "has both `requests:` (fixed hardware table) and `mux:` "
+                       "(DMAMUX crossbar) - a channel is served one way or the other")
 
     signals = set()
     for ch, sigs in requests.items():
-        where = f"dma.requests.{ch}"
+        rwhere = f"{where}.requests.{ch}"
         try:
             n = int(ch)
         except (TypeError, ValueError):
-            r.error(where, "channel must be a number")
+            r.error(rwhere, "channel must be a number")
             continue
         if channels and not (1 <= n <= int(channels)):
-            r.error(where, f"channel {n} is outside 1..{channels}")
+            r.error(rwhere, f"channel {n} is outside 1..{channels}")
         for sig in sigs or []:
             signals.add(sig)
-            # `TIM1_UP` is peripheral TIM1 plus an event name; `ADC1` is the whole
-            # peripheral. Only the peripheral half can be checked - UP/TRIG/COM are
-            # events with no pin, so they are not in any remap table.
-            owner = str(sig).split("_")[0]
-            if owner not in periphs:
-                r.error(where, f"`{sig}` belongs to `{owner}`, which is not a peripheral "
-                               "in this file")
+            if not _dma_owner(sig, periphs):
+                r.error(rwhere, f"`{sig}` belongs to `{_dma_owner_guess(sig)}`, which is "
+                                "not a peripheral in this file")
 
-    params = check_param_list(dma.get("channel_params"), "dma.channel_params", r)
-    if requests and not params:
-        r.warn("dma.channel_params",
+    if mux is not None:
+        if not isinstance(mux, dict):
+            r.error(f"{where}.mux", "must be a mapping")
+            mux = {}
+        base, count = mux.get("base", 0), mux.get("count")
+        if not isinstance(base, int) or base < 0:
+            r.error(f"{where}.mux.base", "must be a non-negative integer")
+        if not isinstance(count, int) or count < 1:
+            r.error(f"{where}.mux.count", "must be a positive integer - the number of "
+                                          "channels this controller owns")
+        mux_requests = mux.get("requests") or {}
+        if not mux.get("sdk_call") and mux_requests:
+            r.warn(f"{where}.mux.sdk_call",
+                   "no function named, so codegen cannot emit the routing call for any "
+                   "of these requests")
+        for name, val in mux_requests.items():
+            signals.add(name)
+            if not _dma_owner(name, periphs):
+                r.error(f"{where}.mux.requests.{name}",
+                        f"belongs to `{_dma_owner_guess(name)}`, which is not a peripheral in this file")
+            if not isinstance(val, int) or val < 1:
+                r.error(f"{where}.mux.requests.{name}", "must be a positive integer "
+                                                         "(the DMAMUX's own numeric id)")
+
+    params = check_param_list(dma.get("channel_params"), f"{where}.channel_params", r)
+    if (requests or mux) and not params:
+        r.warn(f"{where}.channel_params",
                "no per-request parameters, so the DMA Settings tab can only pick a "
                "channel - no direction, priority, width or mode")
 
     defaults = dma.get("request_defaults") or {}
     for sig in sorted(signals - set(defaults)):
-        r.warn("dma.request_defaults",
+        r.warn(f"{where}.request_defaults",
                f"`{sig}` has no starting values, so adding it gives the user a row of "
                "generic defaults to fix by hand")
     for sig in sorted(set(defaults) - signals):
-        r.error("dma.request_defaults", f"`{sig}` is not served by any channel")
+        r.error(f"{where}.request_defaults", f"`{sig}` is not served by any channel")
     for sig, vals in defaults.items():
-        where = f"dma.request_defaults.{sig}"
+        dwhere = f"{where}.request_defaults.{sig}"
         if not isinstance(vals, dict):
-            r.error(where, "must be a mapping of parameter key to value")
+            r.error(dwhere, "must be a mapping of parameter key to value")
             continue
         for key, val in vals.items():
             if key not in params:
-                r.error(where, f"`{key}` is not a dma.channel_params key")
+                r.error(dwhere, f"`{key}` is not a {where}.channel_params key")
                 continue
             opts = params[key].get("options")
             names = [o.get("name") if isinstance(o, dict) else o for o in opts or []]
             if opts and val not in names:
-                r.error(where, f"{key}: `{val}` is not one of {', '.join(map(str, names))}")
+                r.error(dwhere, f"{key}: `{val}` is not one of {', '.join(map(str, names))}")
 
     fields = (dma.get("register") or {}).get("fields") or {}
     seen = {}
@@ -1111,10 +1164,40 @@ def check_dma(doc: dict, r: Report) -> None:
             continue
         for bit in range(int(f.get("lsb", 0)), int(f.get("lsb", 0)) + int(f.get("bits", 1))):
             if bit > 31:
-                r.error(f"dma.register.fields.{name}", f"bit {bit} is outside a 32-bit register")
+                r.error(f"{where}.register.fields.{name}", f"bit {bit} is outside a 32-bit register")
             if bit in seen:
-                r.error(f"dma.register.fields.{name}", f"bit {bit} is also used by `{seen[bit]}`")
+                r.error(f"{where}.register.fields.{name}", f"bit {bit} is also used by `{seen[bit]}`")
             seen[bit] = name
+
+
+def check_dma(doc: dict, r: Report) -> None:
+    """`dma:` has to carry enough to build a DMA Settings tab: which channels serve which
+    request, what a fresh request starts as, and what the user may change. A request with
+    no starting values is the failure that matters - the tab would add a row of blanks.
+
+    `dma:` is a single controller mapping on every part shipped before CH32H417 (unchanged,
+    still checked exactly as before) or a LIST of controller mappings - CH32H417 has two
+    real ones, DMA1 and DMA2 (RM ch.10). Two controllers must not silently claim the same
+    global mux channel range either - `mux.base`/`mux.count` are checked for overlap here,
+    once, across every entry, since that fact belongs to the whole `dma:` list and not to
+    any one controller."""
+    dma = doc.get("dma")
+    if dma is None:
+        return
+    periphs = doc.get("peripherals") or {}
+    entries = dma if isinstance(dma, list) else [dma]
+    ranges = []
+    for i, entry in enumerate(entries):
+        where = f"dma[{i}]" if isinstance(dma, list) else "dma"
+        _check_dma_controller(entry, where, periphs, r)
+        mux = isinstance(entry, dict) and entry.get("mux")
+        if isinstance(mux, dict) and isinstance(mux.get("base"), int) and isinstance(mux.get("count"), int):
+            ranges.append((where, mux["base"], mux["base"] + mux["count"]))
+    for i, (w1, lo1, hi1) in enumerate(ranges):
+        for w2, lo2, hi2 in ranges[i + 1:]:
+            if lo1 < hi2 and lo2 < hi1:
+                r.error(f"{w1}.mux", f"global channel range {lo1 + 1}..{hi1} overlaps "
+                                     f"{w2}'s {lo2 + 1}..{hi2}")
 
 def check_nvic(doc: dict, r: Report) -> None:
     """`nvic:` is what the NVIC Settings tab and the System Core NVIC panel are built

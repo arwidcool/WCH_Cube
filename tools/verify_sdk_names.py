@@ -632,15 +632,54 @@ def check_params(doc: dict, idx: Index, r: Report) -> None:
                 want(r, idx, f"{where}.options[{j}].sdk", o["sdk"],
                      idx.macros | idx.enum_members, "a defined macro or enum member")
 
-    # A DMA request remap names a macro and a register, like anything else.
-    for i, rm in enumerate((doc.get("dma") or {}).get("remaps") or []):
-        if isinstance(rm, dict):
-            want(r, idx, f"dma.remaps[{i}].macro", rm.get("macro"),
-                 idx.macros | idx.enum_members, "a defined macro or enum member")
+    # `dma:` is one controller mapping on every part shipped before CH32H417, or a LIST
+    # of controllers - CH32H417 has two real ones (DMA1, DMA2, RM ch.10). `(doc.get
+    # ("dma") or {}).get(...)` below crashed outright on the list shape (AttributeError,
+    # a list has no `.get`) until this loop replaced it - found landing CH32H417's DMA
+    # data, the first file this tool ever saw with more than one controller.
+    dma_raw = doc.get("dma")
+    dma_entries = dma_raw if isinstance(dma_raw, list) else ([dma_raw] if dma_raw else [])
+    for ci, dma in enumerate(dma_entries):
+        if not isinstance(dma, dict):
+            continue
+        dwhere = f"dma[{ci}]" if isinstance(dma_raw, list) else "dma"
 
-    for i, p in enumerate((doc.get("dma") or {}).get("channel_params") or []):
-        if isinstance(p, dict):
-            one(f"dma.channel_params[{i}] ({p.get('key', i)})", p, "DMA_InitTypeDef")
+        # A DMA request remap names a macro and a register, like anything else.
+        for i, rm in enumerate(dma.get("remaps") or []):
+            if isinstance(rm, dict):
+                want(r, idx, f"{dwhere}.remaps[{i}].macro", rm.get("macro"),
+                     idx.macros | idx.enum_members, "a defined macro or enum member")
+
+        for i, p in enumerate(dma.get("channel_params") or []):
+            if isinstance(p, dict):
+                one(f"{dwhere}.channel_params[{i}] ({p.get('key', i)})", p, "DMA_InitTypeDef")
+
+        # `mux:` (the DMAMUX crossbar shape) names a routing function and a
+        # $CH-templated channel macro - checked by substituting this controller's own
+        # channel numbers (1-16 global) and requiring every one to be a real macro,
+        # the same "claim, not assumed" treatment codegen.channel_macros gets above.
+        mux = dma.get("mux")
+        if isinstance(mux, dict):
+            want(r, idx, f"{dwhere}.mux.sdk_call", mux.get("sdk_call"),
+                 idx.functions, "a declared function")
+            tmpl = mux.get("channel_macro")
+            base, count = mux.get("base", 0), mux.get("count", 0)
+            if tmpl and isinstance(base, int) and isinstance(count, int) and count:
+                for ch in (base + 1, base + count):
+                    want(r, idx, f"{dwhere}.mux.channel_macro ($CH={ch})",
+                         str(tmpl).replace("$CH", str(ch)),
+                         idx.macros | idx.enum_members, "a defined macro or enum member")
+        reg_tmpl = ((dma.get("register") or {}).get("channel_macro"))
+        if reg_tmpl and "$CH" in str(reg_tmpl):
+            # Local channel numbers (1..count for a mux controller, else 1..channels)
+            # - DMA1_Channel$CH/DMA2_Channel$CH are per-controller, unlike mux's own
+            # GLOBAL numbering above.
+            local_count = (mux or {}).get("count") if isinstance(mux, dict) else dma.get("channels")
+            if isinstance(local_count, int) and local_count:
+                for ch in (1, local_count):
+                    want(r, idx, f"{dwhere}.register.channel_macro (local $CH={ch})",
+                         str(reg_tmpl).replace("$CH", str(ch)),
+                         idx.macros | idx.enum_members, "a defined macro or enum member")
 
     for pid, P in (doc.get("peripherals") or {}).items():
         for i, p in enumerate((P or {}).get("params") or []):
