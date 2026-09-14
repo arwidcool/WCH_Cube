@@ -995,6 +995,22 @@ bits, and a clock tree that models what the schema can hold.
 - [x] `clock:` - four oscillators, the SYS PLL (six sources, shared divider, 32 multipliers),
       SYSCLK mux, HPRE/FPRE/PPRE2/ADCPRE, HSE coupling, bus membership.
 - [~] **(AGENT-1) CH32H417: `params:` for the peripherals that have none.**
+      **2026-09-14: PWR/FLASH/IWDG/WWDG/GPHA landed (`22abe30`), RNG/TKEY correctly withdrawn -
+      AGENT-3's 11-peripheral header check corrected my own wrong first pass** (5 genuinely
+      ABSENT: CRC/DBGMCU/HSEM/RNG/TKEY; the other 6 named were real, unmodelled gaps, not
+      absences). Compile-verified all five with a throwaway project, non-default values,
+      `--strict` exit 0. **DMA2 (the sixth, and the P0) is NOT landed - a genuine engine gap,
+      not a data gap:** CH32H417 has no top-level `dma:` block at all, and its DMA is a true
+      16-channel DMAMUX crossbar (any of 123 named requests onto any of 16 mux channels
+      spanning DMA1 ch1-8/DMA2 ch1-8, RM ch.10) - `dma.controller` is singular everywhere in
+      `app/engine/*.js` with no multi-controller concept, and the fixed per-channel
+      `dma.requests:` shape every other part uses cannot express a free crossbar. Full
+      register/request-table facts researched and cited on the board, ready for whoever owns
+      the engine change. GPHA's `GPHA_FG_InitTypeDef`/`GPHA_BG_InitTypeDef` (a second,
+      real-but-per-operation struct pair) and FLASH's pre-existing IWDG_SW/STANDBY_RST/
+      STOP_RST settings (possibly mismatched against `FLASH_UserOptionByteConfig`'s real
+      three-argument signature - not yet resolved) are two smaller open threads from the same
+      pass. `IN_EXTRACTION` stays in place - not tickable yet.
       **2026-09-14: LPTIM1/LPTIM2 landed (`bc2fdb7`) - 54 -> 56 of 78 have a block.** 22 cells
       owed, 6 of them routing pins that still lack a block outright: `DFSDM, ETH, USBFS, USBHS,
       USBPD, USBSS`. Also this cycle: SWPMI's "Single wire with supply" combination removed (not
