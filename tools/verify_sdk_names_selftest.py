@@ -72,7 +72,35 @@ def vector_index(doc: dict, name: str) -> int:
 # Each case: (label, mutate(doc), path fragment the error must name, text it must contain)
 def build_cases(doc: dict):
     pid, pi = first_param_with_options(doc)
-    adc = vector_index(doc, "ADC")
+    try:
+        adc = vector_index(doc, "ADC")
+    except KeyError:
+        # Same principle as the `pid is None` guard below, for the OTHER way a stale
+        # target can hide: this one does not build a shorter list, it raises straight
+        # out of build_cases() with no case ever printed at all -- an uncaught
+        # KeyError crashes main() with a raw traceback before the "N planted break(s)
+        # caught" line is ever reached, which reads as a tooling failure rather than
+        # the specific, nameable gap it is.
+        sys.exit(f"verify_sdk_names_selftest: {SUBJECT.name}'s `nvic.vectors` no "
+                  f"longer names an \"ADC\" vector -- the two `nvic irqn` cases need "
+                  f"a real vector index and cannot be built. Point vector_index() at "
+                  f"a vector name this part still has.")
+    if pid is None:
+        # THE GAP THIS GUARD CLOSES: without it, `if pid is not None:` below simply
+        # never appends the 8 params-shaped cases -- no exception, no missing-key
+        # error, just a shorter `cases` list that still reports "N/N caught" over
+        # fewer than N real checks. That is the exact shape found in
+        # tools/validate_params_selftest.py (a stale `params:` key raised before the
+        # validator ran and the harness still called it a catch, 2026-09-14) one
+        # layer up: here nothing even raises, the case is just never built. A
+        # sibling with an enum-optioned `params:` row is not a rare fact about
+        # CH32V006 worth assuming silently -- it is the premise 8 of this file's
+        # cases stand on, so its absence is a hard error, not a smaller total.
+        sys.exit(f"verify_sdk_names_selftest: no peripheral in {SUBJECT.name} has an "
+                  f"enum-optioned `params:` row any more -- 8 cases (params struct/"
+                  f"sdk_field/sdk_call/sdk_none/sdk_args/option sdk) cannot be built, "
+                  f"not merely skipped. Point first_param_with_options() at a part or "
+                  f"peripheral that still has one.")
     cases = [
         ("header, wrong CASE only (the round-2 defect)",
          lambda d: set_path(d, "codegen.header", "ch32v00x.h"),

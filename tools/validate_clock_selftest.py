@@ -142,7 +142,19 @@ def run(path: pathlib.Path) -> tuple[int, str]:
 
 
 def main() -> int:
-    base = with_block(PART.read_text(encoding="utf-8"))
+    try:
+        base = with_block(PART.read_text(encoding="utf-8"))
+    except AssertionError as exc:
+        # `with_block()`'s two asserts are the splice points every CASE below is anchored
+        # relative to (ANCHOR, then the `prescalers:` block). Left uncaught, either one
+        # going stale crashes main() with a raw traceback before a single case runs or a
+        # single line of "N/N caught" prints - a tooling crash, not the specific, nameable
+        # gap it actually is. Same principle as the sibling selftests' anchor-uniqueness
+        # guard: a mutation target that no longer exists is a hard, named failure, never
+        # silence and never an unrelated stack trace standing in for one.
+        print(f"validate_clock_selftest: cannot splice the plls: block in ({exc}) -- "
+              f"no case below can be built or run.")
+        return 1
     failures = []
 
     with tempfile.TemporaryDirectory() as tmp:
