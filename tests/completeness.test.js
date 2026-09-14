@@ -252,6 +252,39 @@ const ABSENT = {
     + 'CH32H417RM.md:4313: RM 4.4 (:6287) puts R32_IPC_CTLR at 0xE000D000 (:6332), beside HSEM '
     + 'in the core space. No RCC_*Periph_IPC exists in ch32h417_rcc.h:230-307. Its generated C '
     + 'correctly emits IPC_Init() with no clock line',
+
+  // --- CH32H417 params, checked one peripheral at a time against its own
+  //     ch32h417_*.h rather than assumed from the 11 cells IN_EXTRACTION was
+  //     softening. Five are genuinely absent (below); the OTHER SIX of those
+  //     eleven — DMA2, FLASH, GPHA, IWDG, PWR, WWDG — are NOT: each has a real,
+  //     verified init struct or SetXxx/ConfigXxx function this repo has not
+  //     modelled yet, and are reported to the board rather than declared here.
+  //     Declaring real, owed work ABSENT would be the exact failure this table
+  //     exists to prevent — "we meant to leave that blank" standing in for
+  //     "nobody has looked".
+  'CH32H417.CRC.params': 'ch32h417_crc.h declares six functions and no InitTypeDef: '
+    + 'CRC_ResetDR/CalcCRC/CalcBlockCRC/GetCRC are runtime operations on a fixed-function '
+    + 'CRC32 engine, and CRC_Set/GetIDRegister read and write a scratch register that '
+    + 'survives reset, not a configuration choice. No polynomial select, no init struct - '
+    + 'checked against ch32h417_crc.c too, nothing else is declared there',
+  'CH32H417.DBGMCU.params': 'ch32h417_dbgmcu.h\'s only configurable call is '
+    + 'DBGMCU_Config(DBGMCU_Periph, NewState) - which peripherals keep counting while the '
+    + 'core is halted in a debug session, a debugger convenience with no effect outside one, '
+    + 'not an operating parameter of the part. GetREVID/GetDEVID/GetCHIPID are read-only '
+    + 'identification. Same shape as this file\'s own DBGMCU.clock entry above',
+  'CH32H417.HSEM.params': 'ch32h417_hsem.h has no InitTypeDef; every function is a runtime '
+    + 'semaphore operation - Take/FastTake/Release* and the GetAllSemTakenState reads happen '
+    + 'during operation, not at init - and HSEM_Set/GetClearKey read and write a runtime '
+    + 'debug-clear key, not a peripheral mode. Same shape as this file\'s own HSEM.clock entry',
+  'CH32H417.RNG.params': 'ch32h417_rng.h has no InitTypeDef and no SetXxx/ConfigXxx beyond '
+    + 'RNG_Cmd (Enable/Disable, already the Mode setting) and RNG_ITConfig (an interrupt '
+    + 'enable, not a peripheral parameter - nvic\'s job if modelled at all). A hardware RNG '
+    + 'genuinely has no operating mode: it is either running or not',
+  'CH32H417.TKEY.params': 'no ch32h417_tkey.h exists at all - confirmed by the peripheral\'s '
+    + 'own `pins:`/`notes:` citation (RM ch.13, CH32H417RM.md:15745-15752): TKEY is realized '
+    + 'entirely as an ADC mode (ADC_CTLR1.TKENABLE), so its only configuration is the pad '
+    + 'chosen on ADC1\'s or ADC2\'s Channels row, already modelled there. Nothing is left for '
+    + 'a standalone TKEY params: block to hold',
 };
 
 /**
