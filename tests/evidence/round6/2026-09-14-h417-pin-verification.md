@@ -284,3 +284,60 @@ not a repair.
 
 None of these is the full suite (`node tests/run.js` with no filter) — per the standing rule, that
 is run once by main when AGENT-1 and AGENT-2 stop landing, not on a loop while data is moving.
+
+---
+
+## Addendum, 2026-09-14 — one failure class, five independent instances
+
+Not part of the pin-verification work this file was written for, but the same defect
+class kept recurring across everything else this round touched, and it is worth naming
+as a pattern rather than five unrelated bugs:
+
+1. Two real gaps in `*_selftest.py` siblings (`verify_sdk_names_selftest.py`,
+   `validate_clock_selftest.py`) — a stale mutation target silently counted as a catch,
+   or crashed before any case ran. Fixed `59b2aa1`.
+2. `channel_params.params:` had never been validated on any peripheral on any part —
+   `check_param_list`'s call site assumed the wrong shape. Found by AGENT-1 by planting a
+   bad default and watching `validate_mcu.py` exit 0 when it should not have.
+3. The cross-loader gap this addendum's sibling section describes in full: every Python
+   gate in this repository validates YAML 1.1; the app ships YAML 1.2. Built
+   `tools/cross_loader_check.mjs` / `tests/cross_loader.test.js` (`5f8ac48`) to check the
+   two readings directly instead of trusting either one's internal self-consistency.
+4. `data/FORMAT.md`'s own worked `dead_fields:` example listed 21 field names without
+   their `ETH_` prefix, while `codegen.js` compares verbatim against `sdk_field:`. The
+   documented example would never have matched anything — found and fixed by AGENT-1
+   alongside ETH's landing; `data/FORMAT.md:639-640` now says so explicitly.
+5. `tests/completeness.test.js`'s own params-completeness check only ever read
+   `P.params`, never `P.channel_params.params` — so DAC, DFSDM, OPA, SAI and SERDES, all
+   of which fill an init struct once per channel/instance rather than once per
+   peripheral, read as "no Parameter Settings rows" despite each having real, cited,
+   previously-verified params. Fixed `c15204b`, found while sorting CH32H417's
+   IN_EXTRACTION-softened cells into genuinely-absent versus wrong-shape-checked.
+
+A gate that silently checks less than its own name claims, and documentation that
+silently matches nothing, are the same defect from the reader's side: both report
+"handled" over something that was never exercised. Five instances in one round, found by
+three different agents, is a pattern worth the owner's attention on its own — not just
+five bugs to close.
+
+## Addendum, 2026-09-14 — CH32H417's 11 non-routing `params:` cells: 5 absent, 6 real
+
+Deliverable C's completeness gate (`docs/COVERAGE.md`-adjacent, `tests/completeness.test.js`)
+held CH32H417's whole non-routing peripheral set under one blanket `IN_EXTRACTION` line.
+Asked to retire the eleven params-only cells that line was softening by declaring each
+ABSENT, checked every one against its own `ch32h417_*.h` first rather than declaring on
+request. **Five are genuinely absent** (CRC, DBGMCU, HSEM, RNG, TKEY — no init struct, no
+configurable value beyond on/off, checked against both the `.h` and the `.c`). **Six are
+not** — each has a real, verified, unmodelled configuration surface: `DMA2` (a real
+`DMA_InitTypeDef`, and CH32H417 has no top-level `dma:` block AT ALL, unlike every other
+part — this is the whole DMA channel/request surface missing, for DMA1 too, not a DMA2
+peculiarity), `FLASH` (four controller-mode functions no EVT example ever calls and the
+existing option-byte `settings:` does not cover), `GPHA` (a ten-field `GPHA_InitTypeDef`
+plus a second foreground-layer struct — a real graphics-accelerator config surface),
+`IWDG`/`WWDG` (real timeout/window parameters; sibling parts already carry these as OPEN,
+not ABSENT, in this same file — CH32H417 should not disagree with itself), `PWR`
+(`PWR_PVDLevelConfig`'s 4-level threshold, direct precedent in CH32V006's own already-
+modelled `pvd_level` param). Landed `a4f33bc`. CH32H417's known-missing count: 12 -> 7.
+The `IN_EXTRACTION` blanket for CH32H417 was NOT retired — seven real cells still need
+it, six of them now precisely named instead of folded into a claim ("the peripherals
+that have none") that was not true of six of the eleven it was asked to close.
