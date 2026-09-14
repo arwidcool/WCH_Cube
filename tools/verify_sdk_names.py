@@ -831,7 +831,15 @@ def main() -> int:
     warns = sum(len(r.warns) for r in reports)
     bad = errors + (warns if args.strict else 0)
     if not args.quiet or bad:
-        print(f"\n{errors} error(s), {warns} warning(s)" + (" [--strict]" if args.strict else ""))
+        # Same fix, same reason, as validate_mcu.py's own summary line (see its comment):
+        # a total with no scope attached invites comparing it against a baseline taken at
+        # a different scope (one part vs. the default six) and calling the gap a real
+        # change. The scope travels with the number instead.
+        scope = f"across {len(paths)} part(s)"
+        if len(paths) == 1:
+            scope += f" ({paths[0].stem})"
+        print(f"\n{errors} error(s), {warns} warning(s) {scope}"
+              + (" [--strict]" if args.strict else ""))
     return 1 if bad else 0
 
 

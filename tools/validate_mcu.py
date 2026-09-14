@@ -1840,7 +1840,20 @@ def main() -> int:
     warns = sum(len(r.warns) for r in reports)
     bad = errors + (warns if args.strict else 0)
     if not args.quiet or bad:
-        print(f"\n{errors} error(s), {warns} warning(s)" + (" [--strict]" if args.strict else ""))
+        # The scope travels WITH the number, on purpose. `72 warning(s)` (one file,
+        # `CH32H417.yaml` passed explicitly) and `77 warning(s)` (the default six-part
+        # bundle) look like the same measurement and are not - a report that quotes one
+        # against a baseline taken at the other scope reads as a real regression or a
+        # real fix, and is neither. Found the hard way (agents/BOARD.md 2026-09-14): a
+        # single-file 72 read against an all-parts 73 baseline as "-1 elsewhere" that
+        # had no mechanism to be true. Compare like scopes, or better, list-diff full
+        # `warn`/`error` output instead of comparing totals at all - a total never says
+        # which lines moved, only that the count did.
+        scope = f"across {len(paths)} part(s)"
+        if len(paths) == 1:
+            scope += f" ({paths[0].stem})"
+        print(f"\n{errors} error(s), {warns} warning(s) {scope}"
+              + (" [--strict]" if args.strict else ""))
     return 1 if bad else 0
 
 
