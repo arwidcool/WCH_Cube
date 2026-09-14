@@ -2050,6 +2050,81 @@ extras:
             - { name: 30 mV, value: 3, sdk: CMP_HYPSEL_30mV }
           help: "R32_CMP_CTLR HYPSEL[1:0], CH32H417RM.md:50678-50689. Default matches the register reset (0)."
 
+  OPA:
+    comment: |
+      `OPA_InitTypeDef` (ch32h417_opa.h:76-83) is applied PER INSTANCE by
+      `OPA_Init(OPA_Num_TypeDef OPAx, OPA_InitTypeDef*)` (ch32h417_opa.c:40-53, writes
+      R32_OPA_CTLR<n> whole in one go) - `channel_params.instances`, same shape as DAC's
+      two channels, keyed to the three existing "OPA<n> ..." setting rows instead of a
+      channel number. `OPA1`/`OPA2`/`OPA3` (ch32h417_opa.h:24-28) select the register via
+      `OPA_BASE + (OPAx << 2)` (ch32h417_opa.c:44-45) - R32_OPA_CTLR1/2/3
+      (CH32H417RM.md:50363-50365).
+
+      ONLY `FB`/`PGADIF`/`HS` are modelled below - the three fields that are genuinely
+      free knobs, not derived from a pin-claiming setting. `PSEL`/`NSEL`/`Mode` are NOT
+      modelled, and not by oversight: each is DERIVED from a setting whose NAME differs
+      per instance ("OPA1 positive input" vs "OPA2 positive input" vs "OPA3 positive
+      input"), but `channel_params`'s `depends_on`/`paramApplies()` check
+      (app/engine/codegen.js ~1345, `if (d.readonly || !paramApplies(pid, d)) continue`)
+      evaluates every row against the PERIPHERAL's settings once, not per-instance - it
+      has no way to know it is filling instance 2's block when it checks a `depends_on`
+      naming instance 1's setting. Writing `depends_on: { setting: "OPA1 positive
+      input", ... }` into the one shared `params:` list would apply OPA1's choice to
+      OPA2's and OPA3's PSEL alike, which is a wrong number that compiles - so it is
+      TASKS.md's, not a shipped guess. Same class of gap as CMP's MODE routing table and
+      SAI's Frame/Slot structs: this schema's `channel_params` was built for a struct
+      whose OWN fields never depend on a setting (DAC's trigger/wave are free enums;
+      LTDC's layer members are free positions), and OPA is the first instance-varying
+      peripheral where a member IS a setting in disguise. REQUEST to AGENT-2: a
+      per-instance-relative `depends_on` (e.g. `depends_on: { instance_setting: "{n}
+      positive input", equals: P0 }`, `{n}` substituted with the active instance's
+      number) would close this the same day PSEL/NSEL/Mode's citations are ready
+      (RM 50369-50432 for OPA1, 50460-50553 (OPA2/3 register block) for the others).
+
+      `OPA_Cmd(OPAx, ENABLE)` (ch32h417_opa.c:84-98) is a SEPARATE call after
+      `OPA_Init()`, same gap as DAC's `DAC_Cmd` / CMP's `OPA_CMP_Cmd` (comments above) -
+      the three real fields below configure gain/feedback/speed but do not yet enable
+      the op-amp.
+    yaml: |
+      channel_params:
+        struct: OPA_InitTypeDef
+        applies_per: channel
+        instances:
+          1: { sdk_call: OPA_Init, handle: OPA1, setting: "OPA1 positive input", active_choices: [P0, P1] }
+          2: { sdk_call: OPA_Init, handle: OPA2, setting: "OPA2 positive input", active_choices: [P0, P1] }
+          3: { sdk_call: OPA_Init, handle: OPA3, setting: "OPA3 positive input", active_choices: [P0, P1] }
+        params:
+          - key: fb
+            name: PGA feedback resistor
+            struct: OPA_InitTypeDef
+            sdk_field: FB
+            type: enum
+            default: Off
+            options:
+              - { name: Off, value: 0, sdk: FB_OFF }
+              - { name: On,  value: 1, sdk: FB_ON }
+            help: "R32_OPA_CTLR1 FB_EN1 bit 8 (CH32H417RM.md:50396-50400, OPA1's register; OPA2/3 have the analogous FB_EN2/3 in their own CTLR). Default matches the register reset (0)."
+          - key: pgadif
+            name: PGA differential input mode
+            struct: OPA_InitTypeDef
+            sdk_field: PGADIF
+            type: enum
+            default: Off
+            options:
+              - { name: Off, value: 0, sdk: DIF_OFF }
+              - { name: On,  value: 1, sdk: DIF_ON }
+            help: "R32_OPA_CTLR1 PGADIF1 bit 9 (CH32H417RM.md:50388-50395). Connects the N terminal to OPA<n>_CHN1 for differential PGA use. Default matches the register reset (0)."
+          - key: hs
+            name: High-speed mode
+            struct: OPA_InitTypeDef
+            sdk_field: HS
+            type: enum
+            default: Off
+            options:
+              - { name: Off, value: 0, sdk: HS_OFF }
+              - { name: On,  value: 1, sdk: HS_ON }
+            help: "R32_OPA_CTLR1 HS1 bit 10 (CH32H417RM.md:50378-50383). Default matches the register reset (0)."
+
   DAC:
     comment: |
       `DAC_InitTypeDef` (ch32h417_dac.h:22-38) is applied PER CHANNEL by
