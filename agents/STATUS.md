@@ -366,24 +366,87 @@ Say which, in the notes.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: **DFSDM's Channel struct landed this cycle** (`01714b5`,
-  `params:` 56 → 57 of 78); the 5 routing peripherals still owed are `ETH, USBFS, USBHS,
-  USBPD, USBSS` — USBHS/USBSS/USBPD are byte-identical across every EVT example
-  (`const:` fits), USBFS is byte-DIFFERENT across all 8 (must NOT get `const:`), ETH is
-  blocked on a third `verify_sdk_names.py` indexing mode (`ETH_RegInit` is in no header,
-  only designated `.c` files) — its own careful narrowing, not started. DFSDM's other
-  three structs (Filter/Rc/Jc) consolidated with SAI's open multi-struct-per-instance
-  REQUEST to AGENT-2, not a second one.
+- Next step if I stop here: **`params:` is 61 of 78, 17 owed. Only `ETH` and `GPHA`
+  remain as routing peripherals with no block at all** — GPHA not yet investigated;
+  ETH still blocked on a third `verify_sdk_names.py` indexing mode (`ETH_RegInit` is in
+  no header, only designated `.c` files), its own careful narrowing. DFSDM's
+  Filter/Rc/Jc need a genuinely NEW capability (a second, independent per-instance axis
+  — `DFSDM_FLTx` vs `DFSDM_Channely` — confirmed by reading `codegen.js`'s actual
+  multi-struct loop, not the same gap SAI's was), REQUEST posted to AGENT-2, distinct
+  from SAI's (now closed). **Found, not fixed — worth a dedicated round**: Python's
+  `yaml.safe_load` (YAML 1.1) parses unquoted `On`/`Off` option names as booleans while
+  the app's vendored js-yaml (YAML 1.2) parses them as the strings "On"/"Off" —
+  reproduced directly (`yaml.safe_load('name: Off')` → `{'name': False}`, `jsyaml.load`
+  → `{"name":"Off"}`). Self-consistent within each language today (OPA's existing
+  `fb`/`pgadif`/`hs` rows use exactly this shape and work correctly), so not urgent, but
+  a real cross-parser trust gap in every Python tool that reads this YAML — flagged
+  rather than patched under this cycle's time pressure; the fix belongs at a shared
+  loader level, not in the data.
 - Gates last run: `validate_mcu` 0 errors/73 warnings · `verify_sdk_names` 0/0 ·
-  `coverage.py --gate` 6 of 6, CH32H417 complete/0 open · `validate_params_selftest` 5/5
-  · `validate_afmux_selftest` 13/13 · `node tests/run.js "H417"` 66/66 ·
-  `"codegen_compile"` 18/18 · `"completeness"` 15/15 · `node tools/wchcube_cli.js
-  --format c --strict` on a throwaway DFSDM-enabled project, exit 0. `pio run` not run
-  this cycle (no `main` ask).
+  `coverage.py --gate` 6 of 6, CH32H417 complete/0 open · `validate_params_selftest`
+  6/6 · `validate_afmux_selftest` 13/13 · `validate_constraints_selftest` 19/19 ·
+  `validate_clock_selftest` 11/11 · `node tests/run.js "H417"` 66/66 ·
+  `"completeness"` 15/15 · `"app/tests"` (full engine suite) 567/567 ·
+  `"codegen_compile"` 18/18 · `node tools/wchcube_cli.js --format c --strict` on
+  throwaway DFSDM/USB/SAI/LPTIM/OPA-enabled projects, each read by hand, not just the
+  exit code. `pio run` not run this cycle (no `main` ask).
 
-**Current — 2026-09-14T~04:30Z. Resumed after a predecessor was killed mid-task by a
-rate limit; verified its uncommitted LPTIM work by reading the diff and running the
-gates (not by trusting its own description), then committed it and kept going.**
+**Current — 2026-09-14T~06:35Z. Same cycle, continued: DFSDM's Channel struct, a
+real LPTIM `clkpol` bug fixed, the four USB declarations, SAI's Frame/Slot, OPA's
+PSEL/NSEL/Mode, and two real validator bugs found and fixed along the way.
+`params:` 56 → 61 of 78. Commits: `01714b5` `bff24cd` `b7c00a1` `df1956a` `5bdca5d`.**
+
+- **clkpol fix (`bff24cd`), found by AGENT-3, verified here.**
+  `depends_on: { param: encoder, equals: false }` compared an ENUM (options are the
+  strings "Disable"/"Enable") against a literal boolean - `compare()`'s
+  `Boolean(have) === want` branch only fires for a bool-typed `want`, so the dependency
+  was permanently unsatisfiable and `LPTIM_ClockPolarity` was never emitted on either
+  LPTIM instance, in any configuration. Invisible because the struct's zero-init
+  happens to equal the field's own default (Rising). Fixed to `equals: Disable`;
+  verified past the validator with a throwaway project (`clkpol: Falling` now correctly
+  emits `LPTIM_ClockPolarity_Falling`, was silently absent before).
+- **The four USB declarations (`bff24cd`)**: USBHS/USBSS/USBPD get one
+  `const:`+`sdk_manual:` row each (md5-identical bring-up across every shipped
+  example), the note transcribing real register/value/file:line writes. USBFS does
+  NOT get `const:` (8 different md5 hashes across its 8 examples) - two real
+  `sdk_manual:` bool params instead (`USBFS_UC_DEV_PU_EN`, identical in all 8;
+  `USBFS_UC_LOW_SPEED`, clear in 7 of 8, set in exactly the one example named for it).
+- **SAI's Frame/Slot (`b7c00a1`) landed on AGENT-2's multi-struct `channel_params`
+  mechanism**, verified (`channel_multi_struct` 5/5) before touching anything.
+  **Corrected my own DFSDM claim in the same commit**: DFSDM's Filter/Rc/Jc are NOT the
+  same gap - they need a SECOND, independent handle axis (`DFSDM_FLTx`, not
+  `DFSDM_Channely`), confirmed by reading `codegen.js`'s actual multi-struct loop
+  (`inst.handle || handle`, always the CURRENT instance's own handle - no way to give a
+  secondary struct a different one). Forcing it through would silently emit
+  `DFSDM_FilterInit(DFSDM_Channely, &s)`, a real type mismatch. REQUEST to AGENT-2,
+  distinct from SAI's now-closed one.
+- **A second real `check_param_list` gap found and fixed (`df1956a`)**:
+  `channel_params.params:` was never actually validated on ANY peripheral, on any
+  part - the call site assumed `channel_params:` was a map of named sub-blocks
+  (`dma.channel_params`'s shape), not the single block it has always actually been, so
+  `.items()` iterated the block's own top-level keys and never reached the real row
+  list. Found by planting a bad default on OPA's `fb` row and watching
+  `validate_mcu.py` exit 0. Fixed; re-ran all six parts, 0 errors - nothing was
+  actually wrong, only unchecked.
+- **OPA's PSEL/NSEL/Mode (`5bdca5d`) landed on `instance_setting`**, but not in the
+  single-free-enum shape the FORMAT.md worked example's own text might suggest -
+  checked `app/tests/instance_setting.test.js` first and found a `depends_on`-gated
+  row with real options leaves the struct member UNWRITTEN whenever the OTHER live
+  setting state is active. So each field is a PAIR of `const:` rows (mirroring
+  `DVP_DataSize`'s existing precedent), six rows total. Compiled: OPA1 at P1/N0/OUT1,
+  OPA2 at P0/N1/OUT0 (deliberately opposite), each instance resolves only its own
+  setting in the generated C.
+- **Found a real `check_flow_mappings()` false positive while landing OPA, fixed in the
+  same commit.** The "unquoted comma" trap checker treated a literal `{n}` INSIDE a
+  quoted string as its own flow-mapping span - `depends_on`'s own `"OPA{n} positive
+  input"` (the mechanism's own documented syntax) tripped it. Fixed with
+  `_mask_quoted()` plus excluding a `{` right after a word character, the second part
+  needed because `validate_params_selftest.py`'s PyYAML round-trip drops the quotes
+  entirely. Both the real trap and both `{n}` shapes verified directly, not assumed.
+- Every landing this block describes was compiled with a throwaway `.wchproj` and the
+  generated C read by hand before committing, not just `--strict`'s exit code.
+
+Red, and who owns it: **nothing of mine.**
 
 - **LPTIM1/LPTIM2 landed** (`bc2fdb7`): `params:` **54 → 56 of 78**. One shared struct
   and apply call (`LPTIM_TimeBaseInitTypeDef`/`LPTIM_TimeBaseInit`,
