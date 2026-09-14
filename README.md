@@ -1,6 +1,6 @@
 # WCHCube
 
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/arwidcool/WCH_Cube/actions/workflows/ci.yml/badge.svg)](https://github.com/arwidcool/WCH_Cube/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![no dependencies](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen.svg)](#stack)
 [![one file](https://img.shields.io/badge/app-one%20offline%20HTML%20file-informational.svg)](#run-it-in-a-browser)
@@ -22,11 +22,50 @@ click when a choice would collide with something you have already set.
 > times — a wrong SDK header, a GPIO speed macro that does not exist, and a drive mode the
 > silicon cannot do. All three were caught by *building something*, never by reading code.
 >
+> **The same blind spot has a second shape, and it is the one to worry about: correct code that
+> never runs.** On CH32H417 the DMA init struct was filled with every field the user chose and
+> then never applied — no `DMA_Init()`, no `DMA_Cmd()`. A configured DMA transfer compiled
+> clean, reported zero conflicts, and moved nothing, with the coverage ledger at zero, the
+> validator at zero errors and every test green over it. It was one of **three** instances of
+> that shape found in a single cycle. The cause is structural: **most of what each part models
+> has never been generated-and-compiled by any fixture** — CH32X035's one fixture configures
+> *zero* of its 27 peripherals — so a green suite says the files are consistent, never that the
+> code runs. See [`tests/evidence/round6/`](tests/evidence/round6/) for the per-part map of what
+> has actually been exercised.
+>
 > **And nothing here has ever been flashed.** Every green result in this repository is a
 > **compile**. No board has been attached. Hardware behaviour is unverified.
 >
 > → **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** explains both in detail, and is worth ten
 > minutes before you rely on anything below.
+
+## What it does
+
+Four tabs, and each answers a different question.
+
+**Pinout & Configuration** — the chip drawn to scale for the package, the peripheral tree, and
+the GPIO table. Hovering a peripheral says what its name stands for (`SDIO` → *SD input/output
+interface*) and selecting it describes what that kind of block does; hovering a pin says what
+the pad is, what voltage it takes and what to connect to it (`VDDIO`, `VREFP`, `VSSA`). The tree
+is grouped by category and sorted, so `USART1`–`USART8` sit together and `TIM2` comes before
+`TIM10`. The **Power setup** under System Core lists every supply domain with its pads, its
+range and its citation — including the constraints a pin table cannot carry, such as `VDDA` never
+exceeding `VDD`.
+
+**Clock Configuration** — the clock tree, drawn and computed. On CH32H417 that means five PLL
+blocks (the SYS PLL plus USBHS, Ethernet, USB SS and SerDes) and all eight per-peripheral source
+muxes (`USBFS`, `RNG`, `I2S2`, `I2S3`, `HSADC`, `UHSIF`, `LTDC`, `ETH1G`). Every tap either
+reports a number or says why it cannot; a tap that would silently ignore a mux does not render a
+plausible figure instead.
+
+**Project Manager** — everything that will be generated, previewed file by file before you
+commit to it, with the generator's own TODOs marked in the preview. One Generate button.
+
+**Tools** — what this MCU file does *not* say: pads nobody has extracted yet and who owns them,
+signals that are routed but no setting can claim, peripherals with no description, and every
+place a value falls back to a default because the file is silent (no `gpio.speeds`, no
+`codegen:` block, a part number with no PlatformIO board). It reads `none` on a finished part,
+and its job is to make sure it keeps saying so.
 
 ## Documentation
 
@@ -35,6 +74,7 @@ click when a choice would collide with something you have already set.
 | **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** | You want to understand the design and **exactly how much of it to trust**. Start here. |
 | **[docs/ADDING-A-PART.md](docs/ADDING-A-PART.md)** | Your microcontroller is not supported. The whole process: drop the vendor files in, let an AI extract them, verify. |
 | **[docs/COVERAGE.md](docs/COVERAGE.md)** | You are extracting a part, or asking whether one is finished. The coverage ledger: every function on every pin the datasheet lists is modelled, declared absent with a citation, or **open** — and a part is not done while a row is open. |
+| **[docs/WCH-MCU-CATALOG.md](docs/WCH-MCU-CATALOG.md)** | You are asking *which* part to add next, or whether one is already modelled. Every MCU WCH publishes, read from the vendor's own product API and joined against `data/mcus/`. A pointer, never a citation. |
 | **[data/FORMAT.md](data/FORMAT.md)** | You are writing or editing an MCU file. The field-by-field schema. |
 | **[PROGRESS.md](PROGRESS.md)** | What is actually done, broken, and never tested. |
 | **[docs/](docs/)** | Index of all of the above. |
@@ -56,8 +96,20 @@ what a header says:
 
 All six read `status: complete` in the coverage ledger (`python tools/coverage.py --quiet`): every
 function the datasheet puts on a pin is modelled, or declared absent with a `file:line`. That is
-not the same as every peripheral being configurable to the same depth — on CH32H417, 39 of its 78
-peripherals have a `params:` block and 39 do not. The per-peripheral table is
+not the same as every peripheral being configurable to the same depth — a peripheral with no
+`params:` still has its mode choices, but no numbers to set, and some of those are deliberate
+(a CRC unit has no init struct to fill):
+
+| Part | Peripherals with `params:` | Deliberately without |
+|---|---|---|
+| CH32V006 | 14 of 19 | `SYS`, `RCC`, `DMA1`, `EXTI`, `TKEY` — choices only |
+| CH32V005 | 13 of 17 | the same four as CH32V006, inherited with the rest of the part |
+| CH32V003 | 11 of 16 | as CH32V006, plus `OPA1` |
+| CH32X035 | 14 of 27 | the comparators, op-amps and `PIOC` are choice-driven; `FLASH`, `USBFS`, `USBPD` declared absent |
+| CH32L103 | 26 of 33 | `SYS`, `RCC`, `EXTI`, `DMA1`, `USBFS`, `USBPD`, `OPA1` |
+| CH32H417 | **67 of 78** | 9 are ABSENT with a citation; `DMA1`/`DMA2` are the remaining gap |
+
+The per-peripheral table is
 [`tests/evidence/round6/2026-09-13-h417-peripheral-map.md`](tests/evidence/round6/2026-09-13-h417-peripheral-map.md).
 
 ```
@@ -72,10 +124,13 @@ WCH_CubeMX/
 │   ├── packages/packages.yaml   package geometries (SOP, TSSOP, QFN, LQFP...)
 │   ├── sources/<PART>/      the DS, the RM and the EVT package
 │   └── firmware/            PlatformIO project - compiles the generated C for real silicon
-├── docs/                    how it works, and how to add a part (with pictures)
+├── docs/                    how it works, how to add a part, the coverage ledger (with pictures)
 ├── build.py                 inlines the engine and the YAML into dist/index.html
 ├── tests/                   QA suites + the runner (npm test)
-├── tools/validate_mcu.py    checks an MCU file before you trust it
+├── app/tests/               engine unit tests
+├── tools/                   the gates and the headless CLI: validate_mcu.py, coverage.py,
+│                            ledger.py, verify_sdk_names.py, wchcube_cli.js
+├── graft/                   the context graph for AI agents (git-ignored, regenerable)
 ├── src-tauri/               desktop shell (Tauri 2)
 ├── PROGRESS.md              where the project stands, long form - read this first
 ├── TASKS.md                 what is claimed, done and next
@@ -146,7 +201,7 @@ One button, on the **Project Manager** tab, producing one of two scopes.
 ├── src/main.c
 ├── lib/wchcube_generated/include/{wchcube_init.h, BoardPins.h}
 ├── lib/wchcube_generated/src/wchcube_init.c
-└── docs/            pin table (md + csv) and clock summary
+└── docs/            pin table (md + csv), KiCad pin table, pinout SVG, clock summary
 ```
 
 **Only the pin map** turns off everything above and outputs `BoardPins.h` alone. Use it when
@@ -162,8 +217,33 @@ map, not the driver.
 ```
 
 Because that scope needs no board, it also works on a package no PlatformIO board exists
-for — a part number is only needed to pick one. `node tools/wchcube_cli.js <part> --format
-pins-h` does the same from a script, and `--option pin_map_only=1` sets the scope.
+for — a part number is only needed to pick one.
+
+Everything the app can emit is also reachable from a script, which is how CI drives it:
+
+```bash
+node tools/wchcube_cli.js CH32V006 --package TSSOP20 --format all --out build/
+```
+
+| `--format` | What it writes |
+|---|---|
+| `pins-md`, `pins-csv` | the pin table as Markdown, and as CSV |
+| `pins-kicad` | a KiCad Symbol Editor pin table, for pasting into a symbol |
+| `pins-svg` | a standalone pinout diagram, self-contained and self-styled |
+| `pins-h` | `BoardPins.h` — the pin map as C macros |
+| `clocks-md` | the clock tree and the frequency at each tap |
+| `c` | `wchcube_init.c/.h`, the initialisation code |
+| `json` | machine-readable state: pins, conflicts, clocks, peripheral status |
+
+(`all` is every one of those except `json`, which CI asks for by name.)
+
+`--option <key>=<value>` sets any generator option for one run (`--option list` prints them
+all), and `--strict` exits non-zero if the configuration conflicts or the generated C carries
+a TODO — that is the flag CI gates on.
+
+The **pinout SVG** is also a button on the chip toolbar (⤓), and the same renderer backs the
+browser's print view, so what you print is the drawing you were looking at rather than a
+second implementation of it.
 
 ## Add an MCU
 
@@ -202,15 +282,21 @@ npm install     # jsdom + js-yaml, test-only
 npm test        # builds, then runs every suite
 ```
 
-`npm test` runs `node tests/run.js`, which executes the engine unit tests in `app/tests/`
-and the QA suites in `tests/`:
+`npm test` runs `node tests/run.js`, which executes the engine unit tests in `app/tests/` and
+the QA suites in `tests/` — around seventy suites in all. The ones worth knowing about:
 
 | Suite | What it protects |
 |---|---|
-| `app/tests/*` | the engine: model, conflicts, clock, project, export, undo |
+| `app/tests/*` | the engine: model, conflicts, clock, codegen, project round-trip, undo, the pin map |
+| `tests/coverage.test.js` | the coverage ledger — every part meets the status it declares, and the ledger's own tool is proven to catch every planted break |
+| `tests/strict.test.js` | `--strict` exits 0 on every fixture, and exits 2 on a planted conflict |
+| `tests/completeness.test.js` | every peripheral of every part is reachable: a setting, a clock bit, a vector, and no routed signal that no choice can claim |
+| `tests/codegen_compile.test.js` | the generated C for each part actually compiles against the vendor SDK |
+| `tests/generated_project.test.js` | a generated project is self-contained and builds with `pio run` |
+| `tests/cross_loader.test.js` | the Python gates and the app's YAML parser agree about the same file |
 | `tests/data.test.js` | every MCU file is valid, drawable and loadable |
 | `tests/build.test.js` | `dist/index.html` is complete, current, offline, and has no duplicate declarations |
-| `tests/layout.test.js` | the CubeMX layout and the chip fitting its canvas at 1280x720 and 1920x1080 |
+| `tests/layout.test.js` | the CubeMX layout, the chip fitting its canvas, and that no panel grid is mis-sized |
 | `tests/desktop.test.js` | the Tauri config and bridge — including that it does nothing at all in a browser |
 | `tests/smoke.js` | every MCU on every package: load, switch, click, assign, zero console output |
 
@@ -239,6 +325,10 @@ cd data/firmware
 pio run                     # default environment: CH32V006F8P6 (TSSOP20)
 pio run -t upload           # over WCH-Link
 ```
+
+Eight part environments ship — `CH32V006F8P6`, `CH32V006K8U6`, `CH32V005F6P6`, `CH32V003F4P6`,
+`CH32X035G8U6`, `CH32L103K8U6`, `CH32H417QEU6`, `CH32H417WEU6` — plus `native`, which compiles
+the HAL on the host so its logic can be tested without a board. `pio run -e <env>` picks one.
 
 In VS Code, open `data/firmware` as the folder (PlatformIO needs `platformio.ini` at the
 workspace root), or open `data/firmware/wchcube-firmware.code-workspace` to get the repo
@@ -271,6 +361,13 @@ line in `STATUS.md` §2 — on evidence, named on the line. Closed rounds are ar
 [`agents/history/`](agents/history/) and are never read during a work cycle. **If you are
 picking the project up by hand, read `agents/STATUS.md` first**; it is written so that somebody
 who has never seen the repo can resume whatever was in flight when the last session ended.
+
+The repo is indexed by **[graft](https://github.com/NanoNets/context-graph-engine)**, which
+builds a context graph as linked markdown under the git-ignored `graft/` directory — a local,
+regenerable cache that agents query instead of re-reading source files. `graft build` after a
+big change; `graft ask "<question>"`, `graft callers <symbol>` and `graft map` are the entry
+points. It is a development convenience and nothing in `app/`, `data/` or the tests depends on
+it.
 
 ## Contributing
 
