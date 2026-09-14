@@ -32,7 +32,7 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VALIDATOR = ROOT / "tools" / "validate_mcu.py"
 PART = ROOT / "data" / "mcus" / "CH32H417.yaml"
-PERIPH = "UHSIF"          # five enum rows, and the one whose defaults started this
+PERIPH = "UHSIF"          # four enum rows, and the one whose defaults started this
 
 
 def row(doc, key):
@@ -45,7 +45,7 @@ def row(doc, key):
 # (label, mutate(doc), substring the refusal must contain)
 CASES = [
     ("a default that is not one of its own options",
-     lambda d: row(d, "width_bit").__setitem__("default", "48-bit"),
+     lambda d: row(d, "uhsif_port_rm").__setitem__("default", "Mapping 9"),
      "is not one of its options"),
 
     ("a default deleted entirely",
@@ -57,7 +57,7 @@ CASES = [
      "duplicate key"),
 
     ("both `const` and `default` on one row",
-     lambda d: row(d, "width_bit").__setitem__("const", "DEF_UHSIF_DATA_BIT8"),
+     lambda d: row(d, "uhsif_port_rm").__setitem__("const", "DEF_UHSIF_PORT_RM0"),
      "two different answers to one question"),
 
     ("a numeric default below its own min",
