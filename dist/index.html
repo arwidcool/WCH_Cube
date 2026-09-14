@@ -800,6 +800,22 @@
     .logo{margin-right:10px}
   }
   @media (min-width:1900px){#view-pinout{grid-template-columns:360px minmax(460px,1fr) minmax(640px,1.5fr)}}
+
+  /* Print pinout — §7 P2's last item. `pinoutSvg()`'s own output (the SAME string
+     `generateAll()` already puts in the Project Manager's file list) dropped into
+     #print-pinout unmodified is what prints; nothing here re-renders it, so a printed
+     sheet and the exported .svg can never read two different things about one pinout —
+     the exact drift `paramTable()`/`paramTableFrom()` and `rccSection()`/
+     `clockSummaryMarkdown()` both shipped before being caught this cycle. Hidden on
+     screen; @media print hides the live app instead of the reverse, so nothing about
+     the app's own layout has to survive a print stylesheet. */
+  #print-pinout{display:none}
+  @media print{
+    body>.app,body>.toast,body>.pinhover,body>#newproj{display:none!important}
+    #print-pinout{display:block;padding:24px}
+    #print-pinout h1{font:600 16px system-ui,sans-serif;margin:0 0 12px}
+    #print-pinout svg{width:100%;height:auto;max-width:100%}
+  }
 </style>
 </head>
 <body>
@@ -11452,6 +11468,26 @@ codegen:
     SPI_InitTypeDef:         { fn: SPI_Init }           # ch32h417_spi.h:198
     I2C_InitTypeDef:         { fn: I2C_Init }           # ch32h417_i2c.h:302
     ADC_InitTypeDef:         { fn: ADC_Init }          # ch32h417_adc.h:174
+    # MISSING UNTIL 2026-09-14 - real defect, not a cosmetic gap: with no entry here,
+    # `dmaSection()` (app/engine/codegen.js) never emits DMA_Init() OR DMA_Cmd() for
+    # ANY configured DMA request on either controller - the mux routing was correct,
+    # the struct was filled, and the channel was never actually applied or started.
+    # `--strict` DOES catch it (a real TODO, "nothing applies this struct"), but no
+    # shipped fixture configures a live DMA request (both controllers ship disabled,
+    # zero requests), so the path was never exercised by any test - found by AGENT-3
+    # generating real C for a configured request, not by any existing gate. `cmd:
+    # DMA_Cmd` matters as much as `fn:` here: without it the struct is written and
+    # applied but the channel's EN bit is never set (DMA_CFGRx.EN, RM:13046-13053),
+    # so nothing transfers regardless of a correct DMA_Init() call. Confirmed the
+    # ORDER this produces (DeInit -> Init -> Cmd, all AFTER the mux routing call) is
+    # exactly the vendor's own internal three-step sequence, just relocated as a
+    # whole block relative to DMA_MuxChannelConfig - the ordering already checked and
+    # cited on the `dma:` block itself above (the 0-indexed-mux hazard reasoning).
+    #
+    # The SAME gap (missing `cmd:`, and on CH32L103 missing the whole entry) was
+    # found on all four other shipped parts once this one surfaced - fixed there too,
+    # each part's own commit.
+    DMA_InitTypeDef:         { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32h417_dma.h:274,276,273
     # `no_handle: true` is the data saying the Init takes the struct ALONE - these three
     # peripherals are singletons on this part, so their base address is compiled into the
     # SDK function rather than passed to it. Getting this wrong is not a compile error on
@@ -13549,6 +13585,9 @@ peripherals:
           - { name: IN7, signals: [IN7] }
           - { name: IN8, signals: [IN8] }
           - { name: IN9, signals: [IN9] }
+          - { name: "IN16 (temperature sensor, internal)" }
+          - { name: "IN17 (Vrefint, internal)" }
+          - { name: "IN18 (VDDA/2, internal)" }
     params:
       - key: mode
         name: Mode
@@ -13610,12 +13649,80 @@ peripherals:
           - { name: "x4",  value: 1, sdk: ADC_Pga_4 }
           - { name: "x16", value: 2, sdk: ADC_Pga_16 }
           - { name: "x64", value: 3, sdk: ADC_Pga_64 }
+      # NOT ADC_InitTypeDef - ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime)
+      # is a separate call, one per CHANNEL (ch32l103_adc.h:175). Until 2026-09-14 this
+      # row did not exist at all, so `Channels` above ticked a checkbox that reached no
+      # generated code whatsoever - no TODO, no call, nothing, because nothing ever
+      # attempted the lookup (confirmed by generating C on the existing fixture with IN4
+      # ticked before writing this row: the struct filled, `ADC_RegularChannelConfig` was
+      # never even mentioned). Found chasing CH32X035's `codegen.channel_macros` gap and
+      # a probe for the same shape across all six parts (agents/BOARD.md 2026-09-14).
+      #
+      # The eight codes are ADC_SampleTime_CyclesMode0..7 (ch32l103_adc.h:110-117) - SAME
+      # macro NAMES as CH32V006's own eight, but NOT the same cycle counts: this part's
+      # own RM table (CH32L103RM.md:7880-7887) is 1.5/7.5/13.5/28.5/41.5/55.5/71.5/239.5
+      # cycles, V006's is 3.5/9/15/30/43/57/73/241 - three parts, three different ADC
+      # shapes so far, confirmed against THIS header and THIS RM table rather than ported.
+      #
+      # The RM table has TWO columns (ADC_LP=0 / ADC_LP=1, CH32L103RM.md:7878-7880) for
+      # the first five codes - the low-power bit changes what a code MEANS. ADC_LP has no
+      # struct member and no function anywhere in ch32l103_adc.h (grepped, zero hits, same
+      # position CH32X035's own `lowpower` row is in) and its RM reset value is 0
+      # (CH32L103RM.md:8954) = the LOW-POWER column, which is the one used below - nothing
+      # in this generator ever writes it, so it never moves off reset.
+      - key: sample
+        name: Sampling time
+        sdk_call: ADC_RegularChannelConfig
+        sdk_args: [$HANDLE, $CHANNEL, $RANK, $VALUE]
+        sdk_repeat: channels
+        sdk_note: "ADC_InitTypeDef has no sample-time member. Sample time is the fourth argument of ADC_RegularChannelConfig(ADCx, channel, rank, ADC_SampleTime), so it is set per CHANNEL, not per peripheral. ch32l103_adc.h:175."
+        type: enum
+        default: 7.5 cycles
+        options:
+          - { name: 1.5 cycles,   value: 0, sdk: ADC_SampleTime_CyclesMode0 }
+          - { name: 7.5 cycles,   value: 1, sdk: ADC_SampleTime_CyclesMode1 }
+          - { name: 13.5 cycles,  value: 2, sdk: ADC_SampleTime_CyclesMode2 }
+          - { name: 28.5 cycles,  value: 3, sdk: ADC_SampleTime_CyclesMode3 }
+          - { name: 41.5 cycles,  value: 4, sdk: ADC_SampleTime_CyclesMode4 }
+          - { name: 55.5 cycles,  value: 5, sdk: ADC_SampleTime_CyclesMode5 }
+          - { name: 71.5 cycles,  value: 6, sdk: ADC_SampleTime_CyclesMode6 }
+          - { name: 239.5 cycles, value: 7, sdk: ADC_SampleTime_CyclesMode7 }
+        help: "ADC_SAMPTR1/2 SMPx[2:0] (RM 12.2.2 item 5, CH32L103RM.md:7864-7887). Cycle counts shown are the ADC_LP=0 (low-power, reset default) column - ADC_LP=1 changes the first five codes' meaning, and nothing in this file's data ever writes ADC_LP (no struct field, no function - it stays at its reset value)."
+      # RM 12.2 (CH32L103RM.md:7825-7852): "TSVREFE position 1 of the ADC_CTLR2 register,
+      # awakening the ADC internal sampling channel" - without it, IN16 (temperature
+      # sensor) and IN17 (Vrefint) do not give a valid reading, confirmed against
+      # ch32l103_adc.c:964-973 (`ADC1->CTLR2 |= CTLR2_TSVREFE_Set`) and the bit's own RM
+      # entry (CH32L103RM.md:8493, reset 0). IN18 (VDDA/2) needs no such enable - the RM
+      # names only the temperature sensor / Vrefint pair for this bit
+      # (CH32L103RM.md:7842-7852 lists all three channels, only the first two under the
+      # TSVREFE note). Not conditional on which channels are ticked - `when:` gates on
+      # another PARAM's value, not a checkboxes setting's choice, so this stays a plain,
+      # always-offered switch the user turns on when IN16 or IN17 is ticked above, off by
+      # default since most configurations use neither.
+      - key: temp_vref_enable
+        name: Temperature sensor / Vrefint enable
+        sdk_call: ADC_TempSensorVrefintCmd
+        sdk_args: [$VALUE]
+        sdk_note: "ADC_CTLR2 TSVREFE, bit 23 (ch32l103_adc.h has no struct field for it - a bare Cmd function, ch32l103_adc.h:192)."
+        type: bool
+        default: false
+        sdk_enabled: ENABLE
+        sdk_disabled: DISABLE
+        help: "Required before IN16 (temperature sensor) or IN17 (Vrefint) give a valid conversion (RM 12.2.2, CH32L103RM.md:7825-7830). Leave off if neither channel is ticked in Channels above; IN18 (VDDA/2) needs no such enable."
     notes: >
-      Analog peripheral: its channels are pins, not alternate functions, so they are
-      modelled as `codegen.analog_signals` rather than as remaps. The DS reserves
-      ADC channels 10 to 12 as internal (temperature, Vrefint, VBAT) on the L103.
-      The channel to pin map is NOT yet extracted - see CH32L103.notes.md, open
-      questions. Nothing here claims a pin, so the figure above is honest about it.
+      12-bit SAR, 10 external channels plus 3 internal ones - DS0.md 1.4.13
+      (CH32L103DS0.md:1072-1079): "up to 10 external channels and 3 internal channel
+      samples... The internal channels of the ADC are ADC_IN16 to ADC_IN18. The
+      temperature sensor is internally connected to the IN16 input channel...; the
+      internal reference voltage is connected to the IN17 input channel; and VDDA/2 is
+      connected to the IN18 input channel." Corrected 2026-09-14 from a stale note that
+      said channels "10 to 12" and named the third one VBAT - neither matched this
+      part's own header (ADC_Channel_16/17/18, ch32l103_adc.h:92-97) or datasheet; the
+      channel-to-pin map for the external ten (below, `remaps:`) already existed and was
+      correctly extracted, contradicting the same stale note's claim that it was not.
+      Its channels are pins, not alternate functions, so the external ten are modelled
+      as `codegen.analog_signals` rather than as remaps; the three internal ones have no
+      pin and are pinless `codegen.channel_macros` entries instead.
 
     remaps:
       - name: Analog channels (no remap - a channel IS the pin)
@@ -14877,6 +14984,17 @@ codegen:
     ADC_InitTypeDef:         { fn: ADC_Init }
     CAN_InitTypeDef:         { fn: CAN_Init }
     LPTIM_TimeBaseInitTypeDef: { fn: LPTIM_TimeBaseInit }
+    # MISSING entirely until 2026-09-14 - a real defect, not cosmetic: with no entry
+    # here at all, `dmaSection()` never emits DMA_Init() OR DMA_Cmd() for a configured
+    # DMA request - a visible TODO ("nothing applies this struct"), confirmed by
+    # generating real C for a configured USART1_TX request. No shipped fixture
+    # configures a live DMA request, so no gate ever exercised the path. Same class of
+    # gap found across all five other shipped parts the same cycle (agents/BOARD.md
+    # 2026-09-14, AGENT-3's CH32H417 finding, then a sweep of the rest) - V006/V003/
+    # X035 had `fn:` but no `cmd:` (a SILENT gap, no TODO at all, since `dmaSection()`
+    # only emits `spec.cmd` `if (spec.cmd)` with no else branch); this part had
+    # neither.
+    DMA_InitTypeDef:           { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32l103_dma.h:168,169,171
     # THE COMPARATORS' STRUCT WAS NEVER APPLIED, and CMP1 has carried `params:` since the
     # part landed - the rows were filled in and then followed by `/* TODO: nothing applies
     # this struct */`, invisible because no fixture switched a comparator on. Modelling
@@ -14922,11 +15040,31 @@ codegen:
       ADC: { lsb: 14, bits: 2, values: { 2: 0, 4: 1, 6: 2, 8: 3 } }
     # PLLMUL[3:0] at bit 18 - only the three the part offers, per RM 3.3.1.
     pllmul: { lsb: 18, bits: 4, values: { 6: 4, 9: 7, 12: 10 } }
+  # Signal name -> SDK macro, for ADC1's `sample` param (sdk_repeat: channels,
+  # ADC_RegularChannelConfig). THIS BLOCK DID NOT EXIST until 2026-09-14, and neither did
+  # the `sample` param it backs - see that row's own comment for the full story: ticking
+  # ANY of ADC1's channels compiled to nothing at all, not even a TODO, because nothing
+  # ever attempted the lookup. ch32l103_adc.h:82-97 defines ADC_Channel_0..9 (external,
+  # IN0..IN9) and ADC_Channel_16/17/18 (internal - temperature sensor, Vrefint, VDDA/2;
+  # the header's own `ADC_Channel_CalInternal` alias for channel 18 is the SDK's name for
+  # it, not the DS's - CH32L103DS0.md:1078-1079 calls it VDDA/2, so that is the display
+  # name used below, same "the datasheet's word, not the header's" choice CH32H417's own
+  # ADC1/ADC2 make for their own two internal channels).
+  channel_macros:
+    ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            IN8: ADC_Channel_8, IN9: ADC_Channel_9,
+            "IN16 (temperature sensor, internal)": ADC_Channel_16,
+            "IN17 (Vrefint, internal)": ADC_Channel_17,
+            "IN18 (VDDA/2, internal)": ADC_Channel_18 }
+
   # Which signals are analog. Read from the DS pin table's own `ADC_IN<n>` main
   # functions by `tools/l103_adc.py`, so the list is exactly the channels the
   # peripheral routes to a pin. The DS model table says "ADC 10+3": the three that
-  # are NOT here are the internal channels (temperature, Vrefint, VBAT) and they
-  # have no pin, which is the repo-wide internal-channel gap recorded in the notes.
+  # are NOT here are the internal channels (temperature sensor, Vrefint, VDDA/2,
+  # CH32L103DS0.md:1078-1079) and they have no pin - modelled above as pinless
+  # `channel_macros` entries instead, same shape as CH32H417/CH32V003/CH32V006's own
+  # internal ADC channels.
   analog_signals:
     ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9]
 
@@ -16870,7 +17008,12 @@ codegen:
     SPI_InitTypeDef:         { fn: SPI_Init }
     I2C_InitTypeDef:         { fn: I2C_Init }
     ADC_InitTypeDef:         { fn: ADC_Init }
-    DMA_InitTypeDef:         { fn: DMA_Init }
+    # `cmd:`/`deinit:` MISSING until 2026-09-14 - a real, SILENT defect, not cosmetic:
+    # DMA_Init() was called and applied but DMA_Cmd() (the channel's EN bit) was never
+    # emitted, no complaint, no shipped fixture ever configured a live request to
+    # exercise it. Same gap found on CH32H417 (agents/BOARD.md 2026-09-14), fixed here
+    # too rather than left for the next person to rediscover per part.
+    DMA_InitTypeDef:         { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32v00x_dma.h:161,162,164
     TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }
     TIM_BDTRInitTypeDef:     { fn: TIM_BDTRConfig }
     # OPA is a SINGLE-INSTANCE peripheral and OPA_Init takes the struct ALONE — there
@@ -16893,11 +17036,23 @@ codegen:
 
   # Signal name -> SDK macro, for a `sdk_repeat: channels` call.
   # ch32v00x_adc.h:67-79 defines ADC_Channel_0..9 with 8 and 9 aliased to
-  # ADC_Channel_Vrefint and ADC_Channel_Vcalint; this part bonds IN0..IN7 and the last
-  # two are internal, which is why the list stops at 7 rather than mirroring the header.
+  # ADC_Channel_Vrefint and ADC_Channel_Vcalint; this part bonds IN0..IN7 externally.
+  #
+  # IN8/IN9 ARE modelled below - they were not until 2026-09-14, even though ADC1's own
+  # `notes:` already cited the exact macros ("ADC_Channel_Vrefint = channel 8 and
+  # ADC_Channel_Vcalint = channel 9, ch32v00x_adc.h:78-79") and the settings choices
+  # ("IN8 (Vrefint, internal)"/"IN9 (Vcalint, internal)") already existed - the citation
+  # was correct and simply never reached this map, so ticking either compiled to a TODO.
+  # Found by `validate_mcu.py`'s new codegen.channel_macros check (added the same cycle,
+  # after the identical gap surfaced on CH32X035's ADC1 and a probe across all six parts
+  # for the same shape named this one too), not by reading this file cold - confirmed
+  # against the header before trusting the existing citation. Numeric spelling, matching
+  # CH32H417/CH32V006/CH32X035's own stated convention on this exact shape.
   channel_macros:
     ADC1: { IN0: ADC_Channel_0, IN1: ADC_Channel_1, IN2: ADC_Channel_2, IN3: ADC_Channel_3,
-            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7 }
+            IN4: ADC_Channel_4, IN5: ADC_Channel_5, IN6: ADC_Channel_6, IN7: ADC_Channel_7,
+            "IN8 (Vrefint, internal)": ADC_Channel_8,
+            "IN9 (Vcalint, internal)": ADC_Channel_9 }
 
   # Which signals want GPIO_Mode_AIN rather than AF_PP. Without this the generator has
   # to guess from the peripheral's category, and it cannot tell ADC1_IN4 from
@@ -19458,7 +19613,17 @@ codegen:
     SPI_InitTypeDef:           { fn: SPI_Init }           # ch32v00X_spi.h:129
     I2C_InitTypeDef:           { fn: I2C_Init }           # ch32v00X_i2c.h:287
     ADC_InitTypeDef:           { fn: ADC_Init }           # ch32v00X_adc.h:156
-    DMA_InitTypeDef:           { fn: DMA_Init }           # ch32v00X_dma.h:162
+    # `cmd:`/`deinit:` MISSING until 2026-09-14 - a real, SILENT defect, not cosmetic:
+    # with `fn:` alone, `DMA_Init()` was called and applied but `DMA_Cmd()` (the
+    # channel's EN bit, DMA_CFGRx bit 0) was never emitted - the struct is configured
+    # and NEVER STARTED. Unlike a missing `fn:` (a visible TODO complaint), a missing
+    # `cmd:` produces NO complaint at all: `dmaSection()` only pushes the `spec.cmd`
+    # line `if (spec.cmd)`, no `else` branch. Confirmed by generating real C for a
+    # configured ADC1 DMA request: 0 conflicts/issues/complaints, `DMA_Init()` present,
+    # `DMA_Cmd()` absent. No shipped fixture configures a live DMA request (ships
+    # disabled, zero requests), so no gate ever exercised this. Found chasing the
+    # identical gap on CH32H417 (agents/BOARD.md 2026-09-14, AGENT-3's finding).
+    DMA_InitTypeDef:           { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32v00X_dma.h:161,162,164
     TIM_TimeBaseInitTypeDef:   { fn: TIM_TimeBaseInit }   # ch32v00X_tim.h:431
     # NOT TIM_TimeBaseInit, and not derivable from the struct name either. The dead-time
     # parameter lives in this struct and only TIM_BDTRConfig applies it.
@@ -21770,6 +21935,37 @@ dma:
 
   init_struct: DMA_InitTypeDef
 
+  # MISSING ENTIRELY until 2026-09-14 - a real defect, not cosmetic: with no
+  # `register:` block, `dmaChannelHandle()` (app/engine/codegen.js) has no
+  # `channel_macro` to build a handle from, so EVERY configured DMA request on this
+  # part emitted a TODO ("dma.register.channel_macro — the SPL name of a channel")
+  # instead of DMA_Init()/DMA_Cmd() - even after the SEPARATE `cmd:` gap below is
+  # fixed, since `if (spec.fn && handle)` needs both. Confirmed by generating real C
+  # for a configured ADC1 request. The `channel_params:` rows below already reference
+  # `field: DIR`/`field: PL`/etc - clearly written expecting this block to exist -
+  # so this was an omission, not a choice. Address and field layout confirmed
+  # against THIS part's own header/RM (DMA1_Channel1_BASE = AHBPERIPH_BASE + 0x0008 =
+  # 0x40020008, ch32x035.h:602,625; offset 0x08 + (x-1)*20, CH32X035RM.md:1492) -
+  # identical to CH32V006's, same family, checked rather than assumed to carry over.
+  register:
+    name: DMA_CFGRx
+    address: 0x40020008
+    stride: 20
+    channel_macro: DMA1_Channel$CH
+    fields:
+      EN:      { lsb: 0,  bits: 1 }
+      TCIE:    { lsb: 1,  bits: 1 }
+      HTIE:    { lsb: 2,  bits: 1 }
+      TEIE:    { lsb: 3,  bits: 1 }
+      DIR:     { lsb: 4,  bits: 1 }
+      CIRC:    { lsb: 5,  bits: 1 }
+      PINC:    { lsb: 6,  bits: 1 }
+      MINC:    { lsb: 7,  bits: 1 }
+      PSIZE:   { lsb: 8,  bits: 2 }
+      MSIZE:   { lsb: 10, bits: 2 }
+      PL:      { lsb: 12, bits: 2 }
+      MEM2MEM: { lsb: 14, bits: 1 }
+
   # Ported from CH32V006 - DMA_InitTypeDef is member-for-member identical between
   # the two families - and re-checked against the X035 headers by verify_sdk_names.
   channel_params:
@@ -22052,7 +22248,12 @@ codegen:
     SPI_InitTypeDef:         { fn: SPI_Init }
     I2C_InitTypeDef:         { fn: I2C_Init }
     ADC_InitTypeDef:         { fn: ADC_Init }
-    DMA_InitTypeDef:         { fn: DMA_Init }
+    # `cmd:`/`deinit:` MISSING until 2026-09-14 - a real, SILENT defect, not cosmetic:
+    # DMA_Init() was called and applied but DMA_Cmd() (the channel's EN bit) was never
+    # emitted, no complaint, no shipped fixture ever configured a live request to
+    # exercise it. Same gap found on CH32H417 (agents/BOARD.md 2026-09-14), fixed here
+    # too rather than left for the next person to rediscover per part.
+    DMA_InitTypeDef:         { fn: DMA_Init, cmd: DMA_Cmd, deinit: DMA_DeInit }   # ch32x035_dma.h:168,169,171
     TIM_TimeBaseInitTypeDef: { fn: TIM_TimeBaseInit }
     TIM_BDTRInitTypeDef:     { fn: TIM_BDTRConfig }
 
@@ -22155,6 +22356,17 @@ codegen:
             IN8: ADC_Channel_8, IN9: ADC_Channel_9, IN10: ADC_Channel_10, IN11: ADC_Channel_11,
             IN12: ADC_Channel_12, IN13: ADC_Channel_13,
             "IN15 (Vrefint, internal)": ADC_Channel_15 }
+
+  # Without this, ADC1's pads get GPIO_Mode_AIN correctly (`category: Analog` +
+  # `pins.<pin>.analog` is a working fallback) but the generated C says so with
+  # "analog mode inferred — add codegen.analog_signals to be certain" on every ADC1 pin -
+  # confirmed by generating C for a throwaway project before writing this. Not a defect
+  # (the mode was already right), just not authoritative - closed while in the file for
+  # the channel_macros fix, since both are the same "declare it, don't let the generator
+  # guess" question. IN15 (Vrefint) is deliberately absent: it has no pin (no `signals:`
+  # entry on its own settings choice), so it is not a signal any GPIO mode applies to.
+  analog_signals:
+    ADC1: [IN0, IN1, IN2, IN3, IN4, IN5, IN6, IN7, IN8, IN9, IN10, IN11, IN12, IN13]
 
 # What this part offers, so no renderer has to know a part name.
 gpio:
@@ -23637,18 +23849,55 @@ function paramsObject(pid) {
 //  Storage is `S.periph[pid].channelParams[<channel>][<key>]`, keyed by the channel
 //  NUMBER the data uses, so nothing here has to parse a setting's display name.
 
-/** The `channel_params` block for a peripheral, or null. */
-function channelParamBlock(pid) {
+/**
+ * Every `channel_params` BLOCK a peripheral has, normalised to a list.
+ *
+ * `peripherals.<pid>.channel_params` stays a single OBJECT, unchanged, on every part
+ * that has one instance axis - CH32H417 LTDC/SAI/OPA and every other shipped
+ * `channel_params` block, and every test against them, are untouched. It may ALSO be
+ * a LIST of blocks, for a peripheral with more than one INDEPENDENT instance axis -
+ * the same "additive widening, old shape still the common case" pattern `dma:`
+ * (single controller OBJECT, or a LIST) and `signal_groups:`/`embed:` already
+ * established. DFSDM is why this exists: `DFSDM_ChannelInit(DFSDM_Channely, &s)` and
+ * `DFSDM_FilterInit(DFSDM_FLTx, &s)` (`DFSDM_RcInit`/`DFSDM_JcInit` alongside it, the
+ * SAME same-handle multi-struct shape SAI's Frame/Slot already use) take DIFFERENT
+ * handles that do not correspond to the same instance number the way an LTDC layer or
+ * a TIM channel's function-vs-handle pair does — forcing them into ONE block gives
+ * `DFSDM_FilterInit` a `DFSDM_Channely` handle, a real type mismatch (AGENT-1, board
+ * 2026-09-14, checked against this exact loop before assuming the existing mechanism
+ * covered it).
+ */
+function channelParamBlocks(pid) {
   const P = (M && M.peripherals && M.peripherals[pid]) || null;
   const cp = P && P.channel_params;
-  if (!cp || typeof cp !== 'object' || !Array.isArray(cp.params)) return null;
-  return cp;
+  if (!cp) return [];
+  const list = Array.isArray(cp) ? cp : [cp];
+  return list.filter(b => b && typeof b === 'object' && Array.isArray(b.params));
 }
 
-/** Its parameter definitions, normalised exactly like `params:` and `dma.channel_params`. */
-function channelParamDefs(pid) {
-  const cp = channelParamBlock(pid);
-  return cp ? normaliseParamDefs(cp.params) : [];
+/** The FIRST (or only) `channel_params` block for a peripheral, or null - every
+ * single-axis caller's own view, unaffected by a second block existing. */
+function channelParamBlock(pid) {
+  return channelParamBlocks(pid)[0] || null;
+}
+
+/**
+ * Its parameter definitions, normalised exactly like `params:` and `dma.channel_params`.
+ *
+ * Pass a specific BLOCK (from `channelParamBlocks()`) to get only THAT axis's own
+ * definitions — what `codegen.js`'s per-instance loop needs, so a filter's fields
+ * never land on a channel's struct or vice versa. With no block, every block's
+ * definitions are concatenated — identical to the single block's own list when
+ * there is only one (every shipped part today), and what a KEY-based lookup
+ * (`setChannelParam`, the UI's generic editor) needs regardless of which axis a key
+ * belongs to. Key names must stay unique across one peripheral's own blocks — the
+ * same "the data says what the silicon allows" rule the rest of this schema follows;
+ * DFSDM's real field names already keep `DFSDM_Ch*` and `DFSDM_Flt*`/`Rc*`/`Jc*`
+ * distinct, so this costs the data nothing to keep true.
+ */
+function channelParamDefs(pid, cpIn) {
+  if (cpIn) return normaliseParamDefs(cpIn.params);
+  return channelParamBlocks(pid).flatMap(cp => normaliseParamDefs(cp.params));
 }
 
 const chanDefOf = (pid, key) => channelParamDefs(pid).find(d => d.key === key);
@@ -23686,8 +23935,8 @@ const chanDefOf = (pid, key) => channelParamDefs(pid).find(d => d.key === key);
  * number are also why one map is better: a channel present in one and absent from the
  * other is silently half-defined today.
  */
-function paramInstances(pid) {
-  const cp = channelParamBlock(pid);
+function paramInstances(pid, cpIn) {
+  const cp = cpIn || channelParamBlock(pid);
   if (!cp) return [];
   const rows = new Map();
   const at = n => rows.get(n) || rows.set(n, { n, fn: null, handle: null, setting: null, activeChoices: null }).get(n);
@@ -23723,15 +23972,23 @@ function paramInstances(pid) {
   return [...rows.values()].sort((a, b) => a.n - b.n);
 }
 
-/** The noun this block repeats over — "channel" unless the data says otherwise. */
-const instanceNoun = pid => {
-  const cp = channelParamBlock(pid);
+/** The noun a block repeats over — "channel" unless the data says otherwise. With no
+ * block, the FIRST block's noun (every single-axis caller's existing contract). */
+const instanceNoun = (pid, cpIn) => {
+  const cp = cpIn || channelParamBlock(pid);
   return (cp && cp.applies_per) || 'channel';
 };
 
-/** The channel numbers this peripheral's data describes, in order. */
+/** The instance numbers this peripheral's data describes, across EVERY block, in
+ * order - what `setChannelParam` validates a channel/instance number against. Two
+ * blocks naming the same number (DFSDM's Channel 0 and Filter 0) is not a collision
+ * here: the STORE is keyed by (number, key), and key names stay unique per block
+ * (see `channelParamDefs()`), so the two axes' values share the slot without either
+ * overwriting the other. */
 function channelNumbers(pid) {
-  return paramInstances(pid).map(r => r.n);
+  const out = new Set();
+  for (const cp of channelParamBlocks(pid)) for (const r of paramInstances(pid, cp)) out.add(r.n);
+  return [...out].sort((a, b) => a - b);
 }
 
 /**
@@ -23755,11 +24012,11 @@ function activeChannels(pid) {
  * display string; so the block reports what it is short of and the generator turns that
  * into a named TODO rather than emitting an init for a channel nobody configured.
  */
-function activeInstances(pid) {
-  const cp = channelParamBlock(pid);
+function activeInstances(pid, cpIn) {
+  const cp = cpIn || channelParamBlock(pid);
   if (!cp) return { instances: [], missing: null, noun: 'channel' };
-  const noun = instanceNoun(pid);
-  const rows = paramInstances(pid);
+  const noun = instanceNoun(pid, cp);
+  const rows = paramInstances(pid, cp);
   const undescribed = rows.filter(r => !r.setting);
   // NOTHING in the block says which setting decides an instance. This is round 4's E2,
   // open on TASKS.md and the reason the per-channel emitter was parked in the first
@@ -23824,10 +24081,12 @@ function channelParamDefaults(pid) {
   return out;
 }
 
-/** Everything a per-channel editor needs for one channel. */
-function getChannelParams(pid, channel) {
+/** Everything a per-channel editor needs for one channel. Pass the BLOCK (from
+ * `channelParamBlocks()`) to list only that axis's own fields - what the UI needs so
+ * "Filter 0"'s group does not also show Channel 0's fields under the same number. */
+function getChannelParams(pid, channel, cpIn) {
   const store = ((S.periph[pid] || {}).channelParams || {})[channel] || {};
-  return channelParamDefs(pid).map(d => ({
+  return channelParamDefs(pid, cpIn).map(d => ({
     ...d,
     value: store[d.key] !== undefined ? store[d.key] : d.default,
     // `channel` IS the instance number here - without it, an `instance_setting`
@@ -24646,6 +24905,43 @@ function dmaState() {
     channels, enabled: controllers.length === 1 ? enabledControllers.includes(controllers[0].controller) : enabledControllers.length > 0,
     enabledControllers, issues,
   };
+}
+
+/**
+ * Per-channel state for a MUX controller — the crossbar equivalent of `dmaState()`'s
+ * fixed-table `channels` map, which `dmaState()` deliberately skips for a `mux:`
+ * controller (`if (!d.requests) continue;`, above): a crossbar channel's set of LEGAL
+ * requests is not a small, fixed list worth enumerating (it is the WHOLE shared
+ * catalogue, every channel, `dmaLegalChannels()`'s own doc-comment), so what is worth
+ * showing per channel is not "what it could carry" but what it ACTUALLY carries.
+ *
+ * That is not simply "the configured request, or nothing": DMAMUX's `CHANNELx_MUX`
+ * field is 0-INDEXED (RM:13209-13228, "0000000: DMA request input 1") and
+ * `ch32h417_dma.c:625` writes `DMA_Requestx - 1` into it, so an UNCONFIGURED channel's
+ * register reads its RESET value, 0 — which decodes back to request ID 1, not "no
+ * request routed". Rendering an unconfigured channel as empty would claim the silicon
+ * does something it does not (main, board 2026-09-14, the same fact AGENT-1 used to
+ * confirm codegen's mux-before-struct-fill ordering is SAFER than the vendor's own).
+ * `resetRequest` names that ID-1 request so the overview can say so honestly, and
+ * `resetLive` says whether ITS OWN owner happens to be switched on right now — the
+ * exact condition under which an "unconfigured" channel is not actually idle.
+ */
+function dmaMuxChannels(controller) {
+  if (!controller || !controller.mux) return [];
+  const base = controller.mux.base || 0, count = controller.mux.count || 0;
+  const catalogue = muxCatalogue(controller);
+  let resetRequest = null;
+  for (const [name, id] of Object.entries(catalogue)) if (Number(id) === 1) { resetRequest = name; break; }
+  const resetOwner = resetRequest ? requestOwner(resetRequest) : null;
+  const resetLive = !!(resetOwner && M.peripherals[resetOwner] && isEnabled(resetOwner));
+  const configuredByChannel = {};
+  for (const r of dmaRequests()) (configuredByChannel[r.channel] ||= []).push(r);
+  const out = [];
+  for (let i = 1; i <= count; i++) {
+    const channel = String(base + i);
+    out.push({ channel, configured: configuredByChannel[channel] || [], resetRequest, resetOwner, resetLive });
+  }
+  return out;
 }
 
 // =============================================================================
@@ -28299,12 +28595,25 @@ function initPlan(pid) {
   // its `fn:` comes from `codegen.init_structs.<that struct>.fn` - the same global table
   // every non-channel struct already uses - rather than from the per-instance `sdk_call`
   // table, which is the primary struct's mechanism and stays exactly as it was.
-  const cbl = channelParamBlock(pid);
-  if (cbl && cbl.struct) {
-    const plan = activeInstances(pid);
+  //
+  // ONE BLOCK, OR MORE THAN ONE INDEPENDENT AXIS. `channel_params` may be a single
+  // block (every peripheral above) or a LIST of blocks (`channelParamBlocks()`,
+  // params.js) - DFSDM's proven case: `DFSDM_FilterInit`/`RcInit`/`JcInit` take a
+  // `DFSDM_FLTx` handle that has NOTHING to do with the `DFSDM_Channely` handle
+  // `DFSDM_ChannelInit` takes, and "filter 0" is not "channel 0" wearing a different
+  // hat - two genuinely separate instance axes, not one axis two functions disagree
+  // about. Looping over every block gives each its OWN `activeInstances()`/
+  // `channelParamDefs()` call, scoped to THAT block alone (never the union), so a
+  // filter's fields can never land on a channel's struct or vice versa - the exact
+  // trap AGENT-1 checked for before assuming the single-block mechanism already
+  // covered it (board 2026-09-14): forcing DFSDM through one block gives
+  // `DFSDM_FilterInit` a `DFSDM_Channely` handle, a real type mismatch.
+  for (const cbl of channelParamBlocks(pid)) {
+    if (!cbl.struct) continue;
+    const plan = activeInstances(pid, cbl);
     if (plan.missing) problems.push(plan.missing);
     if (plan.note) notes.push(plan.note);
-    const chanDefs = channelParamDefs(pid);
+    const chanDefs = channelParamDefs(pid, cbl);
     for (const inst of plan.instances) {
       const byStruct = new Map();
       const primary = {
@@ -28371,10 +28680,33 @@ function initPlan(pid) {
  *     $RANK     1-based position in that repeat
  *     $INDEX    0-based position in that repeat
  * Anything else, or a placeholder that cannot be filled, becomes a TODO naming it.
+ *
+ * $VALUE is not always there to resolve. `HSADC_ChannelConfig(uint8_t HSADC_Channel)`
+ * (ch32h417_hsadc.h:101) takes the channel ALONE — the SELECTION is the whole
+ * configuration, unlike `ADC_RegularChannelConfig`'s trailing sample-time argument,
+ * which is a real per-channel VALUE. `paramLiteral()` used to run unconditionally, so a
+ * param with this shape (no `type:`/`default:`/`options:` — there is nothing for a user
+ * to set) failed "no value" before ever reaching the repeat logic below, even though
+ * `$VALUE` never appeared in its own `sdk_args`. Resolved only when the data's own
+ * `sdk_args` actually reference `$VALUE`, so every EXISTING `sdk_call:` row (all of
+ * which do) is unaffected — checked directly: `sdk_repeat emits one call per ticked
+ * channel, in rank order` (app/tests/codegen.test.js) passes unchanged.
+ *
+ * main's own finding, checked against the real header and the real EVT example before
+ * building this (`ch32h417_hsadc.c:184-188`, `HSADC->CFGR &= ~HSADC_CHSEL; CFGR |=
+ * Channel << 2`): this call OVERWRITES the channel-select field, and the one real
+ * example (`Evt/EXAM/HSADC/HSADC/Common/hardware.c:51`) calls it EXACTLY ONCE. It is
+ * not a scan sequence with no rank field — it is a single-channel selector, full stop.
+ * `sdk_repeat: channels` against a `type: checkboxes` (multi-select) setting would
+ * silently keep only the LAST ticked channel, exactly the "plausible-looking wrong
+ * code" this generator exists to refuse — flagged to AGENT-1 on the board, not solved
+ * by this function, because whether `HSADC`'s `Channels` setting should be single-
+ * choice instead is a DATA question this mechanism does not and should not decide.
  */
 function sdkCalls(pid, d, handle) {
-  const lit = paramLiteral(pid, d);
   const args = Array.isArray(d.sdk_args) ? d.sdk_args : null;
+  const needsValue = !!args && args.map(String).includes('$VALUE');
+  const lit = needsValue ? paramLiteral(pid, d) : null;
   // `sdk_call_order: before_structs` — most `sdk_call:` rows are an ordinary
   // "set this one thing", order-independent, so the default and the ONLY behaviour
   // before this existed is unchanged: every call after every struct block. But some
@@ -28391,10 +28723,12 @@ function sdkCalls(pid, d, handle) {
   // peripheral is filled and applied; anything else keeps today's order, unchanged.
   const order = d.sdk_call_order === 'before_structs' ? 'before' : 'after';
   const base = {
-    key: d.key, name: d.name, fn: d.sdk_call, value: paramValue(pid, d.key), note: d.sdk_note || '', order,
+    key: d.key, name: d.name, fn: d.sdk_call,
+    value: needsValue ? paramValue(pid, d.key) : undefined,
+    note: d.sdk_note || '', order,
   };
   if (!args) return [{ ...base, missing: 'the MCU file gives no sdk_args, so the argument list is unknown' }];
-  if (lit.missing) return [{ ...base, missing: lit.missing }];
+  if (needsValue && lit.missing) return [{ ...base, missing: lit.missing }];
 
   // One call per selected channel, or exactly one call.
   let repeats = [null];
@@ -28536,11 +28870,20 @@ function structGroups(structs) {
  * before/after split — a helper now only so the same rendering runs from both call
  * sites and cannot drift between them. */
 function emitCall(c, L) {
+  // `c.value` is `undefined` for a call whose whole configuration IS the call itself
+  // (HSADC_ChannelConfig(channel) — no separate value, see sdkCalls()'s own doc-comment)
+  // — printed as "undefined" here would be the exact class of defect the clock summary
+  // report shipped earlier this cycle (main's finding, 2026-09-14): a literal `undefined`
+  // reaching a comment a user reads. Each branch keeps its own pre-existing separator
+  // (`:` on the applied line, `=` on the TODO) exactly as it read before — only the
+  // no-value case is new.
   if (c.text) {
-    L.push(`    ${c.text}   /* ${c.name}: ${c.value}${c.channel ? ` on ${c.channel}` : ''} */`);
+    const detail = c.value !== undefined ? `${c.name}: ${c.value}` : c.name;
+    L.push(`    ${c.text}   /* ${detail}${c.channel ? ` on ${c.channel}` : ''} */`);
     return;
   }
-  L.push(`    /* TODO: ${c.name} = ${c.value} is applied by ${c.fn}(), not by an init struct,`);
+  const detail = c.value !== undefined ? `${c.name} = ${c.value}` : c.name;
+  L.push(`    /* TODO: ${detail} is applied by ${c.fn}(), not by an init struct,`);
   L.push(`       and ${c.missing}. */`);
   if (c.note) L.push(`    /* ${c.note} */`);
 }
@@ -30261,6 +30604,10 @@ function projectZip() {
   </div>
 </div>
 
+<!-- Print pinout target — see the #print-pinout rule above for why this is filled
+     from pinoutSvg()'s own output rather than re-rendered. -->
+<div id="print-pinout"></div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <!-- What a pin is, on hover. The SVG `<title>` above still carries the same words for
      the keyboard and for a screen reader; this is the readable version of it, because a
@@ -31806,8 +32153,11 @@ function renderCentre() {
     el.onchange = () => { setSignalPin(pid, el.dataset.afsig, el.value); renderAll(); });
 
   // The DMA controller's own entry is the one place that shows all its channels at
-  // once, so the overview hangs off it whatever tabs it happens to have.
-  const isDmaCtl = !!(M.dma && pid === M.dma.controller);
+  // once, so the overview hangs off it whatever tabs it happens to have. `M.dma` may be
+  // a single controller OBJECT or a LIST of them (CH32H417's two) - `dmaControllers()`
+  // is the one place that normalises either shape, so this reads the same regardless
+  // of how many controllers the part has, and finds the ONE this peripheral page IS.
+  const dmaCtl = (typeof dmaControllers === 'function' ? dmaControllers() : []).find(d => d.controller === pid);
   // With no tabs there is nothing to put here, and an empty panel under a "Configuration"
   // heading reads as something failing to load. Say where the peripheral's settings
   // actually are instead - which for most of these is the Mode panel just above.
@@ -31818,19 +32168,35 @@ function renderCentre() {
     : ctab === 'param' ? paramTable(pid)
       : ctab === 'nvic' ? nvicTable(nvicVectorsOf(pid), { showOwner: false })
         : ctab === 'dma' ? dmaTable(pid)
-          : isDmaCtl ? '' : nothing;
-  if (isDmaCtl) body.innerHTML += dmaChannelTable();
+          : dmaCtl ? '' : nothing;
+  if (dmaCtl) body.innerHTML += dmaChannelTable(dmaCtl);
 }
 
-// ---- DMA1 in System Core: every channel, what can use it, and what is on it ----
+// ---- a DMA controller in System Core: every channel, what can use it, and what is
+// on it ------------------------------------------------------------------------
 // `dmaState()` is the same engine call the shared-resource warnings come from and
 // `dmaConflicts()` is the hard "two requests, one channel" list, so this table and the
 // banners above it cannot disagree. Configuring a request is the DMA Settings tab on its
 // peripheral; this is the one place that shows every channel at once.
-function dmaChannelTable() {
-  const d = M.dma;
-  if (!d || !d.requests) return '';
+//
+// Two shapes, because a fixed-table channel and a crossbar channel answer a different
+// question. A fixed-table channel's legal requests are a small, silicon-wired list -
+// "what CAN this channel carry" is worth enumerating. A `mux:` channel can carry ANY
+// of its controller's whole shared catalogue (`dmaLegalChannels()`'s own doc-comment),
+// so the honest question is "what DOES it carry" - the configured request, or, for one
+// nothing was configured on, the crossbar's own 0-indexed reset default
+// (`dmaMuxChannels()`, resources.js) rather than a blank cell implying "nothing routed"
+// when the silicon disagrees.
+function dmaChannelTable(controller) {
+  const d = controller;
+  if (!d) return '';
+  return d.mux ? dmaMuxChannelTable(d) : dmaFixedChannelTable(d);
+}
+
+function dmaFixedChannelTable(d) {
+  if (!d.requests) return '';
   const st = hasDmaState() ? dmaState() : null;
+  const stCh = st && st.channels;
   const defs = d.request_defaults || {};
   const owner = r => (M.peripherals[r] ? r : String(r).split('_')[0]);
   const configured = {};                    // channel -> the requests the USER configured
@@ -31840,7 +32206,7 @@ function dmaChannelTable() {
   const rows = [];
   for (let ch = 1; ch <= (d.channels || Object.keys(d.requests).length); ch++) {
     const list = d.requests[ch] || d.requests[String(ch)] || [];
-    const live = (st && st.channels[ch]) ? st.channels[ch].live : [];
+    const live = (stCh && stCh[ch]) ? stCh[ch].live : [];
     const mine = (configured[String(ch)] || []).map(r => r.request);
     const cells = list.map(r => {
       const o = owner(r);
@@ -31858,7 +32224,8 @@ function dmaChannelTable() {
         : mine.length ? esc([...new Set((configured[String(ch)] || []).map(r => r.owner))].join(', '))
           : '<span class="ro">—</span>'}</td></tr>`);
   }
-  const off = st && !st.enabled
+  const on = typeof isEnabled === 'function' && d.controller ? isEnabled(d.controller) : true;
+  const off = !on
     ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing here reaches the generated code yet. Switch it on in its Mode panel above.</div>` : '';
   return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — what each channel can carry, and what is configured on it.`
     + ` Configure a request on its peripheral's <b>DMA Settings</b> tab. A channel with two configured requests is outlined`
@@ -31866,6 +32233,53 @@ function dmaChannelTable() {
     + `<table class="dmach"><thead><tr><th>Channel</th><th>Requests this channel can carry</th><th>Configured</th></tr></thead>`
     + `<tbody>${rows.join('')}</tbody></table>`;
 }
+
+// The crossbar shape: any of the whole shared catalogue on any channel, so what is
+// shown is what is ACTUALLY on the channel right now - configured, or the honest
+// reset default (see dmaMuxChannels()'s own doc-comment for why that is not "empty").
+function dmaMuxChannelTable(d) {
+  if (typeof dmaMuxChannels !== 'function') return '';
+  const rows_ = dmaMuxChannels(d);
+  if (!rows_.length) return '';
+  const clash = {};
+  if (hasDmaConflicts()) for (const c of dmaConflicts()) clash[String(c.channel)] = c;
+  const rows = rows_.map(r => {
+    const c = clash[r.channel];
+    let cell, owners;
+    if (c) {
+      cell = `<b class="clashowners">${esc(c.owners.join(' + '))}</b>`;
+      owners = c.owners.join(' + ');
+    } else if (r.configured.length) {
+      cell = r.configured.map(x => {
+        const link = M.peripherals[x.owner] ? `<a data-goto="${attr(x.owner)}" title="Go to ${attr(x.owner)}">${esc(x.request)}</a>` : esc(x.request);
+        const dir = dmaParamValue(x.id, 'dir');
+        return `<span class="dreq used" title="${attr(`${x.request} — owner ${x.owner}, configured on this channel${dir ? `, direction ${dir}` : ''}`)}">${link}${dir ? `<small>${esc(dir)}</small>` : ''}</span>`;
+      }).join('');
+      owners = [...new Set(r.configured.map(x => x.owner))].join(', ');
+    } else {
+      const link = r.resetOwner && M.peripherals[r.resetOwner]
+        ? `<a data-goto="${attr(r.resetOwner)}" title="Go to ${attr(r.resetOwner)}">${esc(r.resetRequest)}</a>` : esc(r.resetRequest || '?');
+      const why = r.resetLive
+        ? `nothing is configured on this channel, so it is still at the crossbar's power-on default — DMAMUX's mux field is 0-indexed and resets to 0, which IS request ${esc(r.resetRequest)} — and ${esc(r.resetOwner)} is switched on right now, so this is a live, unconfigured route`
+        : `nothing is configured on this channel, so it is still at the crossbar's power-on default — DMAMUX's mux field is 0-indexed and resets to 0, which IS request ${esc(r.resetRequest)} — ${esc(r.resetOwner || 'its owner')} is off, so nothing actually fires today`;
+      cell = `<span class="dreq unrouted${r.resetLive ? ' on' : ''}" title="${attr(why)}">${link}<small>reset default${r.resetLive ? ', LIVE' : ''}</small></span>`;
+      owners = '<span class="ro">—</span>';
+    }
+    return `<tr class="${c ? 'clash' : r.configured.length ? 'used' : r.resetLive ? 'on' : ''}"${c ? ` title="${attr(c.text)}"` : ''}>`
+      + `<td>${r.channel}</td><td>${cell}</td><td>${c ? `<b class="clashowners">${esc(c.owners.join(' + '))}</b>` : owners}</td></tr>`;
+  });
+  const on = typeof isEnabled === 'function' && d.controller ? isEnabled(d.controller) : true;
+  const off = !on
+    ? `<div class="paramhead">${esc(d.controller)} is switched off, so nothing here reaches the generated code yet. Switch it on in its Mode panel above.</div>` : '';
+  return `<div class="paramhead"><b>${esc(d.controller)} channels</b> — any of ${Object.keys(muxCatalogue_(d)).length || '?'} requests can be routed to`
+    + ` any channel through the DMAMUX crossbar, so this shows what each channel ACTUALLY carries: configured, or the crossbar's own`
+    + ` power-on default — an unconfigured channel is NOT "no request", it reads as request 1 until something else is routed there`
+    + ` (RM ch.10; a channel marked <b>reset default, LIVE</b> has that default request's own owner switched on right now).`
+    + ` Configure a request on its peripheral's <b>DMA Settings</b> tab.</div>${off}`
+    + `<table class="dmach"><thead><tr><th>Channel</th><th>What's actually routed</th><th>Owner</th></tr></thead>`
+    + `<tbody>${rows.join('')}</tbody></table>`;
+}
+const muxCatalogue_ = d => (d.mux && d.mux.requests) || {};
 
 // ---- DMA Settings, per peripheral ---------------------------------------------
 //
@@ -32111,7 +32525,7 @@ function paramRowNote(r) {
 const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object' ? String(o.name) : String(o)));
 
 /**
- * The per-INSTANCE rows: one group of editors for each live channel or layer.
+ * The per-INSTANCE rows: one group of editors for each live channel, layer or block.
  *
  * `channel_params` fills one struct once per instance (`app/engine/params.js`), and until
  * now it had NO editor anywhere in this page — so the generator would have emitted values
@@ -32121,18 +32535,30 @@ const paramOptions = d => (d.options || []).map(o => (o && typeof o === 'object'
  * Only LIVE instances are shown. An instance whose setting is off has no struct emitted
  * for it, so an editor for it would be a control with no effect — the same rule the GPIO
  * table's pull column follows.
+ *
+ * A peripheral may have MORE THAN ONE independent instance axis (`channelParamBlocks()`
+ * - DFSDM's proven case: Channel 0/1 and Filter 0/1 are two genuinely different axes,
+ * not one number meaning two things). Looped per block so "Filter 0"'s group shows only
+ * the filter's own fields, never a channel field with the same instance number attached.
  */
 function instanceGroups(pid) {
-  if (typeof activeInstances !== 'function' || typeof getChannelParams !== 'function') return [];
-  let plan;
-  try { plan = activeInstances(pid); } catch (e) { console.error('activeInstances', pid, e); return []; }
-  const noun = plan.noun || 'channel';
-  const title = noun.charAt(0).toUpperCase() + noun.slice(1);
-  return plan.instances.map(inst => {
-    let rows = [];
-    try { rows = getChannelParams(pid, inst.n) || []; } catch (e) { console.error('getChannelParams', pid, e); }
-    return { n: inst.n, name: `${title} ${inst.n}`, rows };
-  }).filter(g => g.rows.length);
+  if (typeof channelParamBlocks !== 'function' || typeof activeInstances !== 'function'
+    || typeof getChannelParams !== 'function') return [];
+  let blocks = [];
+  try { blocks = channelParamBlocks(pid); } catch (e) { console.error('channelParamBlocks', pid, e); return []; }
+  const groups = [];
+  for (const cbl of blocks) {
+    let plan;
+    try { plan = activeInstances(pid, cbl); } catch (e) { console.error('activeInstances', pid, e); continue; }
+    const noun = plan.noun || 'channel';
+    const title = noun.charAt(0).toUpperCase() + noun.slice(1);
+    for (const inst of plan.instances) {
+      let rows = [];
+      try { rows = getChannelParams(pid, inst.n, cbl) || []; } catch (e) { console.error('getChannelParams', pid, e); }
+      if (rows.length) groups.push({ n: inst.n, name: `${title} ${inst.n}`, rows });
+    }
+  }
+  return groups;
 }
 
 function paramRows(pid) {
@@ -33479,9 +33905,16 @@ function renderPmCode(file, flags) {
   const errs = Object.values(marks).filter(k => k === 'error').length;
   const todos = Object.values(marks).filter(k => k === 'todo').length;
   const lines = file.text.split('\n');
+  // Print is offered for the pinout SVG alone - §7 P2's last item, and only because it
+  // can reuse pinoutSvg()'s own output unmodified. Nothing else generateAll() emits is
+  // an image; printing the .c/.h/.md/.csv files the way a browser prints TEXT would be
+  // a second, unrelated feature, not this one.
+  const printable = /_pinout\.svg$/.test(file.path);
   head.innerHTML = `<b>${esc(file.path)}</b><span>${lines.length} lines · ${esc(file.language)}</span>`
-    + `<div class="spacer"></div><button id="pm-copy">Copy</button>`;
+    + `<div class="spacer"></div>${printable ? '<button id="pm-print">Print</button>' : ''}<button id="pm-copy">Copy</button>`;
   head.querySelector('#pm-copy').onclick = () => pmCopy(file);
+  const printBtn = head.querySelector('#pm-print');
+  if (printBtn) printBtn.onclick = () => printPinout(file);
   const note = errs ? `<div class="pmnote bad">${errs} <code>#error</code> line${errs === 1 ? '' : 's'} — <b>this file will not compile as it stands.</b>`
     + ` The generator says so rather than emitting code for a configuration it cannot express. The line${errs === 1 ? ' is' : 's are'} marked below.</div>`
     : todos ? `<div class="pmnote warn">${todos} TODO section${todos === 1 ? '' : 's'} — the generator could not work something out and said so instead of emitting plausible-looking bits.`
@@ -33526,6 +33959,25 @@ function pmCopyFallback(file, done) {
   try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
   ta.remove();
   ok ? done() : toast('Could not copy — select the text and copy it yourself');
+}
+
+/**
+ * §7 P2's last item — the print view. `file.text` here IS `pinoutSvg()`'s own output:
+ * the identical string `generateAll()` already put in the Project Manager's file list,
+ * dropped into `#print-pinout` unmodified. Not a second renderer — the live canvas
+ * (`renderChip()`/`exportSvg()`) measures real glyph widths off a rendered `<text>` and
+ * reads the page's own `var(--x)` colours, neither of which a print stylesheet can rely
+ * on holding still; `pinoutSvg()` is the one renderer that was ALREADY self-styled and
+ * headless-safe for exactly this reason (see its own doc-comment, app/engine/export.js).
+ * `window.print()` is absent from jsdom (`tests/lib/app.js` filters the resulting
+ * "Not implemented" jsdomError as noise, not a real problem), so it is called only when
+ * the browser actually has it - never a silent no-op mistaken for "nothing to print".
+ */
+function printPinout(file) {
+  const box = document.getElementById('print-pinout');
+  if (!box) return;
+  box.innerHTML = `<h1>${esc(M.mcu.name)} — ${esc(S.pkg)} pinout</h1>${file.text}`;
+  if (typeof window.print === 'function') window.print();
 }
 
 // ---- the ZIP writer, which lives in the engine --------------------------------
