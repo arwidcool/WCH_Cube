@@ -710,15 +710,70 @@ RM's worked example, or it does not ship.
   fixed (the SELECTED row was WORSE contrast than unselected — 3.54:1/2.81:1, now 5.14/5.49:1;
   a dark-theme-only badge combo at 2.37:1, now 6.08:1). Contract for AGENT-3's planted-break
   sweep posted to `agents/BOARD.md` 20:45Z — not written by me, `tests/**` is not mine.
-- **Next (manager's order)** — §7 P1: project diff between two `.wchproj` files.
-- **Idle-after-P1** — §7 P2 (pinout SVG export, print view, KiCad CSV); USBHS_PLL's other three
-  inputs (§2 D REQUEST from AGENT-1, 01:14Z), item 7 and item 2's data halves (AGENT-1/AGENT-3),
-  once anyone answers.
+- **§7 P1** — ~~project diff between two `.wchproj` files~~ **done** (`23323ca`).
+- **A per-package default for `signal_groups:`** — ~~QFN68/UHSIF bonded to nothing at the index-0
+  default~~ **done, this cycle.** See Current below.
+- **§7 P2, part one: the KiCad symbol pin CSV** — ~~the owner's literal deliverable~~ **done, this
+  cycle.** See Current below.
+- **Next (manager's order)** — §7 P2, part two: the pinout SVG export; print view only if that
+  lands cleanly.
+- **Idle-after-that** — USBHS_PLL's other three inputs (§2 D REQUEST from AGENT-1, 01:14Z), item 7
+  and item 2's data halves (AGENT-1/AGENT-3), once anyone answers; `sdk_manual:`'s render check
+  once AGENT-1 lands the USB declarations.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: §7 P1, the project diff between two `.wchproj` files.
-- Gates last run: see Current below, at the tree's HEAD this cycle produced.
+- Next step if I stop here: §7 P2 part two, the pinout SVG export. Constraints carry over
+  unchanged from the CSV: state the package, include `remap_unwritable:` planning-only pins
+  (reuse `unwritableRemaps()` from `app/engine/codegen.js`), and prove it round-trips or at least
+  that every claimed pin appears, the same way `app/tests/export.test.js`'s new KiCad tests do.
+- Gates last run: `node tests/run.js "export.test"` 32/32, `"pinmap"` 8/8, `"signal_groups"`
+  13/13, `"app/tests"` (the full engine suite) 560/560, `python tools/validate_mcu.py` 0
+  errors/73 warnings, `python tools/verify_sdk_names.py` 0/0 — all at this cycle's HEAD. No
+  `python build.py` run this cycle (no engine behaviour changed, only new tests over code my
+  predecessor had already built and I re-verified by reading the diff, not by trusting its
+  description).
+
+**Current — 2026-09-14, cycle 5. Resumed after a predecessor was killed by a rate limit mid-task;
+verified its uncommitted work by reading the diffs and running the tests myself, then closed the
+one real gap in it before committing.**
+
+- **Verified, not trusted: `node --check` on every touched engine file, plus the barrel import
+  (`app/engine/index.js` re-exports `export.js`, so `eng.kicadPinCsv()` reaches the test harness
+  with no extra wiring) — clean, then ran the actual test suites rather than stopping at "it
+  parses."**
+- **Item 2 (a per-package default for `signal_groups:`) was already fully built and already had
+  both required tests** (explicit choice beats the package default; the default does not survive
+  onto a package that lacks it, checked in both directions on a live package switch) — read the
+  mechanism in `app/engine/model.js:319` (`groupDefaultIndex()`), confirmed it is read inside
+  `signalPins()` only when a signal has no stored explicit pin (so it cannot outrace
+  `remaps:`-style write-on-switch), and left it as landed. Nothing to add.
+- **Item 3 (the KiCad CSV) was built but its three stated constraints were only two-thirds
+  tested** — the code already stated the package in a header comment and already marked
+  `remap_unwritable:` pins "planning only" via `unwritableRemaps()` (a function my predecessor
+  had already hoisted out of `codegen.js`'s `gpioSection()` for exactly this reuse), but no test
+  read the CSV back, and no test exercised the planning-only marking at all. **Both closed**:
+  `app/tests/export.test.js` gained a quote-aware CSV line parser and two tests — one round-trips
+  an assigned pin's signal/label/name through the exported CSV and checks the header names the
+  part AND the package, the other proves a `remap_unwritable:` pin (the same fixture shape
+  `app/tests/resources.test.js` already uses for the codegen side of this mechanism) is exported
+  rather than dropped, with its Notes column saying so. **Both seen red on a planted break before
+  being trusted**: zeroing `pinRows()`'s `planningOnly` flag failed the planning-only test;
+  stripping the part/package out of the header comment failed the round-trip test. Restored,
+  green. `node tests/run.js "export.test"` 32/32 (was 30/30 before my two additions).
+- **What I did not need to touch**: `app/engine/model.js`, `app/engine/codegen.js`,
+  `app/engine/export.js`'s actual mechanism, `app/tests/pinmap.test.js`,
+  `app/tests/signal_groups.test.js` — all my predecessor's, all read line-by-line, none needed a
+  fix. The only real gap was test coverage, not behaviour.
+- **`data/FORMAT.md`'s `signal_groups:` section is now stale** — it still says "every member
+  defaults to index 0 together" with no mention of `remap_by_package`. Not mine to edit
+  (AGENT-1's file); flagged on `agents/BOARD.md`.
+
+Red, and who owns it: **nothing.** `dist/index.html` in the working tree already reflects the
+mechanism (my predecessor rebuilt it before stopping) but I did not rebuild again — nothing under
+my ownership changed behaviour this cycle, only test coverage, so a rebuild would have been pure
+waiting and would have re-baked AGENT-1's own uncommitted `data/mcus/CH32H417.yaml` into a build I
+have no reason to ship under my own commit.
 
 **Current — 2026-09-13, cycle 4. §7's first item: the tree by keyboard, and two contrast bugs
 nobody had measured.**

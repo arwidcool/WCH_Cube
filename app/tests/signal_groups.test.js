@@ -21,6 +21,11 @@
 // nested_structs.test.js and struct_call_arg.test.js use.
 import { test, assert, fresh, eng } from './_harness.js';
 
+// Two packages sharing the same six pads, so a package-dependent default can be
+// tested without any bonding differences confusing the result - QFN8B exists ONLY to
+// carry `remap_by_package`'s override, exactly the shape CH32H417 UHSIF needs on
+// QFN68 (RM's own mapping wants index 1 there, not the index-0 default every other
+// package gets).
 const PART = `
 mcu:
   name: SIGGRP-TEST
@@ -30,6 +35,13 @@ mcu:
     A8: { package: QFN8, flash_kb: 64, sram_kb: 8, temp: 85, io_count: 8 }
 packages:
   QFN8:
+    1: PA0
+    2: PA1
+    3: PA2
+    4: PA3
+    5: PA4
+    6: PA5
+  QFN8B:
     1: PA0
     2: PA1
     3: PA2
@@ -62,9 +74,14 @@ peripherals:
       CLK: [{ pin: PA4, af: 1 }, { pin: PA5, af: 1 }]
     signal_groups:
       - signals: [P0, P1]
+        remap_by_package: { QFN8B: 1 }
 `;
 
-const load = () => { fresh('CH32V006'); eng.loadMcu(PART); eng.setSetting('U', 'Mode', 'Enabled'); };
+const load = (pkg) => {
+  fresh('CH32V006'); eng.loadMcu(PART);
+  if (pkg) eng.setPackage(pkg);
+  eng.setSetting('U', 'Mode', 'Enabled');
+};
 
 test('a grouped signal defaults to index 0, uniformly across the group', () => {
   load();
@@ -154,4 +171,49 @@ test('the conflict engine sees the moved pins for real - the freed pin is free, 
   const r = eng.compute();
   assert.equal(r.pins.PA2.claims.some(c => c.who === 'U'), true, 'PA2 is genuinely claimed now');
   assert.equal(((r.pins.PA0 || {}).claims || []).some(c => c.who === 'U'), false, 'PA0 is genuinely freed, not double-claimed');
+});
+
+// ---- signal_groups: remap_by_package — main's follow-up, UHSIF on QFN68 ----------
+// UHSIF's PORT0-7 defaulted to index 0 on every package, including QFN68, where the
+// RM's own bonding wants index 1 - correctly SHOWN as bonded to nothing (not silently
+// mixed the way independent per-signal defaults used to be) but not USABLE. Same
+// key and shape `remaps:` already has (`remap_by_package: { QFN12: 0, QSOP24: 1 }`,
+// data/FORMAT.md:223) - reused, not reinvented, per main's instruction.
+
+test('a group with no remap_by_package entry for this package still defaults to index 0', () => {
+  load('QFN8');   // QFN8 has no override in remap_by_package
+  eng.compute();
+  const pins = eng.signalPins('U').pins;
+  assert.equal(pins.P0, 'PA0');
+  assert.equal(pins.P1, 'PA1');
+});
+
+test('a group with a remap_by_package entry for THIS package defaults to it, not to index 0', () => {
+  load('QFN8B');   // QFN8B: remap_by_package: { QFN8B: 1 }
+  eng.compute();
+  const pins = eng.signalPins('U').pins;
+  assert.equal(pins.P0, 'PA2', 'index 1 on QFN8B - the package default, not index 0');
+  assert.equal(pins.P1, 'PA3', 'the sibling follows to its OWN index-1 pin, same as any group move');
+});
+
+test('the package default cannot override an explicit choice, on either package', () => {
+  load('QFN8B');
+  eng.setSignalPin('U', 'P0', 'PA0');   // explicitly back to index 0, against the package default
+  eng.compute();
+  const pins = eng.signalPins('U').pins;
+  assert.equal(pins.P0, 'PA0', "the user's explicit choice must win over the package default");
+  assert.equal(pins.P1, 'PA1', 'the sibling follows the EXPLICIT move, not the package default');
+});
+
+test('switching package live does not resurrect an explicit choice made on the other package', () => {
+  // The explicit choice was made on QFN8B; switching to QFN8 (no override, default
+  // index 0) must not silently reassert anything - the stored, explicit pin is what
+  // signalPinOptions() on the NEW package resolves it against, unchanged.
+  load('QFN8B');
+  eng.setSignalPin('U', 'P0', 'PA2');   // explicitly choose index 1, same as the package default here
+  eng.setPackage('QFN8');
+  eng.compute();
+  const pins = eng.signalPins('U').pins;
+  assert.equal(pins.P0, 'PA2', 'the EXPLICIT choice (index 1) survives a live package switch unchanged');
+  assert.equal(pins.P1, 'PA3');
 });

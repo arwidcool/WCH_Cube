@@ -316,6 +316,28 @@ export function defaultSignalPin(pid, sig) {
 export const signalGroupOf = (pid, sig) =>
   ((M.peripherals[pid] || {}).signal_groups || []).find(g => (g.signals || []).includes(sig)) || null;
 
+// A group's DEFAULT index on the CURRENT package - index 0 unless the group names a
+// per-package override, same key and shape `remaps:` already uses for a whole
+// peripheral (`remap_by_package: { QFN12: 0, QSOP24: 1 }`, data/FORMAT.md:223).
+// CH32H417 UHSIF is why this exists: PORT0-7 default to index 0 on every package, but
+// QFN68's own bonding wants index 1 (RM's own mapping for that package) - defaulting
+// to 0 regardless left the group bonded to NOTHING on QFN68, correctly SHOWN (not
+// silently mixed the way independent per-signal defaults used to) but not USABLE.
+//
+// Deliberately NOT `remaps:`'s own mechanism (a stored index `applyPackageRemaps()`
+// overwrites on every `setPackage()` call): that pattern is only safe for a whole
+// peripheral because `projectApply()` calls it BEFORE restoring the project's saved
+// `remap:` value, so a reopened project's explicit choice still wins by ORDER. A
+// group's default is read HERE INSTEAD, inside `signalPins()`, and only consulted
+// when the signal has no stored `afPins` entry at all - so it can never override an
+// explicit choice by construction, regardless of call order, on a live package
+// switch as much as on a reopened project. Provably safer than copying the mutate-
+// on-switch pattern, not merely assumed to be.
+const groupDefaultIndex = g => {
+  const rbp = g.remap_by_package || {};
+  return S.pkg in rbp ? rbp[S.pkg] : 0;
+};
+
 // signal -> pin for this peripheral as it is configured right now, in the same shape
 // a `remaps:` entry has, so one reader covers both.
 export function signalPins(pid) {
@@ -326,11 +348,13 @@ export function signalPins(pid) {
   for (const sig of Object.keys(P.signal_pins)) {
     const want = chosen[sig];
     const ok = want && signalPinOptions(pid, sig).some(o => o.pin === want);
-    // A grouped signal's UNCHOSEN default is its own index-0 entry, not "first
-    // bonded" - every sibling defaults to index 0 too, so the group starts on a real,
+    // A grouped signal's UNCHOSEN default is its own group-default-index entry
+    // (usually index 0, or this package's own override), not "first bonded" -
+    // every sibling defaults to the SAME index too, so the group starts on a real,
     // atomic combination rather than each signal picking whatever fits it alone.
+    const grp = signalGroupOf(pid, sig);
     const pin = ok ? want
-      : signalGroupOf(pid, sig) ? (signalPinOptions(pid, sig)[0] || {}).pin
+      : grp ? (signalPinOptions(pid, sig)[groupDefaultIndex(grp)] || {}).pin
       : defaultSignalPin(pid, sig);
     if (pin) pins[sig] = pin;
   }

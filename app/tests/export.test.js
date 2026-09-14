@@ -1,6 +1,28 @@
 // export.js — the pin table and clock summary behind the Generate button.
 import { test, assert, fresh, eng } from './_harness.js';
 
+// A minimal RFC4180 reader for one CSV line, quote-aware the same way the
+// exporter's own `esc()` is (a doubled `""` inside a quoted field is one literal
+// `"`). Used to prove the KiCad export actually ROUND-TRIPS rather than merely
+// "looks right" by eye - nobody diffs a CSV, which is exactly where a silent drop
+// hides (main's own words for why this test exists at all).
+function parseCsvLine(line) {
+  const fields = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') { inQuotes = false; }
+      else cur += c;
+    } else if (c === '"') { inQuotes = true; }
+    else if (c === ',') { fields.push(cur); cur = ''; }
+    else cur += c;
+  }
+  fields.push(cur);
+  return fields;
+}
+
 test('the pin table has one row per physical pin, in pin-number order', () => {
   const e = fresh('CH32V006', 'TSSOP20');
   const rows = e.pinRows();
@@ -62,6 +84,80 @@ test('the CSV has a header plus one line per pin and quotes what it must', () =>
   assert.ok(pc0.includes('"A,B ""quoted"""'), `CSV quoting: ${pc0}`);
 });
 
+// ---- KiCad symbol pin table --------------------------------------------------
+// The owner's literal deliverable, and its three named constraints: it must state
+// which package it is for, it must carry a `remap_unwritable:` planning-only pin
+// (not silently drop it), and it must round-trip - export, re-read, every assigned
+// pin still there - because nobody diffs a CSV by eye.
+
+test('kicadPinCsv states its part and package, and every assigned pin round-trips through it', () => {
+  const e = fresh('CH32V006', 'QFN32');
+  e.assignSignal('PC0', { periph: 'USART1', signal: 'TX', remap: 3 });
+  e.S.gpio.PC0 = { mode: 'Alternate Function Push Pull', pull: 'Pull-up', speed: 'High', label: 'DEBUG_TX' };
+  e.compute();
+  const csv = e.kicadPinCsv();
+
+  // A CSV that does not say QFN32 vs QFN20 is a trap: assert the header states
+  // BOTH the part and the package, not merely that a comment line exists.
+  const headerComment = csv.split('\n')[0];
+  assert.ok(headerComment.startsWith('#'), 'a leading comment, so a plain CSV reader still imports cleanly');
+  assert.ok(headerComment.includes('CH32V006'), `part not named: ${headerComment}`);
+  assert.ok(headerComment.includes('QFN32'), `package not named: ${headerComment}`);
+
+  const rows = csv.trim().split('\n').filter(l => !l.startsWith('#'));
+  assert.deepEqual(parseCsvLine(rows.shift()),
+    ['Number', 'Name', 'Electrical Type', 'Port', 'Signal', 'User Label', 'Notes']);
+
+  // Round-trip: parse every data row back and confirm the assigned pin survived
+  // with its real facts intact, not just that SOME row exists for it.
+  const parsed = rows.map(parseCsvLine);
+  assert.equal(parsed.length, e.pinRows().length, 'every physical pin makes it into the export, assigned or not');
+  const pc0 = parsed.find(f => f[3] === 'PC0');
+  assert.ok(pc0, 'PC0 survives the round trip at all');
+  assert.equal(pc0[4], 'USART1_TX', 'the assigned signal survives');
+  assert.equal(pc0[5], 'DEBUG_TX', 'the user label survives');
+  assert.equal(pc0[1], 'DEBUG_TX', 'the label wins as the KiCad pin NAME too, per the stated preference order');
+  assert.equal(pc0[2], 'bidirectional', 'an io pin reads as bidirectional per the vendor-library convention');
+});
+
+test('kicadPinCsv carries a remap_unwritable pin, marked planning-only rather than dropped', () => {
+  // Mirrors resources.test.js's own `remap_unwritable:` fixture: a real, cited pin
+  // plan the generated C cannot write. The export's whole point is that this pin
+  // still needs its pad on the board - a `remap_unwritable:` SDMMC/UHSIF selection
+  // generates no code but is exactly as real a plan as any other for a hardware
+  // export.
+  const e = fresh();
+  e.registerMcuFile(`
+mcu:
+  name: CH32V006-UNWRITABLE-REMAP-KICAD
+  inherits: CH32V006
+peripherals:
+  TESTPERIPH:
+    category: Connectivity
+    settings:
+      - name: Mode
+        choices:
+          - { name: Disable }
+          - { name: On, signals: [SIG] }
+    remaps:
+      - { name: "00 Default", pins: { SIG: PD5 } }
+      - { name: "01", pins: { SIG: PD6 } }
+    remap_unwritable: "AFIO_PCFR1.TESTPERIPH_RM[1:0] - not writable on this part"
+`);
+  e.loadMcu('CH32V006-UNWRITABLE-REMAP-KICAD');
+  e.setPackage('TSSOP20');
+  e.setSetting('TESTPERIPH', 'Mode', 'On');
+  e.setRemap('TESTPERIPH', 1);
+  e.compute();
+
+  const rows = e.kicadPinCsv().trim().split('\n').filter(l => !l.startsWith('#'));
+  const parsed = rows.slice(1).map(parseCsvLine);
+  const pd6 = parsed.find(f => f[3] === 'PD6');
+  assert.ok(pd6, 'the planning-only pin is exported, not dropped - the whole point of the mechanism');
+  assert.equal(pd6[4], 'TESTPERIPH_SIG', 'it still carries its real signal, not blanked out');
+  assert.match(pd6[6], /planning only/, 'marked, so a board house does not read it as firmware-driven today');
+});
+
 test('the clock summary reports every node and the out-of-spec ones', () => {
   const e = fresh();
   e.S.clock.sys = 'PLLCLK';
@@ -89,9 +185,10 @@ test('generateAll names its files after the part and package', () => {
   // reader of a literal.
   assert.deepEqual(out.map(f => f.name), [
     'wchcube_init.h', 'wchcube_init.c', 'BoardPins.h',
-    'CH32V006_QFN32_pinout.md', 'CH32V006_QFN32_pinout.csv', 'CH32V006_QFN32_clocks.md',
+    'CH32V006_QFN32_pinout.md', 'CH32V006_QFN32_pinout.csv', 'CH32V006_QFN32_kicad_pins.csv',
+    'CH32V006_QFN32_clocks.md',
   ], 'the reports are named after the part; the C files keep fixed include names');
-  assert.deepEqual(out.map(f => f.language), ['c', 'c', 'c', 'markdown', 'csv', 'markdown']);
+  assert.deepEqual(out.map(f => f.language), ['c', 'c', 'c', 'markdown', 'csv', 'csv', 'markdown']);
   for (const f of out) assert.ok(f.text.length > 100, `${f.name} has content`);
   for (const f of out) {
     const named = f.name.includes('CH32V006_QFN32');
@@ -121,7 +218,7 @@ test('generateAll obeys the generator options, and only the ones that exist', ()
   assert.deepEqual(e.generateAll().map(f => f.name), ['wchcube_init.h', 'wchcube_init.c', 'BoardPins.h'],
     'one undo brings the pin map back and leaves the reports off');
   e.undo();
-  assert.equal(e.generateAll().length, 6, 'and each is one undo step like everything else');
+  assert.equal(e.generateAll().length, 7, 'and each is one undo step like everything else');
 
   assert.throws(() => e.setGeneratorOption('no_such_option', true),
     /No generator option "no_such_option"/);

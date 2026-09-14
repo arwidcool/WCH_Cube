@@ -1555,3 +1555,44 @@ prints an open row, and `data/coverage/<PART>.yaml` records the count, which may
       restored, green). `node tests/run.js "project.test"` 20/20, `"cli.test"` 26/26. **Parked
       here on the owner's priority change** — §7 APP P2 (pinout SVG, print view, KiCad CSV) is
       deprioritised along with it; moving to §2 C.
+
+- [x] (AGENT-2) **A per-package default for `signal_groups:`** — UHSIF's PORT0-7 defaulted to
+      index 0 on every package, including QFN68, where the RM's own bonding wants index 1;
+      correctly SHOWN as bonded to nothing rather than silently mixed, but not usable. Reuses
+      `remaps:`'s own `remap_by_package: { QFN12: 0, QSOP24: 1 }` naming and shape
+      (`data/FORMAT.md:223`) rather than a second concept: a `signal_groups:` entry may now carry
+      its own `remap_by_package:`, read by `groupDefaultIndex()` (`app/engine/model.js:319`) —
+      index 0 unless the CURRENT package has an override. Deliberately NOT `remaps:`'s
+      write-on-`setPackage()` pattern (`remap_by_package` at `model.js:253`): that mutates stored
+      state and is only safe there because `projectApply()` calls it before restoring a saved
+      project's explicit `remap:`, so order alone keeps an explicit choice safe. A group's default
+      is instead read INSIDE `signalPins()` and consulted only when the signal has no stored
+      `afPins` entry at all — provably cannot override an explicit choice by construction,
+      independent of call order, checked in both directions: lands on the package index when that
+      package is selected, on index 0 when it is not, and a live package switch never resurrects
+      an explicit choice made under the other package. 4 new tests in
+      `app/tests/signal_groups.test.js` (13/13 total), `node tests/run.js "signal_groups"` green.
+- [x] (AGENT-2) **§7 P2, part one: the KiCad symbol pin CSV** — the owner's literal deliverable
+      ("pin planning is first priority so I can plan a product and get board pin definitions"),
+      highest-value of the three because a verified pinout retyped by hand into a schematic is
+      where a correct pin assignment becomes a wrong footprint. `kicadPinCsv()`
+      (`app/engine/export.js`) emits KiCad's own Symbol Editor Pin Table columns (Number, Name,
+      Electrical Type) first, then Port/Signal/User Label/Notes for a human reading the file
+      directly; every physical pin of the current package, assigned or not. All three constraints
+      met: **states its part and package** in a leading `#` comment line (plain-text-safe, most
+      CSV readers pass a `#`-prefixed line through); **carries planning-only pins** — a
+      `remap_unwritable:` selection (SDMMC/UHSIF's shape) still claims its pad and is exported like
+      any other assigned pin, marked "planning only" in Notes rather than hidden or presented as
+      firmware-driven (`unwritableRemaps()`, hoisted out of `codegen.js`'s `gpioSection()` so the
+      GPIO TODO and the export read the identical answer, never two independent guesses); and
+      **round-trips** — a new test parses the emitted CSV back with a quote-aware reader and
+      asserts the assigned pin's signal, label and KiCad name all survive, because nobody diffs a
+      CSV by eye and that is exactly where a silent drop hides. Wired into `generateAll()` and
+      `projectFiles()` beside the existing pinout/clock reports. 2 new tests in
+      `app/tests/export.test.js` (32/32 total): the round-trip/header test and a
+      `remap_unwritable`-pin test (mirrors `app/tests/resources.test.js`'s own fixture shape).
+      Planted breaks seen red on both: zeroing `pinRows()`'s `planningOnly` flag fails the
+      unwritable-pin test; dropping the part/package from the header comment fails the other.
+      Restored, `node tests/run.js "export.test"` ALL GREEN. **Not done**: the pinout SVG export
+      and the print view (§7 P2's other two items) — next up, in that order per the owner's
+      stated priority (SVG second, print view "only if those land cleanly").

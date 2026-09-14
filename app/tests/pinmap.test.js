@@ -146,7 +146,8 @@ test('pin_map_only produces the header alone, and needs no part number', () => {
   assert.ok(files[0].text.includes('BOARD_USART1_TX_PIN'), 'carrying the map');
   e.setGeneratorOption('reports', true);
   assert.deepEqual(e.projectFiles().map(f => f.path),
-    ['BoardPins.h', 'CH32V006_QSOP24_pinout.md', 'CH32V006_QSOP24_pinout.csv', 'CH32V006_QSOP24_clocks.md'],
+    ['BoardPins.h', 'CH32V006_QSOP24_pinout.md', 'CH32V006_QSOP24_pinout.csv',
+      'CH32V006_QSOP24_kicad_pins.csv', 'CH32V006_QSOP24_clocks.md'],
     'and the reports are still available when wanted');
   // the same scope through generateAll(), which is what the CLI uses
   assert.ok(e.generateAll().some(f => f.name === 'BoardPins.h'));

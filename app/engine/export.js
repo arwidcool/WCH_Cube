@@ -10,7 +10,7 @@ import { E, compute } from './engine.js';
 import { clockCalc, firstPre } from './clock.js';
 // `user` is codegen's: main.c carries the same USER CODE blocks under the same
 // option, and two copies of that helper would be two things to keep in step.
-import { cFiles, gpioPlan, cfg, user } from './codegen.js';
+import { cFiles, gpioPlan, cfg, user, unwritableRemaps } from './codegen.js';
 // The same answer codegen gives about whether GPIO_Init may touch a pad, so the pin map
 // and the generated C cannot disagree about which pads belong to the part itself.
 import { skippedClaim } from './constraints.js';
@@ -25,6 +25,13 @@ const num = v => (Math.round(v * 1000) / 1000).toString();
 // One row per physical pin of the current package, in pin-number order.
 export function pinRows() {
   const e = E || compute();
+  // Peripherals whose SELECTED pin plan is real (offered, claimed, exportable) but
+  // that this part's generated C has no way to write - `remap_unwritable:` (SDMMC's
+  // proven case). A pin claimed by one of these is exactly as real a plan as any
+  // other for a HARDWARE export - the board needs the pad regardless of whether the
+  // firmware can set the register yet - so it stays in every export, marked rather
+  // than hidden or silently presented as if the generated C already drives it.
+  const planningOnlyPids = new Set(unwritableRemaps().map(c => c.pid));
   const rows = [];
   for (const [n, names] of Object.entries(M._phys[S.pkg])) {
     const name = names[0];
@@ -43,13 +50,16 @@ export function pinRows() {
       speed: info ? (gpioSpeedFor(g.speed) || '') : '',
       label: g.label || '',
       conflict: !!(info && info.state === 'conflict'),
+      planningOnly: !!(info && info.claims.some(c => planningOnlyPids.has(c.who))),
     });
   }
   return rows.sort((a, b) => a.sortNum - b.sortNum);
 }
 
 const COLS = ['Pin', 'Name', 'Signal', 'Mode', 'Pull', 'Speed', 'User label', 'Note'];
-const note = r => [r.conflict ? 'CONFLICT' : '', r.shorted ? 'shorted pins' : '', r.type !== 'io' ? r.type : ''].filter(Boolean).join('; ');
+const note = r => [r.conflict ? 'CONFLICT' : '', r.shorted ? 'shorted pins' : '', r.type !== 'io' ? r.type : '',
+  r.planningOnly ? 'planning only - see generated C for the register this cannot write yet' : '']
+  .filter(Boolean).join('; ');
 
 export function pinTableMarkdown() {
   const rows = pinRows();
@@ -69,6 +79,87 @@ export function pinTableMarkdown() {
 export function pinTableCsv() {
   const esc = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   return [COLS.join(','), ...pinRows().map(r => [r.num, r.name, r.signal, r.mode, r.pull, r.speed, r.label, note(r)].map(esc).join(','))].join('\n') + '\n';
+}
+
+// ---- KiCad symbol pin table ---------------------------------------------------
+//  A verified pinout that has to be RETYPED into a schematic by hand is exactly
+//  where a correct pin assignment becomes a wrong footprint - main's own words for
+//  why this is the highest-value of the three §7 exports. KiCad's Symbol Editor Pin
+//  Table (Tools > Edit Pin Table in a symbol) is the target: its own grid is Number,
+//  Name, Electrical Type first — everything else (shape, orientation, length) has a
+//  sane default a hardware engineer sets once for the whole symbol, not per pin — so
+//  those three columns come first, in the ORDER KiCad's own dialog uses, and are
+//  followed by the extra traceability columns KiCad ignores but a human reading the
+//  file by hand needs (which port pin this is, which signal is on it, the user's own
+//  label, and whether the plan reaches the generated C at all).
+//
+//  KiCad's electrical pin types (kicad_sym / legacy .lib, both generations use the
+//  same vocabulary): input, output, bidirectional, tri_state, passive, free,
+//  unspecified, power_in, power_out, open_collector, open_emitter, no_connect. There
+//  is no "analog" type — an analog pin is `passive` by the convention every vendor
+//  MCU symbol in KiCad's own library already uses (a passive pin carries a signal
+//  without asserting a direction, which is exactly what an ADC input or DAC output
+//  pad is to the SYMBOL, whichever way the silicon drives it).
+const KICAD_TYPE = type => ({
+  power: 'power_in', ground: 'power_in',
+  reset: 'input',      // NRST: the pad the SILICON reads, from the symbol's own view
+  boot: 'input',        // BOOT0/1: sampled at reset, same reasoning as NRST
+  nc: 'no_connect',
+  analog: 'passive',
+  sys: 'passive',        // SWD/debug etc. - real function varies by part, direction does not
+})[type] || 'bidirectional';   // every io pad: GPIO is direction-configured by firmware,
+                                // and this is the type WCH's own and ST's own vendor KiCad
+                                // libraries use for every general-purpose pin regardless of
+                                // its current alternate function - not a guess particular
+                                // to this pin, the documented convention for the whole class.
+
+const KICAD_COLS = ['Number', 'Name', 'Electrical Type', 'Port', 'Signal', 'User Label', 'Notes'];
+
+/**
+ * The current configuration's pinout as a KiCad Pin Table CSV — EVERY physical pin
+ * of the current package, assigned or not (a symbol missing an unused GPIO is an
+ * incomplete symbol), so a hardware engineer can paste it straight into KiCad's own
+ * pin table grid rather than retyping the pinout by hand, which is exactly the step
+ * where a verified assignment becomes a wrong footprint.
+ *
+ * States its own part and package in a leading comment line, because a CSV that
+ * does not say QFN68 from QFN128 is a trap the moment a design has both - most
+ * spreadsheet and text tools show a `#`-prefixed line as an ordinary row of text
+ * rather than choking on it, so it costs nothing to a straight import and still
+ * says the one thing a bare table cannot.
+ *
+ * A `remap_unwritable:` pin (SDMMC's proven case) is exported exactly like any
+ * other assigned pin — the board needs the pad regardless of whether the generator
+ * can write the register yet — with the "planning only" note in its own column
+ * rather than silently claiming firmware already drives it.
+ */
+export function kicadPinCsv() {
+  const esc = v => { const s = String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  // EVERY physical pin, assigned or not - a symbol missing an unused GPIO is an
+  // incomplete symbol, the same trap as a pin table missing a planning-only one.
+  const rows = pinRows();
+  const lines = [
+    `# ${M.mcu.name} ${S.pkg} — KiCad symbol pin table, generated by WCHCube. Paste into`,
+    '# Tools > Edit Pin Table in the Symbol Editor, or use the columns you need directly.',
+    KICAD_COLS.join(','),
+  ];
+  for (const r of rows) {
+    // The NAME KiCad shows on the pin, in the order a schematic reader actually
+    // wants it: the USER'S OWN LABEL first ("LED_STATUS" beats the generic
+    // "GPIO_Output" a manual claim's own signal name would otherwise show), then
+    // the assigned peripheral function ("USART1_TX"), then the bare physical name
+    // ("PA9") — which is already what the Port column says one row over, so nothing
+    // is lost by preferring a more specific name here. A fixed pin (power, reset,
+    // ...) has no label or peripheral function to prefer, so its own physical name
+    // IS the name.
+    const kicadName = r.label || (r.signal && r.type === 'io' ? r.signal : r.name);
+    lines.push([
+      r.num, kicadName, KICAD_TYPE(r.type), r.name, r.signal || '', r.label || '',
+      [r.conflict ? 'CONFLICT' : '', r.shorted ? 'shorted pins' : '',
+        r.planningOnly ? 'planning only - not yet written by the generated C' : ''].filter(Boolean).join('; '),
+    ].map(esc).join(','));
+  }
+  return lines.join('\n') + '\n';
 }
 
 // ---- BoardPins.h -------------------------------------------------------------
@@ -273,7 +364,8 @@ const GENERATOR_OPTIONS = [
     name: 'Also generate the pin table and clock summary',
     type: 'bool',
     default: true,
-    help: 'Writes <part>_<package>_pinout.md, _pinout.csv and _clocks.md beside the C. '
+    help: 'Writes <part>_<package>_pinout.md, _pinout.csv, _kicad_pins.csv and _clocks.md '
+      + 'beside the C. '
       + 'They document the configuration; nothing compiles them.',
   },
   {
@@ -460,6 +552,7 @@ export function generateAll() {
     if (generatorOption('reports')) {
       out.push({ name: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
       out.push({ name: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
+      out.push({ name: `${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
       out.push({ name: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
     }
     return out;
@@ -471,6 +564,7 @@ export function generateAll() {
   if (generatorOption('reports')) {
     out.push({ name: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
     out.push({ name: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
+    out.push({ name: `${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
     out.push({ name: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
   }
   return out;
@@ -806,6 +900,7 @@ export function projectFiles() {
     if (generatorOption('reports')) {
       out.push({ path: `${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
       out.push({ path: `${base}_pinout.csv`, language: 'csv', text: pinTableCsv() });
+      out.push({ path: `${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
       out.push({ path: `${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
     }
     return out.map(f => ({ ...f, name: f.path.slice(f.path.lastIndexOf('/') + 1) }));
@@ -835,6 +930,7 @@ export function projectFiles() {
   }
   if (generatorOption('reports')) {
     out.push({ path: `docs/${base}_pinout.md`, language: 'markdown', text: pinTableMarkdown() });
+    out.push({ path: `docs/${base}_kicad_pins.csv`, language: 'csv', text: kicadPinCsv() });
     out.push({ path: `docs/${base}_clocks.md`, language: 'markdown', text: clockSummaryMarkdown() });
   }
   return out.map(f => ({ ...f, name: f.path.slice(f.path.lastIndexOf('/') + 1) }));

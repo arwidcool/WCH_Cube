@@ -303,6 +303,32 @@ export function afPlan() {
            dropped: dropped.sort(order) };
 }
 
+/**
+ * Every peripheral whose SELECTED, non-default `remaps:` choice is a real, cited pin
+ * plan (`remap_unwritable:`) that this part's codegen has no way to ever write —
+ * SDMMC on CH32H417 is the proven case (`AFIO_PCFR1.SDMMC_RM[1:0]`, no field slot
+ * under `style: af`, no vendor macro either). One function, not duplicated logic: the
+ * GPIO section below uses it to decide the TODO, and `export.js`'s KiCad/board
+ * exports use the SAME answer to mark the affected pins "planning only" rather than
+ * silently exporting them as if the generated C actually drives them — the export
+ * must never say more than the C does. `{ pid, index, name, note }` per hit.
+ */
+export function unwritableRemaps() {
+  return Object.keys(M.peripherals).filter(pid => {
+    const P = M.peripherals[pid];
+    if (!P.remap_unwritable) return false;
+    const remaps = P.remaps || [];
+    const idx = (S.periph[pid] || {}).remap || 0;
+    if (!idx || !remaps[idx]) return false;                          // index 0 needs no write
+    if (remaps[idx].macro) return false;                             // a macro covers THIS entry
+    if (((cfg().remap || {}).fields || {})[pid]) return false;       // a fields word covers it
+    return [...requiredSignals(pid)].some(sig => !skippedClaim({ who: pid, signal: sigName(pid, sig) }));
+  }).map(pid => {
+    const idx = S.periph[pid].remap;
+    return { pid, index: idx, name: M.peripherals[pid].remaps[idx].name, note: M.peripherals[pid].remap_unwritable };
+  });
+}
+
 /** True when this peripheral's selected remap is applied by a macro call. */
 function remappedByMacro(pid) {
   const index = (S.periph[pid] || {}).remap || 0;
@@ -863,24 +889,14 @@ function gpioSection() {
   // an unexplained warning and not invisible either. Checked independently of every
   // style and of the generic detection above, so a part that also has a macro- or
   // fields-covered peripheral elsewhere cannot hide a cited gap behind its success.
-  const citedUnwritable = Object.keys(M.peripherals).filter(pid => {
-    const P = M.peripherals[pid];
-    if (!P.remap_unwritable) return false;
-    const remaps = P.remaps || [];
-    const idx = (S.periph[pid] || {}).remap || 0;
-    if (!idx || !remaps[idx]) return false;                          // index 0 needs no write
-    if (remaps[idx].macro) return false;                             // a macro covers THIS entry
-    if (((cfg().remap || {}).fields || {})[pid]) return false;       // a fields word covers it
-    return [...requiredSignals(pid)].some(sig => !skippedClaim({ who: pid, signal: sigName(pid, sig) }));
-  });
-  if (citedUnwritable.length) {
+  const cited = unwritableRemaps();
+  if (cited.length) {
     L.push('    /* TODO: alternate function remap. Selected for pin planning, but this MCU file');
     L.push('       says this part\'s generator has no way to write it at all - not a gap to');
     L.push('       close by adding a macro or a fields entry, see the citation. Configure this');
     L.push('       register by hand to match the plan:');
-    for (const pid of citedUnwritable) {
-      const i = S.periph[pid].remap;
-      L.push(`         ${pid}: index ${i} — ${M.peripherals[pid].remaps[i].name}. ${M.peripherals[pid].remap_unwritable}`);
+    for (const c of cited) {
+      L.push(`         ${c.pid}: index ${c.index} — ${c.name}. ${c.note}`);
     }
     L.push('    */');
   }
