@@ -366,16 +366,20 @@ Say which, in the notes.
 
 **IN FLIGHT** — nothing.
 - TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: the 6 routing peripherals still owed (`DFSDM, ETH, USBFS,
-  USBHS, USBPD, USBSS`) — USBHS/USBSS/USBPD are byte-identical across every EVT example
+- Next step if I stop here: **DFSDM's Channel struct landed this cycle** (`01714b5`,
+  `params:` 56 → 57 of 78); the 5 routing peripherals still owed are `ETH, USBFS, USBHS,
+  USBPD, USBSS` — USBHS/USBSS/USBPD are byte-identical across every EVT example
   (`const:` fits), USBFS is byte-DIFFERENT across all 8 (must NOT get `const:`), ETH is
   blocked on a third `verify_sdk_names.py` indexing mode (`ETH_RegInit` is in no header,
-  only designated `.c` files) — its own careful narrowing, not started.
+  only designated `.c` files) — its own careful narrowing, not started. DFSDM's other
+  three structs (Filter/Rc/Jc) consolidated with SAI's open multi-struct-per-instance
+  REQUEST to AGENT-2, not a second one.
 - Gates last run: `validate_mcu` 0 errors/73 warnings · `verify_sdk_names` 0/0 ·
   `coverage.py --gate` 6 of 6, CH32H417 complete/0 open · `validate_params_selftest` 5/5
-  · `validate_afmux_selftest` 13/13 (2 new cases) · `node tests/run.js "H417"` 65/65 ·
-  `"signal_groups"` 13/13 · `"codegen_compile"` 18/18 · `"completeness"` 15/15. `pio run`
-  not run this cycle (no `main` ask).
+  · `validate_afmux_selftest` 13/13 · `node tests/run.js "H417"` 66/66 ·
+  `"codegen_compile"` 18/18 · `"completeness"` 15/15 · `node tools/wchcube_cli.js
+  --format c --strict` on a throwaway DFSDM-enabled project, exit 0. `pio run` not run
+  this cycle (no `main` ask).
 
 **Current — 2026-09-14T~04:30Z. Resumed after a predecessor was killed mid-task by a
 rate limit; verified its uncommitted LPTIM work by reading the diff and running the
