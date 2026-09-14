@@ -1110,16 +1110,25 @@ MODES: dict[str, list[dict]] = {
          "choices": [{"name": "None"}, {"name": "Sleep"}, {"name": "Stop"},
                      {"name": "Standby"}]},
     ],
-    # CH32X035 `FLASH`, with H417's own option-byte names - RM ch.46 is
-    # "Flash Memory and User Option Bytes".
+    # H417's own option-byte names, corrected against this part's own RM Table 46-5
+    # ("User option bytes information structure", CH32H417RM.md:68123-68170), NOT
+    # ported from CH32X035 unchanged (a prior version of this block was - "Reset on
+    # entering Standby (STANDBY_RST)"/"Reset on entering Stop (STOP_RST)" - and those
+    # two bits DO NOT EXIST on this part's USER option byte at all; a genuine defect
+    # from copying a sibling part's template without re-checking it against this
+    # part's own header, found while modelling FLASH's real params: this cycle).
+    # The USER byte (0x1FFFF800) has exactly three defined bits, all reset to 1:
+    # bit 0 IWDGSW, bit 6 USBFSDLEN, bit 7 USARTDLEN - matching
+    # `FLASH_UserOptionByteConfig(uint16_t OB_IWDG, uint16_t OB_USBFSDL, uint16_t
+    # OB_USARTDL)`'s three arguments in that order (ch32h417_flash.h).
     "FLASH": [
-        {"name": "Independent watchdog start (IWDG_SW)",
-         "choices": [{"name": "Started by software (factory default)"},
-                     {"name": "Started by hardware"}]},
-        {"name": "Reset on entering Standby (STANDBY_RST)",
-         "choices": [{"name": "No reset (factory default)"}, {"name": "Reset"}]},
-        {"name": "Reset on entering Stop (STOP_RST)",
-         "choices": [{"name": "No reset (factory default)"}, {"name": "Reset"}]},
+        {"name": "Independent watchdog hardware enable (IWDGSW)",
+         "choices": [{"name": "Software-controlled (factory default)"},
+                     {"name": "Hardware-controlled (always on, LSI-timed)"}]},
+        {"name": "USBFS keyless download (USBFSDLEN)",
+         "choices": [{"name": "Enabled (factory default)"}, {"name": "Disabled"}]},
+        {"name": "USART keyless download (USARTDLEN)",
+         "choices": [{"name": "Enabled (factory default)"}, {"name": "Disabled"}]},
     ],
     # RM ch.40: "The FMC manages expanded connectivity to different types of memory,
     # including: SDRAM, NAND Flash, and synchronous/asynchronous static memory", and the

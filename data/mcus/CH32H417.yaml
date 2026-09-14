@@ -3494,18 +3494,18 @@ peripherals:
   FLASH:
     category: System Core
     settings:
-      - name: "Independent watchdog start (IWDG_SW)"
+      - name: "Independent watchdog hardware enable (IWDGSW)"
         choices:
-          - { name: "Started by software (factory default)" }
-          - { name: "Started by hardware" }
-      - name: "Reset on entering Standby (STANDBY_RST)"
+          - { name: "Software-controlled (factory default)" }
+          - { name: "Hardware-controlled (always on, LSI-timed)" }
+      - name: "USBFS keyless download (USBFSDLEN)"
         choices:
-          - { name: "No reset (factory default)" }
-          - { name: Reset }
-      - name: "Reset on entering Stop (STOP_RST)"
+          - { name: "Enabled (factory default)" }
+          - { name: Disabled }
+      - name: "USART keyless download (USARTDLEN)"
         choices:
-          - { name: "No reset (factory default)" }
-          - { name: Reset }
+          - { name: "Enabled (factory default)" }
+          - { name: Disabled }
     pins: { none: true, source: "CH32H417DS0.md Table 2-1-1 and Tables 2-2-x: no pin row carries a function of this peripheral (checked by tools/coverage.py)" }
     notes: This peripheral holds no pin on any package; it is configured
       through its own registers and the clock tree only.
