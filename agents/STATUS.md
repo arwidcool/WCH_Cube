@@ -369,31 +369,58 @@ fact is accounted for", not "the part is done". And a `disagreements:` entry is 
 fact — the SerDes TX/RX pairs are recorded both ways because the DS says both; the app routes one.
 Say which, in the notes.
 
-**IN FLIGHT** — nothing.
-- TASKS.md line: — · Doing: — · Files touched: —
-- Next step if I stop here: **C's routing requirement is CLOSED — `params:` 62 of 78,
-  16 owed, all non-routing.** ETH landed (the third `verify_sdk_names.py` indexing mode,
-  `codegen.sdk.driver_c:`, 26 of 47 fields on `call_arg:`/`dead_fields`). GPHA correctly
-  excluded per main's own correction — it strands no pads. The 16 remaining cells are
-  either declared ABSENT already (SYS/RCC/EXTI/DMA1/PIOC) or still need an ABSENT
-  declaration for the rest (CRC/DBGMCU/DMA2/FLASH/GPHA/HSEM/IWDG/PWR/RNG/TKEY/WWDG) to
-  formally close the `IN_EXTRACTION` line — **not yet done, next natural step if this
-  line is picked up again.** DFSDM's Filter/Rc/Jc still need a genuinely new capability
-  (a second, independent per-instance axis), REQUEST open to AGENT-2, distinct from
-  SAI's (closed). The YAML 1.1/1.2 boolean split is FIXED, not just found — both real
-  instances (CH32H417 OPA, CH32V006 PWR) quoted, `node tools/cross_loader_check.mjs`
-  reads all 7 files clean; REQUEST open to AGENT-3 to empty their now-fully-stale
-  `KNOWN_DIVERGENCES` (their test is red on that one assertion until they do,
-  disclosed on the board, not silently left).
-- Gates last run: `validate_mcu` 0 errors/73 warnings (unchanged) · `verify_sdk_names`
-  0/0 · `coverage.py --gate` 6 of 6 · `validate_params_selftest` 6/6 ·
-  `verify_sdk_names_selftest` 48/48 (was 44 before ETH's `driver_c_cases()`) ·
-  `validate_afmux_selftest` 13/13 · `node tests/run.js "H417"` 66/66 ·
-  `"completeness"` 15/15 · `"codegen_compile"` 18/18 · `node
-  tools/cross_loader_check.mjs`: all 7 files clean (was 2 diverging). `node
-  tools/wchcube_cli.js --format c --strict` on throwaway ETH/DFSDM/USB/SAI/LPTIM/OPA
-  projects, each read by hand, not just the exit code. `pio run` not run this cycle (no
-  `main` ask).
+**IN FLIGHT** — nothing committed is broken; DFSDM is genuinely half-done and
+correctly NOT committed. Session ending on `main`'s instruction ("land cleanly or
+revert cleanly, then stop").
+- TASKS.md line: — · Doing: — · Files touched (uncommitted, DFSDM in progress, safe
+  to resume or discard): `data/mcus/CH32H417.yaml` currently at HEAD (`e3c5f76`,
+  clean) — my own DFSDM edits (Filter 0/Filter 1 settings, the Channel
+  `channel_params:` reindented from object to list) are NOT in the working tree
+  right now, only saved as `dfsdm_filter_block.yaml` + the reindent script in my
+  scratchpad, because landing the DMA fix required reverting the file to HEAD and
+  reapplying only that fix by hand (see below) — resuming DFSDM means redoing the
+  settings + list-conversion edits, not un-reverting anything.
+- **Next step if I stop here, in order:**
+  1. **DMA_Init/DMA_Cmd fix is DONE, committed (`e3c5f76`), verified with real C
+     on all six parts, but NOT YET PUSHED** — `git push` failed on
+     `check_dist_fresh`: this commit's `dist/index.html` (unchanged by this commit)
+     no longer matches a fresh build of its own committed `data/`. Needs one
+     `python build.py` + a `dist/index.html`-only commit on a quiet tree, then
+     push — did not do it myself because `app/engine/codegen.js` was mid-edit by
+     another agent when I checked, and baking in-flight app state into a data-only
+     commit's dist is exactly the mistake this repo's process exists to prevent.
+  2. **DFSDM's Filter/Rc/Jc** — AGENT-2's list-of-blocks mechanism is shipped
+     (`7c4663a`), the worked contract is on `agents/BOARD.md`
+     (2026-09-14T10:26Z). All the real field names/citations/EVT-example defaults
+     for `DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/`JcInitTypeDef` are already
+     researched and sitting in my scratchpad's `dfsdm_filter_block.yaml` (23
+     params rows, every one cited to `ch32h417_dfsdm.h`/`.c` and to a real EVT
+     example — `DFSDM_SerialSPI` for Filter/Rc, `DFSDM_EXTITrigger` for Jc since
+     `SerialSPI` never exercises the injected path). What's left: reapply the
+     Channel `channel_params:` object-to-list reindent (script logic already
+     proven once this session, straightforward to redo), append the Filter block,
+     add `codegen.init_structs.DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/
+     `JcInitTypeDef` (also already drafted), generate real C for a Filter 0
+     config and read it, then the usual gates.
+  3. **CH32H417's HSADC** — real pins, a real per-channel function
+     (`HSADC_ChannelConfig(uint8_t)`) nothing calls, but it's a ONE-argument
+     call, not the `(channel, rank, sampletime)` shape `sdk_repeat: channels`
+     handles. Needs new engine work - hand to AGENT-2, do not force a data patch
+     behind the existing mechanism to silence the warning.
+  4. **CH32L103's `temp_vref_enable`** — correctly wired, not conditional on
+     channel selection, so ticking IN16/IN17 without separately flipping it
+     compiles clean and reads garbage. Disclosed in the row's own help text.
+     Whether this needs an engine-level implication/complaint is AGENT-2's call,
+     posted as a REQUEST if picked up.
+  5. **X035's CMP1-3/OPA1-2** — same `category: Analog`-with-no-`analog_signals`
+     shape just closed for its ADC1. Not urgent, named on the board.
+- Gates last run (post-DMA-fix, this commit): `validate_mcu.py` 0 errors/78
+  warnings across 6 part(s) · `verify_sdk_names.py` 0/0 across 6 part(s) ·
+  `coverage.py --gate` 6/6 · `node tests/run.js "strict.test"` 19/19 ALL GREEN ·
+  real generated C read by hand for a configured DMA request on every one of the
+  six parts (`DMA_DeInit`/`DMA_Init`/`DMA_Cmd` all present, correct handle, 0
+  conflicts/issues/complaints each time) · CRLF-clean verified by byte count on
+  all five touched `data/mcus/*.yaml` (0 CRLF) immediately before staging.
 
 **Current — 2026-09-14T~07:35Z. ETH lands (the last routing peripheral), then the
 cross-loader boolean fix. Commits: `8c94ad1` `8f6c4ef` `ba6c45c` `eef5b64`.**
