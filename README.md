@@ -74,13 +74,15 @@ and its job is to make sure it keeps saying so.
 | **[docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md)** | You want to understand the design and **exactly how much of it to trust**. Start here. |
 | **[docs/ADDING-A-PART.md](docs/ADDING-A-PART.md)** | Your microcontroller is not supported. The whole process: drop the vendor files in, let an AI extract them, verify. |
 | **[docs/COVERAGE.md](docs/COVERAGE.md)** | You are extracting a part, or asking whether one is finished. The coverage ledger: every function on every pin the datasheet lists is modelled, declared absent with a citation, or **open** — and a part is not done while a row is open. |
-| **[docs/WCH-MCU-CATALOG.md](docs/WCH-MCU-CATALOG.md)** | You are asking *which* part to add next, or whether one is already modelled. Every MCU WCH publishes, read from the vendor's own product API and joined against `data/mcus/`. A pointer, never a citation. |
+| **[docs/WCH-MCU-CATALOG.md](docs/WCH-MCU-CATALOG.md)** | You are asking *which* part to add next, or whether one is already modelled. Every MCU WCH publishes, read from the vendor's own product API and joined against `data/mcus/`. A pointer, never a citation. Its **progress table** says which parts are done, which two are queued, and which have not been started — 11 of WCH's 87 catalogue rows have data. |
 | **[data/FORMAT.md](data/FORMAT.md)** | You are writing or editing an MCU file. The field-by-field schema. |
 | **[PROGRESS.md](PROGRESS.md)** | What is actually done, broken, and never tested. |
 | **[docs/](docs/)** | Index of all of the above. |
 
 Supported parts — the list is `data/mcus/`, and adding to it does not require touching `app/`.
-**Six**, across three families:
+**Six**, across three families. That is **11 of the 87 rows** in WCH's own catalogue;
+[`docs/WCH-MCU-CATALOG.md`](docs/WCH-MCU-CATALOG.md#progress-added-next-and-not-yet-started) has
+the full progress table — what is done, what is queued, and what has not been started.
 
 Peripheral and package counts below are what the engine reports after loading each file, not
 what a header says:

@@ -252,6 +252,8 @@ peripherals:
       Channel 0: Disable
       Channel 1: Disable
       Clock output: Disable
+      Filter 0: Disable
+      Filter 1: Disable
     remap: 0
   DMA1:
     settings:

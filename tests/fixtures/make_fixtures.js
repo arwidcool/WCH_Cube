@@ -309,6 +309,28 @@ export const FIXTURES = [
       eng.assignSignal('PE0', { gpio: 'GPIO_Output' });
       eng.setGpioField('PC0', 'label', 'LED');
       eng.setGpioField('PC0', 'speed', 'Very high');  // four speeds on this part, not one
+
+      // ONE DMA REQUEST ON EACH CONTROLLER, because until 2026-09-14 both of them shipped
+      // "Mode: Disable, zero requests" in every fixture on this part - the compile gate's
+      // own "no TODO" check had never once walked the code DMA's landing (06da08c) actually
+      // generates. Found by hand (AGENT-3, board 2026-09-14): DMA_InitTypeDef is filled with
+      // every field the user picked and never applied - no DMA_Init(), no DMA_Cmd() - on
+      // BOTH controllers, because `codegen.init_structs.DMA_InitTypeDef` does not exist.
+      // USART1/USART2 are already enabled above, so their DMA-capable signals cost nothing
+      // new to reach: USART1_TX on channel 1 (DMA1's own numbering, mux 1-8) and USART2_RX
+      // on channel 9 (DMA2's, mux 9-16 - CH32H417's crossbar is one shared 1-16 space, not
+      // two separate 1-8 ranges, per RM ch.10 and AGENT-1's board note the day DMA landed).
+      //
+      // THIS FIXTURE IS EXPECTED TO BE RED ON `--strict` RIGHT NOW, on purpose, the same way
+      // the OPA/DAC pads above were left unclaimed while their own defect was outstanding -
+      // except the pattern that shipped between here and there is: this gate now WATCHES
+      // the exact defect it exists to catch, rather than staying silent about it until the
+      // fix lands unannounced. AGENT-1 has the fix as its own P0 (`codegen.init_structs.
+      // DMA_InitTypeDef`, plus wiring `DMA_Cmd`); the moment it lands, this fixture goes
+      // green with no further edit here, because a `.wchproj` only encodes settings - the
+      // generated C it is checked against is produced fresh, from CURRENT data, every run.
+      eng.addDmaRequest('USART1_TX', '1');
+      eng.addDmaRequest('USART2_RX', '9');
     },
   },
   {

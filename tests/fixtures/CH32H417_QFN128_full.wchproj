@@ -258,6 +258,8 @@ peripherals:
       Channel 0: Disable
       Channel 1: Disable
       Clock output: Disable
+      Filter 0: Disable
+      Filter 1: Disable
     remap: 0
   DMA1:
     settings:
@@ -975,3 +977,30 @@ clock:
     SERDES_PLL:
       in: 0
       mul: 25
+dma:
+  - request: USART1_TX
+    channel: 1
+    params:
+      dir: Memory to peripheral
+      priority: Low
+      mode: Normal
+      pinc: false
+      minc: true
+      psize: Byte
+      msize: Byte
+      m2m: false
+      buffer_mode: false
+      double_buffer_start: Memory 0
+  - request: USART2_RX
+    channel: 9
+    params:
+      dir: Peripheral to memory
+      priority: Low
+      mode: Normal
+      pinc: false
+      minc: true
+      psize: Byte
+      msize: Byte
+      m2m: false
+      buffer_mode: false
+      double_buffer_start: Memory 0

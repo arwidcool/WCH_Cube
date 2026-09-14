@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "cortex-debug": {
-      "type": "sse",
-      "url": "http://localhost:7580/sse"
-    },
     "graft": {
       "command": "npx",
       "args": [
