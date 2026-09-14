@@ -2785,30 +2785,35 @@ extras:
       `OPA_BASE + (OPAx << 2)` (ch32h417_opa.c:44-45) - R32_OPA_CTLR1/2/3
       (CH32H417RM.md:50363-50365).
 
-      ONLY `FB`/`PGADIF`/`HS` are modelled below - the three fields that are genuinely
-      free knobs, not derived from a pin-claiming setting. `PSEL`/`NSEL`/`Mode` are NOT
-      modelled, and not by oversight: each is DERIVED from a setting whose NAME differs
-      per instance ("OPA1 positive input" vs "OPA2 positive input" vs "OPA3 positive
-      input"), but `channel_params`'s `depends_on`/`paramApplies()` check
-      (app/engine/codegen.js ~1345, `if (d.readonly || !paramApplies(pid, d)) continue`)
-      evaluates every row against the PERIPHERAL's settings once, not per-instance - it
-      has no way to know it is filling instance 2's block when it checks a `depends_on`
-      naming instance 1's setting. Writing `depends_on: { setting: "OPA1 positive
-      input", ... }` into the one shared `params:` list would apply OPA1's choice to
-      OPA2's and OPA3's PSEL alike, which is a wrong number that compiles - so it is
-      TASKS.md's, not a shipped guess. Same class of gap as CMP's MODE routing table and
-      SAI's Frame/Slot structs: this schema's `channel_params` was built for a struct
-      whose OWN fields never depend on a setting (DAC's trigger/wave are free enums;
-      LTDC's layer members are free positions), and OPA is the first instance-varying
-      peripheral where a member IS a setting in disguise. REQUEST to AGENT-2: a
-      per-instance-relative `depends_on` (e.g. `depends_on: { instance_setting: "{n}
-      positive input", equals: P0 }`, `{n}` substituted with the active instance's
-      number) would close this the same day PSEL/NSEL/Mode's citations are ready
-      (RM 50369-50432 for OPA1, 50460-50553 (OPA2/3 register block) for the others).
+      `PSEL`/`NSEL`/`Mode` LANDED 2026-09-14 on AGENT-2's `depends_on: {
+      instance_setting: ... }` mechanism (`app/tests/instance_setting.test.js`, 4
+      tests, verified here before landing). Each field is DERIVED from a setting whose
+      NAME differs per instance ("OPA1 positive input" vs "OPA2 positive input" vs
+      "OPA3 positive input"), and the shape is the SAME one DVP's `DVP_DataSize`
+      already uses above (`const:` rows, one dependency each, exactly one applies) -
+      not the single-free-enum shape a first reading of the mechanism's own worked
+      example might suggest. Checked directly against `app/tests/instance_setting.test.js`
+      before writing this: a `depends_on`-gated row with real OPTIONS and no matching
+      row for the OTHER live setting state leaves the struct member UNWRITTEN (not
+      wrong-but-present) whenever that other state is active - the same class of silent
+      gap `DVP_DataSize`'s own comment names ("a separate editable width would let a
+      project claim twelve pads and configure eight"). So PSEL/NSEL/Mode are each a PAIR
+      of `const:` rows, one per live setting choice, same `sdk_field:`, mutually
+      exclusive `depends_on:` - exactly one ever applies per instance, never zero.
+
+      `NSEL`'s FULL enumeration (`ch32h417_opa.h:36-44`) has SIX real values -
+      `CHN0`/`CHN1` (external pads, matching this part's own "N0"/"N1" setting choices)
+      PLUS `CHN_PGA_8xIN`/`16xIN`/`32xIN`/`64xIN` (internal PGA feedback taps, no
+      external pad) - but the "OPA{n} negative input" setting only offers `N0`/`N1`
+      today, so only those two are modelled; the four PGA multiplier values would need
+      NEW setting choices first (a settings-shape addition, not a params one - not
+      built here). Same gap on `Mode`: `OUT_TO_CMP` ("only for OPA1", routes internally
+      to the comparator, no pad) has no corresponding choice on "OPA{n} output" either
+      (`Disable`/`OUT0`/`OUT1` only) - not modelled for the same reason.
 
       `OPA_Cmd(OPAx, ENABLE)` (ch32h417_opa.c:84-98) is a SEPARATE call after
       `OPA_Init()`, same gap as DAC's `DAC_Cmd` / CMP's `OPA_CMP_Cmd` (comments above) -
-      the three real fields below configure gain/feedback/speed but do not yet enable
+      the fields below configure gain/feedback/speed/routing but do not yet enable
       the op-amp.
     yaml: |
       channel_params:
@@ -2819,6 +2824,50 @@ extras:
           2: { sdk_call: OPA_Init, handle: OPA2, setting: "OPA2 positive input", active_choices: [P0, P1] }
           3: { sdk_call: OPA_Init, handle: OPA3, setting: "OPA3 positive input", active_choices: [P0, P1] }
         params:
+          - key: psel_p0
+            name: Positive input
+            sdk_field: PSEL
+            const: CHP0
+            depends_on: { instance_setting: "OPA{n} positive input", equals: P0 }
+            help: "R32_OPA_CTLR<n> PSEL, ch32h417_opa.h:29-33. Fixed by the OPA<n> positive input row, which is what claims the P0 pad."
+          - key: psel_p1
+            name: Positive input
+            sdk_field: PSEL
+            const: CHP1
+            depends_on: { instance_setting: "OPA{n} positive input", equals: P1 }
+            help: "R32_OPA_CTLR<n> PSEL, ch32h417_opa.h:29-33. Fixed by the OPA<n> positive input row, which is what claims the P1 pad."
+          - key: nsel_n0
+            name: Negative input
+            sdk_field: NSEL
+            const: CHN0
+            depends_on: { instance_setting: "OPA{n} negative input", equals: N0 }
+            help: >
+              R32_OPA_CTLR<n> NSEL, ch32h417_opa.h:36-44. Fixed by the OPA<n> negative
+              input row, which is what claims the N0 pad. NSEL's other four values
+              (CHN_PGA_8xIN/16xIN/32xIN/64xIN, internal PGA feedback taps, no pad) are
+              NOT modelled - see the peripheral comment.
+          - key: nsel_n1
+            name: Negative input
+            sdk_field: NSEL
+            const: CHN1
+            depends_on: { instance_setting: "OPA{n} negative input", equals: N1 }
+            help: "R32_OPA_CTLR<n> NSEL, ch32h417_opa.h:36-44. Fixed by the OPA<n> negative input row, which is what claims the N1 pad."
+          - key: mode_out0
+            name: Output routing
+            sdk_field: Mode
+            const: OUT_IO_OUT0
+            depends_on: { instance_setting: "OPA{n} output", equals: OUT0 }
+            help: >
+              R32_OPA_CTLR<n> MODE, ch32h417_opa.h:49-53. Fixed by the OPA<n> output
+              row, which is what claims the OUT0 pad. OUT_TO_CMP (routes internally to
+              the comparator, OPA1 only, no pad) is NOT modelled - see the peripheral
+              comment.
+          - key: mode_out1
+            name: Output routing
+            sdk_field: Mode
+            const: OUT_IO_OUT1
+            depends_on: { instance_setting: "OPA{n} output", equals: OUT1 }
+            help: "R32_OPA_CTLR<n> MODE, ch32h417_opa.h:49-53. Fixed by the OPA<n> output row, which is what claims the OUT1 pad."
           - key: fb
             name: PGA feedback resistor
             struct: OPA_InitTypeDef

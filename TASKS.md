@@ -1079,6 +1079,43 @@ bits, and a clock tree that models what the schema can hold.
       axis on one peripheral - would be needed; not built speculatively. REQUEST to AGENT-2,
       distinct from SAI's now-closed one; `params:` stays at just the Channel struct for
       DFSDM.
+      **OPA's PSEL/NSEL/Mode landed 2026-09-14** on AGENT-2's `depends_on: {
+      instance_setting: ... }` mechanism (`app/tests/instance_setting.test.js`, 4 tests,
+      verified before landing). Checked the mechanism's own test file rather than trust the
+      FORMAT.md worked example's shape literally: a `depends_on`-gated row with real
+      user-facing `options:` leaves the struct member UNWRITTEN whenever the OTHER live
+      setting state is active, so the correct shape is a PAIR of `const:` rows per field
+      (mirroring `DVP_DataSize`'s own three-const-rows precedent, one dependency each,
+      exactly one applies) - `psel_p0`/`psel_p1`, `nsel_n0`/`nsel_n1`, `mode_out0`/
+      `mode_out1`, six rows total, all citing `ch32h417_opa.h`. Compiled, not asserted: a
+      throwaway project with OPA1 at P1/N0/OUT1 and OPA2 at P0/N1/OUT0 (deliberately
+      opposite, matching the mechanism's own cross-instance-leakage test shape),
+      `--strict`'s generated C shows `OPA_Init(OPA1, ...)` with `PSEL=CHP1, NSEL=CHN0,
+      Mode=OUT_IO_OUT1` and `OPA_Init(OPA2, ...)` with `PSEL=CHP0, NSEL=CHN1,
+      Mode=OUT_IO_OUT0` - each instance resolving only its OWN setting, no leakage either
+      way. `NSEL`'s four PGA-multiplier values (`CHN_PGA_8xIN..64xIN`) and `Mode`'s
+      `OUT_TO_CMP` (OPA1 only) are NOT modelled - no corresponding choice exists on the
+      "OPA{n} negative input"/"OPA{n} output" settings today (a settings-shape addition,
+      not a params one); recorded in the peripheral comment rather than silently dropped.
+
+      **Found and fixed a real `validate_mcu.py` bug while landing this, before it could
+      ship.** `check_flow_mappings()` (the "unquoted comma" trap checker) treats ANY
+      `{...}` in the raw text as a flow-mapping span, including a literal `{n}` sitting
+      INSIDE a quoted string - `depends_on: { instance_setting: "OPA{n} positive input",
+      ... }` made it report "`n` is not a `key: value` pair", a false positive on syntax
+      the `instance_setting` mechanism's own worked example uses the same way. Fixed by
+      masking quoted content before searching for spans (`_mask_quoted()`), plus excluding
+      a `{` immediately after a word character (`(?<!\w)\{`) for the SAME template once it
+      has been through a plain PyYAML round-trip (`validate_params_selftest.py`'s own
+      scratch mechanism drops the quotes entirely, since block-style YAML does not need
+      them) - found by running that selftest, not guessed. Both the real trap
+      (`{ name: IN8 (Vrefint, internal) }`) and the two `{n}` shapes checked directly
+      before trusting the fix. New planted-break case in `validate_params_selftest.py`
+      (`channel_row()` helper) also closes a SECOND, unrelated `check_param_list` gap
+      found the same session: `channel_params.params:` was never actually validated on
+      ANY peripheral, on any part, since the function's call site assumed the wrong shape
+      (`dma.channel_params`'s map-of-groups, not a peripheral's single block) - re-checked
+      all six parts after the fix, 0 errors, so nothing was silently wrong, only unchecked.
       - [ ] (AGENT-1) **SDMMC's DDR-mode structs are not modelled**: `SDMMC_IOInputDelayDDRTypeDef`
             / `SDMMC_IOOutputDelayDDRTypeDef` (eight 4-bit per-line delay taps each,
             `ch32h417_sdmmc.h:111-177`) are real init-time settings, but neither of this part's

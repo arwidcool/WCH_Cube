@@ -1580,7 +1580,31 @@ def check_flow_mappings(text: str, r: Report) -> None:
     """
     for n, raw in enumerate(text.splitlines(), 1):
         line = raw.split(" #", 1)[0] if " #" in raw and not _in_quotes(raw, raw.find(" #")) else raw
-        for span in re.findall(r"\{[^{}]*\}", line):
+        # Find span BOUNDARIES against a copy with quoted content blanked out first -
+        # `\{[^{}]*\}` run on the RAW line treats a literal `{`/`}` inside a quoted
+        # string (e.g. `depends_on: { instance_setting: "OPA{n} positive input", ... }`,
+        # the exact shape `instance_setting:` needs) as a flow-mapping delimiter of its
+        # OWN, so it matched `{n}` as if it were the whole mapping and reported "`n` is
+        # not a `key: value` pair" - a false positive on syntax this checker exists to
+        # allow, found landing OPA's PSEL/NSEL/Mode. `_mask_quoted()` blanks quoted
+        # CONTENT while keeping the quote marks and the string's length, so a brace
+        # inside quotes cannot be mistaken for one outside them; positions still line
+        # up with `line` for slicing the REAL text back out below.
+        #
+        # `(?<!\w)\{` on top of that: a `{` immediately after a letter/digit is inside
+        # a plain (unquoted) SCALAR, never the start of a flow mapping - YAML has no
+        # syntax for a mapping to open mid-word. Needed for the SAME `{n}` template
+        # once it has been through a plain PyYAML round-trip (`validate_params_
+        # selftest.py`'s own scratch-file mechanism does this): `safe_dump` drops the
+        # quotes and switches the row to block style, since `instance_setting: OPA{n}
+        # positive input` does not look like it needs them by PyYAML's own heuristic -
+        # leaving a bare `{n}` in the value with no quotes at all to mask. `_mask_quoted`
+        # alone does not help there; excluding a word-preceded `{` does, and still
+        # catches the real trap (`{ name: IN8 (Vrefint, internal) }` - the `{` there
+        # follows a space, not a letter).
+        masked_line = _mask_quoted(line)
+        for m in re.finditer(r"(?<!\w)\{[^{}]*\}", masked_line):
+            span = line[m.start():m.end()]
             body = span[1:-1]
             if not body.strip():
                 continue
@@ -1599,6 +1623,27 @@ def check_flow_mappings(text: str, r: Report) -> None:
 
 def _in_quotes(line: str, idx: int) -> bool:
     return line.count('"', 0, idx) % 2 == 1 or line.count("'", 0, idx) % 2 == 1
+
+
+def _mask_quoted(line: str) -> str:
+    """`line` with the CONTENT of every quoted string replaced by `_`, same length,
+    quote marks kept - so a `{`, `}`, `,` or `:` inside a string cannot be mistaken for
+    the flow-mapping syntax those characters mean outside one. Used only to locate
+    where a real `{ ... }` span starts and ends; the actual text is sliced back out of
+    the ORIGINAL line afterward, so nothing downstream ever sees an underscore."""
+    out = []
+    quote = None
+    for ch in line:
+        if quote:
+            out.append(ch if ch == quote else "_")
+            if ch == quote:
+                quote = None
+        elif ch in "\"'":
+            quote = ch
+            out.append(ch)
+        else:
+            out.append(ch)
+    return "".join(out)
 
 
 def validate_file(path: pathlib.Path, geom: dict) -> Report:
