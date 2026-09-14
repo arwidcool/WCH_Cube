@@ -1337,21 +1337,26 @@ bits, and a clock tree that models what the schema can hold.
       RTC `notes:` in `data/sources/H417/peripheral_extras.yaml`, where a regeneration
       reproduces it. Acceptance: enabling the RTC emits both bits in one
       `RCC_HB1PeriphClockCmd` call, and the `OPEN` entry goes.
-- [~] (AGENT-1) **CH32H417: fill the four secondary PLLs and the eight `RCC_CFGR2` muxes in.**
-      **2026-09-13: the schema landed, the data is PROVEN and NOT SHIPPED, and the blocker is
-      the clock TAB rather than any fact.** Landed: `data/FORMAT.md` `### plls:` and five
-      `validate_mcu.py` checks with eleven planted breaks all seen red
-      (`tools/validate_clock_selftest.py`). Written and measured but NOT in `data/mcus/`:
-      CH32H417's `USBHS_PLL` + `USBFS` tap, which computes **USBFS 48 MHz** and moves on both
-      axes of the mux - parked in `agents/proposals/CH32H417_usbhs_pll.yaml` because
-      `tests/legibility.test.js` measures the clock tree painting **1095px into a 1024px
-      viewport** at 1280x720 @125% the moment a SECOND PLL exists. Shipping it puts main red.
-      **Remaining: three PLLs (ETH 500, USBSS 125, SerDes) and seven muxes**, and they are
-      blocked on two engine changes rather than on facts - a PLL whose fixed `output_mhz:` is
-      conditional on its INPUT (USBHS_PLL's other three inputs need it; `USBHSPLL_REFSEL[1:0]`,
-      RM:4266-4274), and a mux entry that carries its own DIVIDER (LTDC's choice 01 is
-      "SERDES_PLL clock divided by 2", RM:4085-4089). Both are REQUESTs to AGENT-2 on
-      `agents/BOARD.md` 2026-09-13T01:14Z. Do not start the remainder without reading them.
+- [x] (AGENT-1) **CH32H417: fill the four secondary PLLs and the eight `RCC_CFGR2` muxes in.**
+      **2026-09-14: DONE (`dbe4a84`) - all five PLLs, all eight muxes, the clock tab computes a
+      real number for every one.** ETH_PLL (500 MHz), USBSS_PLL (125 MHz) and SERDES_PLL (16
+      multipliers) land with HSE as their ONLY input - a worse trap than USBHS_PLL's REFSEL one,
+      since HSE is user-editable (not `fixed: true`), so each number holds only while HSE stays
+      25 MHz; the precondition is named in both each PLL's own comment and the top-level clock
+      `notes:`, not smoothed over. ETH_PLL's citation is an explicit INFERENCE (exhaustive
+      `RCC_PLLCFGR2` absence + a clock-tree figure, no quotable RM sentence) and is labelled as
+      one. RNG/I2S2/I2S3/HSADC (bare mux, no divider field at all), UHSIF (bare mux + plain
+      divider) and LTDC/ETH1G (AGENT-2's mux-leg-divider mechanism) round out the eight - LTDC
+      corrected to a real FOUR-way mux against a prior two-choice survey, read directly off the
+      RM rather than carried forward. `validate_mcu.py` fixed first (`b09290d`) to actually
+      validate the leg-divider shape (it previously compared raw objects against a string set,
+      failing every entry regardless of correctness) before any data was written behind it.
+      Verified end to end: LTDC's and ETH1G's SERDES_PLL-fed legs computed together in one
+      project against the SAME live multiplier-PLL state (625 MHz -> 312.5/78.125 MHz), proving
+      the leg-divider mechanism against a real multiplier PLL for the first time. Found (not
+      fixed - `app/**`) a real display bug in `clockSummaryMarkdown()` (`app/engine/export.js:
+      521`, `/undefined` and `[object Object]` for the two new tap shapes) - the actual clock
+      tab is unaffected. Full detail: `agents/BOARD.md` 2026-09-14T10:35Z.
 - [x] (AGENT-2) **The nested-struct shape (§3 REQUEST, 09-12T19:33Z): a member that is a POINTER
       to a second struct no SDK function takes alone.** `codegen.init_structs.<inner-struct>.embed`
       now maps a param's `embed: <key>` to `{ into: <outer-struct>, member: <pointer-field> }`.
