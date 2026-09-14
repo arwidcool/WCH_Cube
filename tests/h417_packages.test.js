@@ -219,18 +219,28 @@ test('every peripheral offers a mode that does something, or declares that it ho
 // both times, not by writing down whatever the last run printed - the data was moving under this
 // file all afternoon.
 //
-// The four that remain are all QFN68, all cases where a signal has few pads to move to.
-// The FMC setting these come from was renamed "Address bus" -> "Address lines" (its
-// choice is still "A0-A25") since this list was first written; found AGENT-1, STATUS §3,
-// 2026-09-13T00:33Z — the count below was always right, only the label had gone stale:
-//   FMC.Address lines = A0-A25   FMC_A6 + FMC_A11 + FMC_A20 on PB11  (FMC_A11 could move)
-//   FMC.Address lines = A0-A25   FMC_A7 + FMC_A12 + FMC_A21 on PB12  (FMC_A12 could move)
-//   UHSIF.Mode = Enabled         UHSIF_PORT3 + UHSIF_PORT6 on PB0    (UHSIF_PORT3 could move)
-//   UHSIF.Mode = Enabled         UHSIF_PORT4 + UHSIF_PORT7 on PB1    (UHSIF_PORT4 could move)
-// At 0 the entry goes and these three checks become the plain assertions they want to be.
+// LOWERED AGAIN 2026-09-14 (AGENT-3): 4 -> 2, both UHSIF ones gone. AGENT-1 landed UHSIF on
+// `signal_groups:` (board, per AGENT-2's atomicity ruling — the same "one register field
+// moves everything at once" shape SDMMC needed `remaps:` for) instead of the old
+// unconditional 49-pad claim, and the two UHSIF collisions this ratchet held
+// (`UHSIF_PORT3`+`PORT6` on `PB0`, `UHSIF_PORT4`+`PORT7` on `PB1`) disappeared with it — not
+// fixed by hand, fixed by the model no longer offering a combination the silicon cannot
+// produce. Confirmed by re-measuring (`node tests/run.js "h417_packages"`), not by trusting
+// the drop.
+//
+// The two that remain are both QFN68, both FMC, and the ratchet's own sweep still calls
+// them AVOIDABLE (an alternative pad exists), not silicon-forced — that classification is
+// this test's, not a verdict AGENT-1 or main have confirmed independently yet:
+//   FMC.Address lines = A0-A15   FMC_A6 + FMC_A11 on PB11  (FMC_A11 had somewhere else to go)
+//   FMC.Address lines = A0-A15   FMC_A7 + FMC_A12 on PB12  (FMC_A12 had somewhere else to go)
+// If AGENT-1's FMC trace instead finds these two silicon-forced the way PD11/PD12's pair
+// was, this ratchet needs the two-kind split main asked for (silicon-forced vs fixable)
+// rather than a further count — a single number cannot tell a user "this one is layout
+// information" from "this one is a bug" once both kinds sit in it. At 0 fixable remaining,
+// this entry goes and the checks below become the plain assertions they want to be.
 const COLLISION_CEILING = {
   // package: choices that default onto an already-taken pad they could have avoided
-  QFN68: 4,
+  QFN68: 2,
   QFN88: 0,
   QFN128: 0,
 };
