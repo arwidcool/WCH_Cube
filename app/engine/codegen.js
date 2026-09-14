@@ -1341,7 +1341,10 @@ export function initPlan(pid) {
       byStruct.set(cbl.struct, primary);
       structs.push(primary);
       for (const d of chanDefs) {
-        if (d.readonly || !paramApplies(pid, d)) continue;
+        // `inst.n` — the ONE call site that can resolve an `instance_setting`
+        // dependency (OPA's PSEL/NSEL/Mode, gated on "OPA<n> positive input" etc.,
+        // a DIFFERENT setting name per instance). See paramApplies()'s own comment.
+        if (d.readonly || !paramApplies(pid, d, inst.n)) continue;
         const structName = d.struct || cbl.struct;
         let block = byStruct.get(structName);
         if (!block) {

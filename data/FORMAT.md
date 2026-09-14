@@ -517,6 +517,45 @@ refuses to do.
 entries and TIM1's has eight. That is the same rule as `gpio.speeds`: what the part does
 not have is not offered.
 
+### `depends_on: { instance_setting: ... }` — a dependency whose SETTING NAME varies per instance
+
+Every `depends_on`/`when` above is checked against the PERIPHERAL's settings once — right
+for `channel_params` whose own fields are free enums (DAC's trigger/wave, LTDC's layer
+members), because nothing about them depends on which instance is being filled. CH32H417
+OPA breaks that: `OPA_InitTypeDef.PSEL` is derived from a setting whose *name itself*
+changes per instance — `"OPA1 positive input"`, `"OPA2 positive input"`, `"OPA3 positive
+input"` are three DIFFERENT settings on ONE shared peripheral, not one setting three
+instances could share. Checking `depends_on: { setting: "OPA1 positive input", ... }`
+against the peripheral once would apply instance 1's choice to instances 2 and 3 alike —
+a number that compiles and configures the wrong op-amp, the same defect class `CMP_NUM`
+already exists to prevent (right for instance 1 by accident, wrong for the rest).
+
+```yaml
+channel_params:
+  struct: OPA_InitTypeDef
+  applies_per: channel
+  instances:
+    1: { sdk_call: OPA_Init, handle: OPA1, setting: "OPA1 positive input", active_choices: [P0, P1] }
+    2: { sdk_call: OPA_Init, handle: OPA2, setting: "OPA2 positive input", active_choices: [P0, P1] }
+    3: { sdk_call: OPA_Init, handle: OPA3, setting: "OPA3 positive input", active_choices: [P0, P1] }
+  params:
+    - key: psel
+      name: Positive input select
+      sdk_field: PSEL
+      type: enum
+      default: P0
+      options: [{ name: P0, value: 0, sdk: PSEL_P0 }, { name: P1, value: 1, sdk: PSEL_P1 }]
+      depends_on: { instance_setting: "OPA{n} positive input", equals: P0 }
+```
+
+`{n}` is substituted with the ACTIVE instance's own number — `1`, `2`, or `3` — only at
+the point `channel_params:`'s per-instance loop checks the dependency, never earlier;
+`normDeps()` keeps the literal `{n}` in the parsed dependency's name. Every OTHER
+dependency kind (`setting:`, `param:`, plain `when:`) is unaffected and unchanged: an
+`instance_setting` dependency checked OUTSIDE a `channel_params:` instance loop (no
+instance to substitute) is left applicable, the same "an unresolvable dependency does not
+hide a field" rule every other dependency kind already follows.
+
 ### `call_arg: true` — a scalar the apply call needs beside the struct pointer
 
 Every mechanism above assumes the function that applies a struct takes the struct alone

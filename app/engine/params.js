@@ -58,6 +58,16 @@ function normDeps(d) {
       out.push({ kind: 'param', name: String(dep.param), ...comparison(dep) });
     } else if (dep.setting !== undefined) {
       out.push({ kind: 'setting', name: String(dep.setting), ...comparison(dep) });
+    } else if (dep.instance_setting !== undefined) {
+      // A `channel_params:` row gated on a setting whose NAME differs per instance -
+      // CH32H417 OPA is the proven case: PSEL is derived from "OPA1 positive input" /
+      // "OPA2 positive input" / "OPA3 positive input", three DIFFERENT settings on ONE
+      // shared peripheral, not one setting three instances could share. `{n}` is
+      // substituted with the ACTIVE instance's own number when this is checked
+      // (`paramApplies()`'s third argument, read only by `channelParamBlock()`'s
+      // per-instance loop) - never resolved here, because normDeps() runs once per
+      // param definition and has no instance to substitute yet.
+      out.push({ kind: 'instance_setting', name: String(dep.instance_setting), ...comparison(dep) });
     } else {
       for (const [name, want] of Object.entries(dep)) out.push({ kind: 'any', name, op: 'equals', value: want });
     }
@@ -219,15 +229,34 @@ function compare(have, op, want) {
  *
  * That last choice is right for a FIELD and wrong for a whole init STRUCT, which is
  * why `depProblems()` exists beside it - read that before changing this.
+ *
+ * `instanceN` is read ONLY for an `instance_setting` dependency (see `normDeps()`),
+ * and only `channelParamBlock()`'s per-instance loop in codegen.js ever passes it -
+ * every other caller checks an ordinary, whole-peripheral param and has no instance to
+ * give. CH32H417 OPA is why this exists: `channel_params` filled and applied the SAME
+ * struct once per instance (DAC's two channels, LTDC's two layers) long before a
+ * struct's OWN FIELD was itself a setting whose NAME varies by instance ("OPA1
+ * positive input" vs "OPA2 positive input" vs "OPA3 positive input") - checking that
+ * against the PERIPHERAL's settings once, the same way an ordinary channel_params
+ * field is checked, would apply instance 1's choice to instances 2 and 3 alike: a
+ * number that compiles and configures the wrong op-amp, the exact defect class
+ * `CMP_NUM` already cost a round to find.
  */
-export function paramApplies(pid, def) {
+export function paramApplies(pid, def, instanceN) {
   const deps = def.deps || [];
   if (!deps.length) return true;
   const st = (S.periph[pid] && S.periph[pid].settings) || {};
   const ps = (S.periph[pid] && S.periph[pid].params) || {};
   return deps.every(dep => {
     let have;
-    if (dep.kind === 'setting') have = st[dep.name];
+    if (dep.kind === 'instance_setting') {
+      // No instance context: an ordinary (non-channel) param can never satisfy this
+      // dependency, and neither guessing an instance nor treating it as false is
+      // right - unresolvable stays "applies", the same rule every other unresolvable
+      // dependency already follows two lines below.
+      if (instanceN === undefined) return true;
+      have = st[dep.name.replace('{n}', instanceN)];
+    } else if (dep.kind === 'setting') have = st[dep.name];
     else if (dep.kind === 'param') have = ps[dep.name];
     else have = dep.name in ps ? ps[dep.name] : st[dep.name];
     if (have === undefined) return true;
@@ -587,7 +616,12 @@ export function getChannelParams(pid, channel) {
   return channelParamDefs(pid).map(d => ({
     ...d,
     value: store[d.key] !== undefined ? store[d.key] : d.default,
-    applicable: paramApplies(pid, d),
+    // `channel` IS the instance number here - without it, an `instance_setting`
+    // dependency (OPA's PSEL etc.) could never resolve and the field would show for
+    // every instance regardless of that instance's own setting, the same UI-vs-
+    // generated-C disagreement this mechanism exists to prevent, just in the picker
+    // instead of the C.
+    applicable: paramApplies(pid, d, channel),
   }));
 }
 
