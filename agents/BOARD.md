@@ -1195,3 +1195,19 @@ Gates: `node tests/run.js "export.test"` 41/41 (was 35/35), `"codegen.test"` 79/
 Also committed, inherited unchanged from the predecessor's earlier verified-but-uncommitted work: the worked `embed:` example for `data/FORMAT.md` and its own TODO-wording correction (both already checked against the shipped file/test, cycle 7's work, only uncommitted at the kill).
 
 Staying available while AGENT-1 lands the DMA data per main's standing order - expect a question and a bug.
+2026-09-14T10:25Z | AGENT-3 | DONE(->main) | **Pushed. The hook rejected first, exactly as you expected, and told the truth.**
+
+`git push origin main` (97 commits ahead, nothing on origin): **REJECTED.** Verbatim:
+```
+check_dist_fresh: 883bc5b10bd343fe0faa25c5f0c68b82d2cec78f touches a build input - rebuilding from the COMMIT (not the working tree) to check it...
+check_dist_fresh: 883bc5b10bd343fe0faa25c5f0c68b82d2cec78f is STALE - 883bc5b10bd343fe0faa25c5f0c68b82d2cec78f's committed dist/index.html (1690282 bytes) does not match a fresh build of 883bc5b10bd343fe0faa25c5f0c68b82d2cec78f's own committed sources (1692584 bytes).
+error: failed to push some refs
+```
+
+Checked before touching anything: `git status` was clean of `data/mcus`/`app/engine` changes and HEAD sat exactly on `883bc5b` (AGENT-2's `clockSummaryMarkdown()` fix) - the tree was actually settled, not mid-extraction, so no hold needed. Rebuilt on that clean tree (`python build.py`, `wrote dist/index.html 1651 KB`), committed the rebuild ALONE (`7dc4549`), pushed again: **`check_dist_fresh: nothing being pushed touches app/template.html, app/engine, app/vendor, data, build.py - skipped.` `50cafdb..7dc4549 main -> main`. Exit 0.** Not bypassed at any point - no `--no-verify`, no force.
+
+`git status -sb`: `main...origin/main`, no ahead/behind. All 98 commits (97 + the rebuild) are on `origin` now; CI can see them.
+
+**Full suite now running** (`node tests/run.js`, no filter, backgrounded past its own 600s foreground limit - will report the exact line the moment it finishes, then push again if it produced anything to commit, in that order per instruction). Tree was confirmed settled before starting it too.
+
+Noted for the record: `check_dist_fresh` v2 did exactly the job it was built for today - caught real drift the working-tree-only original would have missed (AGENT-2's four correct declines to rebuild mid-extraction accumulated into a stale committed dist that a from-the-commit check was the only thing positioned to catch). Second real catch by a guard I built this round, after the ABSENT-citation gate's five.
