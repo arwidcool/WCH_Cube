@@ -419,6 +419,31 @@ def check_peripherals(doc: dict, r: Report) -> None:
         # part carrying both would have two places saying where a signal goes, and the
         # engine reads `signal_pins` first, so the `remaps:` list would silently be
         # dead. Rejected rather than resolved by precedence.
+        # `signal_groups:` - a NAMED SUBSET of `signal_pins:` that moves together (an
+        # atomic remap field coupling only SOME of an af-muxed peripheral's signals,
+        # CH32H417 UHSIF's PORT0-7 under one shared UHSIF_PORT_RM being the first case).
+        # `data/FORMAT.md`'s own rule: every member must offer the SAME NUMBER of
+        # options, IN THE SAME ORDER - index N is every member's own pin under choice N,
+        # the identical "index is the register value" rule `remaps:` states one level up.
+        # Checked here because nothing else does (data/FORMAT.md, "validate_mcu.py
+        # should check the counts agree; a group whose members disagree on how many
+        # options they have is a data defect, not something the engine guesses past").
+        grouped_signals: set[str] = set()
+        for gi, grp in enumerate(P.get("signal_groups") or []):
+            gw = f"{where}.signal_groups[{gi}]"
+            members = (grp or {}).get("signals") if isinstance(grp, dict) else None
+            if not isinstance(members, list) or len(members) < 2:
+                r.error(gw, "must be a mapping with `signals:`, a list of 2+ signal names")
+                continue
+            grouped_signals.update(str(m) for m in members)
+            sp = P.get("signal_pins") or {}
+            counts = {m: len(sp[m]) for m in members if isinstance(sp.get(m), list)}
+            if len(set(counts.values())) > 1:
+                detail = ", ".join(f"{m}={n}" for m, n in counts.items())
+                r.error(gw, f"members do not all offer the same number of options - index N "
+                            f"means a different remap value for different members otherwise, "
+                            f"and the group would silently mis-drag one of them ({detail})")
+
         sig_pins = P.get("signal_pins")
         af_routed: set[str] = set()
         if sig_pins is not None:
@@ -451,9 +476,14 @@ def check_peripherals(doc: dict, r: Report) -> None:
                         r.error(ow, "missing `pin`")
                     elif str(pin) not in pins_map:
                         r.error(ow, f"`{pin}` is not declared in `pins:`")
-                    elif str(pin) in seen_pins:
+                    elif str(pin) in seen_pins and str(signal) not in grouped_signals:
                         # Two entries for one pin can only differ in `af`, and the engine
                         # keys the user's choice by PIN NAME, so the second is unreachable.
+                        # NOT true for a `signal_groups:` member: there, the INDEX is what
+                        # the engine keys on (matching every other member), and two
+                        # different indices genuinely sharing one physical pin is a real
+                        # hardware fact (CH32H417 UHSIF PORT0-2: RM=00 and RM=01 both land
+                        # on the same pad), not dead data.
                         r.error(ow, f"`{pin}` is listed twice for this signal; the engine keys "
                                     f"the choice by pin name, so the second entry is dead")
                     else:

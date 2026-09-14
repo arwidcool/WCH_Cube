@@ -980,17 +980,40 @@ def _serdes_settings() -> list[dict]:
 
 
 def _uhsif_settings() -> list[dict]:
-    """UHSIF's mode used to claim nothing, so all 49 of its ports were unreachable.
+    """UHSIF's mode used to claim nothing (all 49 ports unreachable), then claimed all 49
+    regardless of width - an 8-bit bus took the same 32 data pads a 32-bit bus does,
+    pads the design does not use and cannot release. Fixed the same way DVP's data width
+    already is (CH32H417.yaml:2541-2546, `Mode: 8-bit/10-bit/12-bit` each naming its own
+    `signals:`): width IS the claiming choice, not a second dropdown beside it.
 
-    DS Table 2-2-16 gives `UHSIF_PORT0..PORT47` plus `UHSIF_CLK`, and RM ch.47 names them
-    the lanes of the high-speed parallel interface. There is no smaller unit worth
-    offering - a port either is or is not part of the interface - so one `Enabled` choice
-    carries the whole set rather than 49 rows.
+    The function-per-port table (`tools/recover_h417_uhsif_pdf.py`, PDF Table 3-2,
+    declared at data/sources/H417/UHSIF_port_functions.yaml) gives the split: CLK plus
+    11 control-area ports (PORT3 SEL[0], PORT4 SEL[1], PORT5 AF#, PORT7 AE#, PORT8 EOP#,
+    PORT9 WRNF, PORT11 RDNE, PORT12 RD#, PORT13 OE#, PORT14 WR#, PORT15 CS#) are needed
+    at every width; PORT16..PORT(16+width-1) are the DATA[0..width-1] bits. PORT0, PORT1,
+    PORT2, PORT6 and PORT10 read NC (not connected) in that same table under every
+    width - genuinely unused by the shipped library's only documented mapping ("For
+    other mappings, please contact technical support", the PDF's own words) - but kept
+    CLAIMED here rather than dropped, so `tests/completeness.test.js` never has to carry
+    an unclaimable `signal_pins:` row for them and a board that does wire a custom
+    mapping still sees them reserved. Board findings 2026-09-13T02:00Z (the over-claim)
+    and 2026-09-14 (the recovered table) carry the citations.
     """
+    ctrl = ["PORT3", "PORT4", "PORT5", "PORT7", "PORT8", "PORT9",
+            "PORT11", "PORT12", "PORT13", "PORT14", "PORT15"]
+    aux = ["PORT0", "PORT1", "PORT2", "PORT6", "PORT10"]
+
+    def data_width(n):
+        return ["CLK"] + ctrl + aux + [f"PORT{16 + i}" for i in range(n)]
+
     return [{"name": "Mode",
-             "choices": [{"name": "Disable"},
-                         {"name": "Enabled",
-                          "signals": ["CLK"] + [f"PORT{i}" for i in range(48)]}]}]
+             "choices": [
+                 {"name": "Disable"},
+                 {"name": "8-bit",  "signals": data_width(8)},
+                 {"name": "16-bit", "signals": data_width(16)},
+                 {"name": "24-bit", "signals": data_width(24)},
+                 {"name": "32-bit", "signals": data_width(32)},
+             ]}]
 
 TYPE_OF = {
     **{f"USART{i}": "USART" for i in range(1, 9)},

@@ -7382,57 +7382,10 @@ peripherals:
       - name: Mode
         choices:
           - { name: Disable }
-          - { name: Enabled, signals: [CLK, PORT0, PORT1, PORT2, PORT3, PORT4, PORT5, PORT6, PORT7, PORT8, PORT9, PORT10, PORT11, PORT12, PORT13, PORT14, PORT15, PORT16, PORT17, PORT18, PORT19, PORT20, PORT21, PORT22, PORT23, PORT24, PORT25, PORT26, PORT27, PORT28, PORT29, PORT30, PORT31, PORT32, PORT33, PORT34, PORT35, PORT36, PORT37, PORT38, PORT39, PORT40, PORT41, PORT42, PORT43, PORT44, PORT45, PORT46, PORT47] }
-    signal_pins:
-      CLK: [{ pin: PC0 }, { pin: PF14 }, { pin: PD9 }, { pin: PF11 }]
-      PORT0: [{ pin: PC1 }, { pin: PF12 }]
-      PORT1: [{ pin: PC2 }, { pin: PF13 }]
-      PORT10: [{ pin: PE15 }]
-      PORT11: [{ pin: PB10 }]
-      PORT12: [{ pin: PB11 }]
-      PORT13: [{ pin: PB12 }]
-      PORT14: [{ pin: PB13 }]
-      PORT15: [{ pin: PB14 }]
-      PORT16: [{ pin: PD10 }]
-      PORT17: [{ pin: PD11 }]
-      PORT18: [{ pin: PD12 }]
-      PORT19: [{ pin: PD13 }]
-      PORT2: [{ pin: PC3 }, { pin: PE7 }]
-      PORT20: [{ pin: PD14 }]
-      PORT21: [{ pin: PD15 }]
-      PORT22: [{ pin: PF0 }]
-      PORT23: [{ pin: PF1 }]
-      PORT24: [{ pin: PF2 }]
-      PORT25: [{ pin: PC6 }]
-      PORT26: [{ pin: PC7 }]
-      PORT27: [{ pin: PC8 }]
-      PORT28: [{ pin: PC9 }]
-      PORT29: [{ pin: PA13 }]
-      PORT3: [{ pin: PE8 }, { pin: PB0 }, { pin: PC1 }]
-      PORT30: [{ pin: PA14 }]
-      PORT31: [{ pin: PA15 }]
-      PORT32: [{ pin: PC10 }]
-      PORT33: [{ pin: PC11 }]
-      PORT34: [{ pin: PC12 }]
-      PORT35: [{ pin: PD0 }]
-      PORT36: [{ pin: PD1 }]
-      PORT37: [{ pin: PD2 }]
-      PORT38: [{ pin: PD3 }]
-      PORT39: [{ pin: PD4 }]
-      PORT4: [{ pin: PE9 }, { pin: PB1 }, { pin: PC2 }]
-      PORT40: [{ pin: PD5 }]
-      PORT41: [{ pin: PD6 }]
-      PORT42: [{ pin: PD7 }]
-      PORT43: [{ pin: PF3 }]
-      PORT44: [{ pin: PF4 }]
-      PORT45: [{ pin: PF5 }]
-      PORT46: [{ pin: PE0 }]
-      PORT47: [{ pin: PE1 }]
-      PORT5: [{ pin: PE10 }, { pin: PC3 }]
-      PORT6: [{ pin: PE11 }, { pin: PB0 }]
-      PORT7: [{ pin: PE12 }, { pin: PB1 }]
-      PORT8: [{ pin: PE13 }]
-      PORT9: [{ pin: PE14 }]
+          - { name: "8-bit", signals: [CLK, PORT3, PORT4, PORT5, PORT7, PORT8, PORT9, PORT11, PORT12, PORT13, PORT14, PORT15, PORT0, PORT1, PORT2, PORT6, PORT10, PORT16, PORT17, PORT18, PORT19, PORT20, PORT21, PORT22, PORT23] }
+          - { name: "16-bit", signals: [CLK, PORT3, PORT4, PORT5, PORT7, PORT8, PORT9, PORT11, PORT12, PORT13, PORT14, PORT15, PORT0, PORT1, PORT2, PORT6, PORT10, PORT16, PORT17, PORT18, PORT19, PORT20, PORT21, PORT22, PORT23, PORT24, PORT25, PORT26, PORT27, PORT28, PORT29, PORT30, PORT31] }
+          - { name: "24-bit", signals: [CLK, PORT3, PORT4, PORT5, PORT7, PORT8, PORT9, PORT11, PORT12, PORT13, PORT14, PORT15, PORT0, PORT1, PORT2, PORT6, PORT10, PORT16, PORT17, PORT18, PORT19, PORT20, PORT21, PORT22, PORT23, PORT24, PORT25, PORT26, PORT27, PORT28, PORT29, PORT30, PORT31, PORT32, PORT33, PORT34, PORT35, PORT36, PORT37, PORT38, PORT39] }
+          - { name: "32-bit", signals: [CLK, PORT3, PORT4, PORT5, PORT7, PORT8, PORT9, PORT11, PORT12, PORT13, PORT14, PORT15, PORT0, PORT1, PORT2, PORT6, PORT10, PORT16, PORT17, PORT18, PORT19, PORT20, PORT21, PORT22, PORT23, PORT24, PORT25, PORT26, PORT27, PORT28, PORT29, PORT30, PORT31, PORT32, PORT33, PORT34, PORT35, PORT36, PORT37, PORT38, PORT39, PORT40, PORT41, PORT42, PORT43, PORT44, PORT45, PORT46, PORT47] }
     params:
       - key: mode_select
         name: Mode
@@ -7562,32 +7515,84 @@ peripherals:
           register bit-MAP at :3989 appears to give the same field [1:0]; that is the
           conversion running UHSIFSRC[1:0] into the following line, not a second reading.)
 
-      - key: width_bit
-        name: Data bus width
-        sdk_none: true
-        sdk_note: "UHSIF_GPIO_Init argument 5 (ch32h417_uhsif.h:181)."
-        type: enum
-        default: "32-bit"
-        options:
-          - { name: "8-bit",  value: 0, sdk: DEF_UHSIF_DATA_BIT8 }
-          - { name: "16-bit", value: 1, sdk: DEF_UHSIF_DATA_BIT16 }
-          - { name: "24-bit", value: 2, sdk: DEF_UHSIF_DATA_BIT24 }
-          - { name: "32-bit", value: 3, sdk: DEF_UHSIF_DATA_BIT32 }
-        help: >
-          ch32h417_uhsif.h:43-46. THIS ROW DOES NOT YET CHANGE WHICH PADS ARE CLAIMED,
-          and that is a known defect rather than a design: `Mode: Enabled` claims all 49
-          signals whatever the width, so an 8-bit bus still takes 32 data pads the design
-          does not use and cannot release. Defaulted to 32-bit because that is what the
-          claim currently matches, and because it is what the EVT example uses
-          (ch32h417_uhsif.c:35). Splitting the claim per width needs the pad table named
-          in the Data pin mapping row above. FINDING on the board 2026-09-13T02:00Z.
+    # `width_bit` used to be a SEPARATE dropdown carrying "8/16/24/32-bit" only for
+    # UHSIF_GPIO_Init's 5th argument, disconnected from which pads were claimed - the
+    # exact "do not duplicate a setting" trap (data/FORMAT.md): a project could pick
+    # "Mode: Enabled" (claims all 49) and "Data bus width: 8-bit" (claims 8 via the
+    # SDK argument alone) and the two would disagree about how many data pads are
+    # really in use. Removed: `Mode`'s own choice names ARE the width now (below),
+    # the single source for both the pin claim and (once UHSIF_GPIO_Init's five-
+    # argument-in-one-call gap is closed, board 2026-09-13T01:14Z) the SDK argument.
+    signal_pins:
+      CLK: [{ pin: PC0 }, { pin: PF14 }, { pin: PD9 }, { pin: PF11 }]
+      # PORT0-7: UHSIF_PORT_RM[1:0] moves all eight together (CH32H417RM.md:11770-
+      # 11801, same register as SDMMC_RM) - `signal_groups:` below says so. Three
+      # slots each, index 0/1/2 = RM 00/01/1x, same order for every member (checked:
+      # `validate_mcu.py` now verifies this). RM=00 and RM=01 give PORT0/1/2 the SAME
+      # pin (PF12/PF13/PE7) - a real, repeated hardware fact, not dead data: only
+      # RM=1x moves them (to PC1/PC2/PC3).
+      PORT0: [{ pin: PF12 }, { pin: PF12 }, { pin: PC1 }]
+      PORT1: [{ pin: PF13 }, { pin: PF13 }, { pin: PC2 }]
+      PORT2: [{ pin: PE7 }, { pin: PE7 }, { pin: PC3 }]
+      PORT3: [{ pin: PE8 }, { pin: PC1 }, { pin: PB0 }]
+      PORT4: [{ pin: PE9 }, { pin: PC2 }, { pin: PB1 }]
+      PORT5: [{ pin: PE10 }, { pin: PC3 }, { pin: PE10 }]
+      PORT6: [{ pin: PE11 }, { pin: PB0 }, { pin: PE11 }]
+      PORT7: [{ pin: PE12 }, { pin: PB1 }, { pin: PE12 }]
+      PORT8: [{ pin: PE13 }]
+      PORT9: [{ pin: PE14 }]
+      PORT10: [{ pin: PE15 }]
+      PORT11: [{ pin: PB10 }]
+      PORT12: [{ pin: PB11 }]
+      PORT13: [{ pin: PB12 }]
+      PORT14: [{ pin: PB13 }]
+      PORT15: [{ pin: PB14 }]
+      PORT16: [{ pin: PD10 }]
+      PORT17: [{ pin: PD11 }]
+      PORT18: [{ pin: PD12 }]
+      PORT19: [{ pin: PD13 }]
+      PORT20: [{ pin: PD14 }]
+      PORT21: [{ pin: PD15 }]
+      PORT22: [{ pin: PF0 }]
+      PORT23: [{ pin: PF1 }]
+      PORT24: [{ pin: PF2 }]
+      PORT25: [{ pin: PC6 }]
+      PORT26: [{ pin: PC7 }]
+      PORT27: [{ pin: PC8 }]
+      PORT28: [{ pin: PC9 }]
+      PORT29: [{ pin: PA13 }]
+      PORT30: [{ pin: PA14 }]
+      PORT31: [{ pin: PA15 }]
+      PORT32: [{ pin: PC10 }]
+      PORT33: [{ pin: PC11 }]
+      PORT34: [{ pin: PC12 }]
+      PORT35: [{ pin: PD0 }]
+      PORT36: [{ pin: PD1 }]
+      PORT37: [{ pin: PD2 }]
+      PORT38: [{ pin: PD3 }]
+      PORT39: [{ pin: PD4 }]
+      PORT40: [{ pin: PD5 }]
+      PORT41: [{ pin: PD6 }]
+      PORT42: [{ pin: PD7 }]
+      PORT43: [{ pin: PF3 }]
+      PORT44: [{ pin: PF4 }]
+      PORT45: [{ pin: PF5 }]
+      PORT46: [{ pin: PE0 }]
+      PORT47: [{ pin: PE1 }]
+    signal_groups:
+      - signals: [PORT0, PORT1, PORT2, PORT3, PORT4, PORT5, PORT6, PORT7]
     notes: >
       Its driver is a prebuilt libUHSIF.a (Evt/EXAM/UHSIF/UHSIF_SLAVE/Common) rather than
-      SPL source, so UHSIF_GPIO_Init's body cannot be read and the per-mapping, per-width
-      pad table is only in that folder's UHSIF Development Reference Manual PDF, which has
-      no markdown conversion yet. Two consequences are recorded rather than guessed at:
-      which pads each of the three data mappings and four clock mappings select, and how
-      the 8/16/24/32-bit width narrows the 49-signal claim. Both are in TASKS.md.
+      SPL source, so UHSIF_GPIO_Init's body cannot be read directly - `uhsif_port_rm`/
+      `uhsif_clk_rmm`'s physical-pad question stays open (board 2026-09-14T02:20Z: the
+      file's own PORT0-7 candidates are now grouped and RM-ordered per the recovered
+      Table 9-32 columns above, which is a DIFFERENT and now-answered question from
+      "which physical pin does argument 2 select" - UHSIF_GPIO_Init takes the mapping
+      as a plain callable argument, not an unwritable register field the way SDMMC_RM
+      is, so once the physical mapping is confirmed this is a citation away from
+      working end to end, not a second schema gap). The per-width claim (Mode's own
+      choices, above) is answered: `tools/recover_h417_uhsif_pdf.py`, declared at
+      `data/sources/H417/UHSIF_port_functions.yaml`.
   USART4:
     category: Connectivity
     settings:
