@@ -228,24 +228,100 @@ test('every peripheral offers a mode that does something, or declares that it ho
 // produce. Confirmed by re-measuring (`node tests/run.js "h417_packages"`), not by trusting
 // the drop.
 //
-// The two that remain are both QFN68, both FMC, and the ratchet's own sweep still calls
-// them AVOIDABLE (an alternative pad exists), not silicon-forced — that classification is
-// this test's, not a verdict AGENT-1 or main have confirmed independently yet:
-//   FMC.Address lines = A0-A15   FMC_A6 + FMC_A11 on PB11  (FMC_A11 had somewhere else to go)
-//   FMC.Address lines = A0-A15   FMC_A7 + FMC_A12 on PB12  (FMC_A12 had somewhere else to go)
-// If AGENT-1's FMC trace instead finds these two silicon-forced the way PD11/PD12's pair
-// was, this ratchet needs the two-kind split main asked for (silicon-forced vs fixable)
-// rather than a further count — a single number cannot tell a user "this one is layout
-// information" from "this one is a bug" once both kinds sit in it. At 0 fixable remaining,
-// this entry goes and the checks below become the plain assertions they want to be.
+// LOWERED AGAIN 2026-09-14 (AGENT-3): 2 -> 0. The two that remained were both QFN68, both
+// FMC (PB11: A6+A11, PB12: A7+A12) — this ratchet's own sweep called them AVOIDABLE, but
+// its "silicon-forced" test only checks that SOME bonded alternative exists, not that the
+// alternative is actually FREE. AGENT-1 proved by experiment (not argument) that it is
+// not: `A11`'s only alternative, `PD11`, is `A16`'s ONLY pad, claimed alongside `A11`
+// under the same widest `Address lines = A0-A25` choice — moving `A11` there relocates
+// the collision rather than removing it, and reordering `signal_pins:` to test this
+// directly held QFN68 at 2 while REGRESSING QFN88 from 0 to 2 (`5895ee2`, board
+// `84f4b53`). **Two-kind split applied**: `SILICON_FORCED_DOCUMENTED` above names both
+// pads (with the full three-claimant list AGENT-1's trace found, not just the two the
+// sweep's own per-pad dedup kept) and filters them out of `defects` before this ceiling
+// is checked — they read as documented layout information now, not a shrinking number of
+// bugs. At 0 fixable remaining, this entry stays only as long as `SILICON_FORCED_DOCUMENTED`
+// is non-empty; if that ever empties too, both structures go and the checks below become
+// the plain assertions they want to be.
 const COLLISION_CEILING = {
   // package: choices that default onto an already-taken pad they could have avoided
-  QFN68: 2,
+  QFN68: 0,
   QFN88: 0,
   QFN128: 0,
 };
 const COLLISION_OWNER = 'AGENT-1';
 const COLLISION_TASK = 'CH32H417: default pins collide';
+
+// THE TWO-KIND SPLIT (main, 2026-09-14): `sweepCollisions()`'s own "silicon-forced" test
+// is shallow — it asks only "does a BONDED alternative pin exist for this signal", not
+// "is that alternative actually FREE". PB11's `FMC_A11` has a real second option, `PD11` —
+// but `PD11` is `A16`'s ONLY pad, claimed alongside `A11` under the widest `Address lines
+// = A0-A25` choice, so the sweep called it "avoidable" while the only place to move it to
+// was already taken. AGENT-1 proved this by EXPERIMENT, not argument (`5895ee2`, board
+// `84f4b53`): swapped `A11`/`A12`'s `signal_pins:` order in a throwaway local edit,
+// re-ran this exact sweep, reverted with `git checkout --` (confirmed `git status` clean
+// and `validate_mcu.py` unchanged at 0/73 before committing anything else). Result: QFN68
+// held at exactly 2 — the same collision, merely relabelled onto `PD11` — and QFN88
+// REGRESSED from 0 to 2. Reordering is a net loss on the package it was meant to help and
+// a regression on a clean one; that is as settled as this gets without a schema change
+// (an atomic address-bus group, the same shape UHSIF/SDMMC needed for their own
+// multi-signal remaps, TASKS.md).
+//
+// Named here rather than left for the automatic classifier to (still, wrongly) call
+// avoidable. Filtered OUT of `defects` before the ratchet ever sees them — QFN68 reads 0
+// avoidable, not 2, because these two are not defects; they are a documented layout fact.
+// The auto-generated `defects` string only ever named TWO claimants per pad (the sweep
+// dedupes by pad, keeping the first choice-width it finds one on) — AGENT-1's trace found
+// a THIRD on each: `PB11` carries `A6`, `A11` AND `A20`; `PB12` carries `A7`, `A12` AND
+// `A21`. The citation text below states all three per pad, because a stable count that
+// hides a claimant is not the fact a board designer needs.
+const SILICON_FORCED_DOCUMENTED = {
+  QFN68: [
+    // Matched on the SIGNAL naming the pad, not the pad alone: `/\bon PB11\b/` on its own
+    // would also swallow a future, unrelated defect that happens to land on PB11 for a
+    // completely different reason (a different peripheral's default, say) - silently
+    // filing a genuinely new bug under a citation that never traced it. Requiring
+    // `FMC_A11` in the same line ties the exemption to the specific claim it was proven
+    // against, the same "anchor must be exact" discipline every planted-break file here
+    // already uses for find/replace mutations.
+    { pad: 'PB11', match: /\bFMC_A11\b.*\bon PB11\b|\bon PB11\b.*\bFMC_A11\b/,
+      claimants: ['FMC_A6', 'FMC_A11', 'FMC_A20'],
+      citation: 'AGENT-1, `5895ee2` / board `84f4b53`: `A6` and `A20`\'s only alternates '
+        + '(`PA10`/`PE4`) are not bonded on QFN68, so both pin to `PB11` with nowhere to '
+        + 'go; `A11`\'s only alternate, `PD11`, is itself `A16`\'s only pad, claimed '
+        + 'alongside `A11` under the same widest `Address lines = A0-A25` choice. Tested '
+        + 'by reordering `signal_pins:` and reverting: QFN68 held at 2 (relabelled to '
+        + '`PD11`), QFN88 regressed 0 -> 2. Silicon-forced, not a fixable default.' },
+    { pad: 'PB12', match: /\bFMC_A12\b.*\bon PB12\b|\bon PB12\b.*\bFMC_A12\b/,
+      claimants: ['FMC_A7', 'FMC_A12', 'FMC_A21'],
+      citation: 'Same trace, the mirror pin: `A7`/`A21`\'s alternates are unbonded on '
+        + 'QFN68 and `A12`\'s only alternate collides with `A17` the same way `A11`\'s '
+        + 'does with `A16`. Silicon-forced, not a fixable default.' },
+  ],
+};
+
+// Every rule that has actually fired, across every package swept — checked once at the
+// end (below) the same way `tests/h417_dedicated.test.js`'s `KNOWN_NARROWED` refuses an
+// exception nothing matches: an unused exemption is the "guard nobody has seen fire"
+// failure this repo keeps finding, not a harmless spare.
+const firedDocumentedRules = new Set();
+
+/** Pull the entries `SILICON_FORCED_DOCUMENTED[pkg]` names out of `defects`, returning
+ *  `{ remaining, documented }` — `documented` carries the FULL claimant list from the
+ *  citation, not just the two names the sweep's own dedup happened to keep. */
+function splitDocumentedSiliconForced(pkg, defects) {
+  const rules = SILICON_FORCED_DOCUMENTED[pkg] || [];
+  const remaining = [];
+  const documented = [];
+  for (const d of defects) {
+    const hit = rules.find(r => r.match.test(d));
+    if (hit) {
+      firedDocumentedRules.add(`${pkg}:${hit.pad}`);
+      documented.push(`${hit.pad}: ${hit.claimants.join(' + ')} — ${hit.citation}`);
+    } else remaining.push(d);
+  }
+  return { remaining, documented };
+}
 
 /**
  * Sweep every claiming choice on `pkg` and return the collisions, split into the ones the
@@ -347,7 +423,17 @@ function ratchetVerdict(pkg, defects, choices) {
 
 for (const pkg of PACKAGES) {
   test(`${pkg}: switching any single peripheral on never double-claims a pad it could have avoided`, () => {
-    const { defects, silicon, choices } = sweepCollisions(pkg);
+    const swept = sweepCollisions(pkg);
+    const { silicon, choices } = swept;
+    // Pull out the collisions AGENT-1 proved silicon-forced by experiment BEFORE the
+    // ratchet ever sees them - they are not defects, and printed with their full,
+    // verified claimant list (three per pad, not the two the sweep's own dedup kept).
+    const { remaining: defects, documented } = splitDocumentedSiliconForced(pkg, swept.defects);
+    if (documented.length) {
+      console.log(`      ${pkg}: ${documented.length} collision(s) DOCUMENTED silicon-forced `
+        + `(proven by experiment, not the sweep's own bonding-only heuristic):`);
+      for (const d of documented) console.log(`        - ${d}`);
+    }
     // The silicon-forced collisions are printed rather than asserted away: they are the
     // answer to "why is this not zero", and a reviewer should be able to read them.
     if (silicon.length) {
@@ -362,6 +448,25 @@ for (const pkg of PACKAGES) {
     console.log(`      ${v.message}`);
   });
 }
+
+test('every SILICON_FORCED_DOCUMENTED entry actually fired on a real sweep', () => {
+  // Runs AFTER the per-package loop above, so `firedDocumentedRules` is fully populated.
+  // A citation naming a pad this run never actually found a collision on is exactly the
+  // "unused exception" shape `tests/h417_dedicated.test.js`'s `KNOWN_NARROWED` guard
+  // already refuses for SDMMC - either the underlying data changed and the entry is
+  // stale (delete it), or the match regex above is wrong and is silently matching
+  // nothing (fix it). Never leave an unfired citation on record.
+  const missing = [];
+  for (const [pkg, rules] of Object.entries(SILICON_FORCED_DOCUMENTED)) {
+    for (const r of rules) {
+      if (!firedDocumentedRules.has(`${pkg}:${r.pad}`)) missing.push(`${pkg}:${r.pad}`);
+    }
+  }
+  assert.deep(missing, [],
+    `SILICON_FORCED_DOCUMENTED names a pad that never matched a real collision this run: `
+    + `${missing.join(', ')} - either the data changed (delete the stale entry) or the `
+    + `match regex is broken (fix it), but do not leave an exemption nothing exercises.`);
+});
 
 test('the collision ceiling is a tracked exemption, not a place to put a number', () => {
   // The repository's rule for every exemption (agents/README.md, "Rules that never bend"): an
