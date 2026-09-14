@@ -86,7 +86,18 @@ const ABSENT = {
   'SYS.params': 'SYS is the debug interface and the reset-pin option byte — both are choices, not numbers',
   'RCC.params': 'the clock tree is configured on the Clock tab; RCC has no per-peripheral parameters',
   'EXTI.params': 'notes.md: "the per-line trigger edge (EXTI_RTENR / EXTI_FTENR, RM 6.4.3), eight lines, no signals" — eight choices, no numbers',
+  // DMA1.params/DMA2.params: TRUE AGAIN on CH32H417 as of 2026-09-14 (`06da08c`, "CH32H417
+  // DMA lands - the last real gap, both controllers"), but the shape it cites changed under
+  // it. This was the DMA1.params citation the ABSENT-citation gate (2026-09-14) caught as
+  // stale FIRST - "dma.channel_params" genuinely did not exist while H417 had no dma: block
+  // at all. It landed as a LIST (one entry per controller: `data/mcus/CH32H417.yaml`'s
+  // `dma:` is `[{controller: DMA1, channel_params: {...}, ...}, {controller: DMA2, ...}]`),
+  // not the single-object shape every other part's `dma:` still is - so the RULE is true
+  // again (both DMA1.params and DMA2.params, per-request config living off the peripheral),
+  // it just needs `resolvePath()` to look inside a list (fixed alongside this) rather than a
+  // rewritten citation.
   'DMA1.params': 'DMA parameters are per-REQUEST and live in the top-level dma.channel_params, not on the peripheral. FORMAT.md forbids modelling one fact twice',
+  'DMA2.params': 'same as DMA1.params - DMA parameters are per-REQUEST and live in the top-level dma.channel_params (DMA2\'s own entry in the dma: list), not on the peripheral',
   // PIOC.params used to be one generic entry, citing only CH32H417's own files - true for
   // CH32H417, silently wrong the moment CH32X035's PIOC (a real, separate peripheral) fell
   // through the same generic key via lookup()'s fallback. Found by the ABSENT-citation gate
@@ -579,12 +590,26 @@ function fileIndex(evtRoot) {
   return idx;
 }
 
-/** Walk a dotted path (`dma.channel_params`) into a model object; `undefined` if any step is. */
+/**
+ * Walk a dotted path (`dma.channel_params`) into a model object; `undefined` if any step is
+ * missing. CH32H417's real `dma:` landed as a LIST (one entry per controller, DMA1/DMA2 -
+ * `data/mcus/CH32H417.yaml`'s `dma:`, 2026-09-14) rather than the single-object shape every
+ * other part's `dma:` still is, so a plain `v[seg]` walk would read `dma.channel_params` as
+ * undefined even though every list entry genuinely carries one. At an array, the remaining
+ * path is checked against EACH entry and resolves if ANY does - "does at least one controller
+ * have this" is the existence question an ABSENT citation about the shared dma: mechanism is
+ * actually asking, not "does the array itself have a property by this name".
+ */
 function resolvePath(model, dotted) {
   let v = model;
-  for (const seg of dotted.split('.')) {
+  const segs = dotted.split('.');
+  for (let i = 0; i < segs.length; i++) {
     if (v === null || v === undefined) return undefined;
-    v = v[seg];
+    if (Array.isArray(v)) {
+      const rest = segs.slice(i).join('.');
+      return v.some(item => resolvePath(item, rest) !== undefined) ? true : undefined;
+    }
+    v = v[segs[i]];
   }
   return v;
 }
@@ -685,22 +710,26 @@ test('every ABSENT citation that names a checkable location actually resolves, p
 
 test('planted break: an ABSENT citation naming a location that does not exist is caught', () => {
   // Both directions, the same discipline every gate this round has needed. A real citation
-  // (RCC.params, above) names nothing checkable and must not be flagged. A fabricated one
-  // reproducing the EXACT DMA1.params shape - a real rule, a dead pointer - on a part
-  // confirmed to lack the block, must fail and name it.
-  const noDmaBlock = REAL_PARTS.find(p => { eng.loadMcu(eng.MCU_FILES[p]); return !eng.M.dma; });
-  assert.ok(noDmaBlock, 'no real part currently lacks a dma: block - this plant needs a live target and CH32H417 apparently grew one; find another missing data_path to plant against');
-
-  const claims = citationClaims('parameters live in the top-level dma.channel_params, not on the peripheral');
+  // (RCC.params, above) names nothing checkable and must not be flagged. A fabricated one,
+  // naming a data_path guaranteed never to exist, must fail and name it.
+  //
+  // DELIBERATELY SYNTHETIC, not a real part's real gap (the DMA1.params shape this test
+  // originally plants against, above): CH32H417 was the only part missing a dma: block, and
+  // the moment DMA landed on it (2026-09-14) this plant's live target vanished - "no real
+  // part currently lacks a dma: block" is the exact assertion that broke. A synthetic,
+  // impossible-to-ever-be-real key name cannot go stale the same way: it tests the SAME
+  // code path (citationClaims -> resolvePath -> "did not resolve") without depending on
+  // which parts currently happen to lack which block.
+  const claims = citationClaims('parameters live in the top-level dma.this_key_will_never_exist_xyz, not on the peripheral');
   assert.equal(claims.length, 1, 'the planted citation text should yield exactly one data_path claim');
-  eng.loadMcu(eng.MCU_FILES[noDmaBlock]);
+  eng.loadMcu(eng.MCU_FILES['CH32H417']);
   const missingResolves = resolvePath(eng.M, claims[0].path) !== undefined;
-  assert.notOk(missingResolves, `planted precondition failed: dma.channel_params DOES resolve on ${noDmaBlock} - the plant is not exercising a real gap`);
+  assert.notOk(missingResolves, `planted precondition failed: dma.this_key_will_never_exist_xyz DOES resolve on CH32H417 - the plant is not exercising a real gap`);
 
   const realClaims = citationClaims(ABSENT['RCC.params']);
   assert.equal(realClaims.length, 0, 'RCC.params was expected to be prose-only (no checkable referent) - if this now fails, RCC.params grew a checkable claim and this assertion is stale, not the code under test');
 
-  console.log(`      planted refusal (dead ABSENT referent): dma.channel_params does not resolve on ${noDmaBlock}, reproducing the DMA1.params shape`);
+  console.log('      planted refusal (dead ABSENT referent): dma.this_key_will_never_exist_xyz does not resolve, reproducing the DMA1.params shape without depending on live cross-part drift');
 });
 
 // ---------------------------------------------------------------- how far a part may be soft
