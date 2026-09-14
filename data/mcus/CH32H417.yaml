@@ -10004,7 +10004,14 @@ clock:
       - { name: "HSE /64", source: HSE, div: 64 }
     multipliers: [4, 6, 7, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 16, 17, 18, 19, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 59]
 
-  sysclk: { sources: [HSI, HSE, PLLCLK], max_mhz: 400 }
+  # SYSPLL_SEL[2:0] (RCC_PLLCFGR, RM 3.4.3, :2400-2416) is a SECOND-LEVEL choice within
+  # "system clock = PLL": 0xx keeps the ordinary SYS PLL (PLLCLK), and 100/101/110/111
+  # substitute one of the four secondary PLLs in its place - "100: USBHS_PLL (480MHz)"
+  # verbatim. USBHS_PLL_CLK is added here now that `clock.plls.USBHS_PLL` computes a
+  # real number (it did not when this list was first written with three of the RM's
+  # seven allowed entries). The other three (ETH_PLL, SERDES_PLL/2, USBSS_PLL) stay out
+  # until THEY compute - same rule, not yet met.
+  sysclk: { sources: [HSI, HSE, PLLCLK, USBHS_PLL_CLK], max_mhz: 400 }
 
   # ---- the secondary PLLs (RM 3.3.4) ----------------------------------------------
   # One of the five is modelled. The other four (ETH, USBSS, SERDES, and the three other
@@ -10046,6 +10053,98 @@ clock:
       inputs:
         - { name: HSI, source: HSI, div: 1 }
 
+    # ETH_PLL - 500 MHz, the WORST case of this trap: unlike USBHS_PLL there is no
+    # register field to declare a mismatch with. An exhaustive read of
+    # RCC_PLLCFGR2 (RM:4159-4283, the last register in RCC's PLL config chapter,
+    # so a genuine absence and not an unread page) found NO ETH-PLL field of any
+    # kind - no reference select, no source mux, nothing - and `ch32h417_rcc.h`
+    # has no `RCC_ETHPLL*Config` setter either. This is an INFERENCE, not a
+    # quoted RM sentence, and is stated as one: (a) that exhaustive absence, plus
+    # (b) Figure 31-5 (RM:43116-43137) drawing a direct, unconditional line from
+    # the 25 MHz HSE oscillator symbol into the PLL, with no other path in. No RM
+    # sentence anywhere reads "ETH_PLL input must be 25 MHz" the way RM:1808 does
+    # for USBHS_PLL - this file says so rather than dressing an inference as a
+    # citation, which is how the next reader stops checking.
+    #
+    # So 500 MHz holds ONLY while HSE is exactly 25 MHz - and HSE is NOT
+    # `fixed: true` on this part (`sources.HSE` is editable 4-25 MHz), so a user
+    # who dials HSE to 8 MHz gets a tab that still prints 500, wrong, with no
+    # register this file could point at to say why. Shipped anyway, per instruction
+    # (main, 2026-09-14): the single real input, no mux, the caveat carried here
+    # and in the top-level `notes:` rather than silently guaranteed. The
+    # alternative - declaring ETH_PLL entirely rather than modelling it - would
+    # also block ETH1G, whose own number this file needs.
+    #
+    # Enable/ready lives in `RCC_CTLR`, not `RCC_PLLCFGR2` - a DIFFERENT register
+    # than every other secondary PLL's own enable bit, confirmed against real
+    # firmware rather than assumed from the other four's shape:
+    # `Evt/EXAM/SRC/Peripheral/src/eth_driver_RGMII.c:330-334`'s `ETH_SetClock()`
+    # does `RCC->CTLR |= (1 << 26)` then spins on bit 27 (ready). The same file's
+    # `:400-413` sets `ETH1GSRC = 10b` (ETH_PLL / 4) for a 125 MHz link clock -
+    # only correct if the PLL really is at 500, which is this file's own proof
+    # that the number is right when HSE is 25 MHz, the value every EVT ships with.
+    ETH_PLL:
+      label: ETH PLL
+      output: ETH_PLL_CLK
+      output_mhz: 500
+      inputs:
+        - { name: HSE, source: HSE, div: 1 }
+
+    # USBSS_PLL - 125 MHz, and a genuinely interesting register: the RM NAMES the
+    # field `USBSSPLL_REFSEL[1:0]` (RM:4245) but gives its bit range as `[6:4]` -
+    # a 2-bit name on a 3-bit field with EIGHT documented codes, which only a
+    # 3-bit field can hold. Confirmed twice, independently: found once reading
+    # this file's own RCC bitfields hours before this PLL was modelled, and again
+    # by the research delegate reading the RM cold - two independent reads
+    # reaching the same answer is the strongest evidence this repo produces, and
+    # `ch32h417.h:8156`'s mask (`0x70`, bits 6:4) settles which of the two
+    # contradicting numbers is the real one. Recorded here rather than "corrected"
+    # silently: the RM's own `[1:0]` is wrong, its own `[6:4]` is right, both are
+    # worth a reader knowing were in tension.
+    #
+    # UNLIKE ETH_PLL and SERDES_PLL, this one DOES have a way to tell the silicon
+    # what its reference is (8 REFSEL codes) - but this file still ships ONE
+    # input, HSE, for the same reason USBHS_PLL shipped only HSI: the RESET value
+    # of REFSEL is `010b` = 25 MHz, which is this part's own HSE, and real
+    # firmware never touches the field - `ch32h417_usbss_device.c:28-47,589-600`
+    # brings the PLL up with no call to `RCC_USBSSPLLReferConfig` anywhere,
+    # relying on the reset default matching. So 125 MHz is true for the
+    # SHIPPED, un-reconfigured silicon exactly as long as HSE stays at 25 MHz -
+    # the same "default happens to be right for this part" shape as USBHS_PLL,
+    # not a case this file can make unconditional.
+    USBSS_PLL:
+      label: USBSS PLL
+      output: USBSS_PLL_CLK
+      output_mhz: 125
+      inputs:
+        - { name: HSE, source: HSE, div: 1 }
+
+    # SERDES_PLL - the one with real multipliers, not a fixed output. Sixteen
+    # codes, RM:4176-4225 (corrected from an earlier citation of :4165-4199,
+    # which lands mid-table at "45x" and would have shipped half the list - the
+    # same shape as USBFSDIV's missing 7.5, caught before it repeated). Reset
+    # `1000b` = 50x. All sixteen macros confirmed present, `ch32h417_rcc.h:592-607`.
+    #
+    # No REFSEL, no source mux - same HSE-only shape as ETH_PLL, and the same
+    # kind of inference, not a quoted sentence: real firmware's own
+    # `sds_initial()` (`Evt/EXAM/SerDes/AcquireConfig/Common/hardware.c:104-130`)
+    # explicitly waits on `RCC_HSERDY` immediately before enabling SERDES_PLL -
+    # no reason to gate SERDES_PLL's enable on HSE specifically being ready
+    # unless HSE is the reference it multiplies. So every multiplied number below
+    # holds only while HSE is 25 MHz, same caveat as ETH_PLL and USBSS_PLL.
+    SERDES_PLL:
+      label: SerDes PLL
+      output: SERDES_PLL_CLK
+      inputs:
+        - { name: HSE, source: HSE, div: 1 }
+      # Ascending, matching the RM table's own order - not the reset value (50x is
+      # 9th of 16, `1000b`), the same choice this file already made for the SYS PLL's
+      # own `multipliers:` and for USBFS's `default: 10` (the RM's worked example,
+      # not POR). No `default_multiplier:` key exists in this schema (checked
+      # `clock.js`'s `pllDefaultState()` before reaching for one) - the tab opens on
+      # the first entry, 25x, same as every other `multipliers:` list here.
+      multipliers: [25, 28, 30, 32, 35, 38, 40, 45, 50, 56, 60, 64, 70, 76, 80, 90]
+
   hse_peripheral: RCC
   hse_setting: High Speed Clock (HSE)
   hse_signals: [XI, XO]
@@ -10061,6 +10160,100 @@ clock:
       default: 10
       default_source: USBHS_PLL_CLK
       target_mhz: 48
+
+    # ---- the other seven RM 3.4.13 (RCC_CFGR2) muxes -------------------------------
+    # Whole register read directly, line by line, not paraphrased from an earlier
+    # survey - one correction came out of it (LTDCSRC is a FOUR-way mux, not two;
+    # see LTDC below). Zero new engine mechanism needed for any of the seven
+    # (AGENT-2, `agents/BOARD.md` 2026-09-13T22:55Z) - the mux-leg-divider shape
+    # ETH1G and LTDC need already shipped for USBFS's own sibling mechanism.
+
+    # RNGSRC (bit 23, :4038-4045), I2S2SRC (bit 24, :4029-4036), I2S3SRC
+    # (bit 25, :4020-4027) - three IDENTICAL bare 2-way muxes, SYSCLK/PLL_CLK, no
+    # divider field in the register at all. The simplest shape this schema has.
+    RNG:
+      label: RNG clock (RNGSRC)
+      source: [SYSCLK, PLLCLK]
+      default_source: SYSCLK
+    I2S2:
+      label: I2S2 clock (I2S2SRC)
+      source: [SYSCLK, PLLCLK]
+      default_source: SYSCLK
+    I2S3:
+      label: I2S3 clock (I2S3SRC)
+      source: [SYSCLK, PLLCLK]
+      default_source: SYSCLK
+
+    # HSADCSRC[1:0] (bits 29:28, :4004-4017) - bare 4-way mux, also no divider field.
+    # Same shape as the three above, one more leg each side: SYSCLK/PLL_CLK/
+    # USBHS_PLL(480MHz)/ETH_PLL(500MHz). The RM states both fixed frequencies again
+    # inline (harmless - they match `clock.plls` exactly, which is what makes this
+    # tap computable now). NOT `HSADC_ClockDivision` (an ADC-internal `sdk_field` at
+    # peripherals.HSADC.params already, a different axis entirely - flagged by
+    # AGENT-2 so the two are not conflated here).
+    HSADC:
+      label: HSADC clock (HSADCSRC)
+      source: [SYSCLK, PLLCLK, USBHS_PLL_CLK, ETH_PLL_CLK]
+      default_source: SYSCLK
+
+    # UHSIFSRC[1:0] + UHSIFDIV[5:0] (:4118-4157) - bare 4-way mux, the SAME four legs
+    # as HSADC, all bare (none carries its own divider), PLUS a separate general
+    # /1..64 divider applied after the mux regardless of leg. Exactly USBFS's own
+    # shape (bare mux + `options:`), just a plain divider range instead of USBFSDIV's
+    # sixteen irregular codes.
+    UHSIF:
+      label: UHSIF clock (UHSIFSRC/UHSIFDIV)
+      source: [SYSCLK, PLLCLK, USBHS_PLL_CLK, ETH_PLL_CLK]
+      options: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+                39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
+                57, 58, 59, 60, 61, 62, 63, 64]
+      default: 1
+      default_source: SYSCLK
+
+    # LTDCSRC[1:0] + LTDCDIV[5:0] (:4082-4117). **A FOUR-way mux, not the two-choice
+    # shape an earlier survey described** (choices 10/11 read straight off the
+    # register table here, not assumed from the two that made LTDC famous for
+    # needing the leg-divider mechanism): `00: PLL_CLK` (bare), `01: SERDES_PLL clock
+    # divided by 2` (a leg with its own built-in /2 - the mechanism's whole reason
+    # for existing), `10: ETH_PLL clock` (bare), `11: USBHS_PLL clock` (bare). PLUS
+    # LTDCDIV[5:0], a full separate /1..64 general divider on top of whichever leg is
+    # chosen - the mechanism already supports both at once (a leg divider AND a
+    # tap-level `options:`), applied leg-first.
+    LTDC:
+      label: LTDC clock (LTDCSRC/LTDCDIV)
+      source:
+        - PLLCLK
+        - { name: "SERDES_PLL clock / 2", source: SERDES_PLL_CLK, div: 2 }
+        - ETH_PLL_CLK
+        - USBHS_PLL_CLK
+      options: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
+                39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56,
+                57, 58, 59, 60, 61, 62, 63, 64]
+      default: 1
+      default_source: PLLCLK
+
+    # ETH1GSRC[1:0] (bits 31:30, :3991-4003) - the Gigabit Ethernet 125 MHz link
+    # clock. Four-way mux, TWO legs carry their own built-in divider baked into the
+    # SRC choice itself: `10: ETH_PLL clock output after 4-division` (500/4 = 125)
+    # and `11: SERDES_PLL clock output after 8-division`; the other two
+    # (`00: PLL_CLK`, `01: USBSS_PLL clock`) are bare. Real firmware anchors this:
+    # `Evt/EXAM/SRC/Peripheral/src/eth_driver_RGMII.c:400-413` sets ETH1GSRC = `10b`
+    # (ETH_PLL/4) for its own 125 MHz Gigabit link clock - the same 500/4 = 125 this
+    # file's `clock.plls.ETH_PLL` now makes computable, which is the proof the PLL's
+    # 500 MHz is right for the silicon this EVT ships on. No separate `options:` -
+    # ETH1GSRC has no divider field of its own beyond what two of its four legs
+    # already carry.
+    ETH1G:
+      label: Gigabit Ethernet clock (ETH1GSRC)
+      source:
+        - PLLCLK
+        - USBSS_PLL_CLK
+        - { name: "ETH_PLL clock / 4", source: ETH_PLL_CLK, div: 4 }
+        - { name: "SERDES_PLL clock / 8", source: SERDES_PLL_CLK, div: 8 }
+      default_source: "ETH_PLL clock / 4"
+
     # HPRE[3:0] - RM 3.4.2. **NOT a doubling run.** 0xxx = /1, then /2 /4 /8 /16 /64 /128
     # /256 /512: there is NO /32, so reading it as a doubling run puts /32 on code 1100
     # and halves every bus silently. That warning is in CH32H417.notes.md; this is the
@@ -10167,38 +10360,68 @@ clock:
 
   notes: >
     MODELLED: the four oscillators; the SYS PLL (PLLSRC's six legal sources, the one shared
-    1..64 divider, and all 32 PLLMUL factors from RM 3.4.3); the SYSCLK mux; HPRE, FPRE,
-    PPRE2 and the ADC prescaler; bus membership from the three clock-enable registers
-    (RM 3.4.7-3.4.9); and, as of 2026-09-13, the USBHS_PLL (fixed 480 MHz off HSI, RM:1733
-    and :1806-1811) and its USBFS 48M tap (RM 3.4.13) - the schema's first second PLL,
-    proven against the RM's own worked example (:4048 USBFSSRC, :4055-4077 all sixteen
-    USBFSDIV codes including the 7.5 a first draft of this block omitted) and unblocked by
-    AGENT-2's row-packing fix to the clock tab (`renderClock()`, `agents/BOARD.md`
-    2026-09-13T19:07Z) once the schema-and-layout blocker `agents/proposals/
-    CH32H417_usbhs_pll.yaml` recorded was gone.
+    1..64 divider, and all 32 PLLMUL factors from RM 3.4.3); the SYSCLK mux, now all four
+    entries this file can compute (HSI, HSE, PLLCLK, and USBHS_PLL_CLK since 2026-09-14 -
+    RM 3.4.3's other three, ETH_PLL/SERDES_PLL-div-2/USBSS_PLL, still cannot: see below);
+    HPRE, FPRE, PPRE2 and the ADC prescaler; bus membership from the three clock-enable
+    registers (RM 3.4.7-3.4.9); ALL FIVE PLLs (RM 3.3.4) - USBHS_PLL (2026-09-13), then
+    ETH_PLL, USBSS_PLL and SERDES_PLL (2026-09-14); and, as of 2026-09-14, all EIGHT RM
+    3.4.13 (RCC_CFGR2) peripheral clock muxes - USBFS (2026-09-13), then RNG, I2S2, I2S3,
+    HSADC, UHSIF, LTDC and ETH1G.
 
-    NOT MODELLED, and declared rather than approximated. This part has FIVE PLLs (RM 3.3.4):
-    SYS, USBHS, ETH (500 MHz), USBSS (125 MHz) and SERDES. `clock.plls` now holds more than
-    one, so ETH/USBSS/SERDES are a data gap, not a schema one - each needs the same
-    RM-line-by-line check USBHS_PLL got before it ships (`sysclk.sources` also lists three
-    entries and not the seven RM 3.4.3 allows for the same reason: SYSPLL_SEL can
-    additionally route USBHS_PLL, ETH_PLL, SERDES_PLL/2 and USBSS_PLL to the system clock,
-    and USBHS_PLL could be added to that list now that it computes).
+    USBHS_PLL: fixed 480 MHz off HSI, RM:1733 and :1806-1811; its USBFS 48M tap proven
+    against the RM's own worked example (:4048 USBFSSRC, :4055-4077 all sixteen USBFSDIV
+    codes including the 7.5 a first draft omitted). Ships with ONE input (HSI) because
+    `USBHSPLL_REFSEL[1:0]` (RM:4266-4274) makes 480 MHz conditional on the reference
+    selection matching the real input, and only HSI's `fixed: true` 25 MHz makes REFSEL=00
+    correct unconditionally - see the `plls.USBHS_PLL` comment for the three inputs left
+    out and why each one specifically cannot be guaranteed.
 
-    USBHS_PLL's own other three inputs (HSE, SYS_PLL/N, ETHCLK_20M) stay out for the reason
-    in the `plls.USBHS_PLL` comment above: `USBHSPLL_REFSEL[1:0]` (RM:4266-4274) makes
-    480 MHz conditional on the reference selection matching the real input, and only HSI's
-    `fixed: true` 25 MHz makes REFSEL=00 correct unconditionally.
+    ETH_PLL (500 MHz), USBSS_PLL (125 MHz) and SERDES_PLL (multiplier, 16 codes) all ship
+    with HSE as their ONLY input, for a reason WORSE than USBHS_PLL's REFSEL trap and
+    stated plainly rather than smoothed over: HSE is NOT `fixed: true` on this part
+    (`sources.HSE` is user-editable 4-25 MHz), so these three numbers hold ONLY WHILE HSE
+    IS 25 MHz - a real, user-reachable misconfiguration this file cannot detect or refuse,
+    unlike USBHS_PLL where the one input offered is unconditionally safe. Shipped this way
+    on instruction (main, 2026-09-14), because the alternative (declining to model them)
+    would also have kept ETH1G's own mux uncomputable, and every EVT example anchoring
+    these numbers runs at HSE = 25 MHz, the value every one of this part's own reference
+    designs uses. Each PLL's own comment states which parts of its citation are QUOTED RM
+    text and which are INFERRED (an exhaustive register-absence read plus a clock-tree
+    figure, not a sentence that says so directly, for ETH_PLL and SERDES_PLL specifically)
+    - a citation that overstates its own certainty is how the next reader stops checking.
 
-    The other seven peripheral clock muxes in RM 3.4.13 (RCC_CFGR2) are absent for the same
-    schema-shape reason USBFS's used to be: RNG, I2S2, I2S3, LTDC, UHSIF, HSADC and ETH1G
-    each choose between PLL_CLK, a secondary PLL and SYSCLK, several through their own
-    1..64 divider, and most need a PLL this file does not compute yet (ETH_PLL, SERDES_PLL)
-    or a mux entry that carries its own extra divider (LTDC's choice 01 is "SERDES_PLL
-    clock divided by 2", RM:4085-4089) - a shape `clock.prescalers` cannot express, per the
-    REQUEST to AGENT-2 on `agents/BOARD.md` 2026-09-13T01:14Z. MCO (RM 3.3.5.5, eight
-    sources) is unmodelled likewise.
+    The eight RM 3.4.13 muxes: RNG/I2S2/I2S3 (bare 2-way, SYSCLK/PLL_CLK, no divider
+    field in the register at all) and HSADC (the same, four-way) needed nothing but the
+    data once their PLLs existed. UHSIF is USBFS-shaped (bare 4-way mux + a plain /1..64
+    `options:` divider). LTDC and ETH1G needed AGENT-2's mux-leg-divider mechanism (a
+    `source:` list entry may be a name/source/div mapping instead of a bare string) - LTDC is
+    ALSO a correction to an earlier two-choice description: RM:4082-4094 is a FOUR-way mux
+    (PLL_CLK bare, SERDES_PLL/2 divided, ETH_PLL bare, USBHS_PLL bare), read directly
+    rather than assumed from the survey that first flagged the divided leg. ETH1G's own
+    two divided legs (ETH_PLL/4, SERDES_PLL/8) are anchored to real firmware, not just the
+    RM: `eth_driver_RGMII.c:400-413` sets ETH1GSRC to ETH_PLL/4 for its own 125 MHz
+    Gigabit link clock, which only works if ETH_PLL really is 500 MHz - the proof, from a
+    shipped EVT, that the HSE-conditional number above is right for the silicon it ships
+    on. Every leg-divider computation verified end to end, not just at its default:
+    SERDES_PLL fed at its own default 25x multiplier (625 MHz off 25 MHz HSE) through
+    BOTH divided legs at once (LTDC /2 = 312.5 MHz, ETH1G /8 = 78.125 MHz), same project.
+
+    MCO (RM 3.3.5.5, eight sources) remains unmodelled - it is an RCC *setting* already
+    present with all eight sources (`peripherals.RCC.settings`), not a `clock.prescalers`
+    tap, and the register-field encoding to let codegen WRITE the chosen source is a
+    separate, params/codegen-shaped gap (see the FINDING at `agents/BOARD.md`
+    2026-09-14T02:10Z). Likewise, NO `codegen.rcc.extra` register encoding exists yet for
+    ANY of RM 3.4.13's eight muxes or the four newly-modelled PLLs' own enable bits -
+    `clock.plls`/`clock.prescalers` make the CLOCK TAB compute the right numbers (this
+    file's stated acceptance bar, met the same way USBHS_PLL's was on 2026-09-13), but the
+    generated C still names the gap out loud rather than writing nothing silently
+    ("not written: ... Add a codegen.rcc.extra entry"). Landing that encoding is
+    follow-on work, not blocked by anything above.
 
     A wrong clock number is worse than a missing one - round 5's rule. A computed 48 MHz
-    that is really 24 reaches the generated C and the SDI banner as a stated fact, so the
-    gap stays visible here and in TASKS.md rather than being filled with a guess.
+    that is really 24 reaches the generated C and the SDI banner as a stated fact, so a
+    gap this file cannot close stays visible here and in TASKS.md rather than being filled
+    with a guess - and where a number IS shipped despite a real precondition (the three
+    HSE-only PLLs above), that precondition is named in the same breath as the number,
+    not left for a reader to discover by disagreeing with the silicon.
