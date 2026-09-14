@@ -2285,23 +2285,26 @@ extras:
       each is live - exactly `channel_params.instances`, keyed to those two settings
       rather than a channel number.
 
-      ONLY `SAI_InitTypeDef` (applied by `SAI_Init(SAI_Block_x, &s)`, ch32h417_sai.h:241)
-      is modelled below. The driver defines TWO MORE per-block init structs -
+      `SAI_InitTypeDef` (applied by `SAI_Init(SAI_Block_x, &s)`, ch32h417_sai.h:241) is
+      the primary struct. The driver defines TWO MORE per-block init structs -
       `SAI_FrameInitTypeDef` via `SAI_FrameInit()` and `SAI_SlotInitTypeDef` via
       `SAI_SlotInit()` - and the part's own example calls all three for the one block it
       uses (Evt/EXAM/SAI/SAI_Play/Common/hardware.c:103,110,116). Frame/Slot are NOT a
       later nicety: the header itself says their fields are "ignored ... when AC'97 or
       SPDIF protocols are selected", meaning they matter precisely in Free Protocol, which
       is what the EVT example configures (SAI_Free_Protocol, hardware.c:96) and what a
-      typical I2S/TDM use of this block would be. They are left out because
-      `channel_params:` (app/engine/params.js) holds exactly ONE `struct:` per peripheral -
-      it cannot carry three different structs against the same two instances - and forcing
-      Frame/Slot through a flat `params:` block would need ONE handle for the whole
-      peripheral, silently misconfiguring whichever block is not that hardcoded choice.
-      That is the wrong-but-compiling shape this file exists to refuse, so the two structs
-      are recorded here rather than guessed into a shape the schema does not have.
-      REQUEST to AGENT-2: `channel_params` (or a sibling key) needs to carry more than one
-      struct against the same instance map before Frame/Slot can be modelled. TASKS.md line.
+      typical I2S/TDM use of this block would be.
+
+      LANDED 2026-09-14 on AGENT-2's multi-struct `channel_params` mechanism (board
+      2026-09-13T19:25Z, `node tests/run.js "channel_multi_struct"` 5/5) - a
+      `channel_params.params:` row may now carry `struct:` naming a DIFFERENT struct
+      than the block's primary one, applied via `codegen.init_structs.<that struct>.fn`
+      using the SAME instance handle. This fits SAI exactly because `SAI_FrameInit`/
+      `SAI_SlotInit` take the SAME `SAI_Block_x` handle `SAI_Init` does - only the
+      function varies, not the register block. (DFSDM's Filter/Rc/Jc structs do NOT fit
+      this shape - they want a genuinely DIFFERENT handle axis, `DFSDM_FLTx` rather than
+      `DFSDM_Channely` - see the DFSDM peripheral comment; do not treat this landing as
+      having answered that one too.)
     yaml: |
       channel_params:
         struct: SAI_InitTypeDef
@@ -2426,9 +2429,111 @@ extras:
               - { name: "3/4 full",             value: 3, sdk: SAI_FIFOThreshold_3QuartersFull }
               - { name: Full,                   value: 4, sdk: SAI_FIFOThreshold_Full }
             help: "R32_SAI_xCFGR2.FTH[2:0], CH32H417RM.md:52563-52579. The EVT's own example uses FIFO empty (hardware.c:101)."
+          # Frame/Slot - landed 2026-09-14 on AGENT-2's multi-struct channel_params
+          # mechanism (board 2026-09-13T19:25Z, verified: node tests/run.js
+          # "channel_multi_struct" 5/5). Both `SAI_FrameInit(SAI_Block_x, &s)` and
+          # `SAI_SlotInit(SAI_Block_x, &s)` (ch32h417_sai.h:242-243) take the SAME
+          # handle as the block's own `SAI_Init` - the case this mechanism fits exactly
+          # (unlike DFSDM's Filter/Rc/Jc, which need a SECOND, DIFFERENT handle axis -
+          # see the DFSDM peripheral comment; not the same gap, not landed by this).
+          # `codegen.init_structs` needs SAI_FrameInitTypeDef/SAI_SlotInitTypeDef
+          # entries (below `data/mcus/CH32H417.yaml`'s `codegen:` block, hand-edited -
+          # that section is outside the generator's own scope, same as LPTIM/DFSDM).
+          - key: frame_length
+            name: Frame length
+            struct: SAI_FrameInitTypeDef
+            sdk_field: SAI_FrameLength
+            type: int
+            default: 32
+            min: 8
+            max: 256
+            help: "R32_SAI_xFRCR.FRL[7:0]+1, ch32h417_sai.h:67-70, CH32H417RM.md 23.5.6 (SAI_xFRCR). EVT SAI_Play example: 32 (hardware.c:104)."
+          - key: active_frame_length
+            name: Frame sync active length
+            struct: SAI_FrameInitTypeDef
+            sdk_field: SAI_ActiveFrameLength
+            type: int
+            default: 16
+            min: 1
+            max: 128
+            help: "R32_SAI_xFRCR.FSALL[6:0]+1, ch32h417_sai.h:72-76. EVT SAI_Play example: 16 (hardware.c:105)."
+          - key: fs_definition
+            name: Frame sync definition
+            struct: SAI_FrameInitTypeDef
+            sdk_field: SAI_FSDefinition
+            type: enum
+            default: Start of frame
+            options:
+              - { name: Start of frame,            value: 0,              sdk: SAI_FS_StartFrame }
+              - { name: Start + channel identify,  value: 16777216,       sdk: I2S_FS_ChannelIdentification }
+            help: "R32_SAI_xFRCR.FSDEF, ch32h417_sai.h:78-80. EVT SAI_Play example: Start of frame (hardware.c:106)."
+          - key: fs_polarity
+            name: Frame sync polarity
+            struct: SAI_FrameInitTypeDef
+            sdk_field: SAI_FSPolarity
+            type: enum
+            default: Active high
+            options:
+              - { name: Active low,  value: 0,        sdk: SAI_FS_ActiveLow }
+              - { name: Active high, value: 33554432,  sdk: SAI_FS_ActiveHigh }
+            help: "R32_SAI_xFRCR.FSPOL, ch32h417_sai.h:82-84. EVT SAI_Play example: Active high (hardware.c:107)."
+          - key: fs_offset
+            name: Frame sync offset
+            struct: SAI_FrameInitTypeDef
+            sdk_field: SAI_FSOffset
+            type: enum
+            default: Before first bit
+            options:
+              - { name: On first bit,        value: 0,        sdk: SAI_FS_FirstBit }
+              - { name: Before first bit,     value: 67108864, sdk: SAI_FS_BeforeFirstBit }
+            help: "R32_SAI_xFRCR.FSOFF, ch32h417_sai.h:86-90. EVT SAI_Play example: Before first bit (hardware.c:108)."
+          - key: slot_first_bit_offset
+            name: Slot first-bit offset
+            struct: SAI_SlotInitTypeDef
+            sdk_field: SAI_FirstBitOffset
+            type: int
+            default: 0
+            min: 0
+            max: 24
+            help: "R32_SAI_xSLOTR.FBOFF[4:0], ch32h417_sai.h:99-101. EVT SAI_Play example: 0 (hardware.c:110)."
+          - key: slot_size
+            name: Slot size
+            struct: SAI_SlotInitTypeDef
+            sdk_field: SAI_SlotSize
+            type: enum
+            default: 16 bits
+            options:
+              - { name: Same as Data size, value: 0,   sdk: SAI_SlotSize_DataSize }
+              - { name: 16 bits,           value: 64,  sdk: SAI_SlotSize_16b }
+              - { name: 32 bits,           value: 128, sdk: SAI_SlotSize_32b }
+            help: "R32_SAI_xSLOTR.SLOTSZ[1:0], ch32h417_sai.h:103-105. EVT SAI_Play example: 16 bits (hardware.c:111)."
+          - key: slot_number
+            name: Number of slots
+            struct: SAI_SlotInitTypeDef
+            sdk_field: SAI_SlotNumber
+            type: int
+            default: 2
+            min: 1
+            max: 16
+            help: "R32_SAI_xSLOTR.NBSLOT[3:0]+1, ch32h417_sai.h:107-109. EVT SAI_Play example: 2 (hardware.c:112)."
+          - key: slot_active
+            name: Active slots (bitmask, bit N = slot N)
+            struct: SAI_SlotInitTypeDef
+            sdk_field: SAI_SlotActive
+            type: int
+            default: 4294901760
+            min: 0
+            max: 4294901760
+            help: >
+              R32_SAI_xSLOTR.SLOTEN[15:0], ch32h417_sai.h:111-113 - the header's own
+              macros are PRE-SHIFTED into bits[31:16] (`SAI_SlotActive_0` = 0x00010000,
+              one bit per slot up to `SAI_SlotActive_15` = 0x80000000), so this value is
+              written to the struct member directly, no shift needed here. EVT SAI_Play
+              example: `SAI_SlotActive_ALL` = 0xFFFF0000, all 16 slots (hardware.c:113).
       notes: >
-        `SAI_FrameInit`/`SAI_FrameInitTypeDef` and `SAI_SlotInit`/`SAI_SlotInitTypeDef` are
-        not modelled - see the peripheral comment above for why and the REQUEST it names.
+        `SAI_FrameInitTypeDef`/`SAI_SlotInitTypeDef` landed 2026-09-14 via
+        `channel_params`'s multi-struct mechanism (both share the block's own handle -
+        `SAI_FrameInit(SAI_Block_x, ...)`/`SAI_SlotInit(SAI_Block_x, ...)`).
 
   HSADC:
     comment: |

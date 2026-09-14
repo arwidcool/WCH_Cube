@@ -1049,12 +1049,36 @@ bits, and a clock tree that models what the schema can hold.
       chosen constants are `0x0000` - modelled to match the REGISTER (header's pairing), not the
       example's swapped field names; recorded in the peripheral's own comment so it doesn't read
       as copied from a source that has it backwards.
-      **`DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/`JcInitTypeDef` are NOT modelled - the SAME
-      schema gap as SAI's line above, not a second one.** All three apply to a `DFSDM_FLTx`
-      handle (`DFSDM_FilterInit`/`RcInit`/`JcInit`, `ch32h417_dfsdm.h:317-319`) - THREE structs
-      wanting the SAME instance (`DFSDM_FLT0`/`DFSDM_FLT1`), and `channel_params:` still holds
-      exactly one `struct:` per peripheral. Consolidated with SAI's REQUEST rather than filed
-      again; `params:` stays at just the Channel struct for DFSDM until that mechanism exists.
+      **CORRECTION, 2026-09-14 (main + AGENT-3 caught it): the line above called this "the
+      SAME schema gap as SAI's" and consolidated it with SAI's REQUEST - wrong, and SAI's own
+      gap is now CLOSED (AGENT-2 landed multi-struct `channel_params` the same day,
+      `node tests/run.js "channel_multi_struct"` 5/5, verified here before writing this
+      correction). SAI's Frame/Slot fit that mechanism exactly because `SAI_FrameInit`/
+      `SAI_SlotInit` take the SAME handle (`SAI_Block_x`) `SAI_Init` already uses - only the
+      FUNCTION varies per struct, not the register block, which is precisely what
+      `codegen.js`'s `initPlan()` resolves a secondary struct's handle from
+      (`inst.handle || handle`, always the CURRENT instance's own handle). Landed, `params:`
+      unaffected (SAI's count already included, this only fills in the two remaining structs) -
+      compiled: throwaway project, `SAI_Init`/`SAI_FrameInit`/`SAI_SlotInit` on `SAI_Block_A`,
+      `--strict` exits 0.**
+      **`DFSDM_FilterInitTypeDef`/`RcInitTypeDef`/`JcInitTypeDef` are a DIFFERENT, still-open
+      gap - NOT the same shape, and NOT fixed by the mechanism above.** All three apply to a
+      `DFSDM_FLTx` handle (`DFSDM_FilterInit`/`RcInit`/`JcInit`, `ch32h417_dfsdm.h:317-319`),
+      but DFSDM's OTHER struct (`DFSDM_ChannelInitTypeDef`, already landed) applies to a
+      DIFFERENT handle entirely (`DFSDM_Channely`) - two independent hardware objects (2
+      channels, 2 filters), not one instance wanting three structs the way SAI's block does.
+      The landed mechanism resolves every secondary struct's handle from the CURRENT
+      instance's own `handle:` (`app/engine/codegen.js`, the `channel_params` loop,
+      `block.handle = ... inst.handle || handle`) - there is no way to give a
+      `channel_params.params:` row a DIFFERENT handle than the instance it is filed under, so
+      naming `DFSDM_FilterInitTypeDef` as a secondary struct on the Channel axis would silently
+      emit `DFSDM_FilterInit(DFSDM_Channely, &s)` - the wrong register block entirely (a real
+      type mismatch: `DFSDM_Channel_TypeDef*` where `DFSDM_FLT_TypeDef*` is wanted), not a
+      TODO. Confirmed by reading the actual code before writing this, not assumed from the
+      label "multi-struct". A genuinely new capability - a SECOND, independent per-instance
+      axis on one peripheral - would be needed; not built speculatively. REQUEST to AGENT-2,
+      distinct from SAI's now-closed one; `params:` stays at just the Channel struct for
+      DFSDM.
       - [ ] (AGENT-1) **SDMMC's DDR-mode structs are not modelled**: `SDMMC_IOInputDelayDDRTypeDef`
             / `SDMMC_IOOutputDelayDDRTypeDef` (eight 4-bit per-line delay taps each,
             `ch32h417_sdmmc.h:111-177`) are real init-time settings, but neither of this part's
