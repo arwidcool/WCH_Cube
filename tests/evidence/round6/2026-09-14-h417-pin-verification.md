@@ -320,6 +320,31 @@ silently matches nothing, are the same defect from the reader's side: both repor
 three different agents, is a pattern worth the owner's attention on its own — not just
 five bugs to close.
 
+## Addendum, 2026-09-14 — CH32H417 has no `dma:` block, and the file that excuses it names one that does not exist
+
+**A sharper, distinct shape from the five in the addendum above — not another check that never ran, but a check that ran, passed, and was answering the wrong question.** The five above are gates whose implementation quietly checked less than their own name promised. This one is different: `tests/completeness.test.js:89`'s `DMA1.params` exemption is a *correct rule*, stated in good faith and true on every other part in this repository —
+
+```
+'DMA1.params': 'DMA parameters are per-REQUEST and live in the top-level dma.channel_params,
+  not on the peripheral. FORMAT.md forbids modelling one fact twice',
+```
+
+— pointing at a location, `dma.channel_params`, that **does not exist in `data/mcus/CH32H417.yaml`**. Main confirmed this across every part in the repo:
+
+```
+CH32H417   dma: None
+CH32L103   dma: [controller, channels, requests, init_struct, register, channel_params, request_defaults]
+CH32V003   dma: [... 10 keys ...]
+CH32V006   dma: [... 11 keys ...]
+CH32X035   dma: [controller, channels, requests, init_struct, channel_params, request_defaults, notes]
+```
+
+**CH32H417 is the only part in the repository with no `dma:` block at all** — independently consistent with what this round's own sweep found while sorting the 11 `IN_EXTRACTION`-softened cells into genuinely-absent versus real gaps: `ch32h417_dma.h` has a real `DMA_InitTypeDef`/`DMA_Init()`, both `DMA1` and `DMA2` already have their clock bits in `codegen.periph_clock` and their channel vectors already wired in `nvic.vectors`, so the infrastructure around the gap is complete and only the configuration surface itself — direction, size, mode, and all nine-plus per-request defaults every other part in this repository already carries — is missing.
+
+**What makes this worth its own heading**: the exemption is not lying about the SHAPE of the rule (DMA parameters genuinely do belong in a top-level `dma:` block on every part that has modelled them, `FORMAT.md`'s own documented schema, correctly not duplicated onto the peripheral). It is lying about a FACT this specific file needs the rule to be true of — that the block exists — and nothing in `tests/completeness.test.js` checks that the location an `ABSENT` citation names is real, only that the citation string exists. An entire subsystem — the whole DMA channel/request configuration a user would need to move data in or out of any peripheral without spinning the CPU on every byte — currently reads as accounted for, on the part the owner is planning a product around, and was not until this addendum's parent commits (this round's completeness sweep, followed by main's own cross-part check) looked at what the citation actually pointed at rather than trusting that it once pointed at something true.
+
+Now AGENT-1's P0. Not something I write (`data/mcus/**`), not something `tests/completeness.test.js`'s existing `DMA1.params`/`DMA2` treatment should paper over in the meantime — the six real gaps from the addendum below, DMA2 among them, are reported to the board and left un-declared, not silently exempted a second way.
+
 ## Addendum, 2026-09-14 — CH32H417's 11 non-routing `params:` cells: 5 absent, 6 real
 
 Deliverable C's completeness gate (`docs/COVERAGE.md`-adjacent, `tests/completeness.test.js`)
